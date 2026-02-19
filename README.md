@@ -1,5 +1,6 @@
 # <Nombre de la App>
-<Eslogan corto o una frase que explique el valor en 1 línea.>
+Turn “maybe” into plans.
+Plan it. Share it. Do it.
 
 > App para planificar planes (viajes, quedadas, actividades) y compartirlos con tu gente.  
 > Web (Next.js) + Mobile (Capacitor).
