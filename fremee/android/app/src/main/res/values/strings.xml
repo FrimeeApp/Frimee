@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">frimee</string>
-    <string name="title_activity_main">frimee</string>
+    <string name="app_name">Frimee</string>
+    <string name="title_activity_main">Frimee</string>
     <string name="package_name">com.frimee.app</string>
     <string name="custom_url_scheme">com.frimee.app</string>
 </resources>
