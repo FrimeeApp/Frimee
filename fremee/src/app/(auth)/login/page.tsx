@@ -1,17 +1,83 @@
 ﻿"use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import GoogleAuthButton from "@/components/auth/GoogleAuthButton";
+import { createBrowserSupabaseClient } from "@/services/supabase/client";
+import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
 
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const router = useRouter();
+
+  useEffect(() => {
+    const supabase = createBrowserSupabaseClient();
+
+    const checkSession = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      console.debug("[login] getSession", {
+        hasSession: !!session,
+        userId: session?.user?.id ?? null,
+      });
+
+      if (session) router.replace("/feed");
+    };
+
+    checkSession();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      console.debug("[login] onAuthStateChange", {
+        event,
+        hasSession: !!session,
+      });
+      if (session) router.replace("/feed");
+    });
+
+    return () => subscription.unsubscribe();
+  }, [router]);
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg(null);
+
+    setLoading(true);
+    try {
+      const supabase = createBrowserSupabaseClient();
+
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) throw error;
+
+      router.replace("/feed");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Error iniciando sesión.";
+      setErrorMsg(message);
+    } finally {
+      setLoading(false);
+      // opcional: limpiar password en memoria
+      setPassword("");
+    }
+  };
+
   return (
     <div className="mx-auto w-full max-w-[340px] space-y-7 text-[#535353]">
-      <h1 className="text-6xl font-medium tracking-tight">Registro</h1>
+      <h1 className="text-6xl font-medium tracking-tight">Iniciar sesión</h1>
 
-      <form className="space-y-6">
+      <form className="space-y-6" onSubmit={onSubmit}>
         <fieldset className="rounded-[12px] border border-[#9f9f9f] px-3 pb-2 pt-0.5">
           <legend className="px-1 text-sm text-[#8b8b8b]">E-mail*</legend>
           <input
@@ -19,17 +85,23 @@ export default function LoginPage() {
             className="w-full bg-transparent text-base outline-none"
             aria-label="Correo electronico"
             placeholder="nombre@correo.com"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
           />
         </fieldset>
 
         <fieldset className="rounded-[12px] border border-[#9f9f9f] px-3 pb-2 pt-0.5">
-          <legend className="px-1 text-sm text-[#8b8b8b]">Contrasena*</legend>
+          <legend className="px-1 text-sm text-[#8b8b8b]">Contraseña*</legend>
           <div className="flex items-center gap-3">
             <input
               type={showPassword ? "text" : "password"}
               className="w-full bg-transparent text-base outline-none"
               aria-label="Contrasena"
-              placeholder="Tu contrasena"
+              placeholder="Tu contraseña"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
             />
             <button
               type="button"
@@ -42,18 +114,27 @@ export default function LoginPage() {
           </div>
         </fieldset>
 
+        {errorMsg && <p className="text-sm text-red-600">{errorMsg}</p>}
+
         <button
           type="submit"
-          className="h-14 w-full cursor-pointer rounded-xl bg-gradient-to-r from-[#2ec8b0] to-[#1f8b77] text-xl font-medium text-white"
+          disabled={loading}
+          className="h-14 w-full cursor-pointer rounded-xl bg-gradient-to-r from-[#2ec8b0] to-[#1f8b77] text-xl font-medium text-white disabled:opacity-60"
         >
-          Registrarse
+          {loading ? "Entrando..." : "Iniciar sesión"}
         </button>
 
         <GoogleAuthButton />
       </form>
 
-      <p className="pt-5 text-center text-base text-[#7f7f7f]">
-        Ya tienes cuenta?{" "}
+      <div className="pt-2 text-center">
+        <Link href="/forgot" className="text-base font-medium text-[#1dbf9a]">
+          ¿Has olvidado tu contraseña?
+        </Link>
+      </div>
+
+      <p className="pt-3 text-center text-base text-[#7f7f7f]">
+        ¿No tienes cuenta?{" "}
         <Link href="/register" className="font-medium text-[#1dbf9a]">
           Registrarse
         </Link>
