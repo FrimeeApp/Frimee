@@ -16,6 +16,7 @@ export default function RegisterPage() {
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [registrationComplete, setRegistrationComplete] = useState(false);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,9 +41,7 @@ export default function RegisterPage() {
 
       if (error) throw error;
 
-      // Si tienes email confirmation activado:
-      // aquí lo normal es mostrar mensaje "revisa tu email"
-      // Si no, ya estaría logueado.
+      setRegistrationComplete(true);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Error registrando usuario.";
       setErrorMsg(message);
@@ -50,6 +49,53 @@ export default function RegisterPage() {
       setLoading(false);
     }
   };
+
+  const openMailbox = () => {
+    const domain = email.split("@")[1]?.toLowerCase();
+    const providers: Record<string, string> = {
+      "gmail.com": "https://mail.google.com",
+      "outlook.com": "https://outlook.live.com/mail",
+      "hotmail.com": "https://outlook.live.com/mail",
+      "live.com": "https://outlook.live.com/mail",
+      "yahoo.com": "https://mail.yahoo.com",
+      "icloud.com": "https://www.icloud.com/mail",
+    };
+
+    const url = domain ? providers[domain] : null;
+    if (url) {
+      window.open(url, "_blank", "noopener,noreferrer");
+      return;
+    }
+
+    window.location.href = `mailto:${email}`;
+  };
+
+  if (registrationComplete) {
+    return (
+      <div className="mx-auto w-full max-w-[340px] space-y-7 text-[#535353]">
+        <h1 className="text-5xl font-medium tracking-tight">Registro completado</h1>
+        <div className="space-y-4 rounded-2xl border border-[#d9d9d9] bg-white p-6">
+          <p className="text-base leading-7 text-[#535353]">
+            Tu cuenta ya esta creada. Para activarla, confirma tu email desde el mensaje
+            que te acabamos de enviar a <span className="font-medium">{email}</span>.
+          </p>
+          <p className="text-sm leading-6 text-[#7f7f7f]">
+            Si no ves el correo en la bandeja principal, revisa spam o promociones.
+          </p>
+          <button
+            type="button"
+            onClick={openMailbox}
+            className="h-12 w-full cursor-pointer rounded-xl bg-gradient-to-r from-[#2ec8b0] to-[#1f8b77] text-base font-medium text-white"
+          >
+            Ir a mi correo
+          </button>
+          <Link href="/login" className="block text-center text-sm font-medium text-[#1dbf9a]">
+            Ya confirme, ir a iniciar sesion
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto w-full max-w-[340px] space-y-7 text-[#535353]">
