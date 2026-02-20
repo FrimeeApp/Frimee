@@ -53,29 +53,3 @@
     </table>
   </body>
 </html>
-
-
-import FormData from "form-data"; // form-data v4.0.1
-import Mailgun from "mailgun.js"; // mailgun.js v11.1.0
-
-async function sendSimpleMessage() {
-  const mailgun = new Mailgun(FormData);
-  const mg = mailgun.client({
-    username: "api",
-    key: process.env.API_KEY || "336cafefb45b68813e6a08a37c5d7379-5ba06dbe-a29d95cf",
-    // When you have an EU-domain, you must specify the endpoint:
-    // url: "https://api.eu.mailgun.net"
-  });
-  try {
-    const data = await mg.messages.create("sandbox2fb6ce03a8d6484dae5ae1d6eb2b3754.mailgun.org", {
-      from: "Mailgun Sandbox <postmaster@sandbox2fb6ce03a8d6484dae5ae1d6eb2b3754.mailgun.org>",
-      to: ["Frimee <plannit2026@gmail.com>"],
-      subject: "Hello Frimee",
-      text: "Congratulations Frimee, you just sent an email with Mailgun! You are truly awesome!",
-    });
-
-    console.log(data); // logs response data
-  } catch (error) {
-    console.log(error); //logs any error
-  }
-}
