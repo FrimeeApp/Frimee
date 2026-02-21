@@ -241,7 +241,7 @@ export default function ResetPage() {
           <button
             type="submit"
             disabled={submitting}
-            className="h-14 w-full cursor-pointer rounded-xl bg-gradient-to-r from-[#2ec8b0] to-[#1f8b77] text-xl font-medium text-white disabled:opacity-60"
+            className="h-12 w-full cursor-pointer rounded-xl bg-gradient-to-r from-[#2ec8b0] to-[#1f8b77] text-lg font-medium text-white disabled:opacity-60"
           >
             {submitting ? "Guardando..." : "Cambiar contrasena"}
           </button>

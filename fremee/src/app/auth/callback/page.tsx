@@ -14,6 +14,7 @@ export default function AuthCallbackPage() {
 
     const run = async () => {
       try {
+        const supabase = createBrowserSupabaseClient();
         const url = new URL(window.location.href);
         const code = url.searchParams.get("code");
         const errorDesc =
@@ -31,17 +32,28 @@ export default function AuthCallbackPage() {
         }
 
         if (!code) {
+          const {
+            data: { session },
+          } = await supabase.auth.getSession();
+          if (session) {
+            router.replace("/feed");
+            return;
+          }
           router.replace("/login");
           return;
         }
 
-        const supabase = createBrowserSupabaseClient();
         const { error } = await supabase.auth.exchangeCodeForSession(code);
 
         if (error) {
           console.error("exchangeCodeForSession error:", error);
-          router.replace("/login");
-          return;
+          const {
+            data: { session: maybeSession },
+          } = await supabase.auth.getSession();
+          if (!maybeSession) {
+            router.replace("/login");
+            return;
+          }
         }
 
         const {
@@ -62,5 +74,12 @@ export default function AuthCallbackPage() {
     run();
   }, [router]);
 
-  return null;
+  return (
+    <div className="flex min-h-dvh items-center justify-center bg-[#f4f4f4] px-6 text-center text-[#535353]">
+      <div>
+        <p className="text-lg font-medium">Completando inicio de sesión...</p>
+        <p className="mt-2 text-sm text-[#7d7d7d]">Un momento, te redirigimos.</p>
+      </div>
+    </div>
+  );
 }
