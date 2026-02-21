@@ -64,7 +64,7 @@ export default function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
   return (
     <>
       <nav
-        className={`fixed inset-x-0 bottom-0 z-40 flex h-[calc(4rem+var(--safe-bottom))] items-center justify-around border-t border-[#b9b9b9] bg-[#f4f4f4] px-2 pb-[var(--safe-bottom)] transition-transform duration-250 ease-out lg:hidden ${
+        className={`fixed inset-x-0 bottom-0 z-40 flex h-[calc(4rem+var(--safe-bottom))] items-center justify-around border-t border-[var(--color-border-strong)] bg-[var(--color-bg-sidebar)] px-2 pb-[var(--safe-bottom)] transition-transform duration-250 ease-out lg:hidden ${
           mobileNavVisible ? "translate-y-0" : "translate-y-full"
         }`}
       >
@@ -73,7 +73,7 @@ export default function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
             key={item.key}
             href={item.href}
             aria-label={item.label}
-            className="text-[#1A1F1D] transition-opacity active:opacity-60"
+            className="text-[var(--color-text-strong)] transition-opacity active:opacity-60"
           >
             <item.icon />
           </Link>
@@ -82,7 +82,7 @@ export default function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
         <button
           type="button"
           aria-label="Crear plan"
-          className="text-[#1A1F1D] transition-opacity active:opacity-60"
+          className="text-[var(--color-text-strong)] transition-opacity active:opacity-60"
         >
           <PlusIcon />
         </button>
@@ -92,7 +92,7 @@ export default function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
           aria-label="Perfil"
           onClick={onSignOut}
           disabled={signingOut}
-          className="overflow-hidden rounded-full border border-[#b9b9b9] bg-[#1f1f1f] p-0 text-white transition-opacity active:opacity-60 disabled:opacity-60"
+          className="overflow-hidden rounded-full border border-[var(--color-border-strong)] bg-[var(--color-bg-icon)] p-0 text-white transition-opacity active:opacity-60 disabled:opacity-60"
         >
           <div className={`flex items-center justify-center overflow-hidden rounded-full ${hasProfileImage ? "size-8" : "size-9"}`}>
             {profile?.profile_image ? (
@@ -110,7 +110,7 @@ export default function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
       </nav>
 
       <aside
-        className={`fixed left-0 top-0 z-30 hidden h-dvh border-r border-[#b9b9b9] bg-[#f4f4f4] transition-[width] duration-300 ease-in-out lg:flex lg:flex-col lg:items-center lg:py-6 ${
+        className={`fixed left-0 top-0 z-30 hidden h-dvh border-r border-[var(--color-border-strong)] bg-[var(--color-bg-sidebar)] transition-[width] duration-300 ease-in-out lg:flex lg:flex-col lg:items-center lg:py-6 ${
           collapsed ? "w-[22px]" : "w-[102px]"
         }`}
       >
@@ -118,7 +118,7 @@ export default function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
           type="button"
           aria-label={collapsed ? "Abrir sidebar" : "Ocultar sidebar"}
           onClick={onToggle}
-          className="absolute -right-3 top-5 z-40 flex size-6 items-center justify-center rounded-full border border-[#b9b9b9] bg-white text-[#1A1F1D] shadow-sm transition hover:bg-[#f5f5f5]"
+          className="absolute -right-3 top-5 z-40 flex size-6 items-center justify-center rounded-full border border-[var(--color-border-strong)] bg-[var(--color-bg-surface)] text-[var(--color-text-strong)] shadow-sm transition hover:bg-[var(--color-toggle-hover)]"
         >
           <ChevronIcon collapsed={collapsed} />
         </button>
@@ -128,7 +128,7 @@ export default function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
             collapsed ? "pointer-events-none translate-x-[-8px] opacity-0" : "translate-x-0 opacity-100"
           }`}
         >
-          <div className="text-[46px] font-medium leading-none tracking-tight text-[#1A1F1D]">F.</div>
+          <div className="text-[46px] font-medium leading-none tracking-tight text-[var(--color-text-strong)]">F.</div>
 
           <nav className="mt-56 flex w-full flex-col items-center gap-8">
             {items.map((item) => (
@@ -136,7 +136,7 @@ export default function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
                 key={item.key}
                 href={item.href}
                 aria-label={item.label}
-                className="text-[#1A1F1D] transition-opacity hover:opacity-70"
+                className="text-[var(--color-text-strong)] transition-opacity hover:opacity-70"
               >
                 <item.icon />
               </Link>
@@ -146,7 +146,7 @@ export default function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
           <button
             type="button"
             aria-label="Crear plan"
-            className="mt-14 text-[#1A1F1D] transition-opacity hover:opacity-70"
+            className="mt-14 text-[var(--color-text-strong)] transition-opacity hover:opacity-70"
           >
             <PlusIcon />
           </button>
@@ -156,7 +156,7 @@ export default function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
             aria-label="Perfil"
             onClick={onSignOut}
             disabled={signingOut}
-            className="mt-auto overflow-hidden rounded-full border border-[#b9b9b9] bg-[#1f1f1f] p-0 text-white transition-opacity hover:opacity-80 disabled:opacity-60"
+            className="mt-auto overflow-hidden rounded-full border border-[var(--color-border-strong)] bg-[var(--color-bg-icon)] p-0 text-white transition-opacity hover:opacity-80 disabled:opacity-60"
           >
             <div className="flex size-11 items-center justify-center overflow-hidden rounded-full">
               {profile?.profile_image ? (

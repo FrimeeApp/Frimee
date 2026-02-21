@@ -75,10 +75,10 @@ export default function AuthCallbackPage() {
   }, [router]);
 
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-[#f4f4f4] px-6 text-center text-[#535353]">
+    <div className="flex min-h-dvh items-center justify-center bg-[var(--color-bg-app)] px-6 text-center text-[var(--color-text-primary)]">
       <div>
         <p className="text-lg font-medium">Completando inicio de sesión...</p>
-        <p className="mt-2 text-sm text-[#7d7d7d]">Un momento, te redirigimos.</p>
+        <p className="mt-2 text-sm text-[var(--color-text-secondary)]">Un momento, te redirigimos.</p>
       </div>
     </div>
   );

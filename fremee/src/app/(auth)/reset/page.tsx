@@ -154,23 +154,23 @@ export default function ResetPage() {
 
   if (checkingLink) {
     return (
-      <div className="mx-auto w-full max-w-[340px] space-y-7 text-[#535353]">
-        <h1 className="text-6xl font-medium tracking-tight">Nueva contrasena</h1>
-        <p className="text-base text-[#6b6b6b]">Validando enlace...</p>
+      <div className="mx-auto w-full max-w-[340px] space-y-7 text-[var(--color-text-primary)]">
+        <h1 className="text-6xl font-medium tracking-tight text-[var(--color-text-strong)]">Nueva contrasena</h1>
+        <p className="text-base text-[var(--color-text-subtle)]">Validando enlace...</p>
       </div>
     );
   }
 
   return (
-    <div className="mx-auto w-full max-w-[340px] space-y-7 text-[#535353]">
-      <h1 className="text-6xl font-medium tracking-tight">Nueva contrasena</h1>
+    <div className="mx-auto w-full max-w-[340px] space-y-7 text-[var(--color-text-primary)]">
+      <h1 className="text-6xl font-medium tracking-tight text-[var(--color-text-strong)]">Nueva contrasena</h1>
 
       {msg && (
         <div
           className={`rounded-xl border p-3 text-sm ${
             msg.type === "ok"
-              ? "border-[#1FAF8B] bg-[#E6F6F2] text-[#116F59]"
-              : "border-[#E5484D] bg-[#FDECEC] text-[#8A1F23]"
+              ? "border-[var(--color-border-success)] bg-[var(--color-bg-success-soft)] text-[var(--color-text-success)]"
+              : "border-[var(--color-border-danger)] bg-[var(--color-bg-danger-soft)] text-[var(--color-text-danger)]"
           }`}
         >
           {msg.text}
@@ -178,20 +178,20 @@ export default function ResetPage() {
       )}
 
       {!canReset ? (
-        <div className="space-y-2 text-sm text-[#6b6b6b]">
+        <div className="space-y-2 text-sm text-[var(--color-text-subtle)]">
           <p>Pide un nuevo enlace para volver a intentarlo.</p>
-          <Link href="/forgot" className="font-medium text-[#116F59] underline">
+          <Link href="/forgot" className="font-medium text-[var(--color-text-accent-strong)] underline">
             Volver a recuperar contrasena
           </Link>
         </div>
       ) : (
         <form className="space-y-6" onSubmit={onSubmit}>
-          <fieldset className="rounded-[12px] border border-[#9f9f9f] px-3 pb-2 pt-0.5">
-            <legend className="px-1 text-sm text-[#8b8b8b]">Contrasena nueva*</legend>
+          <fieldset className="rounded-[12px] border border-[var(--color-border-default)] bg-[var(--color-bg-input)] px-3 pb-2 pt-0.5">
+            <legend className="px-1 text-sm text-[var(--color-text-muted)]">Contrasena nueva*</legend>
             <div className="flex items-center gap-3">
               <input
                 type={showPassword ? "text" : "password"}
-                className="w-full bg-transparent text-base outline-none"
+                className="w-full bg-transparent text-base text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-placeholder)]"
                 aria-label="Contrasena nueva"
                 autoComplete="new-password"
                 placeholder="Escribe tu nueva contrasena"
@@ -201,7 +201,7 @@ export default function ResetPage() {
               />
               <button
                 type="button"
-                className="cursor-pointer text-[#8b8b8b]"
+                className="cursor-pointer text-[var(--color-text-muted)]"
                 aria-label={showPassword ? "Ocultar contrasena" : "Mostrar contrasena"}
                 onClick={() => setShowPassword((prev) => !prev)}
               >
@@ -210,12 +210,12 @@ export default function ResetPage() {
             </div>
           </fieldset>
 
-          <fieldset className="rounded-[12px] border border-[#9f9f9f] px-3 pb-2 pt-0.5">
-            <legend className="px-1 text-sm text-[#8b8b8b]">Repetir contrasena*</legend>
+          <fieldset className="rounded-[12px] border border-[var(--color-border-default)] bg-[var(--color-bg-input)] px-3 pb-2 pt-0.5">
+            <legend className="px-1 text-sm text-[var(--color-text-muted)]">Repetir contrasena*</legend>
             <div className="flex items-center gap-3">
               <input
                 type={showRepeatPassword ? "text" : "password"}
-                className="w-full bg-transparent text-base outline-none"
+                className="w-full bg-transparent text-base text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-placeholder)]"
                 aria-label="Repetir contrasena"
                 autoComplete="new-password"
                 placeholder="Repite tu nueva contrasena"
@@ -225,7 +225,7 @@ export default function ResetPage() {
               />
               <button
                 type="button"
-                className="cursor-pointer text-[#8b8b8b]"
+                className="cursor-pointer text-[var(--color-text-muted)]"
                 aria-label={
                   showRepeatPassword
                     ? "Ocultar repetir contrasena"
@@ -241,7 +241,7 @@ export default function ResetPage() {
           <button
             type="submit"
             disabled={submitting}
-            className="h-12 w-full cursor-pointer rounded-xl bg-gradient-to-r from-[#2ec8b0] to-[#1f8b77] text-lg font-medium text-white disabled:opacity-60"
+            className="h-12 w-full cursor-pointer rounded-xl bg-gradient-to-r from-[var(--color-button-primary-start)] to-[var(--color-button-primary-end)] text-lg font-medium text-white disabled:opacity-60"
           >
             {submitting ? "Guardando..." : "Cambiar contrasena"}
           </button>

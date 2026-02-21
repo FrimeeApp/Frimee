@@ -72,24 +72,24 @@ export default function RegisterPage() {
 
   if (registrationComplete) {
     return (
-      <div className="mx-auto w-full max-w-[340px] space-y-7 text-[#535353] dark:text-[#d6dede]">
-        <h1 className="text-5xl font-medium tracking-tight dark:text-[#e7efef]">Registro completado</h1>
-        <div className="space-y-4 rounded-2xl border border-[#d9d9d9] bg-white p-6 dark:border-[#2f3a3c] dark:bg-[#071617]">
-          <p className="text-base leading-7 text-[#535353] dark:text-[#cdd7d7]">
+      <div className="mx-auto w-full max-w-[340px] space-y-7 text-[var(--color-text-primary)]">
+        <h1 className="text-5xl font-medium tracking-tight text-[var(--color-text-strong)]">Registro completado</h1>
+        <div className="space-y-4 rounded-2xl border border-[var(--color-border-surface)] bg-[var(--color-bg-surface)] p-6">
+          <p className="text-base leading-7 text-[var(--color-text-primary)]">
             Tu cuenta ya esta creada. Para activarla, confirma tu email desde el mensaje
             que te acabamos de enviar a <span className="font-medium">{email}</span>.
           </p>
-          <p className="text-sm leading-6 text-[#7f7f7f] dark:text-[#819092]">
+          <p className="text-sm leading-6 text-[var(--color-text-secondary)]">
             Si no ves el correo en la bandeja principal, revisa spam o promociones.
           </p>
           <button
             type="button"
             onClick={openMailbox}
-            className="h-11 w-full cursor-pointer rounded-xl bg-gradient-to-r from-[#2ec8b0] to-[#1f8b77] text-sm font-medium text-white"
+            className="h-11 w-full cursor-pointer rounded-xl bg-gradient-to-r from-[var(--color-button-primary-start)] to-[var(--color-button-primary-end)] text-sm font-medium text-white"
           >
             Ir a mi correo
           </button>
-          <Link href="/login" className="block text-center text-sm font-medium text-[#1dbf9a] dark:text-[#2dcfb2]">
+          <Link href="/login" className="block text-center text-sm font-medium text-[var(--color-text-accent)]">
             Ya confirme, ir a iniciar sesion
           </Link>
         </div>
@@ -98,24 +98,24 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="mx-auto flex min-h-[calc(100dvh-48px)] w-full max-w-[340px] flex-col justify-center text-[#535353] dark:text-[#d6dede] lg:min-h-0 lg:block">
-      <h1 className="text-[34px] font-medium leading-[0.98] tracking-normal dark:text-[#e7efef] sm:text-3xl">Empecemos</h1>
-      <h3 className="mb-5 font-medium tracking-tight text-[#535353] dark:text-[#8f9d9e]">Crea una cuenta</h3>
+    <div className="mx-auto flex min-h-[calc(100dvh-48px)] w-full max-w-[340px] flex-col justify-center text-[var(--color-text-primary)] lg:min-h-0 lg:block">
+      <h1 className="text-[34px] font-medium leading-[0.98] tracking-normal text-[var(--color-text-strong)] sm:text-3xl">Empecemos</h1>
+      <h3 className="mb-5 font-medium tracking-tight text-[var(--color-text-subtle)]">Crea una cuenta</h3>
 
       <GoogleAuthButton />
 
       <div className="flex items-center gap-4 py-1.5">
-        <div className="flex-1 border-t border-[#E3E8E6] dark:border-[#2e3a3c]" />
-        <span className="text-sm font-medium text-[#9AA3A0] dark:text-[#758284]">o</span>
-        <div className="flex-1 border-t border-[#E3E8E6] dark:border-[#2e3a3c]" />
+        <div className="flex-1 border-t border-[var(--color-border-muted)]" />
+        <span className="text-sm font-medium text-[var(--color-text-divider)]">o</span>
+        <div className="flex-1 border-t border-[var(--color-border-muted)]" />
       </div>
 
       <form className="space-y-4" onSubmit={onSubmit}>
-        <fieldset className="rounded-[12px] border border-[#9f9f9f] px-3 pb-2 pt-0.5 dark:border-[#3b4a4c] dark:bg-[#071617]">
-          <legend className="px-1 text-sm text-[#8b8b8b] dark:text-[#7e8b8d]">Nombre*</legend>
+        <fieldset className="rounded-[12px] border border-[var(--color-border-default)] bg-[var(--color-bg-input)] px-3 pb-2 pt-0.5">
+          <legend className="px-1 text-sm text-[var(--color-text-muted)]">Nombre*</legend>
           <input
             type="text"
-            className="w-full bg-transparent text-base outline-none dark:text-[#dce5e6] dark:placeholder:text-[#7f8a8b]"
+            className="w-full bg-transparent text-base text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-placeholder)]"
             aria-label="Nombre"
             autoComplete="name"
             placeholder="Nombre*"
@@ -124,11 +124,11 @@ export default function RegisterPage() {
           />
         </fieldset>
 
-        <fieldset className="rounded-[12px] border border-[#9f9f9f] px-3 pb-2 pt-0.5 dark:border-[#3b4a4c] dark:bg-[#071617]">
-          <legend className="px-1 text-sm text-[#8b8b8b] dark:text-[#7e8b8d]">E-mail*</legend>
+        <fieldset className="rounded-[12px] border border-[var(--color-border-default)] bg-[var(--color-bg-input)] px-3 pb-2 pt-0.5">
+          <legend className="px-1 text-sm text-[var(--color-text-muted)]">E-mail*</legend>
           <input
             type="email"
-            className="w-full bg-transparent text-base outline-none dark:text-[#dce5e6] dark:placeholder:text-[#7f8a8b]"
+            className="w-full bg-transparent text-base text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-placeholder)]"
             aria-label="Correo electronico"
             autoComplete="email"
             placeholder="Email*"
@@ -137,12 +137,12 @@ export default function RegisterPage() {
           />
         </fieldset>
 
-        <fieldset className="rounded-[12px] border border-[#9f9f9f] px-3 pb-2 pt-0.5 dark:border-[#3b4a4c] dark:bg-[#071617]">
-          <legend className="px-1 text-sm text-[#8b8b8b] dark:text-[#7e8b8d]">Contrasena*</legend>
+        <fieldset className="rounded-[12px] border border-[var(--color-border-default)] bg-[var(--color-bg-input)] px-3 pb-2 pt-0.5">
+          <legend className="px-1 text-sm text-[var(--color-text-muted)]">Contrasena*</legend>
           <div className="flex items-center gap-3">
             <input
               type={showPassword ? "text" : "password"}
-              className="w-full bg-transparent text-base outline-none dark:text-[#dce5e6] dark:placeholder:text-[#7f8a8b]"
+              className="w-full bg-transparent text-base text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-placeholder)]"
               aria-label="Contrasena"
               autoComplete="new-password"
               placeholder="Contraseña*"
@@ -151,7 +151,7 @@ export default function RegisterPage() {
             />
             <button
               type="button"
-              className="cursor-pointer text-[#8b8b8b] dark:text-[#7e8b8d]"
+              className="cursor-pointer text-[var(--color-text-muted)]"
               aria-label={showPassword ? "Ocultar contrasena" : "Mostrar contrasena"}
               onClick={() => setShowPassword((prev) => !prev)}
             >
@@ -160,12 +160,12 @@ export default function RegisterPage() {
           </div>
         </fieldset>
 
-        <fieldset className="rounded-[12px] border border-[#9f9f9f] px-3 pb-2 pt-0.5 dark:border-[#3b4a4c] dark:bg-[#071617]">
-          <legend className="px-1 text-sm text-[#8b8b8b] dark:text-[#7e8b8d]">Repetir contrasena*</legend>
+        <fieldset className="rounded-[12px] border border-[var(--color-border-default)] bg-[var(--color-bg-input)] px-3 pb-2 pt-0.5">
+          <legend className="px-1 text-sm text-[var(--color-text-muted)]">Repetir contrasena*</legend>
           <div className="flex items-center gap-3">
             <input
               type={showRepeatPassword ? "text" : "password"}
-              className="w-full bg-transparent text-base outline-none dark:text-[#dce5e6] dark:placeholder:text-[#7f8a8b]"
+              className="w-full bg-transparent text-base text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-placeholder)]"
               aria-label="Repetir contrasena"
               autoComplete="new-password"
               placeholder="Repetir contraseña*"
@@ -174,7 +174,7 @@ export default function RegisterPage() {
             />
             <button
               type="button"
-              className="cursor-pointer text-[#8b8b8b] dark:text-[#7e8b8d]"
+              className="cursor-pointer text-[var(--color-text-muted)]"
               aria-label={
                 showRepeatPassword ? "Ocultar repetir contrasena" : "Mostrar repetir contrasena"
               }
@@ -192,23 +192,23 @@ export default function RegisterPage() {
         <button
           type="submit"
           disabled={loading}
-          className="h-12 w-full cursor-pointer rounded-xl bg-gradient-to-r from-[#2ec8b0] to-[#1f8b77] text-lg font-medium text-white disabled:opacity-60"
+          className="h-12 w-full cursor-pointer rounded-xl bg-gradient-to-r from-[var(--color-button-primary-start)] to-[var(--color-button-primary-end)] text-lg font-medium text-white disabled:opacity-60"
         >
           {loading ? "Creando cuenta..." : "Registrarse"}
         </button>
       </form>
 
-      <p className="pt-3 text-center text-base text-[#7f7f7f] dark:text-[#7f8a8b]">
+      <p className="pt-3 text-center text-base text-[var(--color-text-secondary)]">
         ¿Ya tienes una cuenta?{" "}
-        <Link href="/login" className="font-medium text-[#1dbf9a] dark:text-[#2dcfb2]">
+        <Link href="/login" className="font-medium text-[var(--color-text-accent)]">
           Iniciar sesión
         </Link>
       </p>
 
-      <p className="pt-10 text-center text-sm leading-[1.35] text-[#8a8a8a] dark:text-[#6f7a7b]">
-        Al continuar, aceptas los <span className="font-semibold text-[#636363] dark:text-[#aab7b9]">Términos y</span>
+      <p className="pt-10 text-center text-sm leading-[1.35] text-[var(--color-text-muted)]">
+        Al continuar, aceptas los <span className="font-semibold text-[var(--color-text-subtle)]">Términos y</span>
         <br />
-        <span className="font-semibold text-[#636363] dark:text-[#aab7b9]">Condiciones</span> de Frimee
+        <span className="font-semibold text-[var(--color-text-subtle)]">Condiciones</span> de Frimee
       </p>
     </div>
   );
