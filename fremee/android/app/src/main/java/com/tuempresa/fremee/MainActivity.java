@@ -1,4 +1,4 @@
-package com.tuempresa.fremee;
+package com.frimee.app;
 
 import com.getcapacitor.BridgeActivity;
 

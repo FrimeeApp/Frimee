@@ -3,30 +3,25 @@ import { createMiddlewareClient } from "@/services/supabase/middleware";
 
 export async function middleware(request: NextRequest) {
   const { supabase, response } = createMiddlewareClient(request);
+  const pathname = request.nextUrl.pathname;
+  const code = request.nextUrl.searchParams.get("code");
+  const error = request.nextUrl.searchParams.get("error");
+  const errorDescription = request.nextUrl.searchParams.get("error_description");
+
+  // Si OAuth vuelve a "/" con query, reenviamos al callback real.
+  if (pathname === "/" && (code || error || errorDescription)) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/auth/callback";
+    return NextResponse.redirect(url);
+  }
 
   // Esto fuerza refresh de sesión si hace falta (rotación tokens)
   const { data: { user } } = await supabase.auth.getUser();
-
-  const pathname = request.nextUrl.pathname;
-
-  // Ejemplo: proteger todo lo que esté bajo /feed o /app
-  const isProtected =
-    pathname.startsWith("/feed") ||
-    pathname.startsWith("/settings") ||
-    pathname.startsWith("/plans");
 
   const isAuthRoute =
     pathname.startsWith("/login") ||
     pathname.startsWith("/register") ||
     pathname.startsWith("/forgot");
-
-  // Si intenta acceder a protegido sin login -> /login
-  if (isProtected && !user) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    url.searchParams.set("redirectTo", pathname);
-    return NextResponse.redirect(url);
-  }
 
   // Si está logueado y entra en login/register -> llévalo al feed
   if (isAuthRoute && user) {
