@@ -9,9 +9,7 @@ export default function ForgotPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(
-    null
-  );
+  const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,15 +24,6 @@ export default function ForgotPage() {
     try {
       setSubmitting(true);
       const supabase = createBrowserSupabaseClient();
-
-      // Si quieres controlar a qué pantalla llega el usuario al clicar el email,
-      // define redirectTo. En web, normalmente:
-      // const redirectTo = `${window.location.origin}/reset`;
-      //
-      // En Capacitor, usarías un deep link (si lo tienes configurado):
-      // const redirectTo = `fremee://auth/reset`;
-      //
-      // Si no pones redirectTo, Supabase usa el Site URL / configuración del proyecto.
       const redirectTo = `${window.location.origin}/reset/`;
 
       const { error } = await supabase.auth.resetPasswordForEmail(value, {
@@ -45,23 +34,22 @@ export default function ForgotPage() {
         console.error("[forgot] resetPasswordForEmail error", error);
         setMsg({
           type: "err",
-          text: error.message || "No se pudo enviar el email. Inténtalo de nuevo.",
+          text: error.message || "No se pudo enviar el email. Intentalo de nuevo.",
         });
         return;
       }
 
       setMsg({
         type: "ok",
-        text: "Te hemos enviado un enlace para restablecer la contraseña.",
+        text: "Te hemos enviado un enlace para restablecer la contrasena.",
       });
 
-      // volver a login
       setTimeout(() => router.replace("/login"), 1500);
     } catch (err) {
       console.error("[forgot] exception", err);
       setMsg({
         type: "err",
-        text: "Ha ocurrido un error inesperado. Inténtalo de nuevo.",
+        text: "Ha ocurrido un error inesperado. Intentalo de nuevo.",
       });
     } finally {
       setSubmitting(false);
@@ -69,15 +57,15 @@ export default function ForgotPage() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-[340px] space-y-7 text-[#535353]">
-      <h1 className="text-6xl font-medium tracking-tight">Recuperar</h1>
+    <div className="mx-auto w-full max-w-[340px] space-y-7 text-[var(--color-text-primary)]">
+      <h1 className="text-6xl font-medium tracking-tight text-[var(--color-text-strong)]">Recuperar</h1>
 
       <form className="space-y-6" onSubmit={onSubmit}>
-        <fieldset className="rounded-[12px] border border-[#9f9f9f] px-3 pb-2 pt-0.5">
-          <legend className="px-1 text-sm text-[#8b8b8b]">E-mail*</legend>
+        <fieldset className="rounded-[12px] border border-[var(--color-border-default)] bg-[var(--color-bg-input)] px-3 pb-2 pt-0.5">
+          <legend className="px-1 text-sm text-[var(--color-text-muted)]">E-mail*</legend>
           <input
             type="email"
-            className="w-full bg-transparent text-base outline-none"
+            className="w-full bg-transparent text-base text-[var(--color-text-primary)] outline-none"
             aria-label="Correo electronico"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -90,8 +78,8 @@ export default function ForgotPage() {
           <div
             className={`rounded-xl border p-3 text-sm ${
               msg.type === "ok"
-                ? "border-[#1FAF8B] bg-[#E6F6F2] text-[#116F59]"
-                : "border-[#E5484D] bg-[#FDECEC] text-[#8A1F23]"
+                ? "border-[var(--color-border-success)] bg-[var(--color-bg-success-soft)] text-[var(--color-text-success)]"
+                : "border-[var(--color-border-danger)] bg-[var(--color-bg-danger-soft)] text-[var(--color-text-danger)]"
             }`}
           >
             {msg.text}
@@ -101,16 +89,16 @@ export default function ForgotPage() {
         <button
           type="submit"
           disabled={submitting}
-          className="h-12 w-full rounded-xl bg-gradient-to-r from-[#2ec8b0] to-[#1f8b77] text-lg font-medium text-white disabled:opacity-60"
+          className="h-12 w-full rounded-xl bg-gradient-to-r from-[var(--color-button-primary-start)] to-[var(--color-button-primary-end)] text-lg font-medium text-white disabled:opacity-60"
         >
           {submitting ? "Enviando..." : "Enviar enlace"}
         </button>
       </form>
 
-      <div className="pt-2 text-center text-sm text-[#6b6b6b]">
-        ¿Ya la recordaste?{" "}
-        <Link href="/login" className="font-medium text-[#1dbf9a]">
-          Volver a iniciar sesión
+      <div className="pt-2 text-center text-sm text-[var(--color-text-subtle)]">
+        Ya la recordaste?{" "}
+        <Link href="/login" className="font-medium text-[var(--color-text-accent)]">
+          Volver a iniciar sesion
         </Link>
       </div>
     </div>

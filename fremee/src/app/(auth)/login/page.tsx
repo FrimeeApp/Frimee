@@ -97,24 +97,24 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="mx-auto flex min-h-[calc(100dvh-48px)] w-full max-w-[340px] flex-col justify-center text-[#535353] dark:text-[#d6dede] lg:min-h-0 lg:block">
-      <h1 className="text-[34px] font-medium leading-[0.98] tracking-normal dark:text-[#e7efef] sm:text-3xl">Bienvenid@ de vuelta</h1>
-      <h3 className="mb-5 font-medium tracking-tight text-[#535353] dark:text-[#8f9d9e]">Inicia sesión con tu cuenta</h3>
+    <div className="mx-auto flex min-h-[calc(100dvh-48px)] w-full max-w-[340px] flex-col justify-center text-[var(--color-text-primary)] lg:min-h-0 lg:block">
+      <h1 className="text-[34px] font-medium leading-[0.98] tracking-normal text-[var(--color-text-strong)] sm:text-3xl">Bienvenid@ de vuelta</h1>
+      <h3 className="mb-5 font-medium tracking-tight text-[var(--color-text-subtle)]">Inicia sesión con tu cuenta</h3>
 
       <GoogleAuthButton />
 
       <div className="flex items-center gap-4 py-2">
-        <div className="flex-1 border-t border-[#E3E8E6] dark:border-[#2e3a3c]" />
-        <span className="text-sm font-medium text-[#9AA3A0] dark:text-[#758284]">o</span>
-        <div className="flex-1 border-t border-[#E3E8E6] dark:border-[#2e3a3c]" />
+        <div className="flex-1 border-t border-[var(--color-border-muted)]" />
+        <span className="text-sm font-medium text-[var(--color-text-divider)]">o</span>
+        <div className="flex-1 border-t border-[var(--color-border-muted)]" />
       </div>
 
       <form className="space-y-6" onSubmit={onSubmit}>
-        <fieldset className="rounded-[12px] border border-[#9f9f9f] px-3 pb-2 pt-0.5 dark:border-[#3b4a4c] dark:bg-[#071617]">
-          <legend className="px-1 text-sm text-[#8b8b8b] dark:text-[#7e8b8d]">E-mail*</legend>
+        <fieldset className="rounded-[12px] border border-[var(--color-border-default)] bg-[var(--color-bg-input)] px-3 pb-2 pt-0.5">
+          <legend className="px-1 text-sm text-[var(--color-text-muted)]">E-mail*</legend>
           <input
             type="email"
-            className="w-full bg-transparent text-base outline-none dark:text-[#dce5e6] dark:placeholder:text-[#7f8a8b]"
+            className="w-full bg-transparent text-base text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-placeholder)]"
             aria-label="Correo electronico"
             placeholder="nombre@correo.com"
             autoComplete="email"
@@ -123,12 +123,12 @@ export default function LoginPage() {
           />
         </fieldset>
 
-        <fieldset className="rounded-[12px] border border-[#9f9f9f] px-3 pb-2 pt-0.5 dark:border-[#3b4a4c] dark:bg-[#071617]">
-          <legend className="px-1 text-sm text-[#8b8b8b] dark:text-[#7e8b8d]">Contraseña*</legend>
+        <fieldset className="rounded-[12px] border border-[var(--color-border-default)] bg-[var(--color-bg-input)] px-3 pb-2 pt-0.5">
+          <legend className="px-1 text-sm text-[var(--color-text-muted)]">Contraseña*</legend>
           <div className="flex items-center gap-3">
             <input
               type={showPassword ? "text" : "password"}
-              className="w-full bg-transparent text-base outline-none dark:text-[#dce5e6] dark:placeholder:text-[#7f8a8b]"
+              className="w-full bg-transparent text-base text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-placeholder)]"
               aria-label="Contrasena"
               placeholder="Tu contraseña"
               autoComplete="current-password"
@@ -137,7 +137,7 @@ export default function LoginPage() {
             />
             <button
               type="button"
-              className="cursor-pointer text-[#8b8b8b] dark:text-[#7e8b8d]"
+              className="cursor-pointer text-[var(--color-text-muted)]"
               aria-label={showPassword ? "Ocultar contrasena" : "Mostrar contrasena"}
               onClick={() => setShowPassword((prev) => !prev)}
             >
@@ -151,21 +151,21 @@ export default function LoginPage() {
         <button
           type="submit"
           disabled={loading}
-          className="h-12 w-full cursor-pointer rounded-xl bg-gradient-to-r from-[#2ec8b0] to-[#1f8b77] text-lg font-medium text-white disabled:opacity-60"
+          className="h-12 w-full cursor-pointer rounded-xl bg-gradient-to-r from-[var(--color-button-primary-start)] to-[var(--color-button-primary-end)] text-lg font-medium text-white disabled:opacity-60"
         >
           {loading ? "Entrando..." : "Iniciar sesión"}
         </button>
       </form>
 
       <div className="pt-2 text-center">
-        <Link href="/forgot" className="text-base font-medium text-[#1dbf9a] dark:text-[#2dcfb2]">
+        <Link href="/forgot" className="text-base font-medium text-[var(--color-text-accent)]">
           ¿Has olvidado tu contraseña?
         </Link>
       </div>
 
-      <p className="pt-3 text-center text-base text-[#7f7f7f] dark:text-[#7f8a8b]">
+      <p className="pt-3 text-center text-base text-[var(--color-text-secondary)]">
         ¿No tienes cuenta?{" "}
-        <Link href="/register" className="font-medium text-[#1dbf9a] dark:text-[#2dcfb2]">
+        <Link href="/register" className="font-medium text-[var(--color-text-accent)]">
           Registrarse
         </Link>
       </p>
