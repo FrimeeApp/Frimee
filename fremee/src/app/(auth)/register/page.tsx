@@ -72,24 +72,24 @@ export default function RegisterPage() {
 
   if (registrationComplete) {
     return (
-      <div className="mx-auto w-full max-w-[340px] space-y-7 text-[#535353]">
-        <h1 className="text-5xl font-medium tracking-tight">Registro completado</h1>
-        <div className="space-y-4 rounded-2xl border border-[#d9d9d9] bg-white p-6">
-          <p className="text-base leading-7 text-[#535353]">
+      <div className="mx-auto w-full max-w-[340px] space-y-7 text-[#535353] dark:text-[#d6dede]">
+        <h1 className="text-5xl font-medium tracking-tight dark:text-[#e7efef]">Registro completado</h1>
+        <div className="space-y-4 rounded-2xl border border-[#d9d9d9] bg-white p-6 dark:border-[#2f3a3c] dark:bg-[#071617]">
+          <p className="text-base leading-7 text-[#535353] dark:text-[#cdd7d7]">
             Tu cuenta ya esta creada. Para activarla, confirma tu email desde el mensaje
             que te acabamos de enviar a <span className="font-medium">{email}</span>.
           </p>
-          <p className="text-sm leading-6 text-[#7f7f7f]">
+          <p className="text-sm leading-6 text-[#7f7f7f] dark:text-[#819092]">
             Si no ves el correo en la bandeja principal, revisa spam o promociones.
           </p>
           <button
             type="button"
             onClick={openMailbox}
-            className="h-12 w-full cursor-pointer rounded-xl bg-gradient-to-r from-[#2ec8b0] to-[#1f8b77] text-base font-medium text-white"
+            className="h-11 w-full cursor-pointer rounded-xl bg-gradient-to-r from-[#2ec8b0] to-[#1f8b77] text-sm font-medium text-white"
           >
             Ir a mi correo
           </button>
-          <Link href="/login" className="block text-center text-sm font-medium text-[#1dbf9a]">
+          <Link href="/login" className="block text-center text-sm font-medium text-[#1dbf9a] dark:text-[#2dcfb2]">
             Ya confirme, ir a iniciar sesion
           </Link>
         </div>
@@ -98,51 +98,60 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[340px] space-y-7 text-[#535353]">
-      <h1 className="text-6xl font-medium tracking-tight">Registro</h1>
+    <div className="mx-auto flex min-h-[calc(100dvh-48px)] w-full max-w-[340px] flex-col justify-center text-[#535353] dark:text-[#d6dede] lg:min-h-0 lg:block">
+      <h1 className="text-[34px] font-medium leading-[0.98] tracking-normal dark:text-[#e7efef] sm:text-3xl">Empecemos</h1>
+      <h3 className="mb-5 font-medium tracking-tight text-[#535353] dark:text-[#8f9d9e]">Crea una cuenta</h3>
 
-      <form className="space-y-6" onSubmit={onSubmit}>
-        <fieldset className="rounded-[12px] border border-[#9f9f9f] px-3 pb-2 pt-0.5">
-          <legend className="px-1 text-sm text-[#8b8b8b]">Nombre*</legend>
+      <GoogleAuthButton />
+
+      <div className="flex items-center gap-4 py-1.5">
+        <div className="flex-1 border-t border-[#E3E8E6] dark:border-[#2e3a3c]" />
+        <span className="text-sm font-medium text-[#9AA3A0] dark:text-[#758284]">o</span>
+        <div className="flex-1 border-t border-[#E3E8E6] dark:border-[#2e3a3c]" />
+      </div>
+
+      <form className="space-y-4" onSubmit={onSubmit}>
+        <fieldset className="rounded-[12px] border border-[#9f9f9f] px-3 pb-2 pt-0.5 dark:border-[#3b4a4c] dark:bg-[#071617]">
+          <legend className="px-1 text-sm text-[#8b8b8b] dark:text-[#7e8b8d]">Nombre*</legend>
           <input
             type="text"
-            className="w-full bg-transparent text-base outline-none"
+            className="w-full bg-transparent text-base outline-none dark:text-[#dce5e6] dark:placeholder:text-[#7f8a8b]"
             aria-label="Nombre"
             autoComplete="name"
-            placeholder="Tu nombre completo"
+            placeholder="Nombre*"
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
         </fieldset>
 
-        <fieldset className="rounded-[12px] border border-[#9f9f9f] px-3 pb-2 pt-0.5">
-          <legend className="px-1 text-sm text-[#8b8b8b]">E-mail*</legend>
+        <fieldset className="rounded-[12px] border border-[#9f9f9f] px-3 pb-2 pt-0.5 dark:border-[#3b4a4c] dark:bg-[#071617]">
+          <legend className="px-1 text-sm text-[#8b8b8b] dark:text-[#7e8b8d]">E-mail*</legend>
           <input
             type="email"
-            className="w-full bg-transparent text-base outline-none"
+            className="w-full bg-transparent text-base outline-none dark:text-[#dce5e6] dark:placeholder:text-[#7f8a8b]"
             aria-label="Correo electronico"
             autoComplete="email"
-            placeholder="nombre@correo.com"
+            placeholder="Email*"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
         </fieldset>
 
-        <fieldset className="rounded-[12px] border border-[#9f9f9f] px-3 pb-2 pt-0.5">
-          <legend className="px-1 text-sm text-[#8b8b8b]">Contrasena*</legend>
+        <fieldset className="rounded-[12px] border border-[#9f9f9f] px-3 pb-2 pt-0.5 dark:border-[#3b4a4c] dark:bg-[#071617]">
+          <legend className="px-1 text-sm text-[#8b8b8b] dark:text-[#7e8b8d]">Contrasena*</legend>
           <div className="flex items-center gap-3">
             <input
               type={showPassword ? "text" : "password"}
-              className="w-full bg-transparent text-base outline-none"
+              className="w-full bg-transparent text-base outline-none dark:text-[#dce5e6] dark:placeholder:text-[#7f8a8b]"
               aria-label="Contrasena"
               autoComplete="new-password"
-              placeholder="Crea una contrasena"
+              placeholder="Contraseña*"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
             <button
               type="button"
-              className="cursor-pointer text-[#8b8b8b]"
+              className="cursor-pointer text-[#8b8b8b] dark:text-[#7e8b8d]"
               aria-label={showPassword ? "Ocultar contrasena" : "Mostrar contrasena"}
               onClick={() => setShowPassword((prev) => !prev)}
             >
@@ -151,21 +160,21 @@ export default function RegisterPage() {
           </div>
         </fieldset>
 
-        <fieldset className="rounded-[12px] border border-[#9f9f9f] px-3 pb-2 pt-0.5">
-          <legend className="px-1 text-sm text-[#8b8b8b]">Repetir contrasena*</legend>
+        <fieldset className="rounded-[12px] border border-[#9f9f9f] px-3 pb-2 pt-0.5 dark:border-[#3b4a4c] dark:bg-[#071617]">
+          <legend className="px-1 text-sm text-[#8b8b8b] dark:text-[#7e8b8d]">Repetir contrasena*</legend>
           <div className="flex items-center gap-3">
             <input
               type={showRepeatPassword ? "text" : "password"}
-              className="w-full bg-transparent text-base outline-none"
+              className="w-full bg-transparent text-base outline-none dark:text-[#dce5e6] dark:placeholder:text-[#7f8a8b]"
               aria-label="Repetir contrasena"
               autoComplete="new-password"
-              placeholder="Repite tu contrasena"
+              placeholder="Repetir contraseña*"
               value={repeatPassword}
               onChange={(e) => setRepeatPassword(e.target.value)}
             />
             <button
               type="button"
-              className="cursor-pointer text-[#8b8b8b]"
+              className="cursor-pointer text-[#8b8b8b] dark:text-[#7e8b8d]"
               aria-label={
                 showRepeatPassword ? "Ocultar repetir contrasena" : "Mostrar repetir contrasena"
               }
@@ -183,19 +192,23 @@ export default function RegisterPage() {
         <button
           type="submit"
           disabled={loading}
-          className="h-14 w-full cursor-pointer rounded-xl bg-gradient-to-r from-[#2ec8b0] to-[#1f8b77] text-xl font-medium text-white disabled:opacity-60"
+          className="h-12 w-full cursor-pointer rounded-xl bg-gradient-to-r from-[#2ec8b0] to-[#1f8b77] text-lg font-medium text-white disabled:opacity-60"
         >
           {loading ? "Creando cuenta..." : "Registrarse"}
         </button>
-
-        <GoogleAuthButton />
       </form>
 
-      <p className="pt-5 text-center text-base text-[#7f7f7f]">
-        Ya tienes cuenta?{" "}
-        <Link href="/login" className="font-medium text-[#1dbf9a]">
-          Iniciar sesion
+      <p className="pt-3 text-center text-base text-[#7f7f7f] dark:text-[#7f8a8b]">
+        ¿Ya tienes una cuenta?{" "}
+        <Link href="/login" className="font-medium text-[#1dbf9a] dark:text-[#2dcfb2]">
+          Iniciar sesión
         </Link>
+      </p>
+
+      <p className="pt-10 text-center text-sm leading-[1.35] text-[#8a8a8a] dark:text-[#6f7a7b]">
+        Al continuar, aceptas los <span className="font-semibold text-[#636363] dark:text-[#aab7b9]">Términos y</span>
+        <br />
+        <span className="font-semibold text-[#636363] dark:text-[#aab7b9]">Condiciones</span> de Frimee
       </p>
     </div>
   );

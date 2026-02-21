@@ -3,10 +3,10 @@ import Image from "next/image";
 
 export function AuthSplitLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-dvh w-full bg-[#f4f4f4]">
+    <div className="min-h-dvh w-full bg-[#f4f4f4] dark:bg-[#020c0d]">
       <div className="grid min-h-dvh grid-cols-1 lg:grid-cols-[46%_54%]">
         {/* LEFT / BRAND PANEL */}
-        <section className="relative overflow-hidden bg-[#34c1a4] text-white lg:h-dvh">
+        <section className="relative hidden overflow-hidden bg-[#34c1a4] text-white lg:block lg:h-dvh">
           {/* Top brand */}
           <div className="absolute left-0 top-0 z-10 w-full px-10 pt-12 lg:px-20 lg:pt-14">
             <div className="text-4xl font-medium tracking-tight text-white/80">
@@ -37,7 +37,7 @@ export function AuthSplitLayout({ children }: { children: ReactNode }) {
         </section>
 
         {/* RIGHT / CONTENT SLOT */}
-        <main className="flex items-center justify-center px-6 py-14 lg:px-16">
+        <main className="flex min-h-dvh items-start bg-[#f4f4f4] px-7 pb-8 pt-6 dark:bg-[#020c0d] lg:items-center lg:justify-center lg:px-16 lg:py-8">
           <div className="w-full max-w-md">{children}</div>
         </main>
       </div>

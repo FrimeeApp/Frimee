@@ -16,6 +16,8 @@ const eslintConfig = defineConfig([
     "**/build/**",
     "android/**",
     "ios/**",
+    // Docs / snapshots:
+    "docs/**",
   ]),
 ]);
 
