@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "290401824026",
+    "project_id": "frimee-8a979",
+    "storage_bucket": "frimee-8a979.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:290401824026:android:2b096d62d70ac6687010a3",
+        "android_client_info": {
+          "package_name": "com.frimee.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCet6EJnbU9DYXlGLAsRY7j8uack5i1QrA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
