@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import AppSidebar from "@/components/common/AppSidebar";
-import { listExplorePlans } from "@/services/api/repositories/plans.repository"; // 👈 NUEVO
+import { listExplorePlans } from "@/services/api/repositories/plans.repository";
 
 type PostType = "plan" | "comment";
 
@@ -95,7 +95,6 @@ export default function FeedPage() {
     const load = async () => {
       setLoadingFeed(true);
       try {
-
         const plans = await listExplorePlans({ limit: 20 });
 
         if (cancelled) return;
@@ -117,12 +116,9 @@ export default function FeedPage() {
         });
 
         setPosts(mapped);
-
-        // ✅ Suggestions no las tocamos
         setSuggestions(MOCK_SUGGESTIONS);
       } catch (e) {
         console.error("[feed] load error", e);
-        // si falla, simplemente deja vacío el feed
         setPosts([]);
         setSuggestions(MOCK_SUGGESTIONS);
       } finally {
@@ -139,37 +135,37 @@ export default function FeedPage() {
 
   if (!ready) {
     return (
-      <div className="flex min-h-dvh items-center justify-center bg-[var(--color-bg-app)] px-6 text-center text-[var(--color-text-primary)]">
+      <div className="flex min-h-dvh items-center justify-center bg-app px-[var(--space-6)] text-center text-app">
         <div>
-          <p className="text-lg font-medium">Cargando tu feed...</p>
-          <p className="mt-2 text-sm text-[var(--color-text-secondary)]">Comprobando sesión.</p>
+          <p className="text-body-lg font-[var(--fw-medium)]">Cargando tu feed...</p>
+          <p className="mt-[var(--space-2)] text-body-sm text-muted">Comprobando sesion.</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-dvh bg-[var(--color-bg-app)] text-[var(--color-text-strong)]">
+    <div className="min-h-dvh bg-app text-app">
       <div className="relative mx-auto min-h-dvh max-w-[1440px]">
         <AppSidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed((prev) => !prev)} />
 
         <main
-          className={`px-5 pb-[calc(6rem+var(--safe-bottom))] pt-6 transition-[padding] duration-300 ease-in-out lg:py-8 lg:pr-14 ${
+          className={`px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-4)] transition-[padding] duration-[var(--duration-slow)] [transition-timing-function:var(--ease-standard)] lg:py-[var(--space-8)] lg:pr-[var(--space-14)] ${
             sidebarCollapsed ? "lg:pl-[56px]" : "lg:pl-[136px]"
           }`}
         >
-          <div className="mx-auto grid max-w-[1130px] grid-cols-1 gap-10 xl:grid-cols-[minmax(0,1fr)_300px]">
-            <section className="max-w-[835px]">
-              <div className="flex gap-12 border-b border-[var(--color-border-strong)] pb-2 text-[20px] text-[var(--color-divider-tab)]">
-                <button type="button" className="font-medium">
+          <div className="mx-auto grid max-w-[1160px] grid-cols-1 gap-[var(--space-8)] xl:grid-cols-[minmax(0,1fr)_300px] xl:gap-[var(--space-10)]">
+            <section className="mx-auto w-full max-w-[760px]">
+              <div className="flex gap-[var(--space-10)] border-b border-app pb-[var(--space-2)] text-body text-muted">
+                <button type="button" className="font-[var(--fw-medium)] text-app">
                   Siguiendo
                 </button>
-                <button type="button" className="font-medium">
+                <button type="button" className="font-[var(--fw-medium)]">
                   Explorar
                 </button>
               </div>
 
-              <div className="mt-5 space-y-6">
+              <div className="mt-[var(--space-5)] space-y-[var(--space-6)]">
                 {loadingFeed ? (
                   <FeedSkeleton />
                 ) : (
@@ -178,16 +174,16 @@ export default function FeedPage() {
               </div>
             </section>
 
-            <aside className="hidden pt-11 xl:block">
-              <h2 className="text-[24px] font-semibold leading-[1.1]">Sugerencias para ti</h2>
-              <div className="mt-5 space-y-5">
+            <aside className="hidden pt-[var(--space-10)] xl:block">
+              <h3 className="text-[var(--font-h5)] font-[var(--fw-semibold)] leading-[var(--lh-h5)]">Actividad reciente</h3>
+              <div className="mt-[var(--space-4)] space-y-[var(--space-5)]">
                 {loadingFeed
                   ? [0, 1].map((idx) => (
                       <div key={idx} className="flex animate-pulse items-start gap-3">
-                        <div className="size-11 rounded-full bg-[var(--color-bg-skeleton)]" />
+                        <div className="avatar-lg bg-[color-mix(in_srgb,var(--surface)_62%,var(--text-primary)_38%)]" />
                         <div className="space-y-2">
-                          <div className="h-3 w-24 rounded bg-[var(--color-bg-skeleton)]" />
-                          <div className="h-3 w-36 rounded bg-[var(--color-bg-skeleton)]" />
+                          <div className="h-3 w-24 rounded bg-[color-mix(in_srgb,var(--surface)_62%,var(--text-primary)_38%)]" />
+                          <div className="h-3 w-36 rounded bg-[color-mix(in_srgb,var(--surface)_62%,var(--text-primary)_38%)]" />
                         </div>
                       </div>
                     ))
@@ -195,8 +191,8 @@ export default function FeedPage() {
                       <div key={item.id} className="flex items-start gap-3">
                         <Avatar label={item.avatarLabel} />
                         <div>
-                          <div className="text-[18px] font-semibold leading-none">{item.name}</div>
-                          <p className="mt-1 text-[18px] leading-[1.3] text-[var(--color-feed-subtext)]">{item.text}</p>
+                          <div className="text-body font-[var(--fw-semibold)] leading-none">{item.name}</div>
+                          <p className="mt-[var(--space-1)] text-body-sm leading-[1.35] text-muted">{item.text}</p>
                         </div>
                       </div>
                     ))}
@@ -211,22 +207,26 @@ export default function FeedPage() {
 
 function FeedCard({ post }: { post: FeedPost }) {
   return (
-    <article className="border-b border-[var(--color-border-strong)] pb-8">
-      <header className="mb-3 flex items-center justify-between">
+    <article className="border-b border-app pb-[var(--space-6)]">
+      <header className="mb-[var(--space-3)] flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Avatar label={post.avatarLabel} />
           <div>
-            <div className="text-[18px] font-semibold leading-none">{post.userName}</div>
-            <p className="mt-1 text-[15px] leading-none text-[var(--color-feed-subtext)]">{post.subtitle}</p>
+            <div className="text-body font-[var(--fw-semibold)] leading-none">{post.userName}</div>
+            <p className="mt-[var(--space-1)] text-body-sm leading-none text-muted">{post.subtitle}</p>
           </div>
         </div>
       </header>
 
       {post.hasImage && (
-        <img src={post.coverImage} alt="Imagen del plan" className="mb-4 w-full rounded-[14px]" />
+        <img
+          src={post.coverImage}
+          alt="Imagen del plan"
+          className="feed-image-responsive mb-[var(--space-4)]"
+        />
       )}
 
-      <div className="flex items-center justify-between text-[var(--color-text-strong)]">
+      <div className="flex items-center justify-between text-app">
         <div className="flex items-center gap-4">
           <HeartIcon />
           <CommentIcon />
@@ -235,10 +235,10 @@ function FeedCard({ post }: { post: FeedPost }) {
         <BookmarkIcon />
       </div>
 
-      <p className="mt-2 text-[17px] leading-[1.35]">
-        <span className="font-semibold">{post.userName}</span> {post.text}
+      <p className="mt-[var(--space-2)] text-body leading-[1.45]">
+        <span className="font-[var(--fw-semibold)]">{post.userName}</span> {post.text}
       </p>
-      <button type="button" className="mt-3 text-[16px] font-medium text-[var(--color-plan-link)]">
+      <button type="button" className="mt-[var(--space-3)] text-body-sm font-[var(--fw-semibold)] text-primary-token">
         Ver plan
       </button>
     </article>
@@ -248,17 +248,17 @@ function FeedCard({ post }: { post: FeedPost }) {
 function FeedSkeleton() {
   return (
     <div className="animate-pulse space-y-4">
-      <div className="h-12 w-44 rounded bg-[var(--color-bg-skeleton)]" />
-      <div className="h-[344px] rounded-xl bg-[var(--color-bg-skeleton)]" />
-      <div className="h-6 w-2/3 rounded bg-[var(--color-bg-skeleton)]" />
-      <div className="h-6 w-24 rounded bg-[var(--color-bg-skeleton)]" />
+      <div className="h-12 w-44 rounded bg-[color-mix(in_srgb,var(--surface)_62%,var(--text-primary)_38%)]" />
+      <div className="h-[344px] rounded-card bg-[color-mix(in_srgb,var(--surface)_62%,var(--text-primary)_38%)]" />
+      <div className="h-6 w-2/3 rounded bg-[color-mix(in_srgb,var(--surface)_62%,var(--text-primary)_38%)]" />
+      <div className="h-6 w-24 rounded bg-[color-mix(in_srgb,var(--surface)_62%,var(--text-primary)_38%)]" />
     </div>
   );
 }
 
 function Avatar({ label }: { label: string }) {
   return (
-    <div className="flex size-11 items-center justify-center rounded-full bg-[var(--color-bg-avatar)] text-base font-semibold text-[var(--color-bg-avatar-text)]">
+    <div className="flex avatar-lg items-center justify-center border border-app bg-surface-inset text-body font-[var(--fw-semibold)] text-app">
       {label}
     </div>
   );
