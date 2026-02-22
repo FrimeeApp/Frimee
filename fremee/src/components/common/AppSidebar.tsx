@@ -5,6 +5,10 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/providers/AuthProvider";
 
+type IconProps = {
+  className?: string;
+};
+
 const items = [
   { key: "home", label: "Inicio", icon: HomeIcon, href: "/feed" },
   { key: "calendar", label: "Calendario", icon: CalendarIcon, href: "#" },
@@ -19,11 +23,10 @@ type AppSidebarProps = {
 
 export default function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
   const router = useRouter();
-  const [signingOut, setSigningOut] = useState(false);
   const [mobileNavVisible, setMobileNavVisible] = useState(true);
   const lastScrollYRef = useRef(0);
 
-  const { profile, signOut } = useAuth();
+  const { profile } = useAuth();
   const hasProfileImage = Boolean(profile?.profile_image);
 
   useEffect(() => {
@@ -51,20 +54,12 @@ export default function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  const onSignOut = async () => {
-    try {
-      setSigningOut(true);
-      await signOut();
-      router.replace("/login");
-    } finally {
-      setSigningOut(false);
-    }
-  };
+  const openSettings = () => router.push("/settings");
 
   return (
     <>
       <nav
-        className={`fixed inset-x-0 bottom-0 z-40 flex h-[calc(4rem+var(--safe-bottom))] items-center justify-around border-t border-[var(--color-border-strong)] bg-[var(--color-bg-sidebar)] px-2 pb-[var(--safe-bottom)] transition-transform duration-250 ease-out lg:hidden ${
+        className={`fixed inset-x-0 bottom-0 z-sticky flex h-[calc(var(--space-16)+env(safe-area-inset-bottom))] items-center justify-around border-t border-strong bg-surface px-[var(--space-2)] pb-safe transition-transform duration-[var(--duration-slow)] [transition-timing-function:var(--ease-decelerate)] lg:hidden ${
           mobileNavVisible ? "translate-y-0" : "translate-y-full"
         }`}
       >
@@ -73,28 +68,27 @@ export default function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
             key={item.key}
             href={item.href}
             aria-label={item.label}
-            className="text-[var(--color-text-strong)] transition-opacity active:opacity-60"
+            className="text-app transition-opacity duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] active:opacity-[var(--disabled-opacity)]"
           >
-            <item.icon />
+            <item.icon className="size-icon" />
           </Link>
         ))}
 
         <button
           type="button"
           aria-label="Crear plan"
-          className="text-[var(--color-text-strong)] transition-opacity active:opacity-60"
+          className="text-app transition-opacity duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] active:opacity-[var(--disabled-opacity)]"
         >
-          <PlusIcon />
+          <PlusIcon className="size-icon" />
         </button>
 
         <button
           type="button"
           aria-label="Perfil"
-          onClick={onSignOut}
-          disabled={signingOut}
-          className="overflow-hidden rounded-full border border-[var(--color-border-strong)] bg-[var(--color-bg-icon)] p-0 text-white transition-opacity active:opacity-60 disabled:opacity-60"
+          onClick={openSettings}
+          className="overflow-hidden rounded-avatar border border-strong bg-[var(--text-primary)] p-0 text-contrast-token transition-opacity duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] active:opacity-[var(--disabled-opacity)] disabled:opacity-[var(--disabled-opacity)]"
         >
-          <div className={`flex items-center justify-center overflow-hidden rounded-full ${hasProfileImage ? "size-8" : "size-9"}`}>
+          <div className={`flex items-center justify-center overflow-hidden rounded-avatar ${hasProfileImage ? "avatar-md" : "avatar-lg"}`}>
             {profile?.profile_image ? (
               <img
                 src={profile.profile_image}
@@ -103,14 +97,14 @@ export default function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
                 referrerPolicy="no-referrer"
               />
             ) : (
-              <ProfileIcon className="size-7" />
+              <ProfileIcon className="size-[calc(var(--icon-size)+6px)]" />
             )}
           </div>
         </button>
       </nav>
 
       <aside
-        className={`fixed left-0 top-0 z-30 hidden h-dvh border-r border-[var(--color-border-strong)] bg-[var(--color-bg-sidebar)] transition-[width] duration-300 ease-in-out lg:flex lg:flex-col lg:items-center lg:py-6 ${
+        className={`fixed left-0 top-0 z-30 hidden h-dvh border-r border-strong bg-surface transition-[width] duration-[var(--duration-slow)] [transition-timing-function:var(--ease-standard)] lg:flex lg:flex-col lg:items-center lg:py-[var(--space-6)] ${
           collapsed ? "w-[22px]" : "w-[102px]"
         }`}
       >
@@ -118,27 +112,27 @@ export default function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
           type="button"
           aria-label={collapsed ? "Abrir sidebar" : "Ocultar sidebar"}
           onClick={onToggle}
-          className="absolute -right-3 top-5 z-40 flex size-6 items-center justify-center rounded-full border border-[var(--color-border-strong)] bg-[var(--color-bg-surface)] text-[var(--color-text-strong)] shadow-sm transition hover:bg-[var(--color-toggle-hover)]"
+          className="absolute -right-3 top-5 z-40 flex size-6 items-center justify-center rounded-full border border-strong bg-surface text-app shadow-elev-1 transition-colors duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] hover:bg-[var(--interactive-hover-surface)]"
         >
           <ChevronIcon collapsed={collapsed} />
         </button>
 
         <div
-          className={`flex w-full flex-1 flex-col items-center transition-all duration-200 ${
+          className={`flex w-full flex-1 flex-col items-center transition-all duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] ${
             collapsed ? "pointer-events-none translate-x-[-8px] opacity-0" : "translate-x-0 opacity-100"
           }`}
         >
-          <div className="text-[46px] font-medium leading-none tracking-tight text-[var(--color-text-strong)]">F.</div>
+          <div className="text-[var(--font-h1)] font-[var(--fw-medium)] leading-[var(--lh-h1)] tracking-[-0.02em] text-app">F.</div>
 
-          <nav className="mt-56 flex w-full flex-col items-center gap-8">
+          <nav className="mt-[calc(var(--space-24)+var(--space-24)+var(--space-8))] flex w-full flex-col items-center gap-[var(--space-8)]">
             {items.map((item) => (
               <Link
                 key={item.key}
                 href={item.href}
                 aria-label={item.label}
-                className="text-[var(--color-text-strong)] transition-opacity hover:opacity-70"
+                className="text-app transition-opacity duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] hover:opacity-70"
               >
-                <item.icon />
+                <item.icon className="size-icon" />
               </Link>
             ))}
           </nav>
@@ -146,19 +140,18 @@ export default function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
           <button
             type="button"
             aria-label="Crear plan"
-            className="mt-14 text-[var(--color-text-strong)] transition-opacity hover:opacity-70"
+            className="mt-[var(--space-14)] text-app transition-opacity duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] hover:opacity-70"
           >
-            <PlusIcon />
+            <PlusIcon className="size-icon" />
           </button>
 
-          <button
-            type="button"
-            aria-label="Perfil"
-            onClick={onSignOut}
-            disabled={signingOut}
-            className="mt-auto overflow-hidden rounded-full border border-[var(--color-border-strong)] bg-[var(--color-bg-icon)] p-0 text-white transition-opacity hover:opacity-80 disabled:opacity-60"
-          >
-            <div className="flex size-11 items-center justify-center overflow-hidden rounded-full">
+        <button
+          type="button"
+          aria-label="Perfil"
+          onClick={openSettings}
+          className="mt-auto overflow-hidden rounded-avatar border border-strong bg-[var(--text-primary)] p-0 text-contrast-token transition-opacity duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] hover:opacity-80 disabled:opacity-[var(--disabled-opacity)]"
+        >
+            <div className="flex avatar-lg items-center justify-center overflow-hidden rounded-avatar">
               {profile?.profile_image ? (
                 <img
                   src={profile.profile_image}
@@ -167,7 +160,7 @@ export default function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
                   referrerPolicy="no-referrer"
                 />
               ) : (
-                <ProfileIcon className="size-8" />
+                <ProfileIcon className="size-[calc(var(--icon-size)+8px)]" />
               )}
             </div>
           </button>
@@ -177,9 +170,9 @@ export default function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
   );
 }
 
-function ChevronIcon({ collapsed }: { collapsed: boolean }) {
+function ChevronIcon({ collapsed, className = "size-[14px]" }: { collapsed: boolean; className?: string }) {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
       <path
         d={collapsed ? "M9 6L15 12L9 18" : "M15 6L9 12L15 18"}
         stroke="currentColor"
@@ -191,9 +184,9 @@ function ChevronIcon({ collapsed }: { collapsed: boolean }) {
   );
 }
 
-function HomeIcon() {
+function HomeIcon({ className = "size-icon" }: IconProps = {}) {
   return (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
       <path
         d="M3.5 10.3L12 3.5L20.5 10.3V19A1 1 0 0 1 19.5 20H4.5A1 1 0 0 1 3.5 19V10.3Z"
         stroke="currentColor"
@@ -204,27 +197,27 @@ function HomeIcon() {
   );
 }
 
-function CalendarIcon() {
+function CalendarIcon({ className = "size-icon" }: IconProps = {}) {
   return (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
       <rect x="3" y="5" width="18" height="16" rx="2" stroke="currentColor" strokeWidth="1.8" />
       <path d="M8 3V7M16 3V7M3 10.5H21" stroke="currentColor" strokeWidth="1.8" />
     </svg>
   );
 }
 
-function CardIcon() {
+function CardIcon({ className = "size-icon" }: IconProps = {}) {
   return (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
       <rect x="2.8" y="4.5" width="18.4" height="15" rx="2.2" stroke="currentColor" strokeWidth="1.8" />
       <path d="M2.8 10.2H21.2" stroke="currentColor" strokeWidth="1.8" />
     </svg>
   );
 }
 
-function SendIcon() {
+function SendIcon({ className = "size-icon" }: IconProps = {}) {
   return (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
       <path d="M21 3L10 14" stroke="currentColor" strokeWidth="1.8" />
       <path
         d="M21 3L14.5 21L10 14L3 9.5L21 3Z"
@@ -236,15 +229,15 @@ function SendIcon() {
   );
 }
 
-function PlusIcon() {
+function PlusIcon({ className = "size-icon" }: IconProps = {}) {
   return (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
       <path d="M12 4V20M4 12H20" stroke="currentColor" strokeWidth="1.8" />
     </svg>
   );
 }
 
-function ProfileIcon({ className = "size-[18px]" }: { className?: string }) {
+function ProfileIcon({ className = "size-icon" }: IconProps = {}) {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
       <circle cx="12" cy="8" r="3.2" stroke="currentColor" strokeWidth="1.6" />

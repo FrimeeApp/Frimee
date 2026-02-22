@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
+import { getUserProfile } from "@/services/api/repositories/users.repository";
 
 type Profile = {
   id: string;
@@ -43,20 +44,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       try {
-        const { data, error } = await supabase
-          .from("usuarios")
-          .select("id,nombre,email,rol,profile_image,estado,email_verified_at,deleted_at")
-          .eq("id", authUser.id)
-          .maybeSingle();
-
+        const data = await getUserProfile(authUser.id);
         if (!mountedRef.current) return;
-
-        if (error) {
-          console.warn("[auth] profile fetch error:", error.message);
-          setProfile(null);
-          return;
-        }
-
         setProfile((data as Profile) ?? null);
       } catch (error) {
         if (!mountedRef.current) return;
@@ -64,7 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setProfile(null);
       }
     },
-    [supabase],
+    [],
   );
 
   const refreshProfile = useCallback(async () => {

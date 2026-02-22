@@ -41,7 +41,7 @@ export default function ForgotPage() {
 
       setMsg({
         type: "ok",
-        text: "Te hemos enviado un enlace para restablecer la contrasena.",
+        text: "Te hemos enviado un enlace para restablecer la contraseña.",
       });
 
       setTimeout(() => router.replace("/login"), 1500);
@@ -57,50 +57,66 @@ export default function ForgotPage() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-[340px] space-y-7 text-[var(--color-text-primary)]">
-      <h1 className="text-6xl font-medium tracking-tight text-[var(--color-text-strong)]">Recuperar</h1>
+    <div className="flex h-full w-full max-w-[420px] flex-col py-[var(--space-6)] text-app md:py-[var(--space-8)]">
+      <div className="flex flex-1 items-center">
+        <div className="w-full">
+          <h1 className="text-[var(--font-h1)] font-[var(--fw-semibold)] leading-[1.05] tracking-[-0.02em] text-app">
+            Recuperar
+          </h1>
+          <h3 className="mt-[var(--space-1)] text-body text-muted">
+            Te enviaremos un enlace para restablecer tu contraseña
+          </h3>
 
-      <form className="space-y-6" onSubmit={onSubmit}>
-        <fieldset className="rounded-[12px] border border-[var(--color-border-default)] bg-[var(--color-bg-input)] px-3 pb-2 pt-0.5">
-          <legend className="px-1 text-sm text-[var(--color-text-muted)]">E-mail*</legend>
-          <input
-            type="email"
-            className="w-full bg-transparent text-base text-[var(--color-text-primary)] outline-none"
-            aria-label="Correo electronico"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            autoComplete="email"
-            required
-          />
-        </fieldset>
+          <form className="mt-[var(--space-6)] space-y-[var(--space-3)]" onSubmit={onSubmit}>
+            <div className="h-input rounded-input border border-app bg-[var(--input-bg)] px-[var(--input-padding-x)] transition-[border-color,box-shadow] duration-[var(--duration-fast)] [transition-timing-function:var(--ease-standard)] focus-within:border-[var(--input-border-focus)] focus-within:shadow-[0_0_0_var(--focus-ring-width)_var(--focus-ring-color)]">
+              <input
+                type="email"
+                className="h-full w-full bg-transparent text-body text-app outline-none placeholder:text-muted focus-visible:shadow-none"
+                aria-label="Correo electronico"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
+                required
+                placeholder="Email*"
+              />
+            </div>
 
-        {msg && (
-          <div
-            className={`rounded-xl border p-3 text-sm ${
-              msg.type === "ok"
-                ? "border-[var(--color-border-success)] bg-[var(--color-bg-success-soft)] text-[var(--color-text-success)]"
-                : "border-[var(--color-border-danger)] bg-[var(--color-bg-danger-soft)] text-[var(--color-text-danger)]"
-            }`}
-          >
-            {msg.text}
-          </div>
-        )}
+            {msg && (
+              <div
+                className={`rounded-input border px-[var(--space-3)] py-[var(--space-2)] text-body-sm ${
+                  msg.type === "ok"
+                    ? "border-success-token bg-[color-mix(in_srgb,var(--success)_14%,var(--surface)_86%)] text-success-token"
+                    : "border-error-token bg-[color-mix(in_srgb,var(--error)_12%,var(--surface)_88%)] text-error-token"
+                }`}
+              >
+                {msg.text}
+              </div>
+            )}
 
-        <button
-          type="submit"
-          disabled={submitting}
-          className="h-12 w-full rounded-xl bg-gradient-to-r from-[var(--color-button-primary-start)] to-[var(--color-button-primary-end)] text-lg font-medium text-white disabled:opacity-60"
-        >
-          {submitting ? "Enviando..." : "Enviar enlace"}
-        </button>
-      </form>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="h-btn-primary w-full rounded-button bg-primary-token text-button-md font-[var(--fw-medium)] text-contrast-token transition-colors duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] hover:bg-primary-hover-token disabled:opacity-[var(--disabled-opacity)]"
+            >
+              {submitting ? "Enviando..." : "Enviar enlace"}
+            </button>
+          </form>
 
-      <div className="pt-2 text-center text-sm text-[var(--color-text-subtle)]">
-        Ya la recordaste?{" "}
-        <Link href="/login" className="font-medium text-[var(--color-text-accent)]">
-          Volver a iniciar sesion
-        </Link>
+          <p className="pt-[var(--space-4)] text-center text-body text-muted">
+            ¿Ya la recordaste?{" "}
+            <Link href="/login" className="font-[var(--fw-semibold)] text-primary-token">
+              Volver a iniciar sesión
+            </Link>
+          </p>
+        </div>
       </div>
+
+      <p className="mt-auto pb-[max(var(--space-2),env(safe-area-inset-bottom))] pt-[var(--space-6)] text-center text-caption text-tertiary md:pt-[var(--space-8)]">
+        Al continuar, aceptas los{" "}
+        <span className="font-[var(--fw-semibold)] text-muted">Términos y</span>
+        <br />
+        <span className="font-[var(--fw-semibold)] text-muted">Condiciones</span> de Frimee
+      </p>
     </div>
   );
 }
