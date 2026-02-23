@@ -116,12 +116,12 @@ export default function ResetPage() {
     }
 
     if (password.length < 6) {
-      setMsg({ type: "err", text: "La contrasena debe tener al menos 6 caracteres." });
+      setMsg({ type: "err", text: "La contraseña debe tener al menos 6 caracteres." });
       return;
     }
 
     if (password !== repeatPassword) {
-      setMsg({ type: "err", text: "Las contrasenas no coinciden." });
+      setMsg({ type: "err", text: "Las contraseñas no coinciden." });
       return;
     }
 
@@ -131,13 +131,13 @@ export default function ResetPage() {
       const { error } = await supabase.auth.updateUser({ password });
 
       if (error) {
-        setMsg({ type: "err", text: error.message || "No se pudo cambiar la contrasena." });
+        setMsg({ type: "err", text: error.message || "No se pudo cambiar la contraseña." });
         return;
       }
 
       setMsg({
         type: "ok",
-        text: "Contrasena actualizada. Te llevamos a iniciar sesion.",
+        text: "Contraseña actualizada. Te llevamos a iniciar sesion.",
       });
 
       setTimeout(() => router.replace("/login"), 1200);
@@ -154,99 +154,124 @@ export default function ResetPage() {
 
   if (checkingLink) {
     return (
-      <div className="mx-auto w-full max-w-[340px] space-y-7 text-[var(--color-text-primary)]">
-        <h1 className="text-6xl font-medium tracking-tight text-[var(--color-text-strong)]">Nueva contrasena</h1>
-        <p className="text-base text-[var(--color-text-subtle)]">Validando enlace...</p>
+      <div className="flex h-full w-full max-w-[420px] flex-col py-[var(--space-6)] text-app md:py-[var(--space-8)]">
+        <div className="flex flex-1 items-center">
+          <div className="w-full">
+            <h1 className="text-[var(--font-h1)] font-[var(--fw-semibold)] leading-[1.05] tracking-[-0.02em] text-app">
+              Nueva contraseña
+            </h1>
+            <h3 className="mt-[var(--space-1)] text-body text-muted">Validando enlace...</h3>
+          </div>
+        </div>
+
+        <p className="mt-auto pb-[max(var(--space-2),env(safe-area-inset-bottom))] pt-[var(--space-6)] text-center text-caption text-tertiary md:pt-[var(--space-8)]">
+          Al continuar, aceptas los{" "}
+          <span className="font-[var(--fw-semibold)] text-muted">Términos y</span>
+          <br />
+          <span className="font-[var(--fw-semibold)] text-muted">Condiciones</span> de Frimee
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="mx-auto w-full max-w-[340px] space-y-7 text-[var(--color-text-primary)]">
-      <h1 className="text-6xl font-medium tracking-tight text-[var(--color-text-strong)]">Nueva contrasena</h1>
+    <div className="flex h-full w-full max-w-[420px] flex-col py-[var(--space-6)] text-app md:py-[var(--space-8)]">
+      <div className="flex flex-1 items-center">
+        <div className="w-full">
+          <h1 className="text-[var(--font-h1)] font-[var(--fw-semibold)] leading-[1.05] tracking-[-0.02em] text-app">
+            Nueva contraseña
+          </h1>
+          <h3 className="mt-[var(--space-1)] text-body text-muted">Crea una nueva contraseña segura</h3>
 
-      {msg && (
-        <div
-          className={`rounded-xl border p-3 text-sm ${
-            msg.type === "ok"
-              ? "border-[var(--color-border-success)] bg-[var(--color-bg-success-soft)] text-[var(--color-text-success)]"
-              : "border-[var(--color-border-danger)] bg-[var(--color-bg-danger-soft)] text-[var(--color-text-danger)]"
-          }`}
-        >
-          {msg.text}
-        </div>
-      )}
-
-      {!canReset ? (
-        <div className="space-y-2 text-sm text-[var(--color-text-subtle)]">
-          <p>Pide un nuevo enlace para volver a intentarlo.</p>
-          <Link href="/forgot" className="font-medium text-[var(--color-text-accent-strong)] underline">
-            Volver a recuperar contrasena
-          </Link>
-        </div>
-      ) : (
-        <form className="space-y-6" onSubmit={onSubmit}>
-          <fieldset className="rounded-[12px] border border-[var(--color-border-default)] bg-[var(--color-bg-input)] px-3 pb-2 pt-0.5">
-            <legend className="px-1 text-sm text-[var(--color-text-muted)]">Contrasena nueva*</legend>
-            <div className="flex items-center gap-3">
-              <input
-                type={showPassword ? "text" : "password"}
-                className="w-full bg-transparent text-base text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-placeholder)]"
-                aria-label="Contrasena nueva"
-                autoComplete="new-password"
-                placeholder="Escribe tu nueva contrasena"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-              <button
-                type="button"
-                className="cursor-pointer text-[var(--color-text-muted)]"
-                aria-label={showPassword ? "Ocultar contrasena" : "Mostrar contrasena"}
-                onClick={() => setShowPassword((prev) => !prev)}
-              >
-                <EyeIcon open={showPassword} />
-              </button>
+          {msg && (
+            <div
+              className={`mt-[var(--space-4)] rounded-input border px-[var(--space-3)] py-[var(--space-2)] text-body-sm ${
+                msg.type === "ok"
+                  ? "border-success-token bg-[color-mix(in_srgb,var(--success)_14%,var(--surface)_86%)] text-success-token"
+                  : "border-error-token bg-[color-mix(in_srgb,var(--error)_12%,var(--surface)_88%)] text-error-token"
+              }`}
+            >
+              {msg.text}
             </div>
-          </fieldset>
+          )}
 
-          <fieldset className="rounded-[12px] border border-[var(--color-border-default)] bg-[var(--color-bg-input)] px-3 pb-2 pt-0.5">
-            <legend className="px-1 text-sm text-[var(--color-text-muted)]">Repetir contrasena*</legend>
-            <div className="flex items-center gap-3">
-              <input
-                type={showRepeatPassword ? "text" : "password"}
-                className="w-full bg-transparent text-base text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-placeholder)]"
-                aria-label="Repetir contrasena"
-                autoComplete="new-password"
-                placeholder="Repite tu nueva contrasena"
-                value={repeatPassword}
-                onChange={(e) => setRepeatPassword(e.target.value)}
-                required
-              />
-              <button
-                type="button"
-                className="cursor-pointer text-[var(--color-text-muted)]"
-                aria-label={
-                  showRepeatPassword
-                    ? "Ocultar repetir contrasena"
-                    : "Mostrar repetir contrasena"
-                }
-                onClick={() => setShowRepeatPassword((prev) => !prev)}
-              >
-                <EyeIcon open={showRepeatPassword} />
-              </button>
+          {!canReset ? (
+            <div className="pt-[var(--space-4)] text-body text-muted">
+              <p>Pide un nuevo enlace para volver a intentarlo.</p>
+              <Link href="/forgot" className="font-[var(--fw-semibold)] text-primary-token">
+                Volver a recuperar contraseña
+              </Link>
             </div>
-          </fieldset>
+          ) : (
+            <form className="mt-[var(--space-6)] space-y-[var(--space-3)]" onSubmit={onSubmit}>
+              <div className="h-input rounded-input border border-app bg-[var(--input-bg)] px-[var(--input-padding-x)] transition-[border-color,box-shadow] duration-[var(--duration-fast)] [transition-timing-function:var(--ease-standard)] focus-within:border-[var(--input-border-focus)] focus-within:shadow-[0_0_0_var(--focus-ring-width)_var(--focus-ring-color)]">
+                <div className="flex h-full items-center gap-[var(--space-3)]">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    className="w-full bg-transparent text-body text-app outline-none placeholder:text-muted focus-visible:shadow-none"
+                    aria-label="Contraseña nueva"
+                    autoComplete="new-password"
+                    placeholder="Contraseña nueva*"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="text-muted"
+                    aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                    onClick={() => setShowPassword((prev) => !prev)}
+                  >
+                    <EyeIcon open={showPassword} />
+                  </button>
+                </div>
+              </div>
 
-          <button
-            type="submit"
-            disabled={submitting}
-            className="h-12 w-full cursor-pointer rounded-xl bg-gradient-to-r from-[var(--color-button-primary-start)] to-[var(--color-button-primary-end)] text-lg font-medium text-white disabled:opacity-60"
-          >
-            {submitting ? "Guardando..." : "Cambiar contrasena"}
-          </button>
-        </form>
-      )}
+              <div className="h-input rounded-input border border-app bg-[var(--input-bg)] px-[var(--input-padding-x)] transition-[border-color,box-shadow] duration-[var(--duration-fast)] [transition-timing-function:var(--ease-standard)] focus-within:border-[var(--input-border-focus)] focus-within:shadow-[0_0_0_var(--focus-ring-width)_var(--focus-ring-color)]">
+                <div className="flex h-full items-center gap-[var(--space-3)]">
+                  <input
+                    type={showRepeatPassword ? "text" : "password"}
+                    className="w-full bg-transparent text-body text-app outline-none placeholder:text-muted focus-visible:shadow-none"
+                    aria-label="Repetir contraseña"
+                    autoComplete="new-password"
+                    placeholder="Repetir contraseña*"
+                    value={repeatPassword}
+                    onChange={(e) => setRepeatPassword(e.target.value)}
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="text-muted"
+                    aria-label={
+                      showRepeatPassword
+                        ? "Ocultar repetir contraseña"
+                        : "Mostrar repetir contraseña"
+                    }
+                    onClick={() => setShowRepeatPassword((prev) => !prev)}
+                  >
+                    <EyeIcon open={showRepeatPassword} />
+                  </button>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={submitting}
+                className="h-btn-primary w-full rounded-button bg-primary-token text-button-md font-[var(--fw-medium)] text-contrast-token transition-colors duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] hover:bg-primary-hover-token disabled:opacity-[var(--disabled-opacity)]"
+              >
+                {submitting ? "Guardando..." : "Cambiar contraseña"}
+              </button>
+            </form>
+          )}
+        </div>
+      </div>
+
+      <p className="mt-auto pb-[max(var(--space-2),env(safe-area-inset-bottom))] pt-[var(--space-6)] text-center text-caption text-tertiary md:pt-[var(--space-8)]">
+        Al continuar, aceptas los{" "}
+        <span className="font-[var(--fw-semibold)] text-muted">Términos y</span>
+        <br />
+        <span className="font-[var(--fw-semibold)] text-muted">Condiciones</span> de Frimee
+      </p>
     </div>
   );
 }
@@ -257,7 +282,7 @@ function EyeIcon({ open }: { open: boolean }) {
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
       fill="none"
-      className="size-7"
+      className="size-5"
       aria-hidden="true"
     >
       <path

@@ -97,77 +97,91 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="mx-auto flex min-h-[calc(100dvh-48px)] w-full max-w-[340px] flex-col justify-center text-[var(--color-text-primary)] lg:min-h-0 lg:block">
-      <h1 className="text-[34px] font-medium leading-[0.98] tracking-normal text-[var(--color-text-strong)] sm:text-3xl">Bienvenid@ de vuelta</h1>
-      <h3 className="mb-5 font-medium tracking-tight text-[var(--color-text-subtle)]">Inicia sesión con tu cuenta</h3>
+    <div className="flex h-full w-full max-w-[420px] flex-col py-[var(--space-6)] md:py-[var(--space-8)] text-app">
+      <div className="flex flex-1 items-center">
+        <div className="w-full">
+        <h1 className="text-[var(--font-h1)] font-[var(--fw-semibold)] leading-[1.05] tracking-[-0.02em] text-app">
+          Bienvenid@ de vuelta
+        </h1>
+        <h3 className="mt-[var(--space-1)] text-body text-muted">Inicia sesión con tu cuenta</h3>
 
-      <GoogleAuthButton />
+        <GoogleAuthButton className="mt-[var(--space-6)] flex h-btn-primary w-full items-center justify-center gap-[var(--button-gap)] rounded-button border border-app bg-[var(--input-bg)] text-button-md font-[var(--fw-medium)] text-app transition-colors duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] hover:bg-[var(--interactive-hover-surface)]" />
 
-      <div className="flex items-center gap-4 py-2">
-        <div className="flex-1 border-t border-[var(--color-border-muted)]" />
-        <span className="text-sm font-medium text-[var(--color-text-divider)]">o</span>
-        <div className="flex-1 border-t border-[var(--color-border-muted)]" />
-      </div>
+        <div className="flex items-center gap-[var(--space-4)] py-[var(--space-3)]">
+          <div className="flex-1 border-t border-app" />
+          <span className="text-body-sm font-[var(--fw-medium)] text-muted">o</span>
+          <div className="flex-1 border-t border-app" />
+        </div>
 
-      <form className="space-y-6" onSubmit={onSubmit}>
-        <fieldset className="rounded-[12px] border border-[var(--color-border-default)] bg-[var(--color-bg-input)] px-3 pb-2 pt-0.5">
-          <legend className="px-1 text-sm text-[var(--color-text-muted)]">E-mail*</legend>
-          <input
-            type="email"
-            className="w-full bg-transparent text-base text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-placeholder)]"
-            aria-label="Correo electronico"
-            placeholder="nombre@correo.com"
-            autoComplete="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-        </fieldset>
-
-        <fieldset className="rounded-[12px] border border-[var(--color-border-default)] bg-[var(--color-bg-input)] px-3 pb-2 pt-0.5">
-          <legend className="px-1 text-sm text-[var(--color-text-muted)]">Contraseña*</legend>
-          <div className="flex items-center gap-3">
+        <form className="space-y-[var(--space-3)]" onSubmit={onSubmit}>
+          <div className="h-input rounded-input border border-app bg-[var(--input-bg)] px-[var(--input-padding-x)] transition-[border-color,box-shadow] duration-[var(--duration-fast)] [transition-timing-function:var(--ease-standard)] focus-within:border-[var(--input-border-focus)] focus-within:shadow-[0_0_0_var(--focus-ring-width)_var(--focus-ring-color)]">
             <input
-              type={showPassword ? "text" : "password"}
-              className="w-full bg-transparent text-base text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-placeholder)]"
-              aria-label="Contrasena"
-              placeholder="Tu contraseña"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              type="email"
+              className="h-full w-full bg-transparent text-body text-app outline-none placeholder:text-muted focus-visible:shadow-none"
+              aria-label="Correo electronico"
+              placeholder="Email*"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
             />
-            <button
-              type="button"
-              className="cursor-pointer text-[var(--color-text-muted)]"
-              aria-label={showPassword ? "Ocultar contrasena" : "Mostrar contrasena"}
-              onClick={() => setShowPassword((prev) => !prev)}
-            >
-              <EyeIcon open={showPassword} />
-            </button>
           </div>
-        </fieldset>
 
-        {errorMsg && <p className="text-sm text-red-600">{errorMsg}</p>}
+          <div>
+            <div className="h-input rounded-input border border-app bg-[var(--input-bg)] px-[var(--input-padding-x)] transition-[border-color,box-shadow] duration-[var(--duration-fast)] [transition-timing-function:var(--ease-standard)] focus-within:border-[var(--input-border-focus)] focus-within:shadow-[0_0_0_var(--focus-ring-width)_var(--focus-ring-color)]">
+              <div className="flex h-full items-center gap-[var(--space-3)]">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  className="w-full bg-transparent text-body text-app outline-none placeholder:text-muted focus-visible:shadow-none"
+                  aria-label="Contraseña"
+                  placeholder="Contraseña*"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="text-muted"
+                  aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                  onClick={() => setShowPassword((prev) => !prev)}
+                >
+                  <EyeIcon open={showPassword} />
+                </button>
+              </div>
+            </div>
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="h-12 w-full cursor-pointer rounded-xl bg-gradient-to-r from-[var(--color-button-primary-start)] to-[var(--color-button-primary-end)] text-lg font-medium text-white disabled:opacity-60"
-        >
-          {loading ? "Entrando..." : "Iniciar sesión"}
-        </button>
-      </form>
+            <div className="pt-[var(--space-2)] text-right">
+              <Link href="/forgot" className="text-body-sm text-muted transition-colors hover:text-app">
+                ¿Has olvidado tu contraseña?
+              </Link>
+            </div>
+          </div>
 
-      <div className="pt-2 text-center">
-        <Link href="/forgot" className="text-base font-medium text-[var(--color-text-accent)]">
-          ¿Has olvidado tu contraseña?
-        </Link>
+          {errorMsg && <p className="text-body-sm text-error-token">{errorMsg}</p>}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="h-btn-primary w-full rounded-button bg-primary-token text-button-md font-[var(--fw-medium)] text-contrast-token transition-colors duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] hover:bg-primary-hover-token disabled:opacity-[var(--disabled-opacity)]"
+          >
+            {loading ? "Entrando..." : "Iniciar sesión"}
+          </button>
+        </form>
+
+        <p className="pt-[var(--space-4)] text-center text-body text-muted">
+          ¿Todavía no tienes una cuenta?{" "}
+          <Link href="/register" className="font-[var(--fw-semibold)] text-primary-token">
+            Registrarse
+          </Link>
+        </p>
+        </div>
       </div>
 
-      <p className="pt-3 text-center text-base text-[var(--color-text-secondary)]">
-        ¿No tienes cuenta?{" "}
-        <Link href="/register" className="font-medium text-[var(--color-text-accent)]">
-          Registrarse
-        </Link>
+      <p className="mt-auto pb-[max(var(--space-2),env(safe-area-inset-bottom))] pt-[var(--space-6)] text-center text-caption text-tertiary md:pt-[var(--space-8)]">
+        Al continuar, aceptas los{" "}
+        <Link href="#" className="font-[var(--fw-semibold)] text-muted">
+          Términos y <br /> Condiciones
+        </Link>{" "}
+        de Frimee
       </p>
     </div>
   );
@@ -179,7 +193,7 @@ function EyeIcon({ open }: { open: boolean }) {
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
       fill="none"
-      className="size-7"
+      className="size-5"
       aria-hidden="true"
     >
       <path
