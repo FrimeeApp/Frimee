@@ -22,8 +22,22 @@ export default function RegisterPage() {
     e.preventDefault();
     setErrorMsg(null);
 
+    const normalizedName = name.trim();
+    const normalizedEmail = email.trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!normalizedName || !normalizedEmail || !password || !repeatPassword) {
+      setErrorMsg("Debes añadir los campos obligatorios.");
+      return;
+    }
+
+    if (!emailRegex.test(normalizedEmail)) {
+      setErrorMsg("El email no es válido.");
+      return;
+    }
+
     if (password !== repeatPassword) {
-      setErrorMsg("Las contraseñas no coinciden.");
+      setErrorMsg("La contraseña no coinciden");
       return;
     }
 
@@ -32,10 +46,10 @@ export default function RegisterPage() {
       const supabase = createBrowserSupabaseClient();
 
       const { error } = await supabase.auth.signUp({
-        email,
+        email: normalizedEmail,
         password,
         options: {
-          data: { name },
+          data: { name: normalizedName },
         },
       });
 
@@ -72,24 +86,24 @@ export default function RegisterPage() {
 
   if (registrationComplete) {
     return (
-      <div className="mx-auto w-full max-w-[340px] space-y-7 text-[var(--color-text-primary)]">
-        <h1 className="text-5xl font-medium tracking-tight text-[var(--color-text-strong)]">Registro completado</h1>
-        <div className="space-y-4 rounded-2xl border border-[var(--color-border-surface)] bg-[var(--color-bg-surface)] p-6">
-          <p className="text-base leading-7 text-[var(--color-text-primary)]">
+      <div className="flex h-full w-full max-w-[420px] flex-col justify-center text-app">
+        <div className="space-y-[var(--space-4)] rounded-modal border border-app bg-surface p-[var(--space-6)] shadow-elev-1">
+          <h1 className="text-[var(--font-h2)] font-[var(--fw-semibold)] tracking-tight text-app">Registro completado</h1>
+          <p className="text-body text-app">
             Tu cuenta ya esta creada. Para activarla, confirma tu email desde el mensaje
-            que te acabamos de enviar a <span className="font-medium">{email}</span>.
+            que te acabamos de enviar a <span className="font-[var(--fw-medium)]">{email}</span>.
           </p>
-          <p className="text-sm leading-6 text-[var(--color-text-secondary)]">
+          <p className="text-body-sm text-muted">
             Si no ves el correo en la bandeja principal, revisa spam o promociones.
           </p>
           <button
             type="button"
             onClick={openMailbox}
-            className="h-11 w-full cursor-pointer rounded-xl bg-gradient-to-r from-[var(--color-button-primary-start)] to-[var(--color-button-primary-end)] text-sm font-medium text-white"
+            className="h-btn-primary w-full rounded-button bg-primary-token text-button-md font-[var(--fw-medium)] text-contrast-token transition-colors duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] hover:bg-primary-hover-token"
           >
             Ir a mi correo
           </button>
-          <Link href="/login" className="block text-center text-sm font-medium text-[var(--color-text-accent)]">
+          <Link href="/login" className="block text-center text-body-sm font-[var(--fw-medium)] text-primary-token">
             Ya confirme, ir a iniciar sesion
           </Link>
         </div>
@@ -98,117 +112,116 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="mx-auto flex min-h-[calc(100dvh-48px)] w-full max-w-[340px] flex-col justify-center text-[var(--color-text-primary)] lg:min-h-0 lg:block">
-      <h1 className="text-[34px] font-medium leading-[0.98] tracking-normal text-[var(--color-text-strong)] sm:text-3xl">Empecemos</h1>
-      <h3 className="mb-5 font-medium tracking-tight text-[var(--color-text-subtle)]">Crea una cuenta</h3>
+    <div className="flex h-full w-full max-w-[420px] flex-col py-[var(--space-6)] text-app md:py-[var(--space-8)]">
+      <div className="flex flex-1 items-center">
+        <div className="w-full">
+          <h1 className="text-[var(--font-h1)] font-[var(--fw-semibold)] leading-[1.05] tracking-[-0.02em] text-app">
+            Empecemos
+          </h1>
+          <h3 className="mt-[var(--space-1)] text-body text-muted">Crea una cuenta</h3>
 
-      <GoogleAuthButton />
+          <GoogleAuthButton className="mt-[var(--space-6)] flex h-btn-primary w-full items-center justify-center gap-[var(--button-gap)] rounded-button border border-app bg-[var(--input-bg)] text-button-md font-[var(--fw-medium)] text-app transition-colors duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] hover:bg-[var(--interactive-hover-surface)]" />
 
-      <div className="flex items-center gap-4 py-1.5">
-        <div className="flex-1 border-t border-[var(--color-border-muted)]" />
-        <span className="text-sm font-medium text-[var(--color-text-divider)]">o</span>
-        <div className="flex-1 border-t border-[var(--color-border-muted)]" />
+          <div className="flex items-center gap-[var(--space-4)] py-[var(--space-3)]">
+            <div className="flex-1 border-t border-app" />
+            <span className="text-body-sm font-[var(--fw-medium)] text-muted">o</span>
+            <div className="flex-1 border-t border-app" />
+          </div>
+
+          <form className="space-y-[var(--space-3)]" onSubmit={onSubmit}>
+            <div className="h-input rounded-input border border-app bg-[var(--input-bg)] px-[var(--input-padding-x)] transition-[border-color,box-shadow] duration-[var(--duration-fast)] [transition-timing-function:var(--ease-standard)] focus-within:border-[var(--input-border-focus)] focus-within:shadow-[0_0_0_var(--focus-ring-width)_var(--focus-ring-color)]">
+              <input
+                type="text"
+                className="h-full w-full bg-transparent text-body text-app outline-none placeholder:text-muted focus-visible:shadow-none"
+                aria-label="Nombre"
+                autoComplete="name"
+                placeholder="Nombre*"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </div>
+
+            <div className="h-input rounded-input border border-app bg-[var(--input-bg)] px-[var(--input-padding-x)] transition-[border-color,box-shadow] duration-[var(--duration-fast)] [transition-timing-function:var(--ease-standard)] focus-within:border-[var(--input-border-focus)] focus-within:shadow-[0_0_0_var(--focus-ring-width)_var(--focus-ring-color)]">
+              <input
+                type="email"
+                className="h-full w-full bg-transparent text-body text-app outline-none placeholder:text-muted focus-visible:shadow-none"
+                aria-label="Correo electronico"
+                autoComplete="email"
+                placeholder="Email*"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </div>
+
+            <div className="h-input rounded-input border border-app bg-[var(--input-bg)] px-[var(--input-padding-x)] transition-[border-color,box-shadow] duration-[var(--duration-fast)] [transition-timing-function:var(--ease-standard)] focus-within:border-[var(--input-border-focus)] focus-within:shadow-[0_0_0_var(--focus-ring-width)_var(--focus-ring-color)]">
+              <div className="flex h-full items-center gap-[var(--space-3)]">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  className="w-full bg-transparent text-body text-app outline-none placeholder:text-muted focus-visible:shadow-none"
+                  aria-label="Contraseña"
+                  autoComplete="new-password"
+                  placeholder="Contraseña*"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="text-muted"
+                  aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                  onClick={() => setShowPassword((prev) => !prev)}
+                >
+                  <EyeIcon open={showPassword} />
+                </button>
+              </div>
+            </div>
+
+            <div className="h-input rounded-input border border-app bg-[var(--input-bg)] px-[var(--input-padding-x)] transition-[border-color,box-shadow] duration-[var(--duration-fast)] [transition-timing-function:var(--ease-standard)] focus-within:border-[var(--input-border-focus)] focus-within:shadow-[0_0_0_var(--focus-ring-width)_var(--focus-ring-color)]">
+              <div className="flex h-full items-center gap-[var(--space-3)]">
+                <input
+                  type={showRepeatPassword ? "text" : "password"}
+                  className="w-full bg-transparent text-body text-app outline-none placeholder:text-muted focus-visible:shadow-none"
+                  aria-label="Repetir contraseña"
+                  autoComplete="new-password"
+                  placeholder="Repetir contraseña*"
+                  value={repeatPassword}
+                  onChange={(e) => setRepeatPassword(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="text-muted"
+                  aria-label={showRepeatPassword ? "Ocultar repetir contraseña" : "Mostrar repetir contraseña"}
+                  onClick={() => setShowRepeatPassword((prev) => !prev)}
+                >
+                  <EyeIcon open={showRepeatPassword} />
+                </button>
+              </div>
+            </div>
+
+            {errorMsg && <p className="text-body-sm text-error-token">{errorMsg}</p>}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="h-btn-primary w-full rounded-button bg-primary-token text-button-md font-[var(--fw-medium)] text-contrast-token transition-colors duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] hover:bg-primary-hover-token disabled:opacity-[var(--disabled-opacity)]"
+            >
+              {loading ? "Creando cuenta..." : "Registrarse"}
+            </button>
+          </form>
+
+          <p className="pt-[var(--space-4)] text-center text-body text-muted">
+            ¿Ya tienes una cuenta?{" "}
+            <Link href="/login" className="font-[var(--fw-semibold)] text-primary-token">
+              Iniciar sesión
+            </Link>
+          </p>
+        </div>
       </div>
 
-      <form className="space-y-4" onSubmit={onSubmit}>
-        <fieldset className="rounded-[12px] border border-[var(--color-border-default)] bg-[var(--color-bg-input)] px-3 pb-2 pt-0.5">
-          <legend className="px-1 text-sm text-[var(--color-text-muted)]">Nombre*</legend>
-          <input
-            type="text"
-            className="w-full bg-transparent text-base text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-placeholder)]"
-            aria-label="Nombre"
-            autoComplete="name"
-            placeholder="Nombre*"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-        </fieldset>
-
-        <fieldset className="rounded-[12px] border border-[var(--color-border-default)] bg-[var(--color-bg-input)] px-3 pb-2 pt-0.5">
-          <legend className="px-1 text-sm text-[var(--color-text-muted)]">E-mail*</legend>
-          <input
-            type="email"
-            className="w-full bg-transparent text-base text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-placeholder)]"
-            aria-label="Correo electronico"
-            autoComplete="email"
-            placeholder="Email*"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-        </fieldset>
-
-        <fieldset className="rounded-[12px] border border-[var(--color-border-default)] bg-[var(--color-bg-input)] px-3 pb-2 pt-0.5">
-          <legend className="px-1 text-sm text-[var(--color-text-muted)]">Contrasena*</legend>
-          <div className="flex items-center gap-3">
-            <input
-              type={showPassword ? "text" : "password"}
-              className="w-full bg-transparent text-base text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-placeholder)]"
-              aria-label="Contrasena"
-              autoComplete="new-password"
-              placeholder="Contraseña*"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-            <button
-              type="button"
-              className="cursor-pointer text-[var(--color-text-muted)]"
-              aria-label={showPassword ? "Ocultar contrasena" : "Mostrar contrasena"}
-              onClick={() => setShowPassword((prev) => !prev)}
-            >
-              <EyeIcon open={showPassword} />
-            </button>
-          </div>
-        </fieldset>
-
-        <fieldset className="rounded-[12px] border border-[var(--color-border-default)] bg-[var(--color-bg-input)] px-3 pb-2 pt-0.5">
-          <legend className="px-1 text-sm text-[var(--color-text-muted)]">Repetir contrasena*</legend>
-          <div className="flex items-center gap-3">
-            <input
-              type={showRepeatPassword ? "text" : "password"}
-              className="w-full bg-transparent text-base text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-placeholder)]"
-              aria-label="Repetir contrasena"
-              autoComplete="new-password"
-              placeholder="Repetir contraseña*"
-              value={repeatPassword}
-              onChange={(e) => setRepeatPassword(e.target.value)}
-            />
-            <button
-              type="button"
-              className="cursor-pointer text-[var(--color-text-muted)]"
-              aria-label={
-                showRepeatPassword ? "Ocultar repetir contrasena" : "Mostrar repetir contrasena"
-              }
-              onClick={() => setShowRepeatPassword((prev) => !prev)}
-            >
-              <EyeIcon open={showRepeatPassword} />
-            </button>
-          </div>
-        </fieldset>
-
-        {errorMsg && (
-          <p className="text-sm text-red-600">{errorMsg}</p>
-        )}
-
-        <button
-          type="submit"
-          disabled={loading}
-          className="h-12 w-full cursor-pointer rounded-xl bg-gradient-to-r from-[var(--color-button-primary-start)] to-[var(--color-button-primary-end)] text-lg font-medium text-white disabled:opacity-60"
-        >
-          {loading ? "Creando cuenta..." : "Registrarse"}
-        </button>
-      </form>
-
-      <p className="pt-3 text-center text-base text-[var(--color-text-secondary)]">
-        ¿Ya tienes una cuenta?{" "}
-        <Link href="/login" className="font-medium text-[var(--color-text-accent)]">
-          Iniciar sesión
-        </Link>
-      </p>
-
-      <p className="pt-10 text-center text-sm leading-[1.35] text-[var(--color-text-muted)]">
-        Al continuar, aceptas los <span className="font-semibold text-[var(--color-text-subtle)]">Términos y</span>
+      <p className="mt-auto pb-[max(var(--space-2),env(safe-area-inset-bottom))] pt-[var(--space-6)] text-center text-caption text-tertiary md:pt-[var(--space-8)]">
+        Al continuar, aceptas los{" "}
+        <span className="font-[var(--fw-semibold)] text-muted">Términos y</span>
         <br />
-        <span className="font-semibold text-[var(--color-text-subtle)]">Condiciones</span> de Frimee
+        <span className="font-[var(--fw-semibold)] text-muted">Condiciones</span> de Frimee
       </p>
     </div>
   );
@@ -216,7 +229,7 @@ export default function RegisterPage() {
 
 function EyeIcon({ open }: { open: boolean }) {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" className="size-7" aria-hidden="true">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" className="size-5" aria-hidden="true">
       <path
         d="M2 12C3.8 8.6 7.4 6.5 12 6.5C16.6 6.5 20.2 8.6 22 12C20.2 15.4 16.6 17.5 12 17.5C7.4 17.5 3.8 15.4 2 12Z"
         stroke="currentColor"

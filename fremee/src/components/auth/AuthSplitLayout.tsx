@@ -3,31 +3,32 @@ import Image from "next/image";
 
 export function AuthSplitLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-dvh w-full bg-[var(--color-bg-app)]">
-      <div className="grid min-h-dvh grid-cols-1 lg:grid-cols-[46%_54%]">
+    <div className="h-dvh w-full overflow-hidden bg-surface">
+      <div className="grid h-full grid-cols-4 gap-0 overflow-hidden min-[800px]:grid-cols-8 lg:grid-cols-12">
         {/* LEFT / BRAND PANEL */}
-        <section className="relative hidden overflow-hidden bg-[var(--color-bg-brand)] text-white lg:block lg:h-dvh">
-          {/* Top brand */}
-          <div className="absolute left-0 top-0 z-10 w-full px-10 pt-12 lg:px-20 lg:pt-14">
-            <div className="text-4xl font-medium tracking-tight text-white/80">
-              Frimee
+        <section className="relative hidden overflow-hidden bg-primary-token text-contrast-token min-[800px]:col-span-4 min-[800px]:block min-[800px]:h-full lg:col-span-5">
+          <div className="relative z-20 h-full px-safe pb-[var(--space-24)] pt-[var(--space-10)] md:pt-[var(--space-12)] lg:pt-[var(--space-14)]">
+            {/* Top brand */}
+            <div className="md:pl-[25%] lg:pl-[20%]">
+              <div className="text-[var(--font-h1)] font-[var(--fw-semibold)] leading-[var(--lh-h1)] tracking-tight text-contrast-token opacity-85">
+                Frimee
+              </div>
             </div>
-          </div>
 
-          {/* Copy block */}
-          <div className="relative z-20 flex min-h-[480px] flex-col justify-center px-10 pb-52 pt-24 lg:min-h-dvh lg:px-20 lg:pb-56 lg:pt-24">
-            <h1 className="max-w-xl text-3xl font-semibold leading-[1.24] tracking-tight lg:text-[50px]">
-              <span className="block text-white">Organiza.</span>
-              <span className="block whitespace-nowrap text-[var(--color-bg-brand-muted)]">
-                Sin preocupaciones.
-              </span>
-              <span className="block text-white">Comparte.</span>
-            </h1>
+            {/* Copy block */}
+            <div className="mt-[11vh] md:mt-[12vh] md:pl-[25%] lg:mt-[7vh] lg:pl-[20%]">
+              <div className="md:w-[72%] lg:w-[82%]">
+                <h1 className="text-[clamp(2.35rem,5vw,3.125rem)] font-[var(--fw-semibold)] leading-[1.2] tracking-tight text-contrast-token">
+                  <span className="block">Organiza.</span>
+                  <span className="block opacity-80">Sin preocupaciones.</span>
+                  <span className="block">Comparte.</span>
+                </h1>
 
-            <p className="mt-6 max-w-md text-base leading-7 text-white/80">
-              Coordina viajes, gastos y actividades en un solo lugar <br />
-              para que tu grupo avance sin caos
-            </p>
+                <p className="mt-[var(--space-6)] w-full text-body text-contrast-token opacity-80">
+                  Coordina viajes, gastos y actividades en un solo lugar para que tu grupo avance sin caos
+                </p>
+              </div>
+            </div>
           </div>
 
           {/* Plane illustration (bottom, anchored to section edge) */}
@@ -37,8 +38,12 @@ export function AuthSplitLayout({ children }: { children: ReactNode }) {
         </section>
 
         {/* RIGHT / CONTENT SLOT */}
-        <main className="flex min-h-dvh items-start bg-[var(--color-bg-auth-main)] px-7 pb-8 pt-6 lg:items-center lg:justify-center lg:px-16 lg:py-8">
-          <div className="w-full max-w-md">{children}</div>
+        <main className="col-span-full overflow-hidden bg-surface min-[800px]:col-span-4 lg:col-span-7">
+          <div className="grid h-full grid-cols-4 gap-0 px-safe pb-[var(--space-8)] pt-[var(--space-6)] min-[800px]:grid-cols-4 min-[800px]:py-[var(--space-8)] lg:grid-cols-7">
+            <div className="col-span-full min-[800px]:col-span-4 lg:col-span-4 lg:col-start-2">
+              <div className="flex h-full w-full justify-center">{children}</div>
+            </div>
+          </div>
         </main>
       </div>
     </div>
