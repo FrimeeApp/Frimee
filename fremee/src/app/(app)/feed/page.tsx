@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -7,6 +7,11 @@ import AppSidebar from "@/components/common/AppSidebar";
 import { listExplorePlans } from "@/services/api/repositories/plans.repository";
 import type { FeedPlanItemDto } from "@/services/api/dtos/plan.dto";
 import { publishPlanAsPost } from "@/services/api/repositories/post.repository";
+import {
+  listPlanLikeCounts,
+  listUserLikedPlanIds,
+  togglePlanLike,
+} from "@/services/api/repositories/likes.repository";
 
 type PostType = "plan" | "comment";
 
@@ -23,6 +28,8 @@ type FeedPost = {
 
 type UiPost = FeedPost & {
   plan: FeedPlanItemDto;
+  initiallyLiked: boolean;
+  initialLikeCount: number;
 };
 
 type Suggestion = {
@@ -44,6 +51,7 @@ export default function FeedPage() {
   const [loadingFeed, setLoadingFeed] = useState(true);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [uiPosts, setUiPosts] = useState<UiPost[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   useEffect(() => {
     const supabase = createBrowserSupabaseClient();
@@ -58,6 +66,7 @@ export default function FeedPage() {
         } = await supabase.auth.getSession();
 
         if (session) {
+          setCurrentUserId(session.user.id);
           sessionFound = true;
           break;
         }
@@ -81,9 +90,11 @@ export default function FeedPage() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_, session) => {
       if (!session) {
+        setCurrentUserId(null);
         router.replace("/login");
         return;
       }
+      setCurrentUserId(session.user.id);
       setReady(true);
     });
 
@@ -105,6 +116,20 @@ export default function FeedPage() {
 
         if (cancelled) return;
 
+        const planIds = plans.map((plan) => plan.id);
+        const [likedPlanIds, likeCountsByPlanId] = await Promise.all([
+          currentUserId
+            ? listUserLikedPlanIds({
+                userId: currentUserId,
+                planIds,
+              })
+            : Promise.resolve<number[]>([]),
+          listPlanLikeCounts({ planIds }),
+        ]);
+
+        if (cancelled) return;
+
+        const likedSet = new Set<number>(likedPlanIds);
         const mapped: UiPost[] = plans.map((p) => {
           const name = p.creator?.name || "Usuario";
           const avatarLabel = (name.trim()[0] || "U").toUpperCase();
@@ -118,17 +143,16 @@ export default function FeedPage() {
             text: p.description,
             hasImage: Boolean(p.coverImage),
             coverImage: p.coverImage ?? undefined,
-            plan: p, // 👈
+            plan: p,
+            initiallyLiked: likedSet.has(p.id),
+            initialLikeCount: likeCountsByPlanId[p.id] ?? 0,
           };
         });
 
         setUiPosts(mapped);
-
-        // ✅ Suggestions no las tocamos
         setSuggestions(MOCK_SUGGESTIONS);
       } catch (e) {
         console.error("[feed] load error", e);
-        // si falla, simplemente deja vacío el feed
         setUiPosts([]);
         setSuggestions(MOCK_SUGGESTIONS);
       } finally {
@@ -141,7 +165,7 @@ export default function FeedPage() {
     return () => {
       cancelled = true;
     };
-  }, [ready]);
+  }, [ready, currentUserId]);
 
   if (!ready) {
     return (
@@ -179,7 +203,9 @@ export default function FeedPage() {
                 {loadingFeed ? (
                   <FeedSkeleton />
                 ) : (
-                  uiPosts.map((post) => <FeedCard key={post.id} post={post} />)
+                  uiPosts.map((post) => (
+                    <FeedCard key={post.id} post={post} currentUserId={currentUserId} />
+                  ))
                 )}
               </div>
             </section>
@@ -215,20 +241,56 @@ export default function FeedPage() {
   );
 }
 
-function FeedCard({ post }: { post: UiPost }) {
-  
+function FeedCard({ post, currentUserId }: { post: UiPost; currentUserId: string | null }) {
   const [publishing, setPublishing] = useState(false);
+  const [liked, setLiked] = useState(post.initiallyLiked);
+  const [likeCount, setLikeCount] = useState(post.initialLikeCount);
+  const [likeLoading, setLikeLoading] = useState(false);
+  const [likeAnimating, setLikeAnimating] = useState(false);
+
+  useEffect(() => {
+    setLiked(post.initiallyLiked);
+  }, [post.initiallyLiked]);
+
+  useEffect(() => {
+    setLikeCount(post.initialLikeCount);
+  }, [post.initialLikeCount]);
+
+  useEffect(() => {
+    if (!likeAnimating) return;
+    const timeoutId = window.setTimeout(() => setLikeAnimating(false), 180);
+    return () => window.clearTimeout(timeoutId);
+  }, [likeAnimating]);
 
   const onPublish = async () => {
     if (publishing) return;
     setPublishing(true);
     try {
       await publishPlanAsPost(post.plan);
-      console.log("✅ Publicado en Firebase:", post.plan.id);
+      console.log("Publicado en Firebase:", post.plan.id);
     } catch (e) {
-      console.error("❌ Error publicando:", e);
+      console.error("Error publicando:", e);
     } finally {
       setPublishing(false);
+    }
+  };
+
+  const onLikeToggle = async () => {
+    if (!currentUserId || likeLoading) return;
+
+    setLikeLoading(true);
+    try {
+      const result = await togglePlanLike({
+        userId: currentUserId,
+        planId: post.plan.id,
+      });
+      setLiked(result.liked);
+      setLikeCount(result.likeCount);
+      setLikeAnimating(true);
+    } catch (e) {
+      console.error("[feed] Error toggling like:", e);
+    } finally {
+      setLikeLoading(false);
     }
   };
 
@@ -254,7 +316,17 @@ function FeedCard({ post }: { post: UiPost }) {
 
       <div className="flex items-center justify-between text-app">
         <div className="flex items-center gap-4">
-          <HeartIcon />
+          <button
+            type="button"
+            className="flex items-center gap-1 p-1 disabled:opacity-50"
+            aria-label={liked ? "Quitar like" : "Dar like"}
+            onClick={onLikeToggle}
+            disabled={!currentUserId || likeLoading}
+            title={liked ? "Quitar like" : "Dar like"}
+          >
+            <HeartIcon liked={liked} animating={likeAnimating} />
+            <span className="text-body-sm font-[var(--fw-medium)] tabular-nums">{likeCount}</span>
+          </button>
           <CommentIcon />
           <button
             type="button"
@@ -299,9 +371,16 @@ function Avatar({ label }: { label: string }) {
   );
 }
 
-function HeartIcon() {
+function HeartIcon({ liked, animating }: { liked: boolean; animating: boolean }) {
   return (
-    <svg width="31" height="31" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <svg
+      width="31"
+      height="31"
+      viewBox="0 0 24 24"
+      fill={liked ? "currentColor" : "none"}
+      aria-hidden="true"
+      className={`transition-all duration-150 ${liked ? "text-red-500" : "text-app"} ${animating ? "scale-[1.2]" : "scale-100"}`}
+    >
       <path
         d="M12 20.5C11.7 20.5 11.4 20.4 11.1 20.2C8.2 18.2 4 14.8 4 10.8C4 8.2 6 6.2 8.5 6.2C10 6.2 11.3 6.9 12 8C12.7 6.9 14 6.2 15.5 6.2C18 6.2 20 8.2 20 10.8C20 14.8 15.8 18.2 12.9 20.2C12.6 20.4 12.3 20.5 12 20.5Z"
         stroke="currentColor"

@@ -8,11 +8,11 @@ export type PlanToPostDTO = {
   creado_por_user_id: string | null;
 
   estado: string | null;
-  inicio_at: string | null; // viene como string/ISO desde SQL
+  inicio_at: string | null;
   fin_at: string | null;
   all_day: boolean | null;
 
-  visibilidad: string | null; // ej: "PÚBLICO"
+  visibilidad: string | null;
   ubicacion_nombre: string | null;
   ubicacion_direccion: string | null;
 

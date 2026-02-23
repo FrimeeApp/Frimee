@@ -10,14 +10,20 @@ export async function publishPostRoute(payload: PublishPostPayload): Promise<Pub
 
   const created = await runTransaction(db, async (tx) => {
     const existing = await tx.get(postRef);
-    if (existing.exists()) return false;
-
-    tx.set(postRef, {
-      planId: payload.plan.id,
-      plan: payload.plan,
-      createdAt: serverTimestamp(),
-    });
-    return true;
+    tx.set(
+      postRef,
+      {
+        planId: payload.plan.id,
+        plan: payload.plan,
+        likeCount: existing.exists() ? existing.data().likeCount ?? 0 : 0,
+        published: true,
+        publishedAt: existing.exists() ? existing.data().publishedAt ?? serverTimestamp() : serverTimestamp(),
+        createdAt: existing.exists() ? existing.data().createdAt ?? serverTimestamp() : serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true },
+    );
+    return !existing.exists();
   });
 
   return { ok: true, post_id: postRef.id, alreadyPublished: !created };
