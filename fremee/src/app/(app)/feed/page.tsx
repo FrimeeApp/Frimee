@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import AppSidebar from "@/components/common/AppSidebar";
@@ -12,6 +12,14 @@ import {
   listUserLikedPlanIds,
   togglePlanLike,
 } from "@/services/api/repositories/likes.repository";
+import {
+  createComment,
+  getTopCommentForPlan,
+  listTopCommentsForPlans,
+  toggleCommentLike,
+  type TopCommentDto,
+} from "@/services/api/repositories/comments.repository";
+import { getUserProfile } from "@/services/api/repositories/users.repository";
 
 type PostType = "plan" | "comment";
 
@@ -30,6 +38,7 @@ type UiPost = FeedPost & {
   plan: FeedPlanItemDto;
   initiallyLiked: boolean;
   initialLikeCount: number;
+  topComment: TopCommentDto | null;
 };
 
 type Suggestion = {
@@ -43,6 +52,9 @@ const MOCK_SUGGESTIONS: Suggestion[] = [
   { id: "s1", name: "Patrick", text: "Ha publicado su viaje a Oslo", avatarLabel: "P" },
   { id: "s2", name: "Isa", text: "Ha publicado su viaje a Escocia", avatarLabel: "I" },
 ];
+
+const commentAuthorNameCache = new Map<string, string>();
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export default function FeedPage() {
   const router = useRouter();
@@ -117,7 +129,7 @@ export default function FeedPage() {
         if (cancelled) return;
 
         const planIds = plans.map((plan) => plan.id);
-        const [likedPlanIds, likeCountsByPlanId] = await Promise.all([
+        const [likedPlanIds, likeCountsByPlanId, topCommentsByPlanId] = await Promise.all([
           currentUserId
             ? listUserLikedPlanIds({
                 userId: currentUserId,
@@ -125,6 +137,7 @@ export default function FeedPage() {
               })
             : Promise.resolve<number[]>([]),
           listPlanLikeCounts({ planIds }),
+          listTopCommentsForPlans({ planIds, userId: currentUserId ?? undefined }),
         ]);
 
         if (cancelled) return;
@@ -146,6 +159,7 @@ export default function FeedPage() {
             plan: p,
             initiallyLiked: likedSet.has(p.id),
             initialLikeCount: likeCountsByPlanId[p.id] ?? 0,
+            topComment: topCommentsByPlanId[p.id] ?? null,
           };
         });
 
@@ -247,6 +261,12 @@ function FeedCard({ post, currentUserId }: { post: UiPost; currentUserId: string
   const [likeCount, setLikeCount] = useState(post.initialLikeCount);
   const [likeLoading, setLikeLoading] = useState(false);
   const [likeAnimating, setLikeAnimating] = useState(false);
+  const [commentOpen, setCommentOpen] = useState(false);
+  const [commentText, setCommentText] = useState("");
+  const [commentSubmitting, setCommentSubmitting] = useState(false);
+  const [topComment, setTopComment] = useState<TopCommentDto | null>(post.topComment);
+  const [commentLikeLoading, setCommentLikeLoading] = useState(false);
+  const [topCommentAuthorName, setTopCommentAuthorName] = useState<string | null>(null);
 
   useEffect(() => {
     setLiked(post.initiallyLiked);
@@ -255,6 +275,65 @@ function FeedCard({ post, currentUserId }: { post: UiPost; currentUserId: string
   useEffect(() => {
     setLikeCount(post.initialLikeCount);
   }, [post.initialLikeCount]);
+
+  useEffect(() => {
+    setTopComment(post.topComment);
+  }, [post.topComment]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadAuthorName = async () => {
+      const userId = topComment?.userId;
+      if (!userId) {
+        setTopCommentAuthorName(null);
+        return;
+      }
+
+      if (topComment?.userName?.trim()) {
+        setTopCommentAuthorName(topComment.userName.trim());
+        return;
+      }
+
+      const cached = commentAuthorNameCache.get(userId);
+      if (cached) {
+        setTopCommentAuthorName(cached);
+        return;
+      }
+
+      let resolvedName: string | null = null;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          const profile = await getUserProfile(userId);
+          if (cancelled) return;
+          const candidate = profile?.nombre?.trim() ?? "";
+          if (candidate) {
+            resolvedName = candidate;
+            break;
+          }
+        } catch {
+          // retry on transient failure
+        }
+        await wait(200 * (attempt + 1));
+      }
+
+      if (cancelled) return;
+      if (resolvedName) {
+        commentAuthorNameCache.set(userId, resolvedName);
+        setTopCommentAuthorName(resolvedName);
+        return;
+      }
+
+      // evita mostrar UUID cruda en UI cuando no se pudo resolver el perfil
+      setTopCommentAuthorName("Usuario");
+    };
+
+    void loadAuthorName();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [topComment?.userId, currentUserId]);
 
   useEffect(() => {
     if (!likeAnimating) return;
@@ -294,6 +373,76 @@ function FeedCard({ post, currentUserId }: { post: UiPost; currentUserId: string
     }
   };
 
+  const refreshTopComment = async () => {
+    const latest = await getTopCommentForPlan({
+      planId: post.plan.id,
+      userId: currentUserId ?? undefined,
+    });
+    setTopComment(latest);
+  };
+
+  const onSubmitComment = async () => {
+    if (!currentUserId || commentSubmitting) return;
+    const content = commentText.trim();
+    if (!content) return;
+
+    setCommentSubmitting(true);
+    try {
+      let currentUserName = commentAuthorNameCache.get(currentUserId) ?? "";
+      if (!currentUserName) {
+        const profile = await getUserProfile(currentUserId);
+        currentUserName = profile?.nombre?.trim() || "Usuario";
+        commentAuthorNameCache.set(currentUserId, currentUserName);
+      }
+
+      await createComment({
+        planId: post.plan.id,
+        userId: currentUserId,
+        userName: currentUserName,
+        content,
+      });
+      setCommentText("");
+      setCommentOpen(false);
+      await refreshTopComment();
+    } catch (e) {
+      console.error("[feed] Error creating comment:", e);
+    } finally {
+      setCommentSubmitting(false);
+    }
+  };
+
+  const onCommentKeyDown = async (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    await onSubmitComment();
+  };
+
+  const onToggleTopCommentLike = async () => {
+    if (!currentUserId || !topComment || commentLikeLoading) return;
+
+    setCommentLikeLoading(true);
+    try {
+      const result = await toggleCommentLike({
+        planId: post.plan.id,
+        commentId: topComment.commentId,
+        userId: currentUserId,
+      });
+      setTopComment((prev) =>
+        prev
+          ? {
+              ...prev,
+              likedByMe: result.liked,
+              likeCount: result.likeCount,
+            }
+          : prev,
+      );
+    } catch (e) {
+      console.error("[feed] Error toggling comment like:", e);
+    } finally {
+      setCommentLikeLoading(false);
+    }
+  };
+
   return (
     <article className="border-b border-app pb-[var(--space-6)]">
       <header className="mb-[var(--space-3)] flex items-center justify-between">
@@ -327,7 +476,16 @@ function FeedCard({ post, currentUserId }: { post: UiPost; currentUserId: string
             <HeartIcon liked={liked} animating={likeAnimating} />
             <span className="text-body-sm font-[var(--fw-medium)] tabular-nums">{likeCount}</span>
           </button>
-          <CommentIcon />
+          <button
+            type="button"
+            className="p-1 disabled:opacity-50"
+            aria-label={commentOpen ? "Ocultar comentarios" : "Comentar"}
+            onClick={() => setCommentOpen((prev) => !prev)}
+            disabled={!currentUserId}
+            title={commentOpen ? "Ocultar comentarios" : "Comentar"}
+          >
+            <CommentIcon />
+          </button>
           <button
             type="button"
             className="p-1 disabled:opacity-50"
@@ -343,8 +501,51 @@ function FeedCard({ post, currentUserId }: { post: UiPost; currentUserId: string
       </div>
 
       <p className="mt-[var(--space-2)] text-body leading-[1.45]">
-        <span className="font-[var(--fw-semibold)]">{post.userName}</span> {post.text}
+        {post.text}
       </p>
+
+      {topComment && (
+        <div className="mt-[var(--space-3)] rounded-card border border-app px-[var(--space-3)] py-[var(--space-2)]">
+          <div className="text-body-sm leading-[1.35]">
+            <span className="font-[var(--fw-semibold)]">{topCommentAuthorName ?? "Usuario"}</span>{" "}
+            {topComment.content}
+          </div>
+          <div className="mt-[var(--space-2)]">
+            <button
+              type="button"
+              className="flex items-center gap-1 text-body-sm text-muted disabled:opacity-50"
+              onClick={onToggleTopCommentLike}
+              disabled={!currentUserId || commentLikeLoading}
+            >
+              <HeartIcon liked={topComment.likedByMe} animating={false} small />
+              <span className="tabular-nums">{topComment.likeCount}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {commentOpen && (
+        <div className="mt-[var(--space-3)] flex items-center gap-2">
+          <input
+            type="text"
+            value={commentText}
+            onChange={(e) => setCommentText(e.target.value)}
+            onKeyDown={onCommentKeyDown}
+            placeholder="Escribe un comentario..."
+            className="flex-1 rounded-card border border-app bg-app px-3 py-2 text-body-sm outline-none"
+            disabled={!currentUserId || commentSubmitting}
+          />
+          <button
+            type="button"
+            onClick={onSubmitComment}
+            disabled={!currentUserId || commentSubmitting || !commentText.trim()}
+            className="rounded-card border border-app px-3 py-2 text-body-sm font-[var(--fw-semibold)] disabled:opacity-50"
+          >
+            Enviar
+          </button>
+        </div>
+      )}
+
       <button type="button" className="mt-[var(--space-3)] text-body-sm font-[var(--fw-semibold)] text-primary-token">
         Ver plan
       </button>
@@ -371,11 +572,11 @@ function Avatar({ label }: { label: string }) {
   );
 }
 
-function HeartIcon({ liked, animating }: { liked: boolean; animating: boolean }) {
+function HeartIcon({ liked, animating, small }: { liked: boolean; animating: boolean; small?: boolean }) {
   return (
     <svg
-      width="31"
-      height="31"
+      width={small ? "18" : "31"}
+      height={small ? "18" : "31"}
       viewBox="0 0 24 24"
       fill={liked ? "currentColor" : "none"}
       aria-hidden="true"

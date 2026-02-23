@@ -20,6 +20,12 @@ export async function fetchUserProfileById(userId: string): Promise<UserProfileR
     .eq("id", userId)
     .maybeSingle();
 
+  console.log("[users] fetchUserProfileById", {
+    userId,
+    data,
+    error: error ? { message: error.message, code: error.code, details: error.details } : null,
+  });
+
   if (error) throw error;
   return (data as UserProfileRow | null) ?? null;
 }
