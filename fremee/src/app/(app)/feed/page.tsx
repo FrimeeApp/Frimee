@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import AppSidebar from "@/components/common/AppSidebar";
-import { listExplorePlans } from "@/services/api/repositories/plans.repository"; // 👈 NUEVO
+import { listExplorePlans } from "@/services/api/repositories/plans.repository";
+import type { FeedPlanItemDto } from "@/services/api/dtos/plan.dto";
+import { publishPlanAsPost } from "@/services/api/repositories/post.repository";
 
 type PostType = "plan" | "comment";
 
@@ -17,6 +19,10 @@ type FeedPost = {
   text: string;
   hasImage?: boolean;
   coverImage?: string;
+};
+
+type UiPost = FeedPost & {
+  plan: FeedPlanItemDto;
 };
 
 type Suggestion = {
@@ -36,8 +42,8 @@ export default function FeedPage() {
   const [ready, setReady] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [loadingFeed, setLoadingFeed] = useState(true);
-  const [posts, setPosts] = useState<FeedPost[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [uiPosts, setUiPosts] = useState<UiPost[]>([]);
 
   useEffect(() => {
     const supabase = createBrowserSupabaseClient();
@@ -100,7 +106,7 @@ export default function FeedPage() {
 
         if (cancelled) return;
 
-        const mapped: FeedPost[] = plans.map((p) => {
+        const mapped: UiPost[] = plans.map((p) => {
           const name = p.creator?.name || "Usuario";
           const avatarLabel = (name.trim()[0] || "U").toUpperCase();
 
@@ -113,17 +119,18 @@ export default function FeedPage() {
             text: p.description,
             hasImage: Boolean(p.coverImage),
             coverImage: p.coverImage ?? undefined,
+            plan: p, // 👈
           };
         });
 
-        setPosts(mapped);
+        setUiPosts(mapped);
 
         // ✅ Suggestions no las tocamos
         setSuggestions(MOCK_SUGGESTIONS);
       } catch (e) {
         console.error("[feed] load error", e);
         // si falla, simplemente deja vacío el feed
-        setPosts([]);
+        setUiPosts([]);
         setSuggestions(MOCK_SUGGESTIONS);
       } finally {
         if (!cancelled) setLoadingFeed(false);
@@ -173,7 +180,7 @@ export default function FeedPage() {
                 {loadingFeed ? (
                   <FeedSkeleton />
                 ) : (
-                  posts.map((post) => <FeedCard key={post.id} post={post} />)
+                  uiPosts.map((post) => <FeedCard key={post.id} post={post} />)
                 )}
               </div>
             </section>
@@ -209,7 +216,23 @@ export default function FeedPage() {
   );
 }
 
-function FeedCard({ post }: { post: FeedPost }) {
+function FeedCard({ post }: { post: UiPost }) {
+  
+  const [publishing, setPublishing] = useState(false);
+
+  const onPublish = async () => {
+    if (publishing) return;
+    setPublishing(true);
+    try {
+      await publishPlanAsPost(post.plan);
+      console.log("✅ Publicado en Firebase:", post.plan.id);
+    } catch (e) {
+      console.error("❌ Error publicando:", e);
+    } finally {
+      setPublishing(false);
+    }
+  };
+
   return (
     <article className="border-b border-[var(--color-border-strong)] pb-8">
       <header className="mb-3 flex items-center justify-between">
@@ -222,7 +245,7 @@ function FeedCard({ post }: { post: FeedPost }) {
         </div>
       </header>
 
-      {post.hasImage && (
+      {post.hasImage && post.coverImage && (
         <img src={post.coverImage} alt="Imagen del plan" className="mb-4 w-full rounded-[14px]" />
       )}
 
@@ -230,7 +253,16 @@ function FeedCard({ post }: { post: FeedPost }) {
         <div className="flex items-center gap-4">
           <HeartIcon />
           <CommentIcon />
-          <SendIcon />
+          <button
+            type="button"
+            className="p-1 disabled:opacity-50"
+            aria-label="Publicar"
+            onClick={onPublish}
+            disabled={publishing}
+            title={publishing ? "Publicando..." : "Publicar en Firebase"}
+          >
+            <SendIcon />
+          </button>
         </div>
         <BookmarkIcon />
       </div>
