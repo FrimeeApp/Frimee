@@ -19,7 +19,7 @@ import {
   toggleCommentLike,
   type TopCommentDto,
 } from "@/services/api/repositories/comments.repository";
-import { getUserProfile } from "@/services/api/repositories/users.repository";
+import { getPublicUserProfile } from "@/services/api/repositories/users.repository";
 
 type PostType = "plan" | "comment";
 
@@ -53,7 +53,8 @@ const MOCK_SUGGESTIONS: Suggestion[] = [
   { id: "s2", name: "Isa", text: "Ha publicado su viaje a Escocia", avatarLabel: "I" },
 ];
 
-const commentAuthorNameCache = new Map<string, string>();
+const COMMENT_AUTHOR_CACHE_TTL_MS = 60_000;
+const commentAuthorNameCache = new Map<string, { name: string; cachedAt: number }>();
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export default function FeedPage() {
@@ -285,26 +286,22 @@ function FeedCard({ post, currentUserId }: { post: UiPost; currentUserId: string
 
     const loadAuthorName = async () => {
       const userId = topComment?.userId;
+      const fallbackName = topComment?.userName?.trim() || null;
       if (!userId) {
-        setTopCommentAuthorName(null);
-        return;
-      }
-
-      if (topComment?.userName?.trim()) {
-        setTopCommentAuthorName(topComment.userName.trim());
+        setTopCommentAuthorName(fallbackName);
         return;
       }
 
       const cached = commentAuthorNameCache.get(userId);
-      if (cached) {
-        setTopCommentAuthorName(cached);
+      if (cached && Date.now() - cached.cachedAt < COMMENT_AUTHOR_CACHE_TTL_MS) {
+        setTopCommentAuthorName(cached.name);
         return;
       }
 
       let resolvedName: string | null = null;
       for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
-          const profile = await getUserProfile(userId);
+          const profile = await getPublicUserProfile(userId);
           if (cancelled) return;
           const candidate = profile?.nombre?.trim() ?? "";
           if (candidate) {
@@ -319,12 +316,17 @@ function FeedCard({ post, currentUserId }: { post: UiPost; currentUserId: string
 
       if (cancelled) return;
       if (resolvedName) {
-        commentAuthorNameCache.set(userId, resolvedName);
+        commentAuthorNameCache.set(userId, { name: resolvedName, cachedAt: Date.now() });
         setTopCommentAuthorName(resolvedName);
         return;
       }
 
-      // evita mostrar UUID cruda en UI cuando no se pudo resolver el perfil
+      // si no hay permiso para resolver perfil por UID, usa snapshot guardado en el comentario
+      if (fallbackName) {
+        setTopCommentAuthorName(fallbackName);
+        return;
+      }
+
       setTopCommentAuthorName("Usuario");
     };
 
@@ -333,7 +335,7 @@ function FeedCard({ post, currentUserId }: { post: UiPost; currentUserId: string
     return () => {
       cancelled = true;
     };
-  }, [topComment?.userId, currentUserId]);
+  }, [topComment?.userId, topComment?.userName, currentUserId]);
 
   useEffect(() => {
     if (!likeAnimating) return;
@@ -388,11 +390,15 @@ function FeedCard({ post, currentUserId }: { post: UiPost; currentUserId: string
 
     setCommentSubmitting(true);
     try {
-      let currentUserName = commentAuthorNameCache.get(currentUserId) ?? "";
+      const cachedCurrentUser = commentAuthorNameCache.get(currentUserId);
+      let currentUserName =
+        cachedCurrentUser && Date.now() - cachedCurrentUser.cachedAt < COMMENT_AUTHOR_CACHE_TTL_MS
+          ? cachedCurrentUser.name
+          : "";
       if (!currentUserName) {
-        const profile = await getUserProfile(currentUserId);
+        const profile = await getPublicUserProfile(currentUserId);
         currentUserName = profile?.nombre?.trim() || "Usuario";
-        commentAuthorNameCache.set(currentUserId, currentUserName);
+        commentAuthorNameCache.set(currentUserId, { name: currentUserName, cachedAt: Date.now() });
       }
 
       await createComment({
