@@ -8,6 +8,7 @@ import { getUserProfile } from "@/services/api/repositories/users.repository";
 type Profile = {
   id: string;
   nombre: string;
+  fecha_nac: string | null;
   email: string;
   rol: string;
   profile_image: string | null;
