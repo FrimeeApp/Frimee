@@ -14,10 +14,9 @@ import {
 } from "@/services/api/repositories/likes.repository";
 import {
   createComment,
-  getTopCommentForPlan,
-  listTopCommentsForPlans,
-  toggleCommentLike,
-  type TopCommentDto,
+  listCommentsForPlan,
+  listPreviewCommentsForPlans,
+  type CommentDto,
 } from "@/services/api/repositories/comments.repository";
 import { getPublicUserProfile } from "@/services/api/repositories/users.repository";
 
@@ -38,7 +37,7 @@ type UiPost = FeedPost & {
   plan: FeedPlanItemDto;
   initiallyLiked: boolean;
   initialLikeCount: number;
-  topComment: TopCommentDto | null;
+  previewComments: CommentDto[];
 };
 
 type Suggestion = {
@@ -55,7 +54,6 @@ const MOCK_SUGGESTIONS: Suggestion[] = [
 
 const COMMENT_AUTHOR_CACHE_TTL_MS = 60_000;
 const commentAuthorNameCache = new Map<string, { name: string; cachedAt: number }>();
-const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export default function FeedPage() {
   const router = useRouter();
@@ -135,7 +133,7 @@ export default function FeedPage() {
         if (cancelled) return;
 
         const planIds = plans.map((plan) => plan.id);
-        const [likedPlanIds, likeCountsByPlanId, topCommentsByPlanId] = await Promise.all([
+        const [likedPlanIds, likeCountsByPlanId, previewCommentsByPlanId] = await Promise.all([
           currentUserId
             ? listUserLikedPlanIds({
                 userId: currentUserId,
@@ -143,7 +141,7 @@ export default function FeedPage() {
               })
             : Promise.resolve<number[]>([]),
           listPlanLikeCounts({ planIds }),
-          listTopCommentsForPlans({ planIds, userId: currentUserId ?? undefined }),
+          listPreviewCommentsForPlans({ planIds, userId: currentUserId ?? undefined, limitPerPlan: 2 }),
         ]);
 
         if (cancelled) return;
@@ -165,7 +163,7 @@ export default function FeedPage() {
             plan: p,
             initiallyLiked: likedSet.has(p.id),
             initialLikeCount: likeCountsByPlanId[p.id] ?? 0,
-            topComment: topCommentsByPlanId[p.id] ?? null,
+            previewComments: previewCommentsByPlanId[p.id] ?? [],
           };
         });
 
@@ -314,9 +312,10 @@ function FeedCard({ post, currentUserId }: { post: UiPost; currentUserId: string
   const [commentOpen, setCommentOpen] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [commentSubmitting, setCommentSubmitting] = useState(false);
-  const [topComment, setTopComment] = useState<TopCommentDto | null>(post.topComment);
-  const [commentLikeLoading, setCommentLikeLoading] = useState(false);
-  const [topCommentAuthorName, setTopCommentAuthorName] = useState<string | null>(null);
+  const [previewComments, setPreviewComments] = useState<CommentDto[]>(post.previewComments);
+  const [commentsSection, setCommentsSection] = useState<CommentDto[]>([]);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [resolvedAuthorNames, setResolvedAuthorNames] = useState<Record<string, string>>({});
 
   useEffect(() => {
     setLiked(post.initiallyLiked);
@@ -327,70 +326,90 @@ function FeedCard({ post, currentUserId }: { post: UiPost; currentUserId: string
   }, [post.initialLikeCount]);
 
   useEffect(() => {
-    setTopComment(post.topComment);
-  }, [post.topComment]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadAuthorName = async () => {
-      const userId = topComment?.userId;
-      const fallbackName = topComment?.userName?.trim() || null;
-      if (!userId) {
-        setTopCommentAuthorName(fallbackName);
-        return;
-      }
-
-      const cached = commentAuthorNameCache.get(userId);
-      if (cached && Date.now() - cached.cachedAt < COMMENT_AUTHOR_CACHE_TTL_MS) {
-        setTopCommentAuthorName(cached.name);
-        return;
-      }
-
-      let resolvedName: string | null = null;
-      for (let attempt = 0; attempt < 3; attempt += 1) {
-        try {
-          const profile = await getPublicUserProfile(userId);
-          if (cancelled) return;
-          const candidate = profile?.nombre?.trim() ?? "";
-          if (candidate) {
-            resolvedName = candidate;
-            break;
-          }
-        } catch {
-          // retry on transient failure
-        }
-        await wait(200 * (attempt + 1));
-      }
-
-      if (cancelled) return;
-      if (resolvedName) {
-        commentAuthorNameCache.set(userId, { name: resolvedName, cachedAt: Date.now() });
-        setTopCommentAuthorName(resolvedName);
-        return;
-      }
-
-      // si no hay permiso para resolver perfil por UID, usa snapshot guardado en el comentario
-      if (fallbackName) {
-        setTopCommentAuthorName(fallbackName);
-        return;
-      }
-
-      setTopCommentAuthorName("Usuario");
-    };
-
-    void loadAuthorName();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [topComment?.userId, topComment?.userName, currentUserId]);
+    setPreviewComments(post.previewComments);
+  }, [post.previewComments]);
 
   useEffect(() => {
     if (!likeAnimating) return;
     const timeoutId = window.setTimeout(() => setLikeAnimating(false), 180);
     return () => window.clearTimeout(timeoutId);
   }, [likeAnimating]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const commentsToResolve = [...previewComments, ...commentsSection];
+    const uniqueUserIds = [...new Set(commentsToResolve.map((c) => c.userId).filter((id) => id && id.length > 0))];
+    const unresolved = uniqueUserIds.filter((userId) => {
+      if (resolvedAuthorNames[userId]) return false;
+      const cached = commentAuthorNameCache.get(userId);
+      return !(cached && Date.now() - cached.cachedAt < COMMENT_AUTHOR_CACHE_TTL_MS);
+    });
+
+    if (unresolved.length === 0) {
+      const hydratedFromCache: Record<string, string> = {};
+      for (const userId of uniqueUserIds) {
+        const cached = commentAuthorNameCache.get(userId);
+        if (cached && Date.now() - cached.cachedAt < COMMENT_AUTHOR_CACHE_TTL_MS) {
+          hydratedFromCache[userId] = cached.name;
+        }
+      }
+      if (!cancelled && Object.keys(hydratedFromCache).length > 0) {
+        setResolvedAuthorNames((prev) => {
+          let changed = false;
+          for (const [userId, name] of Object.entries(hydratedFromCache)) {
+            if (prev[userId] !== name) {
+              changed = true;
+              break;
+            }
+          }
+          if (!changed) return prev;
+          return { ...prev, ...hydratedFromCache };
+        });
+      }
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const resolveNames = async () => {
+      const resolved: Record<string, string> = {};
+
+      await Promise.all(
+        unresolved.map(async (userId) => {
+          try {
+            const profile = await getPublicUserProfile(userId);
+            const name = profile?.nombre?.trim();
+            if (name) {
+              resolved[userId] = name;
+              commentAuthorNameCache.set(userId, { name, cachedAt: Date.now() });
+            }
+          } catch {
+            // silent fallback to snapshot name/user placeholder
+          }
+        }),
+      );
+
+      if (!cancelled && Object.keys(resolved).length > 0) {
+        setResolvedAuthorNames((prev) => {
+          let changed = false;
+          for (const [userId, name] of Object.entries(resolved)) {
+            if (prev[userId] !== name) {
+              changed = true;
+              break;
+            }
+          }
+          if (!changed) return prev;
+          return { ...prev, ...resolved };
+        });
+      }
+    };
+
+    void resolveNames();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [previewComments, commentsSection, resolvedAuthorNames]);
 
   const onPublish = async () => {
     if (publishing) return;
@@ -424,12 +443,23 @@ function FeedCard({ post, currentUserId }: { post: UiPost; currentUserId: string
     }
   };
 
-  const refreshTopComment = async () => {
-    const latest = await getTopCommentForPlan({
-      planId: post.plan.id,
-      userId: currentUserId ?? undefined,
-    });
-    setTopComment(latest);
+  const openCommentsSection = async () => {
+    setCommentOpen(true);
+    setCommentsLoading(true);
+    try {
+      const allComments = await listCommentsForPlan({
+        planId: post.plan.id,
+        userId: currentUserId ?? undefined,
+        limit: 50,
+      });
+      setCommentsSection(allComments);
+      setPreviewComments(allComments.slice(0, 2));
+    } catch (error) {
+      console.error("[feed] Error loading comments:", error);
+      setCommentsSection([]);
+    } finally {
+      setCommentsLoading(false);
+    }
   };
 
   const onSubmitComment = async () => {
@@ -457,8 +487,7 @@ function FeedCard({ post, currentUserId }: { post: UiPost; currentUserId: string
         content,
       });
       setCommentText("");
-      setCommentOpen(false);
-      await refreshTopComment();
+      await openCommentsSection();
     } catch (e) {
       console.error("[feed] Error creating comment:", e);
     } finally {
@@ -472,30 +501,16 @@ function FeedCard({ post, currentUserId }: { post: UiPost; currentUserId: string
     await onSubmitComment();
   };
 
-  const onToggleTopCommentLike = async () => {
-    if (!currentUserId || !topComment || commentLikeLoading) return;
-
-    setCommentLikeLoading(true);
-    try {
-      const result = await toggleCommentLike({
-        planId: post.plan.id,
-        commentId: topComment.commentId,
-        userId: currentUserId,
-      });
-      setTopComment((prev) =>
-        prev
-          ? {
-              ...prev,
-              likedByMe: result.liked,
-              likeCount: result.likeCount,
-            }
-          : prev,
-      );
-    } catch (e) {
-      console.error("[feed] Error toggling comment like:", e);
-    } finally {
-      setCommentLikeLoading(false);
+  const onToggleCommentsSection = async () => {
+    if (commentOpen) {
+      setCommentOpen(false);
+      return;
     }
+    await openCommentsSection();
+  };
+
+  const getCommentAuthorName = (comment: CommentDto) => {
+    return resolvedAuthorNames[comment.userId] || comment.userName?.trim() || "Usuario";
   };
 
   return (
@@ -534,10 +549,9 @@ function FeedCard({ post, currentUserId }: { post: UiPost; currentUserId: string
           <button
             type="button"
             className="p-1 disabled:opacity-50"
-            aria-label={commentOpen ? "Ocultar comentarios" : "Comentar"}
-            onClick={() => setCommentOpen((prev) => !prev)}
-            disabled={!currentUserId}
-            title={commentOpen ? "Ocultar comentarios" : "Comentar"}
+            aria-label={commentOpen ? "Cerrar comentarios" : "Abrir comentarios"}
+            onClick={onToggleCommentsSection}
+            title={commentOpen ? "Cerrar comentarios" : "Abrir comentarios"}
           >
             <CommentIcon />
           </button>
@@ -559,45 +573,55 @@ function FeedCard({ post, currentUserId }: { post: UiPost; currentUserId: string
         {post.text}
       </p>
 
-      {topComment && (
-        <div className="mt-[var(--space-3)] rounded-card border border-app px-[var(--space-3)] py-[var(--space-2)]">
-          <div className="text-body-sm leading-[1.35]">
-            <span className="font-[var(--fw-semibold)]">{topCommentAuthorName ?? "Usuario"}</span>{" "}
-            {topComment.content}
-          </div>
-          <div className="mt-[var(--space-2)]">
-            <button
-              type="button"
-              className="flex items-center gap-1 text-body-sm text-muted disabled:opacity-50"
-              onClick={onToggleTopCommentLike}
-              disabled={!currentUserId || commentLikeLoading}
-            >
-              <HeartIcon liked={topComment.likedByMe} animating={false} small />
-              <span className="tabular-nums">{topComment.likeCount}</span>
-            </button>
-          </div>
+      {!commentOpen && previewComments.length > 0 && (
+        <div className="mt-[var(--space-3)] space-y-[var(--space-1)]">
+          {previewComments.slice(0, 2).map((comment) => (
+            <p key={comment.commentId} className="text-body-sm leading-[1.35]">
+              <span className="font-[var(--fw-semibold)]">{getCommentAuthorName(comment)}</span>{" "}
+              {comment.content}
+            </p>
+          ))}
         </div>
       )}
 
       {commentOpen && (
-        <div className="mt-[var(--space-3)] flex items-center gap-2">
-          <input
-            type="text"
-            value={commentText}
-            onChange={(e) => setCommentText(e.target.value)}
-            onKeyDown={onCommentKeyDown}
-            placeholder="Escribe un comentario..."
-            className="flex-1 rounded-card border border-app bg-app px-3 py-2 text-body-sm outline-none"
-            disabled={!currentUserId || commentSubmitting}
-          />
-          <button
-            type="button"
-            onClick={onSubmitComment}
-            disabled={!currentUserId || commentSubmitting || !commentText.trim()}
-            className="rounded-card border border-app px-3 py-2 text-body-sm font-[var(--fw-semibold)] disabled:opacity-50"
-          >
-            Enviar
-          </button>
+        <div className="mt-[var(--space-3)] border-t border-app pt-[var(--space-3)]">
+          <p className="text-body-sm font-[var(--fw-semibold)]">Comentarios</p>
+
+          <div className="mt-[var(--space-2)] space-y-[var(--space-2)]">
+            {commentsLoading ? (
+              <p className="text-body-sm text-muted">Cargando comentarios...</p>
+            ) : commentsSection.length === 0 ? (
+              <p className="text-body-sm text-muted">Aun no hay comentarios. Se el primero.</p>
+            ) : (
+              commentsSection.map((comment) => (
+                <p key={comment.commentId} className="text-body-sm leading-[1.35]">
+                  <span className="font-[var(--fw-semibold)]">{getCommentAuthorName(comment)}</span>{" "}
+                  {comment.content}
+                </p>
+              ))
+            )}
+          </div>
+
+          <div className="mt-[var(--space-3)] flex items-center gap-2">
+            <input
+              type="text"
+              value={commentText}
+              onChange={(e) => setCommentText(e.target.value)}
+              onKeyDown={onCommentKeyDown}
+              placeholder="Escribe un comentario..."
+              className="flex-1 rounded-card border border-app bg-app px-3 py-2 text-body-sm outline-none"
+              disabled={!currentUserId || commentSubmitting}
+            />
+            <button
+              type="button"
+              onClick={onSubmitComment}
+              disabled={!currentUserId || commentSubmitting || !commentText.trim()}
+              className="rounded-card border border-app px-3 py-2 text-body-sm font-[var(--fw-semibold)] disabled:opacity-50"
+            >
+              Enviar
+            </button>
+          </div>
         </div>
       )}
 
@@ -635,12 +659,14 @@ function HeartIcon({ liked, animating, small }: { liked: boolean; animating: boo
       viewBox="0 0 24 24"
       fill={liked ? "currentColor" : "none"}
       aria-hidden="true"
-      className={`transition-all duration-150 ${liked ? "text-red-500" : "text-app"} ${animating ? "scale-[1.2]" : "scale-100"}`}
+      className={`transition-all duration-150 ${liked ? "text-warning-token" : "text-app"} ${animating ? "scale-[1.2]" : "scale-100"}`}
     >
       <path
-        d="M12 20.5C11.7 20.5 11.4 20.4 11.1 20.2C8.2 18.2 4 14.8 4 10.8C4 8.2 6 6.2 8.5 6.2C10 6.2 11.3 6.9 12 8C12.7 6.9 14 6.2 15.5 6.2C18 6.2 20 8.2 20 10.8C20 14.8 15.8 18.2 12.9 20.2C12.6 20.4 12.3 20.5 12 20.5Z"
+        d="M2.5 11.2H8.6L12.6 4.2H14.5L13.5 11.2H20.8L21.8 12.8L13.5 13.8L14.5 20.8H12.6L8.6 13.8H2.5V11.2Z"
         stroke="currentColor"
         strokeWidth="1.7"
+        strokeLinejoin="round"
+        strokeLinecap="round"
       />
     </svg>
   );
