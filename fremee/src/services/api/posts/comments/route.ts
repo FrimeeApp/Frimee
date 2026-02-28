@@ -36,6 +36,8 @@ export type TopCommentDto = {
   likedByMe: boolean;
 };
 
+export type CommentDto = TopCommentDto;
+
 type ToggleCommentLikeInput = {
   planId: number;
   commentId: string;
@@ -96,6 +98,43 @@ async function getTopCommentInternal(planId: number, userId?: string): Promise<T
     createdAt: toIsoOrNull(data.created_at),
     likedByMe,
   };
+}
+
+async function listCommentsInternal(params: {
+  planId: number;
+  userId?: string;
+  maxItems: number;
+}): Promise<CommentDto[]> {
+  const commentsRef = collection(db, "posts", getPostId(params.planId), "comments");
+  const commentsSnap = await getDocs(query(commentsRef, orderBy("created_at", "desc"), limit(params.maxItems)));
+
+  const comments = await Promise.all(
+    commentsSnap.docs.map(async (row) => {
+      const data = row.data();
+      const rawLikeCount = data.likeCount;
+      const likeCount = typeof rawLikeCount === "number" && Number.isFinite(rawLikeCount) ? rawLikeCount : 0;
+
+      let likedByMe = false;
+      if (params.userId) {
+        const likeRef = doc(db, "posts", getPostId(params.planId), "comments", row.id, "likes", params.userId);
+        const likeSnap = await getDoc(likeRef);
+        likedByMe = likeSnap.exists();
+      }
+
+      return {
+        planId: params.planId,
+        commentId: row.id,
+        userId: typeof data.user_id === "string" ? data.user_id : "",
+        userName: typeof data.user_name === "string" ? data.user_name : null,
+        content: typeof data.content === "string" ? data.content : "",
+        likeCount,
+        createdAt: toIsoOrNull(data.created_at),
+        likedByMe,
+      } satisfies CommentDto;
+    }),
+  );
+
+  return comments;
 }
 
 export async function createCommentRoute(input: CreateCommentInput): Promise<CreateCommentResult> {
@@ -179,4 +218,49 @@ export async function listTopCommentsForPlansRoute(params: {
   }
 
   return { topCommentsByPlanId };
+}
+
+export async function listCommentsForPlanRoute(params: {
+  planId: number;
+  userId?: string;
+  limit?: number;
+}): Promise<{ comments: CommentDto[] }> {
+  const safeLimit = Number.isFinite(params.limit) ? Math.max(1, Math.min(100, Number(params.limit))) : 30;
+  const comments = await listCommentsInternal({
+    planId: params.planId,
+    userId: params.userId,
+    maxItems: safeLimit,
+  });
+  return { comments };
+}
+
+export async function listPreviewCommentsForPlansRoute(params: {
+  planIds: number[];
+  userId?: string;
+  limitPerPlan?: number;
+}): Promise<{ previewCommentsByPlanId: Record<number, CommentDto[]> }> {
+  const uniquePlanIds = [...new Set(params.planIds)].filter(
+    (planId) => Number.isInteger(planId) && planId > 0,
+  );
+  const safeLimit = Number.isFinite(params.limitPerPlan)
+    ? Math.max(1, Math.min(5, Number(params.limitPerPlan)))
+    : 2;
+
+  const entries = await Promise.all(
+    uniquePlanIds.map(async (planId) => {
+      const comments = await listCommentsInternal({
+        planId,
+        userId: params.userId,
+        maxItems: safeLimit,
+      });
+      return [planId, comments] as const;
+    }),
+  );
+
+  const previewCommentsByPlanId: Record<number, CommentDto[]> = {};
+  for (const [planId, comments] of entries) {
+    previewCommentsByPlanId[planId] = comments;
+  }
+
+  return { previewCommentsByPlanId };
 }
