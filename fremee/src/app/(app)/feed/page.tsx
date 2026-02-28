@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useEffect, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import AppSidebar from "@/components/common/AppSidebar";
@@ -61,10 +61,15 @@ export default function FeedPage() {
   const router = useRouter();
   const [ready, setReady] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [activeFeedTab, setActiveFeedTab] = useState<"following" | "explore">("following");
   const [loadingFeed, setLoadingFeed] = useState(true);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [uiPosts, setUiPosts] = useState<UiPost[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const tabRowRef = useRef<HTMLDivElement | null>(null);
+  const followingTabRef = useRef<HTMLButtonElement | null>(null);
+  const exploreTabRef = useRef<HTMLButtonElement | null>(null);
+  const [tabIndicator, setTabIndicator] = useState({ left: 0, width: 0, ready: false });
 
   useEffect(() => {
     const supabase = createBrowserSupabaseClient();
@@ -182,6 +187,26 @@ export default function FeedPage() {
     };
   }, [ready, currentUserId]);
 
+  useEffect(() => {
+    const updateIndicator = () => {
+      const row = tabRowRef.current;
+      const target = activeFeedTab === "following" ? followingTabRef.current : exploreTabRef.current;
+      if (!row || !target) return;
+
+      const rowRect = row.getBoundingClientRect();
+      const tabRect = target.getBoundingClientRect();
+      setTabIndicator({
+        left: tabRect.left - rowRect.left,
+        width: tabRect.width,
+        ready: true,
+      });
+    };
+
+    updateIndicator();
+    window.addEventListener("resize", updateIndicator);
+    return () => window.removeEventListener("resize", updateIndicator);
+  }, [activeFeedTab]);
+
   if (!ready) {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-app px-[var(--space-6)] text-center text-app">
@@ -205,13 +230,37 @@ export default function FeedPage() {
         >
           <div className="mx-auto grid max-w-[1160px] grid-cols-1 gap-[var(--space-8)] xl:grid-cols-[minmax(0,1fr)_300px] xl:gap-[var(--space-10)]">
             <section className="mx-auto w-full max-w-[760px]">
-              <div className="flex gap-[var(--space-10)] border-b border-app pb-[var(--space-2)] text-body text-muted">
-                <button type="button" className="font-[var(--fw-medium)] text-app">
+              <div
+                ref={tabRowRef}
+                className="relative flex gap-[var(--space-10)] border-b border-app text-body text-muted"
+              >
+                <button
+                  ref={followingTabRef}
+                  type="button"
+                  onClick={() => setActiveFeedTab("following")}
+                  className={`pb-[var(--space-2)] font-[var(--fw-medium)] transition-colors duration-[var(--duration-base)] ${
+                    activeFeedTab === "following" ? "text-app" : "hover:text-app"
+                  }`}
+                >
                   Siguiendo
                 </button>
-                <button type="button" className="font-[var(--fw-medium)]">
+                <button
+                  ref={exploreTabRef}
+                  type="button"
+                  onClick={() => setActiveFeedTab("explore")}
+                  className={`pb-[var(--space-2)] font-[var(--fw-medium)] transition-colors duration-[var(--duration-base)] ${
+                    activeFeedTab === "explore" ? "text-app" : "hover:text-app"
+                  }`}
+                >
                   Explorar
                 </button>
+                <span
+                  className={`pointer-events-none absolute bottom-0 h-[2px] bg-warning-token transition-[left,width,opacity] duration-[220ms] [transition-timing-function:var(--ease-standard)] ${
+                    tabIndicator.ready ? "opacity-100" : "opacity-0"
+                  }`}
+                  style={{ left: tabIndicator.left, width: tabIndicator.width }}
+                  aria-hidden="true"
+                />
               </div>
 
               <div className="mt-[var(--space-5)] space-y-[var(--space-6)]">
