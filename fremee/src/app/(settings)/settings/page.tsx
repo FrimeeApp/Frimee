@@ -2,7 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import { Capacitor } from "@capacitor/core";
+import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
 import { useAuth } from "@/providers/AuthProvider";
+import LoadingScreen from "@/components/common/LoadingScreen";
+import { createBrowserSupabaseClient } from "@/services/supabase/client";
+import { applyThemePreference, cacheThemePreference } from "@/services/theme/preferences";
 import {
   getUserSettings,
   saveUserProfileAndSettings,
@@ -27,6 +32,8 @@ type SettingsForm = {
   notifyInApp: boolean;
   profileVisibility: VisibilityOption;
   allowFriendRequests: boolean;
+  googleSyncEnabled: boolean;
+  googleSyncExportPlans: boolean;
 };
 
 const DEFAULT_SETTINGS: SettingsForm = {
@@ -41,6 +48,8 @@ const DEFAULT_SETTINGS: SettingsForm = {
   notifyInApp: true,
   profileVisibility: "PUBLICO",
   allowFriendRequests: true,
+  googleSyncEnabled: false,
+  googleSyncExportPlans: true,
 };
 
 const LANGUAGE_OPTIONS = [
@@ -88,6 +97,8 @@ function mapCombinedRowToForm(row: {
   notify_in_app: boolean;
   profile_visibility: VisibilityOption;
   allow_friend_requests: boolean;
+  google_sync_enabled?: boolean | null;
+  google_sync_export_plans?: boolean | null;
 }): SettingsForm {
   return {
     nombre: row.nombre ?? "",
@@ -101,6 +112,8 @@ function mapCombinedRowToForm(row: {
     notifyInApp: row.notify_in_app,
     profileVisibility: normalizeVisibility(row.profile_visibility),
     allowFriendRequests: row.allow_friend_requests,
+    googleSyncEnabled: row.google_sync_enabled ?? false,
+    googleSyncExportPlans: row.google_sync_export_plans ?? true,
   };
 }
 
@@ -115,6 +128,8 @@ function mergeProfileAndSettings(params: {
     notify_in_app: boolean;
     profile_visibility: VisibilityOption;
     allow_friend_requests: boolean;
+    google_sync_enabled?: boolean | null;
+    google_sync_export_plans?: boolean | null;
   } | null;
 }): SettingsForm {
   return {
@@ -129,19 +144,36 @@ function mergeProfileAndSettings(params: {
     notifyInApp: params.settings?.notify_in_app ?? true,
     profileVisibility: normalizeVisibility(params.settings?.profile_visibility),
     allowFriendRequests: params.settings?.allow_friend_requests ?? true,
+    googleSyncEnabled: params.settings?.google_sync_enabled ?? false,
+    googleSyncExportPlans: params.settings?.google_sync_export_plans ?? true,
   };
 }
 
 function applyThemeToDocument(theme: ThemeOption) {
-  if (typeof window === "undefined") return;
-  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-  const useDark = theme === "DARK" || (theme === "SYSTEM" && prefersDark);
-  document.documentElement.classList.toggle("dark", useDark);
+  applyThemePreference(theme);
+}
+
+async function syncAuthUserMetadata(params: { nombre: string; profileImage: string | null }) {
+  const supabase = createBrowserSupabaseClient();
+  const displayName = params.nombre.trim();
+  const avatarUrl = params.profileImage ?? null;
+
+  const { error } = await supabase.auth.updateUser({
+    data: {
+      name: displayName || null,
+      full_name: displayName || null,
+      display_name: displayName || null,
+      avatar_url: avatarUrl,
+      picture: avatarUrl,
+    },
+  });
+
+  if (error) throw error;
 }
 
 export default function SettingsPage() {
   const router = useRouter();
-  const { user, profile, signOut, refreshProfile } = useAuth();
+  const { user, profile, settings, signOut, refreshProfile, setUserSnapshot } = useAuth();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [settingsLoading, setSettingsLoading] = useState(true);
@@ -177,9 +209,7 @@ export default function SettingsPage() {
       setErrorMsg(null);
 
       try {
-        const settingsRow = await getUserSettings(user.id);
-        if (cancelled) return;
-
+        const latestSettings = await getUserSettings(user.id);
         const mapped = mergeProfileAndSettings({
           profile: profile
             ? {
@@ -188,11 +218,12 @@ export default function SettingsPage() {
                 profile_image: profile.profile_image ?? null,
               }
             : null,
-          settings: settingsRow,
+          settings: latestSettings ?? settings,
         });
         setForm(mapped);
         setInitialForm(mapped);
         applyThemeToDocument(mapped.theme);
+        cacheThemePreference(mapped.theme);
       } catch (error) {
         if (cancelled) return;
         console.warn("[settings] load error:", error);
@@ -207,9 +238,11 @@ export default function SettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [user?.id, profile]);
+  }, [user?.id, profile, settings]);
 
   useEffect(() => {
+    if (settingsLoading) return;
+
     applyThemeToDocument(form.theme);
 
     if (typeof window === "undefined" || form.theme !== "SYSTEM") return;
@@ -223,7 +256,7 @@ export default function SettingsPage() {
 
     media.addListener(onChange);
     return () => media.removeListener(onChange);
-  }, [form.theme]);
+  }, [form.theme, settingsLoading]);
 
   const goBack = () => {
     if (typeof window !== "undefined" && window.history.length > 1) {
@@ -233,16 +266,8 @@ export default function SettingsPage() {
     router.push("/feed");
   };
 
-  const onPickImage = () => {
-    if (!user?.id || busyAction !== null) return;
-    fileInputRef.current?.click();
-  };
-
-  const onFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file || !user?.id) return;
-
+  const uploadSelectedImage = async (file: File) => {
+    if (!user?.id) return;
     setSaveMsg(null);
     setErrorMsg(null);
     setBusyAction("upload-image");
@@ -262,6 +287,47 @@ export default function SettingsPage() {
     } finally {
       setBusyAction(null);
     }
+  };
+
+  const onPickImage = async () => {
+    if (!user?.id || busyAction !== null) return;
+
+    if (!Capacitor.isNativePlatform()) {
+      fileInputRef.current?.click();
+      return;
+    }
+
+    try {
+      const photo = await Camera.getPhoto({
+        quality: 90,
+        resultType: CameraResultType.Uri,
+        source: CameraSource.Prompt,
+      });
+
+      if (!photo.webPath) return;
+      const response = await fetch(photo.webPath);
+      const blob = await response.blob();
+      const extension = blob.type.split("/")[1] ?? "jpg";
+      const file = new File([blob], `profile-${Date.now()}.${extension}`, {
+        type: blob.type || "image/jpeg",
+      });
+      await uploadSelectedImage(file);
+    } catch (error) {
+      const message =
+        typeof error === "object" && error && "message" in error ? String(error.message) : "";
+      const cancelled = /cancel/i.test(message);
+      if (!cancelled) {
+        console.warn("[settings] pick image native error:", error);
+        setErrorMsg("No se pudo abrir camara/galeria.");
+      }
+    }
+  };
+
+  const onFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    await uploadSelectedImage(file);
   };
 
   const onSaveSettings = async () => {
@@ -285,11 +351,48 @@ export default function SettingsPage() {
         notifyInApp: form.notifyInApp,
         profileVisibility: normalizeVisibility(form.profileVisibility),
         allowFriendRequests: form.allowFriendRequests,
+        googleSyncEnabled: form.googleSyncEnabled,
+        googleSyncExportPlans: form.googleSyncExportPlans,
       });
 
       const mapped = mapCombinedRowToForm(saved);
       setForm(mapped);
       setInitialForm(mapped);
+      cacheThemePreference(mapped.theme);
+      setUserSnapshot({
+        profile: profile
+          ? {
+              ...profile,
+              nombre: saved.nombre,
+              fecha_nac: saved.fecha_nac,
+              profile_image: saved.profile_image,
+            }
+          : null,
+        settings: {
+          user_id: saved.user_id,
+          theme: saved.theme,
+          language: saved.language,
+          timezone: saved.timezone,
+          notify_push: saved.notify_push,
+          notify_email: saved.notify_email,
+          notify_in_app: saved.notify_in_app,
+          profile_visibility: saved.profile_visibility,
+          allow_friend_requests: saved.allow_friend_requests,
+          google_sync_enabled: saved.google_sync_enabled ?? false,
+          google_sync_export_plans: saved.google_sync_export_plans ?? true,
+        },
+      });
+      try {
+        await syncAuthUserMetadata({
+          nombre: saved.nombre ?? "",
+          profileImage: saved.profile_image ?? null,
+        });
+      } catch (metadataError) {
+        console.warn("[settings] auth metadata sync error:", metadataError);
+      }
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("fremee.profile.updated_at", String(Date.now()));
+      }
       await refreshProfile();
       setSaveMsg("Ajustes guardados.");
     } catch (error) {
@@ -321,6 +424,8 @@ export default function SettingsPage() {
   };
 
   const disableEditing = settingsLoading || busyAction === "save" || busyAction === "upload-image";
+
+  if (settingsLoading) return <LoadingScreen />;
 
   return (
     <div className="min-h-dvh bg-app text-app">
@@ -532,6 +637,33 @@ export default function SettingsPage() {
                 }
               />
             </SettingsCard>
+
+            <SettingsCard title="Google Calendar" subtitle="Controla la sincronizacion con Google">
+              <SettingsRow
+                icon={<CalendarIcon />}
+                label="Sincronizacion habilitada"
+                description="Permite sincronizar Frimee con Google Calendar"
+                right={
+                  <Switch
+                    checked={form.googleSyncEnabled}
+                    disabled={disableEditing}
+                    onChange={(next) => setForm((prev) => ({ ...prev, googleSyncEnabled: next }))}
+                  />
+                }
+              />
+              <SettingsRow
+                icon={<CalendarIcon />}
+                label="Exportar planes"
+                description="Crear y actualizar planes de Frimee en Google Calendar"
+                right={
+                  <Switch
+                    checked={form.googleSyncExportPlans}
+                    disabled={disableEditing || !form.googleSyncEnabled}
+                    onChange={(next) => setForm((prev) => ({ ...prev, googleSyncExportPlans: next }))}
+                  />
+                }
+              />
+            </SettingsCard>
           </section>
 
           <aside className="space-y-[var(--space-4)]">
@@ -572,7 +704,6 @@ export default function SettingsPage() {
           ref={fileInputRef}
           type="file"
           accept="image/*"
-          capture="user"
           onChange={onFileChange}
           className="hidden"
           aria-hidden="true"

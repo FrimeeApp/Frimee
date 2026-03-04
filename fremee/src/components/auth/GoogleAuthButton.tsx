@@ -27,7 +27,15 @@ export default function GoogleAuthButton({
 
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
-        options: { redirectTo },
+        options: {
+          redirectTo,
+          scopes: "https://www.googleapis.com/auth/calendar",
+          queryParams: {
+            access_type: "offline",
+            prompt: "consent",
+            include_granted_scopes: "true",
+          },
+        },
       });
 
       if (error) console.error("[google] web OAuth error:", error);

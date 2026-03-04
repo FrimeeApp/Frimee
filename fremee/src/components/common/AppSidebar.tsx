@@ -11,7 +11,7 @@ type IconProps = {
 
 const items = [
   { key: "home", label: "Inicio", icon: HomeIcon, href: "/feed" },
-  { key: "calendar", label: "Calendario", icon: CalendarIcon, href: "#" },
+  { key: "calendar", label: "Calendario", icon: CalendarIcon, href: "/calendar" },
   { key: "cards", label: "Planes", icon: CardIcon, href: "#" },
   { key: "send", label: "Mensajes", icon: SendIcon, href: "#" },
 ];
@@ -55,6 +55,7 @@ export default function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
   }, []);
 
   const openSettings = () => router.push("/settings");
+  const openCreatePlan = () => router.push("/plans/new");
 
   return (
     <>
@@ -77,6 +78,7 @@ export default function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
         <button
           type="button"
           aria-label="Crear plan"
+          onClick={openCreatePlan}
           className="text-app transition-opacity duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] active:opacity-[var(--disabled-opacity)]"
         >
           <PlusIcon className="size-icon" />
@@ -140,6 +142,7 @@ export default function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
           <button
             type="button"
             aria-label="Crear plan"
+            onClick={openCreatePlan}
             className="mt-[var(--space-14)] text-app transition-opacity duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] hover:opacity-70"
           >
             <PlusIcon className="size-icon" />

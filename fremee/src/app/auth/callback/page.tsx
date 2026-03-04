@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
+import LoadingScreen from "@/components/common/LoadingScreen";
 
 export default function AuthCallbackPage() {
   const router = useRouter();
@@ -74,12 +75,6 @@ export default function AuthCallbackPage() {
     run();
   }, [router]);
 
-  return (
-    <div className="flex min-h-dvh items-center justify-center bg-[var(--color-bg-app)] px-6 text-center text-[var(--color-text-primary)]">
-      <div>
-        <p className="text-lg font-medium">Completando inicio de sesión...</p>
-        <p className="mt-2 text-sm text-[var(--color-text-secondary)]">Un momento, te redirigimos.</p>
-      </div>
-    </div>
-  );
+  return <LoadingScreen />;
+
 }

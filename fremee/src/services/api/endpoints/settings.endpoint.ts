@@ -13,6 +13,8 @@ export type UserSettingsRow = {
   notify_in_app: boolean;
   profile_visibility: ProfileVisibility;
   allow_friend_requests: boolean;
+  google_sync_enabled: boolean;
+  google_sync_export_plans: boolean;
 };
 
 export type UpsertUserSettingsParams = {
@@ -25,6 +27,8 @@ export type UpsertUserSettingsParams = {
   notifyInApp?: boolean | null;
   profileVisibility?: ProfileVisibility | null;
   allowFriendRequests?: boolean | null;
+  googleSyncEnabled?: boolean | null;
+  googleSyncExportPlans?: boolean | null;
 };
 
 export type UpsertUserProfileAndSettingsParams = {
@@ -40,6 +44,8 @@ export type UpsertUserProfileAndSettingsParams = {
   notifyInApp?: boolean | null;
   profileVisibility?: ProfileVisibility | null;
   allowFriendRequests?: boolean | null;
+  googleSyncEnabled?: boolean | null;
+  googleSyncExportPlans?: boolean | null;
 };
 
 export type UserProfileAndSettingsRow = {
@@ -55,6 +61,8 @@ export type UserProfileAndSettingsRow = {
   notify_in_app: boolean;
   profile_visibility: ProfileVisibility;
   allow_friend_requests: boolean;
+  google_sync_enabled?: boolean | null;
+  google_sync_export_plans?: boolean | null;
 };
 
 const profileImagesBucket = process.env.NEXT_PUBLIC_SUPABASE_PROFILE_BUCKET ?? "profile-images";
@@ -65,7 +73,7 @@ export async function fetchUserSettingsByUserId(userId: string): Promise<UserSet
   const { data, error } = await supabase
     .from("user_settings")
     .select(
-      "user_id,theme,language,timezone,notify_push,notify_email,notify_in_app,profile_visibility,allow_friend_requests",
+      "user_id,theme,language,timezone,notify_push,notify_email,notify_in_app,profile_visibility,allow_friend_requests,google_sync_enabled,google_sync_export_plans",
     )
     .eq("user_id", userId)
     .is("deleted_at", null)
@@ -88,6 +96,8 @@ export async function upsertUserSettingsRpc(params: UpsertUserSettingsParams): P
     p_notify_in_app: params.notifyInApp ?? null,
     p_profile_visibility: params.profileVisibility ?? null,
     p_allow_friend_requests: params.allowFriendRequests ?? null,
+    p_google_sync_enabled: params.googleSyncEnabled ?? null,
+    p_google_sync_export_plans: params.googleSyncExportPlans ?? null,
   });
 
   if (error) throw error;
@@ -113,6 +123,8 @@ export async function upsertUserProfileAndSettingsRpc(
     p_notify_in_app: params.notifyInApp ?? null,
     p_profile_visibility: params.profileVisibility ?? null,
     p_allow_friend_requests: params.allowFriendRequests ?? null,
+    p_google_sync_enabled: params.googleSyncEnabled ?? null,
+    p_google_sync_export_plans: params.googleSyncExportPlans ?? null,
   });
 
   if (error) throw error;

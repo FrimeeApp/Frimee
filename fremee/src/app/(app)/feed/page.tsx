@@ -1,10 +1,11 @@
 ﻿"use client";
 
-import { useEffect, useState, type KeyboardEvent } from "react";
-import { useRouter } from "next/navigation";
-import { createBrowserSupabaseClient } from "@/services/supabase/client";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import AppSidebar from "@/components/common/AppSidebar";
-import { listExplorePlans } from "@/services/api/repositories/plans.repository";
+import LoadingScreen from "@/components/common/LoadingScreen";
+import { useAuth } from "@/providers/AuthProvider";
+import { listPlansByIdsInOrder } from "@/services/api/repositories/plans.repository";
+import { listPublishedPostPlanIds } from "@/services/api/repositories/feed.repository";
 import type { FeedPlanItemDto } from "@/services/api/dtos/plan.dto";
 import { publishPlanAsPost } from "@/services/api/repositories/post.repository";
 import {
@@ -28,6 +29,7 @@ type FeedPost = {
   type: PostType;
   userName: string;
   avatarLabel: string;
+  avatarImage?: string | null;
   subtitle: string;
   text: string;
   hasImage?: boolean;
@@ -54,91 +56,69 @@ const MOCK_SUGGESTIONS: Suggestion[] = [
 ];
 
 const COMMENT_AUTHOR_CACHE_TTL_MS = 60_000;
-const commentAuthorNameCache = new Map<string, { name: string; cachedAt: number }>();
+const commentAuthorCache = new Map<string, { name: string; profileImage: string | null; cachedAt: number }>();
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+function preloadImages(urls: string[], timeoutMs = 2500) {
+  if (typeof window === "undefined" || urls.length === 0) {
+    return Promise.resolve();
+  }
+
+  const uniqueUrls = [...new Set(urls.filter(Boolean))];
+  if (uniqueUrls.length === 0) return Promise.resolve();
+
+  const loadAll = Promise.allSettled(
+    uniqueUrls.map(
+      (url) =>
+        new Promise<void>((resolve) => {
+          const img = new Image();
+          img.onload = () => resolve();
+          img.onerror = () => resolve();
+          img.src = url;
+        }),
+    ),
+  ).then(() => undefined);
+
+  const timeout = new Promise<void>((resolve) => {
+    window.setTimeout(resolve, timeoutMs);
+  });
+
+  return Promise.race([loadAll, timeout]);
+}
+
 export default function FeedPage() {
-  const router = useRouter();
-  const [ready, setReady] = useState(false);
+  const { user } = useAuth();
+  const currentUserId = user?.id ?? null;
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [loadingFeed, setLoadingFeed] = useState(true);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [uiPosts, setUiPosts] = useState<UiPost[]>([]);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [reloadNonce, setReloadNonce] = useState(0);
+  const lastProfileUpdatedAtRef = useRef<string | null>(null);
 
   useEffect(() => {
-    const supabase = createBrowserSupabaseClient();
-    let cancelled = false;
-
-    const guard = async () => {
-      let sessionFound = false;
-
-      for (let i = 0; i < 8; i += 1) {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-
-        if (session) {
-          setCurrentUserId(session.user.id);
-          sessionFound = true;
-          break;
-        }
-
-        await new Promise((resolve) => setTimeout(resolve, 250));
-      }
-
-      if (cancelled) return;
-
-      if (!sessionFound) {
-        router.replace("/login");
-        return;
-      }
-
-      setReady(true);
-    };
-
-    guard();
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_, session) => {
-      if (!session) {
-        setCurrentUserId(null);
-        router.replace("/login");
-        return;
-      }
-      setCurrentUserId(session.user.id);
-      setReady(true);
-    });
-
-    return () => {
-      cancelled = true;
-      subscription.unsubscribe();
-    };
-  }, [router]);
-
-  useEffect(() => {
-    if (!ready) return;
+    if (!currentUserId) return;
 
     let cancelled = false;
 
     const load = async () => {
       setLoadingFeed(true);
       try {
-        const plans = await listExplorePlans({ limit: 20 });
+        const planIds = await listPublishedPostPlanIds({ limit: 20 });
+        const plans = await listPlansByIdsInOrder(planIds);
 
         if (cancelled) return;
 
-        const planIds = plans.map((plan) => plan.id);
+        const resolvedPlanIds = plans.map((plan) => plan.id);
         const [likedPlanIds, likeCountsByPlanId, topCommentsByPlanId] = await Promise.all([
           currentUserId
             ? listUserLikedPlanIds({
                 userId: currentUserId,
-                planIds,
+                planIds: resolvedPlanIds,
               })
             : Promise.resolve<number[]>([]),
-          listPlanLikeCounts({ planIds }),
-          listTopCommentsForPlans({ planIds, userId: currentUserId ?? undefined }),
+          listPlanLikeCounts({ planIds: resolvedPlanIds }),
+          listTopCommentsForPlans({ planIds: resolvedPlanIds, userId: currentUserId ?? undefined }),
         ]);
 
         if (cancelled) return;
@@ -153,6 +133,7 @@ export default function FeedPage() {
             type: "plan",
             userName: name,
             avatarLabel,
+            avatarImage: p.creator?.profileImage ?? null,
             subtitle: p.title,
             text: p.description,
             hasImage: Boolean(p.coverImage),
@@ -163,6 +144,15 @@ export default function FeedPage() {
             topComment: topCommentsByPlanId[p.id] ?? null,
           };
         });
+
+        const imageUrlsToPreload = mapped.flatMap((post) => {
+          const urls: string[] = [];
+          if (post.coverImage) urls.push(post.coverImage);
+          if (post.avatarImage) urls.push(post.avatarImage);
+          return urls;
+        });
+        await preloadImages(imageUrlsToPreload);
+        if (cancelled) return;
 
         setUiPosts(mapped);
         setSuggestions(MOCK_SUGGESTIONS);
@@ -180,18 +170,40 @@ export default function FeedPage() {
     return () => {
       cancelled = true;
     };
-  }, [ready, currentUserId]);
+  }, [currentUserId, reloadNonce]);
 
-  if (!ready) {
-    return (
-      <div className="flex min-h-dvh items-center justify-center bg-app px-[var(--space-6)] text-center text-app">
-        <div>
-          <p className="text-body-lg font-[var(--fw-medium)]">Cargando tu feed...</p>
-          <p className="mt-[var(--space-2)] text-body-sm text-muted">Comprobando sesion.</p>
-        </div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const checkProfileUpdate = () => {
+      const marker = window.localStorage.getItem("fremee.profile.updated_at");
+      if (!marker || marker === lastProfileUpdatedAtRef.current) return;
+
+      lastProfileUpdatedAtRef.current = marker;
+      commentAuthorCache.clear();
+      setReloadNonce((prev) => prev + 1);
+    };
+
+    checkProfileUpdate();
+
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        checkProfileUpdate();
+      }
+    };
+
+    window.addEventListener("focus", checkProfileUpdate);
+    window.addEventListener("pageshow", checkProfileUpdate);
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      window.removeEventListener("focus", checkProfileUpdate);
+      window.removeEventListener("pageshow", checkProfileUpdate);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, []);
+
+  if (loadingFeed) return <LoadingScreen />;
 
   return (
     <div className="min-h-dvh bg-app text-app">
@@ -215,38 +227,24 @@ export default function FeedPage() {
               </div>
 
               <div className="mt-[var(--space-5)] space-y-[var(--space-6)]">
-                {loadingFeed ? (
-                  <FeedSkeleton />
-                ) : (
-                  uiPosts.map((post) => (
-                    <FeedCard key={post.id} post={post} currentUserId={currentUserId} />
-                  ))
-                )}
+                {uiPosts.map((post) => (
+                  <FeedCard key={post.id} post={post} currentUserId={currentUserId} />
+                ))}
               </div>
             </section>
 
             <aside className="hidden pt-[var(--space-10)] xl:block">
               <h3 className="text-[var(--font-h5)] font-[var(--fw-semibold)] leading-[var(--lh-h5)]">Actividad reciente</h3>
               <div className="mt-[var(--space-4)] space-y-[var(--space-5)]">
-                {loadingFeed
-                  ? [0, 1].map((idx) => (
-                      <div key={idx} className="flex animate-pulse items-start gap-3">
-                        <div className="avatar-lg bg-[color-mix(in_srgb,var(--surface)_62%,var(--text-primary)_38%)]" />
-                        <div className="space-y-2">
-                          <div className="h-3 w-24 rounded bg-[color-mix(in_srgb,var(--surface)_62%,var(--text-primary)_38%)]" />
-                          <div className="h-3 w-36 rounded bg-[color-mix(in_srgb,var(--surface)_62%,var(--text-primary)_38%)]" />
-                        </div>
-                      </div>
-                    ))
-                  : suggestions.map((item) => (
-                      <div key={item.id} className="flex items-start gap-3">
-                        <Avatar label={item.avatarLabel} />
-                        <div>
-                          <div className="text-body font-[var(--fw-semibold)] leading-none">{item.name}</div>
-                          <p className="mt-[var(--space-1)] text-body-sm leading-[1.35] text-muted">{item.text}</p>
-                        </div>
-                      </div>
-                    ))}
+                {suggestions.map((item) => (
+                  <div key={item.id} className="flex items-start gap-3">
+                    <Avatar label={item.avatarLabel} />
+                    <div>
+                      <div className="text-body font-[var(--fw-semibold)] leading-none">{item.name}</div>
+                      <p className="mt-[var(--space-1)] text-body-sm leading-[1.35] text-muted">{item.text}</p>
+                    </div>
+                  </div>
+                ))}
               </div>
             </aside>
           </div>
@@ -268,6 +266,7 @@ function FeedCard({ post, currentUserId }: { post: UiPost; currentUserId: string
   const [topComment, setTopComment] = useState<TopCommentDto | null>(post.topComment);
   const [commentLikeLoading, setCommentLikeLoading] = useState(false);
   const [topCommentAuthorName, setTopCommentAuthorName] = useState<string | null>(null);
+  const [topCommentAuthorImage, setTopCommentAuthorImage] = useState<string | null>(null);
 
   useEffect(() => {
     setLiked(post.initiallyLiked);
@@ -289,23 +288,33 @@ function FeedCard({ post, currentUserId }: { post: UiPost; currentUserId: string
       const fallbackName = topComment?.userName?.trim() || null;
       if (!userId) {
         setTopCommentAuthorName(fallbackName);
+        setTopCommentAuthorImage(null);
         return;
       }
 
-      const cached = commentAuthorNameCache.get(userId);
-      if (cached && Date.now() - cached.cachedAt < COMMENT_AUTHOR_CACHE_TTL_MS) {
+      const cached = commentAuthorCache.get(userId);
+      if (
+        cached &&
+        cached.profileImage &&
+        Date.now() - cached.cachedAt < COMMENT_AUTHOR_CACHE_TTL_MS
+      ) {
         setTopCommentAuthorName(cached.name);
+        setTopCommentAuthorImage(cached.profileImage ?? null);
         return;
       }
 
       let resolvedName: string | null = null;
+      let resolvedImage: string | null = null;
       for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
           const profile = await getPublicUserProfile(userId);
           if (cancelled) return;
+          console.log("[feed] top comment profile", { userId, profile });
           const candidate = profile?.nombre?.trim() ?? "";
+          const candidateImage = profile?.profile_image ?? null;
           if (candidate) {
             resolvedName = candidate;
+            resolvedImage = candidateImage;
             break;
           }
         } catch {
@@ -316,18 +325,26 @@ function FeedCard({ post, currentUserId }: { post: UiPost; currentUserId: string
 
       if (cancelled) return;
       if (resolvedName) {
-        commentAuthorNameCache.set(userId, { name: resolvedName, cachedAt: Date.now() });
+        console.log("[feed] top comment resolved", { userId, resolvedName, resolvedImage });
+        commentAuthorCache.set(userId, {
+          name: resolvedName,
+          profileImage: resolvedImage ?? null,
+          cachedAt: Date.now(),
+        });
         setTopCommentAuthorName(resolvedName);
+        setTopCommentAuthorImage(resolvedImage ?? null);
         return;
       }
 
       // si no hay permiso para resolver perfil por UID, usa snapshot guardado en el comentario
       if (fallbackName) {
         setTopCommentAuthorName(fallbackName);
+        setTopCommentAuthorImage(null);
         return;
       }
 
       setTopCommentAuthorName("Usuario");
+      setTopCommentAuthorImage(null);
     };
 
     void loadAuthorName();
@@ -390,7 +407,7 @@ function FeedCard({ post, currentUserId }: { post: UiPost; currentUserId: string
 
     setCommentSubmitting(true);
     try {
-      const cachedCurrentUser = commentAuthorNameCache.get(currentUserId);
+      const cachedCurrentUser = commentAuthorCache.get(currentUserId);
       let currentUserName =
         cachedCurrentUser && Date.now() - cachedCurrentUser.cachedAt < COMMENT_AUTHOR_CACHE_TTL_MS
           ? cachedCurrentUser.name
@@ -398,7 +415,11 @@ function FeedCard({ post, currentUserId }: { post: UiPost; currentUserId: string
       if (!currentUserName) {
         const profile = await getPublicUserProfile(currentUserId);
         currentUserName = profile?.nombre?.trim() || "Usuario";
-        commentAuthorNameCache.set(currentUserId, { name: currentUserName, cachedAt: Date.now() });
+        commentAuthorCache.set(currentUserId, {
+          name: currentUserName,
+          profileImage: profile?.profile_image ?? null,
+          cachedAt: Date.now(),
+        });
       }
 
       await createComment({
@@ -453,7 +474,7 @@ function FeedCard({ post, currentUserId }: { post: UiPost; currentUserId: string
     <article className="border-b border-app pb-[var(--space-6)]">
       <header className="mb-[var(--space-3)] flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Avatar label={post.avatarLabel} />
+          <Avatar label={post.avatarLabel} image={post.avatarImage ?? null} />
           <div>
             <div className="text-body font-[var(--fw-semibold)] leading-none">{post.userName}</div>
             <p className="mt-[var(--space-1)] text-body-sm leading-none text-muted">{post.subtitle}</p>
@@ -512,9 +533,12 @@ function FeedCard({ post, currentUserId }: { post: UiPost; currentUserId: string
 
       {topComment && (
         <div className="mt-[var(--space-3)] rounded-card border border-app px-[var(--space-3)] py-[var(--space-2)]">
-          <div className="text-body-sm leading-[1.35]">
-            <span className="font-[var(--fw-semibold)]">{topCommentAuthorName ?? "Usuario"}</span>{" "}
-            {topComment.content}
+          <div className="flex items-start gap-[var(--space-2)]">
+            <CommentAvatar name={topCommentAuthorName ?? "Usuario"} image={topCommentAuthorImage} />
+            <div className="text-body-sm leading-[1.35]">
+              <span className="font-[var(--fw-semibold)]">{topCommentAuthorName ?? "Usuario"}</span>{" "}
+              {topComment.content}
+            </div>
           </div>
           <div className="mt-[var(--space-2)]">
             <button
@@ -559,18 +583,38 @@ function FeedCard({ post, currentUserId }: { post: UiPost; currentUserId: string
   );
 }
 
-function FeedSkeleton() {
+function CommentAvatar({ name, image }: { name: string; image: string | null }) {
+  if (image) {
+    return (
+      <img
+        src={image}
+        alt={`Avatar de ${name}`}
+        className="h-7 w-7 rounded-full border border-app object-cover"
+        referrerPolicy="no-referrer"
+      />
+    );
+  }
+
+  const fallback = name.trim()[0]?.toUpperCase() ?? "U";
   return (
-    <div className="animate-pulse space-y-4">
-      <div className="h-12 w-44 rounded bg-[color-mix(in_srgb,var(--surface)_62%,var(--text-primary)_38%)]" />
-      <div className="h-[344px] rounded-card bg-[color-mix(in_srgb,var(--surface)_62%,var(--text-primary)_38%)]" />
-      <div className="h-6 w-2/3 rounded bg-[color-mix(in_srgb,var(--surface)_62%,var(--text-primary)_38%)]" />
-      <div className="h-6 w-24 rounded bg-[color-mix(in_srgb,var(--surface)_62%,var(--text-primary)_38%)]" />
+    <div className="flex h-7 w-7 items-center justify-center rounded-full border border-app bg-surface-inset text-[11px] font-[var(--fw-semibold)] text-app">
+      {fallback}
     </div>
   );
 }
 
-function Avatar({ label }: { label: string }) {
+function Avatar({ label, image }: { label: string; image?: string | null }) {
+  if (image) {
+    return (
+      <img
+        src={image}
+        alt={`Avatar de ${label}`}
+        className="avatar-lg rounded-full border border-app object-cover"
+        referrerPolicy="no-referrer"
+      />
+    );
+  }
+
   return (
     <div className="flex avatar-lg items-center justify-center border border-app bg-surface-inset text-body font-[var(--fw-semibold)] text-app">
       {label}
