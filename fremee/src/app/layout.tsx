@@ -14,13 +14,28 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
+const themeInitScript = `
+(() => {
+  try {
+    const stored = localStorage.getItem("fremee.theme");
+    const theme = stored === "DARK" || stored === "LIGHT" || stored === "SYSTEM" ? stored : "SYSTEM";
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const useDark = theme === "DARK" || (theme === "SYSTEM" && prefersDark);
+    document.documentElement.classList.toggle("dark", useDark);
+  } catch {}
+})();
+`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es">
+    <html lang="es" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body className="antialiased">
         <NativeSystemUi />
         <AuthProvider>{children}</AuthProvider>

@@ -290,6 +290,10 @@
     font-size: var(--font-body);
     line-height: var(--lh-body);
     font-weight: var(--fw-regular);
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-top: constant(safe-area-inset-top);
+    padding-bottom: constant(safe-area-inset-bottom);
   }
 
   *,
@@ -573,6 +577,10 @@
   .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
   .pl-safe { padding-left: env(safe-area-inset-left); }
   .pr-safe { padding-right: env(safe-area-inset-right); }
+  .safe-area-y {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
 
   .px-safe {
     padding-left: max(var(--page-margin-x), env(safe-area-inset-left));

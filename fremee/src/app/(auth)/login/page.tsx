@@ -2,8 +2,6 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Capacitor } from "@capacitor/core";
-import { ScreenOrientation } from "@capacitor/screen-orientation";
 import GoogleAuthButton from "@/components/auth/GoogleAuthButton";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { useRouter } from "next/navigation";
@@ -20,19 +18,7 @@ export default function LoginPage() {
   const router = useRouter();
 
   useEffect(() => {
-    let shouldUnlockOrientation = false;
     const supabase = createBrowserSupabaseClient();
-
-    const lockOrientation = async () => {
-      if (!Capacitor.isNativePlatform()) return;
-
-      try {
-        await ScreenOrientation.lock({ orientation: "portrait" });
-        shouldUnlockOrientation = true;
-      } catch (error) {
-        console.warn("[login] No se pudo bloquear la orientacion:", error);
-      }
-    };
 
     const checkSession = async () => {
       const {
@@ -46,7 +32,6 @@ export default function LoginPage() {
       if (session) router.replace("/feed");
     };
 
-    lockOrientation();
     checkSession();
 
     const {
@@ -61,12 +46,6 @@ export default function LoginPage() {
 
     return () => {
       subscription.unsubscribe();
-
-      if (shouldUnlockOrientation) {
-        ScreenOrientation.unlock().catch((error) => {
-          console.warn("[login] No se pudo restaurar la orientacion:", error);
-        });
-      }
     };
   }, [router]);
 

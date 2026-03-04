@@ -6,8 +6,10 @@ export type FeedPlanItemDto = {
   locationName: string;
   startsAt: string;
   endsAt: string;
-  visibility: "PÚBLICO" | "SOLO_GRUPO" | "SOLO_AMIGOS" | "SOLO_FOLLOW";
+  allDay?: boolean;
+  visibility: "PUBLICO" | "PÚBLICO" | "SOLO_GRUPO" | "SOLO_AMIGOS" | "SOLO_FOLLOW";
   coverImage: string | null;
+  ownerUserId?: string;
   creator: {
     id: string;
     name: string;
