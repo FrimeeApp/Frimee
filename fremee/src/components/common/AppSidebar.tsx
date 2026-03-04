@@ -12,7 +12,7 @@ type IconProps = {
 const items = [
   { key: "home", label: "Inicio", icon: HomeIcon, href: "/feed" },
   { key: "calendar", label: "Calendario", icon: CalendarIcon, href: "/calendar" },
-  { key: "cards", label: "Planes", icon: CardIcon, href: "#" },
+  { key: "cards", label: "Mis gastos", icon: CardIcon, href: "/mis-gastos" },
   { key: "send", label: "Mensajes", icon: SendIcon, href: "#" },
 ];
 
