@@ -1,8 +1,11 @@
 import {
+  listCommentsForPlanRoute,
+  listPreviewCommentsForPlansRoute,
   createCommentRoute,
   getTopCommentForPlanRoute,
   listTopCommentsForPlansRoute,
   toggleCommentLikeRoute,
+  type CommentDto,
   type TopCommentDto,
 } from "@/services/api/posts/comments/route";
 
@@ -39,4 +42,20 @@ export async function listTopCommentsForPlansEndpoint(params: {
   userId?: string;
 }) {
   return listTopCommentsForPlansRoute(params);
+}
+
+export async function listCommentsForPlanEndpoint(params: {
+  planId: number;
+  userId?: string;
+  limit?: number;
+}): Promise<{ comments: CommentDto[] }> {
+  return listCommentsForPlanRoute(params);
+}
+
+export async function listPreviewCommentsForPlansEndpoint(params: {
+  planIds: number[];
+  userId?: string;
+  limitPerPlan?: number;
+}) {
+  return listPreviewCommentsForPlansRoute(params);
 }
