@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import AppSidebar from "@/components/common/AppSidebar";
 import LoadingScreen from "@/components/common/LoadingScreen";
+import CreatePlanModal, { type CreatePlanPayload } from "@/components/plans/CreatePlanModal";
 import { useAuth } from "@/providers/AuthProvider";
 import type { CalendarEventDto } from "@/services/api/dtos/event.dto";
 import type { FeedPlanItemDto } from "@/services/api/dtos/plan.dto";
@@ -14,13 +16,6 @@ import { listUserRelatedPlans } from "@/services/api/repositories/plans.reposito
 
 type PlanTab = "active" | "done";
 
-type DayOccupancy = {
-  count: number;
-  hasAllDay: boolean;
-  hasTimed: boolean;
-  hasInformative: boolean;
-};
-
 type CalendarCell = {
   key: string;
   date: Date;
@@ -28,27 +23,82 @@ type CalendarCell = {
   isCurrentMonth: boolean;
 };
 
+type WeekPlanSegment = {
+  id: string;
+  startIndex: number;
+  endIndex: number;
+  label: string;
+};
+
 const MONTHS_SHORT = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 const WEEK_DAYS = ["Do", "Lu", "Ma", "Mi", "Ju", "Vi", "Sa"];
 
 export default function CalendarPage() {
-  const { user, session, settings, loading: authLoading } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const createFromQuery = searchParams.get("create");
+  const { user, session, settings, loading: authLoading, profile } = useAuth();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [syncingGoogle, setSyncingGoogle] = useState(false);
   const [plans, setPlans] = useState<FeedPlanItemDto[]>([]);
+  const [localPlans, setLocalPlans] = useState<FeedPlanItemDto[]>([]);
   const [events, setEvents] = useState<CalendarEventDto[]>([]);
   const [tab, setTab] = useState<PlanTab>("active");
   const [planSearch, setPlanSearch] = useState("");
   const [monthDate, setMonthDate] = useState(() => startOfMonth(new Date()));
   const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const localPlanIdRef = useRef(Date.now());
   const autoSyncTriggeredRef = useRef(false);
 
   useEffect(() => {
     autoSyncTriggeredRef.current = false;
   }, [user?.id]);
+
+  useEffect(() => {
+    if (createFromQuery === "1") {
+      setCreateModalOpen(true);
+    }
+  }, [createFromQuery]);
+
+  const closeCreateModal = () => {
+    setCreateModalOpen(false);
+    if (createFromQuery === "1") {
+      router.replace("/calendar");
+    }
+  };
+
+  const handleCreatePlan = (payload: CreatePlanPayload) => {
+    const creatorName =
+      profile?.nombre?.trim() || user?.email?.split("@")[0] || "Tu";
+    const startIso = dateInputToIso(payload.startDate, 10);
+    const endIso = dateInputToIso(payload.endDate, 18);
+
+    const newPlan: FeedPlanItemDto = {
+      id: localPlanIdRef.current++,
+      createdAt: new Date().toISOString(),
+      title: payload.title,
+      description: `Plan en ${payload.location}`,
+      locationName: payload.location,
+      startsAt: startIso,
+      endsAt: endIso,
+      allDay: true,
+      visibility: payload.visibility,
+      coverImage: payload.coverImageUrl,
+      ownerUserId: user?.id ?? undefined,
+      creator: {
+        id: user?.id ?? "local",
+        name: creatorName,
+        profileImage: profile?.profile_image ?? null,
+      },
+    };
+
+    setLocalPlans((prev) => [newPlan, ...prev]);
+    closeCreateModal();
+  };
 
   useEffect(() => {
     if (authLoading) return;
@@ -152,13 +202,17 @@ export default function CalendarPage() {
     void runGoogleSync();
   }, [authLoading, loading, runGoogleSync, settings?.google_sync_enabled, user?.id]);
 
+  const mergedPlans = useMemo(() => {
+    return [...localPlans, ...plans];
+  }, [localPlans, plans]);
+
   const visiblePlans = useMemo(() => {
     const startToday = startOfDay(new Date());
-    return plans.filter((plan) => {
+    return mergedPlans.filter((plan) => {
       const endsAt = new Date(plan.endsAt);
       return tab === "active" ? endsAt >= startToday : endsAt < startToday;
     });
-  }, [plans, tab]);
+  }, [mergedPlans, tab]);
 
   const visibleEvents = useMemo(() => {
     const startToday = startOfDay(new Date());
@@ -197,74 +251,22 @@ export default function CalendarPage() {
   }, [selectedDayDate, visibleEvents]);
 
   const calendarCells = useMemo(() => buildCalendarCells(monthDate), [monthDate]);
-
-  const occupancyMap = useMemo(() => {
-    const map = new Map<string, DayOccupancy>();
-
-    const appendItem = (startsAtIso: string, endsAtIso: string, isAllDay: boolean) => {
-      const firstDay = startOfDay(new Date(startsAtIso));
-      const lastDay = startOfDay(new Date(endsAtIso));
-
-      for (let cursor = new Date(firstDay); cursor <= lastDay; cursor.setDate(cursor.getDate() + 1)) {
-        const key = toDayKey(cursor);
-        const prev = map.get(key) ?? { count: 0, hasAllDay: false, hasTimed: false, hasInformative: false };
-        map.set(key, {
-          count: prev.count + 1,
-          hasAllDay: prev.hasAllDay || isAllDay,
-          hasTimed: prev.hasTimed || !isAllDay,
-          hasInformative: prev.hasInformative,
-        });
-      }
-    };
-
-    for (const plan of visiblePlans) {
-      const firstDay = startOfDay(new Date(plan.startsAt));
-      const lastDay = startOfDay(new Date(plan.endsAt));
-
-      for (let cursor = new Date(firstDay); cursor <= lastDay; cursor.setDate(cursor.getDate() + 1)) {
-        const dayMode = getPlanDayOccupation(plan, cursor);
-        if (dayMode === "none") continue;
-        const key = toDayKey(cursor);
-        const prev = map.get(key) ?? { count: 0, hasAllDay: false, hasTimed: false, hasInformative: false };
-        map.set(key, {
-          count: prev.count + 1,
-          hasAllDay: prev.hasAllDay || dayMode === "all_day",
-          hasTimed: prev.hasTimed || dayMode === "partial",
-          hasInformative: prev.hasInformative,
-        });
-      }
-    }
-
-    for (const event of visibleEvents) {
-      if (isNonBlockingGoogleHoliday(event)) {
-        const firstDay = startOfDay(new Date(event.startsAt));
-        const lastDay = startOfDay(new Date(event.endsAt));
-        for (let cursor = new Date(firstDay); cursor <= lastDay; cursor.setDate(cursor.getDate() + 1)) {
-          const key = toDayKey(cursor);
-          const prev = map.get(key) ?? { count: 0, hasAllDay: false, hasTimed: false, hasInformative: false };
-          map.set(key, {
-            count: prev.count,
-            hasAllDay: prev.hasAllDay,
-            hasTimed: prev.hasTimed,
-            hasInformative: true,
-          });
-        }
-        continue;
-      }
-      appendItem(event.startsAt, event.endsAt, event.allDay);
-    }
-
-    return map;
-  }, [visiblePlans, visibleEvents]);
-
-  const monthLabel = `${MONTHS_SHORT[monthDate.getMonth()]} ${monthDate.getFullYear()}`;
+  const calendarWeeks = useMemo(() => splitIntoWeeks(calendarCells), [calendarCells]);
+  const weekPlanSegments = useMemo(
+    () => buildWeekPlanSegments(calendarWeeks, visiblePlans),
+    [calendarWeeks, visiblePlans],
+  );
 
   if (authLoading || loading) return <LoadingScreen />;
 
   return (
     <div className="min-h-dvh bg-app text-app">
       <div className="relative mx-auto min-h-dvh max-w-[1440px]">
-        <AppSidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed((prev) => !prev)} />
+        <AppSidebar
+          collapsed={sidebarCollapsed}
+          onToggle={() => setSidebarCollapsed((prev) => !prev)}
+          onCreatePlan={() => setCreateModalOpen(true)}
+        />
 
         <main
           className={`px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-4)] transition-[padding] duration-[var(--duration-slow)] [transition-timing-function:var(--ease-standard)] lg:py-[var(--space-8)] lg:pr-[var(--space-14)] ${
@@ -300,7 +302,16 @@ export default function CalendarPage() {
                 />
               </div>
 
-              {syncingGoogle ? <span className="text-body-sm text-muted">Sincronizando Google...</span> : null}
+              <div className="flex items-center gap-[var(--space-3)]">
+                {syncingGoogle ? <span className="text-body-sm text-muted">Sincronizando Google...</span> : null}
+                <button
+                  type="button"
+                  onClick={() => setCreateModalOpen(true)}
+                  className="h-btn-primary rounded-input border border-primary-token bg-primary-token px-[var(--space-4)] text-body-sm font-[var(--fw-semibold)] text-contrast-token"
+                >
+                  Crear plan
+                </button>
+              </div>
             </div>
 
             <div className="mt-[var(--space-5)] grid grid-cols-1 gap-[var(--space-6)] lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-[var(--space-8)]">
@@ -340,6 +351,9 @@ export default function CalendarPage() {
                               {plan.title}
                             </h2>
                             <p className="mt-1 text-body text-muted">{formatDateRange(plan.startsAt, plan.endsAt)}</p>
+                            {plan.locationName ? (
+                              <p className="mt-1 text-body-sm text-muted">{plan.locationName}</p>
+                            ) : null}
                             <p className="mt-1 text-body-sm text-tertiary">{creatorLabel}</p>
                           </div>
 
@@ -353,71 +367,101 @@ export default function CalendarPage() {
                 })}
               </section>
 
-              <aside className="rounded-modal border border-app bg-surface p-[var(--space-4)] shadow-elev-1 lg:sticky lg:top-[var(--space-6)] lg:self-start">
-                <div className="mb-[var(--space-2)] flex items-center justify-between">
+            <aside className="rounded-modal border border-app bg-surface p-[var(--space-4)] shadow-elev-1 lg:sticky lg:top-[var(--space-6)] lg:self-start">
+                <div className="mb-[var(--space-3)] flex items-center justify-between gap-[var(--space-2)]">
                   <button
                     type="button"
                     aria-label="Mes anterior"
                     onClick={() => setMonthDate((prev) => addMonths(prev, -1))}
-                    className="rounded-input border border-app px-3 py-1 text-body"
+                    className="flex h-9 w-9 items-center justify-center rounded-input border border-app text-body"
                   >
                     {"<"}
                   </button>
-                  <div className="text-body-sm font-[var(--fw-medium)]">{monthLabel}</div>
+                  <div className="flex items-center gap-[var(--space-2)]">
+                    <select
+                      value={monthDate.getMonth()}
+                      onChange={(e) =>
+                        setMonthDate((prev) => new Date(prev.getFullYear(), Number(e.target.value), 1))
+                      }
+                      className="h-9 rounded-input border border-app bg-surface px-3 text-body-sm"
+                    >
+                      {MONTHS_SHORT.map((month, index) => (
+                        <option key={month} value={index}>
+                          {month}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      value={monthDate.getFullYear()}
+                      onChange={(e) =>
+                        setMonthDate((prev) => new Date(Number(e.target.value), prev.getMonth(), 1))
+                      }
+                      className="h-9 rounded-input border border-app bg-surface px-3 text-body-sm"
+                    >
+                      {getYearOptions(monthDate.getFullYear()).map((year) => (
+                        <option key={year} value={year}>
+                          {year}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                   <button
                     type="button"
                     aria-label="Mes siguiente"
                     onClick={() => setMonthDate((prev) => addMonths(prev, 1))}
-                    className="rounded-input border border-app px-3 py-1 text-body"
+                    className="flex h-9 w-9 items-center justify-center rounded-input border border-app text-body"
                   >
                     {">"}
                   </button>
                 </div>
 
-                <div className="grid grid-cols-7 gap-y-2 text-center">
+                <div className="grid grid-cols-7 text-center">
                   {WEEK_DAYS.map((weekDay) => (
                     <div key={weekDay} className="text-caption text-muted">
                       {weekDay}
                     </div>
                   ))}
+                </div>
 
-                  {calendarCells.map((cell) => {
-                    const dayData = occupancyMap.get(toDayKey(cell.date));
-                    const isBusy = Boolean(dayData?.count);
-                    const allDay = Boolean(dayData?.hasAllDay);
-                    const partiallyBusy = Boolean(dayData?.hasTimed) && !allDay;
-                    const informativeOnly = Boolean(dayData?.hasInformative) && !isBusy;
-                    const dayKey = toDayKey(cell.date);
-                    const isSelected = selectedDayKey === dayKey;
-
+                <div className="mt-[var(--space-3)] space-y-[var(--space-3)]">
+                  {calendarWeeks.map((week, weekIndex) => {
+                    const segments = weekPlanSegments[weekIndex] ?? [];
                     return (
-                      <button
-                        type="button"
-                        key={cell.key}
-                        onClick={() => setSelectedDayKey((prev) => (prev === dayKey ? null : dayKey))}
-                        title={
-                          dayData
-                            ? informativeOnly
-                              ? "Dia con informacion"
-                              : `${dayData.count} elemento(s)`
-                            : "Sin elementos"
-                        }
-                        className={`relative mx-auto flex h-10 w-10 items-center justify-center rounded-input text-body transition-colors ${
-                          allDay
-                            ? "bg-error-token text-contrast-token"
-                            : partiallyBusy
-                              ? "border border-warning-token bg-[color-mix(in_srgb,var(--warning)_16%,white_84%)] text-warning-token"
-                              : "border border-success-token bg-[color-mix(in_srgb,var(--success)_16%,white_84%)] text-success-token"
-                        } ${!cell.isCurrentMonth ? "opacity-60" : ""} ${isSelected ? "ring-2 ring-[var(--primary)] ring-offset-1" : ""}`}
-                      >
-                        {cell.day}
-                        {isBusy && partiallyBusy ? (
-                          <span className="absolute bottom-[4px] h-1.5 w-1.5 rounded-chip bg-warning-token" aria-hidden="true" />
-                        ) : null}
-                        {informativeOnly ? (
-                          <span className="absolute bottom-[4px] h-1.5 w-1.5 rounded-chip bg-info-token" aria-hidden="true" />
-                        ) : null}
-                      </button>
+                      <div key={`week-${weekIndex}`} className="relative pt-1 pb-5">
+                        <div className="grid grid-cols-7 place-items-center text-center">
+                          {week.map((cell) => {
+                            const dayKey = toDayKey(cell.date);
+                            const isSelected = selectedDayKey === dayKey;
+                            return (
+                              <button
+                                type="button"
+                                key={cell.key}
+                                onClick={() => setSelectedDayKey((prev) => (prev === dayKey ? null : dayKey))}
+                                className={`flex h-10 w-10 items-center justify-center rounded-full text-body ${
+                                  !cell.isCurrentMonth ? "text-tertiary" : "text-app"
+                                } ${isSelected ? "ring-2 ring-[var(--primary)] ring-offset-2" : ""}`}
+                              >
+                                {cell.day}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {segments.map((segment) => {
+                          const left = `${(segment.startIndex / 7) * 100}%`;
+                          const width = `${((segment.endIndex - segment.startIndex + 1) / 7) * 100}%`;
+                          return (
+                            <div
+                              key={segment.id}
+                              className="pointer-events-none absolute left-0 top-[32px] h-[18px] rounded-chip bg-[#b26cd6] px-2 text-[11px] font-[var(--fw-medium)] text-white shadow-sm"
+                              style={{ left, width }}
+                              title={segment.label}
+                            >
+                              <span className="block truncate">{segment.label}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
                     );
                   })}
                 </div>
@@ -459,6 +503,8 @@ export default function CalendarPage() {
           </div>
         </main>
       </div>
+
+      <CreatePlanModal open={createModalOpen} onClose={closeCreateModal} onCreate={handleCreatePlan} />
     </div>
   );
 }
@@ -473,6 +519,11 @@ function startOfMonth(date: Date) {
 
 function endOfMonth(date: Date) {
   return new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
+}
+
+function dateInputToIso(dateInput: string, hour = 12) {
+  const [year, month, day] = dateInput.split("-").map(Number);
+  return new Date(year ?? 0, (month ?? 1) - 1, day ?? 1, hour, 0, 0).toISOString();
 }
 
 function startOfDay(date: Date) {
@@ -495,24 +546,6 @@ function dayKeyToDate(dayKey: string | null) {
 
 function rangesOverlap(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date) {
   return aStart <= bEnd && aEnd >= bStart;
-}
-
-function getPlanDayOccupation(plan: FeedPlanItemDto, dayDate: Date): "none" | "all_day" | "partial" {
-  const startsAt = new Date(plan.startsAt);
-  const endsAt = new Date(plan.endsAt);
-  const dayStart = startOfDay(dayDate);
-  const dayEnd = endOfDay(dayDate);
-
-  if (!rangesOverlap(startsAt, endsAt, dayStart, dayEnd)) return "none";
-  if (plan.allDay) return "all_day";
-
-  const startKey = toDayKey(startsAt);
-  const endKey = toDayKey(endsAt);
-  const currentKey = toDayKey(dayDate);
-
-  if (startKey === endKey) return "partial";
-  if (currentKey === startKey || currentKey === endKey) return "partial";
-  return "all_day";
 }
 
 function formatDateRange(startsAtIso: string, endsAtIso: string) {
@@ -543,19 +576,6 @@ function formatTimeRange(startsAtIso: string, endsAtIso: string) {
   const startTime = startsAt.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
   const endTime = endsAt.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
   return `${startTime} - ${endTime}`;
-}
-
-function isNonBlockingGoogleHoliday(event: CalendarEventDto) {
-  if (event.source !== "GOOGLE") return false;
-  const calendarId = (event.googleCalendarId ?? "").toLowerCase();
-  const title = (event.title ?? "").toLowerCase();
-
-  return (
-    calendarId.includes("holiday") ||
-    calendarId.includes("festiv") ||
-    title.includes("holiday") ||
-    title.includes("festivo")
-  );
 }
 
 function buildCalendarCells(monthDate: Date): CalendarCell[] {
@@ -600,4 +620,60 @@ function buildCalendarCells(monthDate: Date): CalendarCell[] {
   }
 
   return cells;
+}
+
+function splitIntoWeeks(cells: CalendarCell[]) {
+  const weeks: CalendarCell[][] = [];
+  for (let i = 0; i < cells.length; i += 7) {
+    weeks.push(cells.slice(i, i + 7));
+  }
+  return weeks;
+}
+
+function buildWeekPlanSegments(weeks: CalendarCell[][], plans: FeedPlanItemDto[]): WeekPlanSegment[][] {
+  return weeks.map((week, weekIndex) => {
+    if (!week.length) return [];
+    const weekStart = startOfDay(week[0].date);
+    const weekEnd = startOfDay(week[week.length - 1].date);
+
+    const segments = plans
+      .filter((plan) => {
+        const start = startOfDay(new Date(plan.startsAt));
+        const end = startOfDay(new Date(plan.endsAt));
+        return rangesOverlap(start, end, weekStart, weekEnd);
+      })
+      .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())
+      .slice(0, 1)
+      .map((plan) => {
+        const start = startOfDay(new Date(plan.startsAt));
+        const end = startOfDay(new Date(plan.endsAt));
+        const startIndex = clamp(diffInDays(start, weekStart), 0, 6);
+        const endIndex = clamp(diffInDays(end, weekStart), 0, 6);
+        return {
+          id: `week-${weekIndex}-plan-${plan.id}`,
+          startIndex,
+          endIndex,
+          label: plan.title,
+        };
+      });
+
+    return segments;
+  });
+}
+
+function diffInDays(date: Date, base: Date) {
+  const ms = startOfDay(date).getTime() - startOfDay(base).getTime();
+  return Math.round(ms / 86_400_000);
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function getYearOptions(currentYear: number) {
+  const years: number[] = [];
+  for (let year = currentYear - 4; year <= currentYear + 4; year += 1) {
+    years.push(year);
+  }
+  return years;
 }
