@@ -3,10 +3,19 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
+import { getUserAuthSnapshot, type UserAuthSnapshotDto } from "@/services/api/repositories/users.repository";
+import { cacheUserSnapshot, readCachedUserSnapshot } from "@/services/auth/snapshotCache";
+import {
+  applyThemePreference,
+  cacheThemePreference,
+  readCachedThemePreference,
+} from "@/services/theme/preferences";
+import type { UserSettingsDto } from "@/services/api/repositories/settings.repository";
 
 type Profile = {
   id: string;
   nombre: string;
+  fecha_nac: string | null;
   email: string;
   rol: string;
   profile_image: string | null;
@@ -20,7 +29,9 @@ type AuthState = {
   session: Session | null;
   user: User | null;
   profile: Profile | null;
+  settings: UserSettingsDto | null;
   refreshProfile: () => Promise<void>;
+  setUserSnapshot: (snapshot: UserAuthSnapshotDto | null) => void;
   signOut: () => Promise<void>;
 };
 
@@ -34,46 +45,65 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [settings, setSettings] = useState<UserSettingsDto | null>(null);
 
-  const fetchProfile = useCallback(
-    async (authUser: User | null) => {
-      if (!authUser) {
-        if (mountedRef.current) setProfile(null);
-        return;
+  const applySnapshot = useCallback((snapshot: UserAuthSnapshotDto | null, persist = true) => {
+    const nextProfile = (snapshot?.profile as Profile | null) ?? null;
+    const nextSettings = snapshot?.settings ?? null;
+
+    if (mountedRef.current) {
+      setProfile(nextProfile);
+      setSettings(nextSettings);
+    }
+
+    const theme = nextSettings?.theme ?? readCachedThemePreference() ?? "SYSTEM";
+    applyThemePreference(theme);
+    if (nextSettings) {
+      cacheThemePreference(theme);
+      if (persist && nextProfile?.id) {
+        cacheUserSnapshot(nextProfile.id, { profile: nextProfile, settings: nextSettings });
       }
+    }
+  }, []);
 
-      try {
-        const { data, error } = await supabase
-          .from("usuarios")
-          .select("id,nombre,email,rol,profile_image,estado,email_verified_at,deleted_at")
-          .eq("id", authUser.id)
-          .maybeSingle();
+  const loadUserSnapshot = useCallback(async (authUser: User | null) => {
+    if (!authUser) {
+      applySnapshot(null);
+      return;
+    }
 
-        if (!mountedRef.current) return;
+    const cachedSnapshot = readCachedUserSnapshot(authUser.id);
+    if (cachedSnapshot) {
+      applySnapshot(cachedSnapshot, false);
+    }
 
-        if (error) {
-          console.warn("[auth] profile fetch error:", error.message);
-          setProfile(null);
-          return;
-        }
-
-        setProfile((data as Profile) ?? null);
-      } catch (error) {
-        if (!mountedRef.current) return;
-        console.warn("[auth] profile fetch exception:", error);
+    try {
+      const snapshot = await getUserAuthSnapshot(authUser.id);
+      if (!mountedRef.current) return;
+      applySnapshot(snapshot, true);
+    } catch (error) {
+      if (!mountedRef.current) return;
+      console.warn("[auth] user snapshot fetch exception:", error);
+      if (!cachedSnapshot) {
         setProfile(null);
+        setSettings(null);
       }
-    },
-    [supabase],
-  );
+      const cachedTheme = readCachedThemePreference();
+      applyThemePreference(cachedTheme ?? "SYSTEM");
+    }
+  }, [applySnapshot]);
 
   const refreshProfile = useCallback(async () => {
     const { data, error } = await supabase.auth.getUser();
     if (error) {
       console.warn("[auth] refreshProfile getUser error:", error.message);
     }
-    await fetchProfile(data.user ?? null);
-  }, [supabase, fetchProfile]);
+    await loadUserSnapshot(data.user ?? null);
+  }, [supabase, loadUserSnapshot]);
+
+  const setUserSnapshot = useCallback((snapshot: UserAuthSnapshotDto | null) => {
+    applySnapshot(snapshot, true);
+  }, [applySnapshot]);
 
   const signOut = useCallback(async () => {
     const { error } = await supabase.auth.signOut();
@@ -84,13 +114,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!mountedRef.current) return;
     setSession(null);
     setUser(null);
-    setProfile(null);
+    applySnapshot(null);
     setLoading(false);
-  }, [supabase]);
+  }, [supabase, applySnapshot]);
 
   useEffect(() => {
     mountedRef.current = true;
     let cancelled = false;
+    const cachedTheme = readCachedThemePreference();
+    applyThemePreference(cachedTheme ?? "SYSTEM");
 
     const init = async () => {
       try {
@@ -102,7 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         setSession(data.session ?? null);
         setUser(data.session?.user ?? null);
-        await fetchProfile(data.session?.user ?? null);
+        await loadUserSnapshot(data.session?.user ?? null);
       } finally {
         if (!cancelled && mountedRef.current) {
           setLoading(false);
@@ -118,7 +150,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         setSession(nextSession);
         setUser(nextSession?.user ?? null);
-        await fetchProfile(nextSession?.user ?? null);
+        await loadUserSnapshot(nextSession?.user ?? null);
 
         if (!cancelled && mountedRef.current) {
           setLoading(false);
@@ -131,14 +163,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       mountedRef.current = false;
       sub.subscription.unsubscribe();
     };
-  }, [supabase, fetchProfile]);
+  }, [supabase, loadUserSnapshot]);
 
   const value: AuthState = {
     loading,
     session,
     user,
     profile,
+    settings,
     refreshProfile,
+    setUserSnapshot,
     signOut,
   };
 
