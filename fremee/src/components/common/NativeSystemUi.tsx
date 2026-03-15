@@ -4,12 +4,19 @@ import { useEffect } from "react";
 import { Capacitor } from "@capacitor/core";
 import { StatusBar, Style } from "@capacitor/status-bar";
 import { NavigationBar } from "@capgo/capacitor-navigation-bar";
+import { ScreenOrientation } from "@capacitor/screen-orientation";
 
 export default function NativeSystemUi() {
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
 
     const setupSystemUi = async () => {
+      try {
+        await ScreenOrientation.lock({ orientation: "portrait" });
+      } catch (error) {
+        console.warn("[native-ui] orientation lock failed:", error);
+      }
+
       try {
         await StatusBar.setOverlaysWebView({ overlay: true });
         await StatusBar.setStyle({ style: Style.Dark });
