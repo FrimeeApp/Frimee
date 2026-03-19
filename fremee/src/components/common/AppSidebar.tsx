@@ -20,9 +20,10 @@ const items = [
 type AppSidebarProps = {
   collapsed: boolean;
   onToggle: () => void;
+  onCreatePlan?: () => void;
 };
 
-export default function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
+export default function AppSidebar({ collapsed, onToggle, onCreatePlan }: AppSidebarProps) {
   const router = useRouter();
   const [mobileNavVisible, setMobileNavVisible] = useState(true);
   const lastScrollYRef = useRef(0);
@@ -56,7 +57,13 @@ export default function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
   }, []);
 
   const openSettings = () => router.push("/settings");
-  const openCreatePlan = () => router.push("/plans/new");
+  const openCreatePlan = () => {
+    if (onCreatePlan) {
+      onCreatePlan();
+      return;
+    }
+    router.push("/plans/new");
+  };
 
   return (
     <>
