@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import AppSidebar from "@/components/common/AppSidebar";
@@ -42,7 +43,18 @@ const MONTHS_SHORT = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "S
 const WEEK_DAYS = ["Do", "Lu", "Ma", "Mi", "Ju", "Vi", "Sa"];
 
 export default function CalendarPage() {
-  const { user, session, googleProviderToken, settings, loading: authLoading } = useAuth();
+  return (
+    <Suspense>
+      <CalendarPageInner />
+    </Suspense>
+  );
+}
+
+function CalendarPageInner() {
+  const { user, session, googleProviderToken, settings, loading: authLoading, profile } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const createFromQuery = searchParams.get("create");
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -57,6 +69,7 @@ export default function CalendarPage() {
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [localPlans, setLocalPlans] = useState<FeedPlanItemDto[]>([]);
   const localPlanIdRef = useRef(Date.now());
   const autoSyncTriggeredRef = useRef(false);
   const hasLoadedOnceRef = useRef(false);
@@ -241,7 +254,7 @@ export default function CalendarPage() {
       const endsAt = new Date(plan.endsAt);
       return tab === "active" ? endsAt >= startToday : endsAt < startToday;
     });
-  }, [plans, tab]);
+  }, [mergedPlans, tab]);
 
   const filteredPlans = useMemo(() => {
     const query = planSearch.trim().toLowerCase();
