@@ -59,7 +59,7 @@ function CalendarPageInner() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [backgroundRefreshing, setBackgroundRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+
   const [syncingGoogle, setSyncingGoogle] = useState(false);
   const [plans, setPlans] = useState<FeedPlanItemDto[]>([]);
   const [tab, setTab] = useState<PlanTab>("active");
@@ -67,6 +67,13 @@ function CalendarPageInner() {
   const [monthDate, setMonthDate] = useState(() => startOfMonth(new Date()));
   const [viewMode, setViewMode] = useState<CalendarViewMode>("month");
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
+  const [calendarOpen, setCalendarOpen] = useState(true);
+  const [pinnedPlanIds, setPinnedPlanIds] = useState<number[]>(() => {
+    try {
+      const stored = localStorage.getItem("frimee:pinnedPlans");
+      return stored ? (JSON.parse(stored) as number[]) : [];
+    } catch { return []; }
+  });
   const [reloadNonce, setReloadNonce] = useState(0);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [localPlans, setLocalPlans] = useState<FeedPlanItemDto[]>([]);
@@ -83,6 +90,30 @@ function CalendarPageInner() {
       setCreateModalOpen(true);
     }
   }, [createFromQuery]);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const isMobile = window.innerWidth < 1024;
+      if (isMobile && viewMode === "day") return;
+      if (window.scrollY > 60) {
+        setCalendarOpen(false);
+      } else if (window.scrollY < 10) {
+        setCalendarOpen(true);
+      }
+    };
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, [viewMode]);
+
+  const togglePin = (planId: number) => {
+    setPinnedPlanIds((prev) => {
+      const next = prev.includes(planId)
+        ? prev.filter((id) => id !== planId)
+        : prev.length < 3 ? [...prev, planId] : prev;
+      try { localStorage.setItem("frimee:pinnedPlans", JSON.stringify(next)); } catch { /* noop */ }
+      return next;
+    });
+  };
 
   const closeCreateModal = () => {
     setCreateModalOpen(false);
@@ -138,7 +169,6 @@ function CalendarPageInner() {
       } else {
         setLoading(true);
       }
-      setError(null);
       try {
         const plansResult = await listUserRelatedPlans({ userId: user.id, limit: 300 });
 
@@ -155,7 +185,6 @@ function CalendarPageInner() {
         } else {
           console.error("[calendar] error loading calendar data", loadError);
         }
-        setError("No se pudieron cargar tus datos del calendario.");
         setPlans([]);
       } finally {
         if (!cancelled) {
@@ -182,12 +211,11 @@ function CalendarPageInner() {
     });
 
     if (!providerToken) {
-      setError("No se pudo obtener el token de Google Calendar. Reconecta Google desde login si persiste.");
+      console.error("[calendar] No se pudo obtener el token de Google Calendar.");
       return;
     }
 
     setSyncingGoogle(true);
-    setError(null);
 
     try {
       const timeMin = startOfMonth(addMonths(new Date(), -12)).toISOString();
@@ -205,20 +233,16 @@ function CalendarPageInner() {
     } catch (syncError) {
       if (syncError instanceof Error) {
         const message = syncError.message;
-        const isGoogle403 = message.includes("[google-calendar] 403");
         const isGoogle401 = message.includes("[google-calendar] 401");
+        const isGoogle403 = message.includes("[google-calendar] 403");
         if (isGoogle401 || isGoogle403) {
-          if (user?.id) {
-            clearCachedGoogleProviderToken(user.id);
-          }
-          setError(
-            "Google Calendar rechazo la sincronizacion (401/403). Reautoriza Google para conceder permisos de Calendar.",
-          );
+          if (user?.id) clearCachedGoogleProviderToken(user.id);
+          console.error("[calendar] Google Calendar 401/403 — reautoriza Google.");
         } else {
-          setError(`No se pudo sincronizar Google Calendar: ${message}`);
+          console.error("[calendar] Error sincronizando Google Calendar:", message);
         }
       } else {
-        setError("No se pudo sincronizar Google Calendar.");
+        console.error("[calendar] Error sincronizando Google Calendar:", syncError);
       }
     } finally {
       setSyncingGoogle(false);
@@ -350,66 +374,26 @@ function CalendarPageInner() {
                 <CalendarPageSkeleton />
               ) : (
                 <>
-                  <section className="space-y-[var(--space-4)]">
-                    {error ? <p className="text-body text-error-token">{error}</p> : null}
-                    {!error && filteredPlans.length === 0 ? (
-                      <p className="rounded-modal border border-app bg-surface p-[var(--space-4)] text-body text-muted">
-                        {planSearch.trim()
-                          ? "No hay planes con ese nombre."
-                          : "No hay planes para mostrar."}
-                      </p>
-                    ) : null}
+                  <aside className={`lg:col-start-2 lg:row-start-1 flex flex-col rounded-modal border border-app bg-surface shadow-elev-1 lg:sticky lg:top-[var(--space-6)] lg:self-start transition-all duration-300 ${calendarOpen ? (viewMode === "day" ? "h-[380px] lg:h-[420px]" : "lg:h-[420px]") : "lg:h-auto"}`}>
+                    <button
+                      type="button"
+                      onClick={() => setCalendarOpen((prev) => !prev)}
+                      className="flex w-full items-center justify-between p-[var(--space-4)]"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-[15px]">✈</span>
+                        <span className="text-body-sm font-[var(--fw-medium)] text-app">
+                          {viewMode === "month" ? monthLabel : formatDayHeading(selectedDayValue)}
+                        </span>
+                      </div>
+                      <span
+                        className={`text-muted transition-transform duration-[var(--duration-base)] ${calendarOpen ? "rotate-180" : ""}`}
+                      >
+                        ▾
+                      </span>
+                    </button>
 
-                    <div className="grid grid-cols-1 gap-[var(--space-4)] md:grid-cols-2">
-                      {filteredPlans.map((plan) => {
-                        const creatorLabel = plan.creator.id === user?.id ? "Creado por ti" : `De ${plan.creator.name}`;
-                        const scheduleLabel = formatPlanSchedule(plan);
-                        const statusLabel = tab === "active" ? "Activo" : "Finalizado";
-                        const statusClass =
-                          tab === "active"
-                            ? "border-[color-mix(in_srgb,var(--success)_35%,transparent)] bg-[color-mix(in_srgb,var(--success)_20%,transparent_80%)] text-success-token"
-                            : "border-app bg-surface/90 text-muted";
-
-                        return (
-                          <article
-                            key={`plan-${plan.id}`}
-                            className="overflow-hidden rounded-[14px] border border-app bg-surface shadow-elev-1"
-                          >
-                            <div
-                              className="relative h-[138px] bg-cover bg-center bg-no-repeat"
-                              role="img"
-                              aria-label={plan.title}
-                              style={{
-                                backgroundImage: `url(${plan.coverImage ?? "https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=1600&q=80"})`,
-                              }}
-                            >
-                              <span
-                                className={`absolute right-3 top-3 rounded-chip border px-2.5 py-1 text-[11px] font-[var(--fw-medium)] leading-none ${statusClass}`}
-                              >
-                                {statusLabel}
-                              </span>
-                            </div>
-
-                            <div className="flex items-end justify-between gap-3 p-[var(--space-4)]">
-                              <div className="min-w-0">
-                                <h2 className="truncate text-[26px] font-[var(--fw-medium)] leading-[1.15] text-app">
-                                  {plan.title}
-                                </h2>
-                                <p className="mt-1 text-body-sm text-muted">{formatDateRange(plan.startsAt, plan.endsAt)}</p>
-                                <p className="mt-1 truncate text-caption text-tertiary">{creatorLabel}</p>
-                              </div>
-
-                              <span className="shrink-0 rounded-[10px] border border-success-token bg-[color-mix(in_srgb,var(--success)_20%,transparent_80%)] px-3 py-2 text-[12px] font-[var(--fw-medium)] leading-none text-success-token">
-                                {scheduleLabel}
-                              </span>
-                            </div>
-                          </article>
-                        );
-                      })}
-                    </div>
-                  </section>
-
-                  <aside className="overflow-hidden rounded-modal border border-app bg-surface p-[var(--space-4)] shadow-elev-1 lg:sticky lg:top-[var(--space-6)] lg:h-[420px] lg:self-start">
+                    <div className={`min-h-0 flex-1 overflow-hidden p-[var(--space-4)] pt-0 lg:pt-0 ${calendarOpen ? "block" : "hidden"}`}>
                     {viewMode === "month" ? (
                       <>
                         <div className="mb-[var(--space-2)] flex items-center justify-between">
@@ -417,18 +401,18 @@ function CalendarPageInner() {
                             type="button"
                             aria-label="Mes anterior"
                             onClick={() => setMonthDate((prev) => addMonths(prev, -1))}
-                            className="rounded-input border border-app px-3 py-1 text-body"
+                            className="flex h-7 w-7 items-center justify-center rounded-full border border-app transition-colors hover:border-primary-token hover:text-primary-token"
                           >
-                            {"<"}
+                            <span className="inline-block rotate-180 text-[13px] leading-none">✈</span>
                           </button>
                           <div className="text-body-sm font-[var(--fw-medium)]">{monthLabel}</div>
                           <button
                             type="button"
                             aria-label="Mes siguiente"
                             onClick={() => setMonthDate((prev) => addMonths(prev, 1))}
-                            className="rounded-input border border-app px-3 py-1 text-body"
+                            className="flex h-7 w-7 items-center justify-center rounded-full border border-app transition-colors hover:border-primary-token hover:text-primary-token"
                           >
-                            {">"}
+                            <span className="inline-block text-[13px] leading-none">✈</span>
                           </button>
                         </div>
 
@@ -572,7 +556,7 @@ function CalendarPageInner() {
                           </div>
                         ) : null}
 
-                        <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+                        <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto pr-1">
                           <div className="relative">
                             {Array.from({ length: 24 }).map((_, hour) => (
                               <div key={`hour-${hour}`} className="grid h-16 grid-cols-[52px_minmax(0,1fr)]">
@@ -614,7 +598,116 @@ function CalendarPageInner() {
                         </div>
                       </div>
                     )}
+                    </div>
+
+                    {!calendarOpen && (
+                      <div className="hidden border-t border-app/50 px-[var(--space-3)] pb-[var(--space-3)] lg:block">
+                        {pinnedPlanIds.length === 0 ? (
+                          <p className="pt-[var(--space-3)] text-center text-[11px] text-muted">
+                            Ancla hasta 3 planes con 📌
+                          </p>
+                        ) : (
+                          <div className="space-y-2 pt-[var(--space-2)]">
+                            {mergedPlans
+                              .filter((p) => pinnedPlanIds.includes(p.id))
+                              .map((p) => (
+                                <div
+                                  key={`pinboard-${p.id}`}
+                                  className="group relative flex overflow-hidden rounded-[10px] border border-app bg-app"
+                                >
+                                  <div
+                                    className="h-12 w-12 shrink-0 bg-cover bg-center"
+                                    style={{ backgroundImage: `url(${p.coverImage ?? "https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=400&q=60"})` }}
+                                  />
+                                  <div className="min-w-0 flex-1 px-3 py-2">
+                                    <p className="truncate text-[12px] font-[var(--fw-medium)] text-app">{p.title}</p>
+                                    <p className="mt-0.5 truncate text-[10px] text-muted">{formatDateRange(p.startsAt, p.endsAt)}</p>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => togglePin(p.id)}
+                                    aria-label="Desanclar"
+                                    className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/20 text-[10px] opacity-0 transition-opacity group-hover:opacity-100"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </aside>
+
+                  <section className="space-y-[var(--space-4)] lg:col-start-1 lg:row-start-1">
+                    {filteredPlans.length === 0 ? (
+                      <p className="rounded-modal border border-app bg-surface p-[var(--space-4)] text-body text-muted">
+                        {planSearch.trim()
+                          ? "No hay planes con ese nombre."
+                          : "No hay planes para mostrar."}
+                      </p>
+                    ) : null}
+
+                    <div className="grid grid-cols-1 gap-[var(--space-4)] md:grid-cols-2">
+                      {filteredPlans.map((plan) => {
+                        const creatorLabel = plan.creator.id === user?.id ? "Creado por ti" : `De ${plan.creator.name}`;
+                        const scheduleLabel = formatPlanSchedule(plan);
+                        const statusLabel = tab === "active" ? "Activo" : "Finalizado";
+                        const statusClass =
+                          tab === "active"
+                            ? "border-[color-mix(in_srgb,var(--success)_35%,transparent)] bg-[color-mix(in_srgb,var(--success)_20%,transparent_80%)] text-success-token"
+                            : "border-app bg-surface/90 text-muted";
+
+                        return (
+                          <article
+                            key={`plan-${plan.id}`}
+                            className="group overflow-hidden rounded-[14px] border border-app bg-surface shadow-elev-1"
+                          >
+                            <div
+                              className="relative h-[138px] bg-cover bg-center bg-no-repeat"
+                              role="img"
+                              aria-label={plan.title}
+                              style={{
+                                backgroundImage: `url(${plan.coverImage ?? "https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=1600&q=80"})`,
+                              }}
+                            >
+                              <span
+                                className={`absolute right-3 top-3 rounded-chip border px-2.5 py-1 text-[11px] font-[var(--fw-medium)] leading-none ${statusClass}`}
+                              >
+                                {statusLabel}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => togglePin(plan.id)}
+                                aria-label={pinnedPlanIds.includes(plan.id) ? "Desanclar" : "Anclar"}
+                                className={`absolute left-3 top-3 hidden h-7 w-7 items-center justify-center rounded-full text-[13px] shadow-sm transition-opacity lg:flex ${
+                                  pinnedPlanIds.includes(plan.id)
+                                    ? "bg-warning-token/90 opacity-100"
+                                    : "bg-white/80 opacity-0 group-hover:opacity-100"
+                                }`}
+                              >
+                                📌
+                              </button>
+                            </div>
+
+                            <div className="flex items-end justify-between gap-3 p-[var(--space-4)]">
+                              <div className="min-w-0">
+                                <h2 className="truncate text-[26px] font-[var(--fw-medium)] leading-[1.15] text-app">
+                                  {plan.title}
+                                </h2>
+                                <p className="mt-1 text-body-sm text-muted">{formatDateRange(plan.startsAt, plan.endsAt)}</p>
+                                <p className="mt-1 truncate text-caption text-tertiary">{creatorLabel}</p>
+                              </div>
+
+                              <span className="shrink-0 rounded-[10px] border border-success-token bg-[color-mix(in_srgb,var(--success)_20%,transparent_80%)] px-3 py-2 text-[12px] font-[var(--fw-medium)] leading-none text-success-token">
+                                {scheduleLabel}
+                              </span>
+                            </div>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  </section>
                 </>
               )}
             </div>

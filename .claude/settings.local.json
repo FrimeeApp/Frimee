@@ -3,7 +3,9 @@
     "allow": [
       "Bash(npm install:*)",
       "Bash(node -e \"require\\(''stripe''\\); console.log\\(''stripe ok''\\)\")",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(ls \"c:\\\\Users\\\\cayet\\\\Desktop\\\\Proyectos\\\\Frimee\\\\fremee\\\\src\\\\app\\\\\\(app\\)\\\\calendario\"\")",
+      "Bash(find \"c:/Users/cayet/Desktop/Proyectos/Frimee/fremee/src/app/\\(app\\)/calendario\" -type f)"
     ]
   }
 }
