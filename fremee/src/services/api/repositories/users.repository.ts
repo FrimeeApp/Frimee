@@ -1,6 +1,7 @@
 import {
   fetchUserAuthSnapshotById,
   fetchPublicUserProfileById,
+  searchPublicUserProfiles,
   type PublicUserProfileRow,
   type UserAuthSnapshotRow,
   type UserProfileRow,
@@ -16,5 +17,13 @@ export async function getPublicUserProfile(userId: string): Promise<PublicUserPr
 
 export async function getUserAuthSnapshot(userId: string): Promise<UserAuthSnapshotDto> {
   return fetchUserAuthSnapshotById(userId);
+}
+
+export async function searchUsers(params: {
+  query: string;
+  limit?: number;
+  excludeUserId?: string;
+}): Promise<PublicUserProfileDto[]> {
+  return searchPublicUserProfiles(params);
 }
 

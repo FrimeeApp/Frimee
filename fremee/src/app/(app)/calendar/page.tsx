@@ -4,22 +4,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AppSidebar from "@/components/common/AppSidebar";
 import LoadingScreen from "@/components/common/LoadingScreen";
 import { useAuth } from "@/providers/AuthProvider";
-import type { CalendarEventDto } from "@/services/api/dtos/event.dto";
+import { clearCachedGoogleProviderToken } from "@/services/auth/googleTokenCache";
+import { resolveGoogleProviderToken } from "@/services/auth/googleProviderToken";
 import type { FeedPlanItemDto } from "@/services/api/dtos/plan.dto";
-import {
-  listUserCalendarEventsByRange,
-  syncGoogleCalendarBidirectional,
-} from "@/services/api/repositories/events.repository";
+import { syncGoogleCalendarBidirectional } from "@/services/api/repositories/events.repository";
 import { listUserRelatedPlans } from "@/services/api/repositories/plans.repository";
+import { createBrowserSupabaseClient } from "@/services/supabase/client";
 
 type PlanTab = "active" | "done";
-
-type DayOccupancy = {
-  count: number;
-  hasAllDay: boolean;
-  hasTimed: boolean;
-  hasInformative: boolean;
-};
+type CalendarViewMode = "month" | "day";
 
 type CalendarCell = {
   key: string;
@@ -28,23 +21,41 @@ type CalendarCell = {
   isCurrentMonth: boolean;
 };
 
+type CalendarWeek = {
+  key: string;
+  days: CalendarCell[];
+};
+
+type WeekPlanSegment = {
+  key: string;
+  planId: number;
+  title: string;
+  startCol: number;
+  endCol: number;
+  isStart: boolean;
+  isEnd: boolean;
+};
+
 const MONTHS_SHORT = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 const WEEK_DAYS = ["Do", "Lu", "Ma", "Mi", "Ju", "Vi", "Sa"];
 
 export default function CalendarPage() {
-  const { user, session, settings, loading: authLoading } = useAuth();
+  const { user, session, googleProviderToken, settings, loading: authLoading } = useAuth();
+  const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [backgroundRefreshing, setBackgroundRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [syncingGoogle, setSyncingGoogle] = useState(false);
   const [plans, setPlans] = useState<FeedPlanItemDto[]>([]);
-  const [events, setEvents] = useState<CalendarEventDto[]>([]);
   const [tab, setTab] = useState<PlanTab>("active");
   const [planSearch, setPlanSearch] = useState("");
   const [monthDate, setMonthDate] = useState(() => startOfMonth(new Date()));
-  const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<CalendarViewMode>("month");
+  const [selectedDay, setSelectedDay] = useState<Date | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
   const autoSyncTriggeredRef = useRef(false);
+  const hasLoadedOnceRef = useRef(false);
 
   useEffect(() => {
     autoSyncTriggeredRef.current = false;
@@ -54,33 +65,27 @@ export default function CalendarPage() {
     if (authLoading) return;
     if (!user?.id) {
       setPlans([]);
-      setEvents([]);
       setLoading(false);
+      setBackgroundRefreshing(false);
+      hasLoadedOnceRef.current = false;
       return;
     }
 
     let cancelled = false;
 
     const load = async () => {
-      setLoading(true);
+      if (hasLoadedOnceRef.current) {
+        setBackgroundRefreshing(true);
+      } else {
+        setLoading(true);
+      }
       setError(null);
       try {
-        const rangeStart = startOfMonth(addMonths(new Date(), -12)).toISOString();
-        const rangeEnd = endOfMonth(addMonths(new Date(), 12)).toISOString();
-
-        const [plansResult, eventsResult] = await Promise.all([
-          listUserRelatedPlans({ userId: user.id, limit: 300 }),
-          listUserCalendarEventsByRange({
-            userId: user.id,
-            rangeStartAt: rangeStart,
-            rangeEndAt: rangeEnd,
-            limit: 1000,
-          }),
-        ]);
+        const plansResult = await listUserRelatedPlans({ userId: user.id, limit: 300 });
 
         if (cancelled) return;
         setPlans(plansResult);
-        setEvents(eventsResult);
+        hasLoadedOnceRef.current = true;
       } catch (loadError) {
         if (cancelled) return;
         if (loadError instanceof Error) {
@@ -93,9 +98,11 @@ export default function CalendarPage() {
         }
         setError("No se pudieron cargar tus datos del calendario.");
         setPlans([]);
-        setEvents([]);
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          setBackgroundRefreshing(false);
+        }
       }
     };
 
@@ -108,10 +115,15 @@ export default function CalendarPage() {
 
   const runGoogleSync = useCallback(async () => {
     if (!user?.id || syncingGoogle) return;
-    const providerToken = (session as { provider_token?: string | null } | null)?.provider_token ?? null;
+    const providerToken = await resolveGoogleProviderToken({
+      supabase,
+      session,
+      userId: user.id,
+      cachedToken: googleProviderToken,
+    });
 
     if (!providerToken) {
-      setError("No hay token de Google Calendar. Cierra sesion e inicia con Google de nuevo para conceder permisos.");
+      setError("No se pudo obtener el token de Google Calendar. Reconecta Google desde login si persiste.");
       return;
     }
 
@@ -133,14 +145,35 @@ export default function CalendarPage() {
       setReloadNonce((prev) => prev + 1);
     } catch (syncError) {
       if (syncError instanceof Error) {
-        setError(`No se pudo sincronizar Google Calendar: ${syncError.message}`);
+        const message = syncError.message;
+        const isGoogle403 = message.includes("[google-calendar] 403");
+        const isGoogle401 = message.includes("[google-calendar] 401");
+        if (isGoogle401 || isGoogle403) {
+          if (user?.id) {
+            clearCachedGoogleProviderToken(user.id);
+          }
+          setError(
+            "Google Calendar rechazo la sincronizacion (401/403). Reautoriza Google para conceder permisos de Calendar.",
+          );
+        } else {
+          setError(`No se pudo sincronizar Google Calendar: ${message}`);
+        }
       } else {
         setError("No se pudo sincronizar Google Calendar.");
       }
     } finally {
       setSyncingGoogle(false);
     }
-  }, [plans, session, settings?.google_sync_enabled, settings?.google_sync_export_plans, syncingGoogle, user?.id]);
+  }, [
+    googleProviderToken,
+    plans,
+    session,
+    settings?.google_sync_enabled,
+    settings?.google_sync_export_plans,
+    syncingGoogle,
+    supabase,
+    user?.id,
+  ]);
 
   useEffect(() => {
     if (authLoading || loading) return;
@@ -160,106 +193,39 @@ export default function CalendarPage() {
     });
   }, [plans, tab]);
 
-  const visibleEvents = useMemo(() => {
-    const startToday = startOfDay(new Date());
-    return events.filter((event) => {
-      const endsAt = new Date(event.endsAt);
-      return tab === "active" ? endsAt >= startToday : endsAt < startToday;
-    });
-  }, [events, tab]);
-
-  const selectedDayDate = useMemo(() => dayKeyToDate(selectedDayKey), [selectedDayKey]);
-
   const filteredPlans = useMemo(() => {
-    const dayFilteredPlans = !selectedDayDate
-      ? visiblePlans
-      : visiblePlans.filter((plan) => {
-          const startsAt = new Date(plan.startsAt);
-          const endsAt = new Date(plan.endsAt);
-          const dayStart = startOfDay(selectedDayDate);
-          const dayEnd = endOfDay(selectedDayDate);
-          return rangesOverlap(startsAt, endsAt, dayStart, dayEnd);
-        });
-
     const query = planSearch.trim().toLowerCase();
-    if (!query) return dayFilteredPlans;
-    return dayFilteredPlans.filter((plan) => plan.title.toLowerCase().includes(query));
-  }, [visiblePlans, selectedDayDate, planSearch]);
-  const selectedDayEvents = useMemo(() => {
-    if (!selectedDayDate) return [] as CalendarEventDto[];
-    const dayStart = startOfDay(selectedDayDate);
-    const dayEnd = endOfDay(selectedDayDate);
-    return visibleEvents.filter((event) => {
-      const startsAt = new Date(event.startsAt);
-      const endsAt = new Date(event.endsAt);
-      return rangesOverlap(startsAt, endsAt, dayStart, dayEnd);
-    });
-  }, [selectedDayDate, visibleEvents]);
+    if (!query) return visiblePlans;
+    return visiblePlans.filter((plan) => plan.title.toLowerCase().includes(query));
+  }, [visiblePlans, planSearch]);
 
   const calendarCells = useMemo(() => buildCalendarCells(monthDate), [monthDate]);
+  const calendarWeeks = useMemo(() => groupCalendarWeeks(calendarCells), [calendarCells]);
 
-  const occupancyMap = useMemo(() => {
-    const map = new Map<string, DayOccupancy>();
-
-    const appendItem = (startsAtIso: string, endsAtIso: string, isAllDay: boolean) => {
-      const firstDay = startOfDay(new Date(startsAtIso));
-      const lastDay = startOfDay(new Date(endsAtIso));
-
-      for (let cursor = new Date(firstDay); cursor <= lastDay; cursor.setDate(cursor.getDate() + 1)) {
-        const key = toDayKey(cursor);
-        const prev = map.get(key) ?? { count: 0, hasAllDay: false, hasTimed: false, hasInformative: false };
-        map.set(key, {
-          count: prev.count + 1,
-          hasAllDay: prev.hasAllDay || isAllDay,
-          hasTimed: prev.hasTimed || !isAllDay,
-          hasInformative: prev.hasInformative,
-        });
-      }
-    };
-
-    for (const plan of visiblePlans) {
-      const firstDay = startOfDay(new Date(plan.startsAt));
-      const lastDay = startOfDay(new Date(plan.endsAt));
-
-      for (let cursor = new Date(firstDay); cursor <= lastDay; cursor.setDate(cursor.getDate() + 1)) {
-        const dayMode = getPlanDayOccupation(plan, cursor);
-        if (dayMode === "none") continue;
-        const key = toDayKey(cursor);
-        const prev = map.get(key) ?? { count: 0, hasAllDay: false, hasTimed: false, hasInformative: false };
-        map.set(key, {
-          count: prev.count + 1,
-          hasAllDay: prev.hasAllDay || dayMode === "all_day",
-          hasTimed: prev.hasTimed || dayMode === "partial",
-          hasInformative: prev.hasInformative,
-        });
-      }
-    }
-
-    for (const event of visibleEvents) {
-      if (isNonBlockingGoogleHoliday(event)) {
-        const firstDay = startOfDay(new Date(event.startsAt));
-        const lastDay = startOfDay(new Date(event.endsAt));
-        for (let cursor = new Date(firstDay); cursor <= lastDay; cursor.setDate(cursor.getDate() + 1)) {
-          const key = toDayKey(cursor);
-          const prev = map.get(key) ?? { count: 0, hasAllDay: false, hasTimed: false, hasInformative: false };
-          map.set(key, {
-            count: prev.count,
-            hasAllDay: prev.hasAllDay,
-            hasTimed: prev.hasTimed,
-            hasInformative: true,
-          });
-        }
-        continue;
-      }
-      appendItem(event.startsAt, event.endsAt, event.allDay);
-    }
-
-    return map;
-  }, [visiblePlans, visibleEvents]);
+  const weekSegments = useMemo(
+    () => calendarWeeks.map((week) => buildWeekPlanRows(week, filteredPlans)),
+    [calendarWeeks, filteredPlans],
+  );
+  const selectedDayValue = useMemo(() => selectedDay ?? startOfDay(new Date()), [selectedDay]);
+  const selectedDayPlans = useMemo(
+    () =>
+      filteredPlans
+        .filter((plan) => rangesOverlap(new Date(plan.startsAt), new Date(plan.endsAt), startOfDay(selectedDayValue), endOfDay(selectedDayValue)))
+        .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime()),
+    [filteredPlans, selectedDayValue],
+  );
+  const timedDayPlans = useMemo(
+    () => selectedDayPlans.filter((plan) => !plan.allDay),
+    [selectedDayPlans],
+  );
+  const allDayPlans = useMemo(
+    () => selectedDayPlans.filter((plan) => plan.allDay),
+    [selectedDayPlans],
+  );
 
   const monthLabel = `${MONTHS_SHORT[monthDate.getMonth()]} ${monthDate.getFullYear()}`;
 
-  if (authLoading || loading) return <LoadingScreen />;
+  if (authLoading) return <LoadingScreen />;
 
   return (
     <div className="min-h-dvh bg-app text-app">
@@ -271,196 +237,390 @@ export default function CalendarPage() {
             sidebarCollapsed ? "lg:pl-[56px]" : "lg:pl-[136px]"
           }`}
         >
-          <div className="mx-auto w-full max-w-[1040px]">
-            <div className="flex items-center justify-between gap-[var(--space-4)] border-b border-app pb-[var(--space-2)] text-body text-muted">
-              <div className="flex items-center gap-[var(--space-4)]">
-                <div className="flex gap-[var(--space-10)]">
-                <button
-                  type="button"
-                  onClick={() => setTab("active")}
-                  className={tab === "active" ? "font-[var(--fw-medium)] text-app" : "font-[var(--fw-medium)]"}
-                >
-                  Activos
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTab("done")}
-                  className={tab === "done" ? "font-[var(--fw-medium)] text-app" : "font-[var(--fw-medium)]"}
-                >
-                  Finalizados
-                </button>
+          <div className="mx-auto w-full max-w-[1120px]">
+            <div className="border-b border-app pb-[var(--space-2)] text-body text-muted">
+              <div className="flex flex-wrap items-end justify-between gap-[var(--space-3)]">
+                <div className="flex items-center gap-[var(--space-10)]">
+                  <button
+                    type="button"
+                    onClick={() => setTab("active")}
+                    className={`pb-[2px] font-[var(--fw-medium)] transition-colors duration-[var(--duration-base)] ${
+                      tab === "active" ? "text-app" : "hover:text-app"
+                    }`}
+                  >
+                    Activos
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTab("done")}
+                    className={`pb-[2px] font-[var(--fw-medium)] transition-colors duration-[var(--duration-base)] ${
+                      tab === "done" ? "text-app" : "hover:text-app"
+                    }`}
+                  >
+                    Finalizados
+                  </button>
                 </div>
 
-                <input
-                  type="text"
-                  value={planSearch}
-                  onChange={(e) => setPlanSearch(e.target.value)}
-                  placeholder="Buscar plan..."
-                  className="h-[34px] w-[180px] rounded-input border border-app bg-app px-3 text-body-sm text-app outline-none"
-                />
-              </div>
+                <div className="flex items-center gap-[var(--space-3)]">
+                  <input
+                    type="text"
+                    value={planSearch}
+                    onChange={(e) => setPlanSearch(e.target.value)}
+                    placeholder="Buscar plan..."
+                    className="h-[36px] w-full min-w-[180px] rounded-input border border-app bg-app px-3 text-body-sm text-app outline-none sm:w-[220px]"
+                  />
 
-              {syncingGoogle ? <span className="text-body-sm text-muted">Sincronizando Google...</span> : null}
+                  {syncingGoogle ? <span className="text-body-sm text-muted">Sincronizando Google...</span> : null}
+                  {!syncingGoogle && backgroundRefreshing ? (
+                    <span className="text-body-sm text-muted">Actualizando...</span>
+                  ) : null}
+                </div>
+              </div>
             </div>
 
             <div className="mt-[var(--space-5)] grid grid-cols-1 gap-[var(--space-6)] lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-[var(--space-8)]">
-              <section className="space-y-[var(--space-4)]">
-                {error ? <p className="text-body text-error-token">{error}</p> : null}
-                {!error && filteredPlans.length === 0 ? (
-                  <p className="rounded-modal border border-app bg-surface p-[var(--space-4)] text-body text-muted">
-                    {planSearch.trim()
-                      ? "No hay planes con ese nombre."
-                      : selectedDayDate
-                        ? "No hay planes para este dia."
-                        : "No hay planes para mostrar."}
-                  </p>
-                ) : null}
+              {loading ? (
+                <CalendarPageSkeleton />
+              ) : (
+                <>
+                  <section className="space-y-[var(--space-4)]">
+                    {error ? <p className="text-body text-error-token">{error}</p> : null}
+                    {!error && filteredPlans.length === 0 ? (
+                      <p className="rounded-modal border border-app bg-surface p-[var(--space-4)] text-body text-muted">
+                        {planSearch.trim()
+                          ? "No hay planes con ese nombre."
+                          : "No hay planes para mostrar."}
+                      </p>
+                    ) : null}
 
-                {filteredPlans.map((plan) => {
-                  const creatorLabel = plan.creator.id === user?.id ? "Creado por ti" : `De ${plan.creator.name}`;
-                  const scheduleLabel = formatPlanSchedule(plan);
+                    <div className="grid grid-cols-1 gap-[var(--space-4)] md:grid-cols-2">
+                      {filteredPlans.map((plan) => {
+                        const creatorLabel = plan.creator.id === user?.id ? "Creado por ti" : `De ${plan.creator.name}`;
+                        const scheduleLabel = formatPlanSchedule(plan);
+                        const statusLabel = tab === "active" ? "Activo" : "Finalizado";
+                        const statusClass =
+                          tab === "active"
+                            ? "border-[color-mix(in_srgb,var(--success)_35%,transparent)] bg-[color-mix(in_srgb,var(--success)_20%,transparent_80%)] text-success-token"
+                            : "border-app bg-surface/90 text-muted";
 
-                  return (
-                    <article key={`plan-${plan.id}`} className="overflow-hidden rounded-modal border border-app bg-surface shadow-elev-1">
-                      <div>
-                        <div
-                          className="relative h-[148px] bg-cover bg-center bg-no-repeat"
-                          role="img"
-                          aria-label={plan.title}
-                          style={{ backgroundImage: `url(${plan.coverImage ?? "https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=1600&q=80"})` }}
-                        >
-                          <span className="absolute right-3 top-3 rounded-chip border border-app bg-surface/90 px-3 py-1 text-caption text-muted">
-                            Plan
-                          </span>
+                        return (
+                          <article
+                            key={`plan-${plan.id}`}
+                            className="overflow-hidden rounded-[14px] border border-app bg-surface shadow-elev-1"
+                          >
+                            <div
+                              className="relative h-[138px] bg-cover bg-center bg-no-repeat"
+                              role="img"
+                              aria-label={plan.title}
+                              style={{
+                                backgroundImage: `url(${plan.coverImage ?? "https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=1600&q=80"})`,
+                              }}
+                            >
+                              <span
+                                className={`absolute right-3 top-3 rounded-chip border px-2.5 py-1 text-[11px] font-[var(--fw-medium)] leading-none ${statusClass}`}
+                              >
+                                {statusLabel}
+                              </span>
+                            </div>
+
+                            <div className="flex items-end justify-between gap-3 p-[var(--space-4)]">
+                              <div className="min-w-0">
+                                <h2 className="truncate text-[26px] font-[var(--fw-medium)] leading-[1.15] text-app">
+                                  {plan.title}
+                                </h2>
+                                <p className="mt-1 text-body-sm text-muted">{formatDateRange(plan.startsAt, plan.endsAt)}</p>
+                                <p className="mt-1 truncate text-caption text-tertiary">{creatorLabel}</p>
+                              </div>
+
+                              <span className="shrink-0 rounded-[10px] border border-success-token bg-[color-mix(in_srgb,var(--success)_20%,transparent_80%)] px-3 py-2 text-[12px] font-[var(--fw-medium)] leading-none text-success-token">
+                                {scheduleLabel}
+                              </span>
+                            </div>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  </section>
+
+                  <aside className="overflow-hidden rounded-modal border border-app bg-surface p-[var(--space-4)] shadow-elev-1 lg:sticky lg:top-[var(--space-6)] lg:h-[420px] lg:self-start">
+                    {viewMode === "month" ? (
+                      <>
+                        <div className="mb-[var(--space-2)] flex items-center justify-between">
+                          <button
+                            type="button"
+                            aria-label="Mes anterior"
+                            onClick={() => setMonthDate((prev) => addMonths(prev, -1))}
+                            className="rounded-input border border-app px-3 py-1 text-body"
+                          >
+                            {"<"}
+                          </button>
+                          <div className="text-body-sm font-[var(--fw-medium)]">{monthLabel}</div>
+                          <button
+                            type="button"
+                            aria-label="Mes siguiente"
+                            onClick={() => setMonthDate((prev) => addMonths(prev, 1))}
+                            className="rounded-input border border-app px-3 py-1 text-body"
+                          >
+                            {">"}
+                          </button>
                         </div>
 
-                        <div className="flex items-center justify-between gap-[var(--space-4)] p-[var(--space-4)]">
-                          <div>
-                            <h2 className="text-[30px] font-[var(--fw-semibold)] leading-[1.15] text-app sm:text-[34px] lg:text-[36px]">
-                              {plan.title}
-                            </h2>
-                            <p className="mt-1 text-body text-muted">{formatDateRange(plan.startsAt, plan.endsAt)}</p>
-                            <p className="mt-1 text-body-sm text-tertiary">{creatorLabel}</p>
+                        <div className="grid grid-cols-7 gap-x-1 gap-y-2 border-b border-app/70 pb-2 text-center">
+                          {WEEK_DAYS.map((weekDay) => (
+                            <div key={weekDay} className="text-[11px] text-muted">
+                              {weekDay}
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="mt-2 space-y-1">
+                          {calendarWeeks.map((week, weekIndex) => (
+                            <div key={week.key} className="relative h-[48px] p-1.5">
+                              <div className="grid grid-cols-7 gap-x-1">
+                                {week.days.map((cell) => {
+                                  const isToday = toDayKey(cell.date) === toDayKey(new Date());
+                                  return (
+                                    <button
+                                      type="button"
+                                      key={cell.key}
+                                      onClick={() => {
+                                        setSelectedDay(startOfDay(cell.date));
+                                        setMonthDate(startOfMonth(cell.date));
+                                        setViewMode("day");
+                                      }}
+                                      className={`flex h-7 items-center justify-center text-body-sm transition-colors ${
+                                        cell.isCurrentMonth ? "text-app" : "text-tertiary"
+                                      } ${isToday ? "bg-[color-mix(in_srgb,var(--warning)_25%,transparent_75%)] font-[var(--fw-semibold)]" : "hover:bg-app/50"}`}
+                                    >
+                                      {cell.day}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+
+                              <div className="mt-1 space-y-0.5">
+                                {[0, 1].map((laneIndex) => {
+                                  const lane = weekSegments[weekIndex]?.lanes[laneIndex] ?? [];
+                                  return (
+                                    <div key={`${week.key}-lane-${laneIndex}`} className="grid grid-cols-7 gap-x-1">
+                                      {lane.length
+                                        ? lane.map((segment) => (
+                                            <div
+                                              key={segment.key}
+                                              className="h-3 rounded-full bg-[linear-gradient(90deg,#cc37b0_0%,#f06ebc_100%)] px-1.5 text-[8px] font-[var(--fw-semibold)] leading-[12px] text-white"
+                                              style={{
+                                                gridColumn: `${segment.startCol + 1} / ${segment.endCol + 2}`,
+                                              }}
+                                              title={segment.title}
+                                            >
+                                              <span className="block truncate">{segment.title}</span>
+                                            </div>
+                                          ))
+                                        : <div className="h-3" aria-hidden="true" />}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+
+                              {weekSegments[weekIndex]?.hiddenCount ? (
+                                <p className="pointer-events-none absolute bottom-0 right-1.5 text-[9px] leading-none text-muted">
+                                  +{weekSegments[weekIndex].hiddenCount}
+                                </p>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex h-full min-h-0 flex-col">
+                        <div className="mb-3 flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedDay(startOfDay(new Date()));
+                                setMonthDate(startOfMonth(new Date()));
+                              }}
+                              className="rounded-full border border-app px-3 py-1.5 text-body-sm"
+                            >
+                              Hoy
+                            </button>
+                            <button
+                              type="button"
+                              aria-label="Dia anterior"
+                              onClick={() => {
+                                const nextDay = addDays(selectedDayValue, -1);
+                                setSelectedDay(nextDay);
+                                setMonthDate(startOfMonth(nextDay));
+                              }}
+                              className="rounded-input border border-app px-3 py-1 text-body"
+                            >
+                              {"<"}
+                            </button>
+                            <button
+                              type="button"
+                              aria-label="Dia siguiente"
+                              onClick={() => {
+                                const nextDay = addDays(selectedDayValue, 1);
+                                setSelectedDay(nextDay);
+                                setMonthDate(startOfMonth(nextDay));
+                              }}
+                              className="rounded-input border border-app px-3 py-1 text-body"
+                            >
+                              {">"}
+                            </button>
                           </div>
 
-                          <span className="shrink-0 rounded-input border border-success-token bg-[color-mix(in_srgb,var(--success)_16%,white_84%)] px-4 py-3 text-body-sm text-success-token">
-                            {scheduleLabel}
-                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMonthDate(startOfMonth(selectedDayValue));
+                              setViewMode("month");
+                            }}
+                            className="rounded-full border border-app px-3 py-1.5 text-body-sm"
+                          >
+                            Mes
+                          </button>
+                        </div>
+
+                        <div className="mb-4">
+                          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">
+                            {formatWeekdayShort(selectedDayValue)}
+                          </p>
+                          <h3 className="mt-1 text-[20px] font-[var(--fw-semibold)] leading-tight text-app">
+                            {formatDayHeading(selectedDayValue)}
+                          </h3>
+                        </div>
+
+                        {allDayPlans.length ? (
+                          <div className="mb-4 space-y-2">
+                            {allDayPlans.map((plan) => (
+                              <div
+                                key={`all-day-${plan.id}`}
+                                className="rounded-full bg-[linear-gradient(90deg,#cc37b0_0%,#f06ebc_100%)] px-3 py-1.5 text-body-sm font-[var(--fw-medium)] text-white"
+                              >
+                                <span className="block truncate">{plan.title}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+
+                        <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+                          <div className="relative">
+                            {Array.from({ length: 24 }).map((_, hour) => (
+                              <div key={`hour-${hour}`} className="grid h-16 grid-cols-[52px_minmax(0,1fr)]">
+                                <div className="pr-2 pt-1 text-right text-[11px] text-muted">
+                                  {String(hour).padStart(2, "0")}:00
+                                </div>
+                                <div className="border-t border-app/60" />
+                              </div>
+                            ))}
+
+                            <div className="pointer-events-none absolute inset-y-0 left-[60px] right-0">
+                              {timedDayPlans.map((plan) => {
+                                const startMinutes = getMinutesWithinDay(plan.startsAt, selectedDayValue);
+                                const endMinutes = getMinutesWithinDay(plan.endsAt, selectedDayValue, true);
+                                const duration = Math.max(endMinutes - startMinutes, 30);
+
+                                return (
+                                  <div
+                                    key={`day-plan-${plan.id}`}
+                                    className="absolute left-2 right-2 overflow-hidden rounded-[12px] bg-[linear-gradient(90deg,#cc37b0_0%,#f06ebc_100%)] px-3 py-2 text-white shadow-sm"
+                                    style={{
+                                      top: `${(startMinutes / 60) * 64}px`,
+                                      height: `${Math.max((duration / 60) * 64, 24)}px`,
+                                    }}
+                                    title={plan.title}
+                                  >
+                                    <p className="truncate text-body-sm font-[var(--fw-semibold)]">{plan.title}</p>
+                                    <p className="mt-0.5 truncate text-[11px] text-white/90">
+                                      {formatTimeRange(
+                                        clampDateTimeToDay(plan.startsAt, selectedDayValue).toISOString(),
+                                        clampDateTimeToDay(plan.endsAt, selectedDayValue, true).toISOString(),
+                                      )}
+                                    </p>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
                         </div>
                       </div>
-                    </article>
-                  );
-                })}
-              </section>
-
-              <aside className="rounded-modal border border-app bg-surface p-[var(--space-4)] shadow-elev-1 lg:sticky lg:top-[var(--space-6)] lg:self-start">
-                <div className="mb-[var(--space-2)] flex items-center justify-between">
-                  <button
-                    type="button"
-                    aria-label="Mes anterior"
-                    onClick={() => setMonthDate((prev) => addMonths(prev, -1))}
-                    className="rounded-input border border-app px-3 py-1 text-body"
-                  >
-                    {"<"}
-                  </button>
-                  <div className="text-body-sm font-[var(--fw-medium)]">{monthLabel}</div>
-                  <button
-                    type="button"
-                    aria-label="Mes siguiente"
-                    onClick={() => setMonthDate((prev) => addMonths(prev, 1))}
-                    className="rounded-input border border-app px-3 py-1 text-body"
-                  >
-                    {">"}
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-7 gap-y-2 text-center">
-                  {WEEK_DAYS.map((weekDay) => (
-                    <div key={weekDay} className="text-caption text-muted">
-                      {weekDay}
-                    </div>
-                  ))}
-
-                  {calendarCells.map((cell) => {
-                    const dayData = occupancyMap.get(toDayKey(cell.date));
-                    const isBusy = Boolean(dayData?.count);
-                    const allDay = Boolean(dayData?.hasAllDay);
-                    const partiallyBusy = Boolean(dayData?.hasTimed) && !allDay;
-                    const informativeOnly = Boolean(dayData?.hasInformative) && !isBusy;
-                    const dayKey = toDayKey(cell.date);
-                    const isSelected = selectedDayKey === dayKey;
-
-                    return (
-                      <button
-                        type="button"
-                        key={cell.key}
-                        onClick={() => setSelectedDayKey((prev) => (prev === dayKey ? null : dayKey))}
-                        title={
-                          dayData
-                            ? informativeOnly
-                              ? "Dia con informacion"
-                              : `${dayData.count} elemento(s)`
-                            : "Sin elementos"
-                        }
-                        className={`relative mx-auto flex h-10 w-10 items-center justify-center rounded-input text-body transition-colors ${
-                          allDay
-                            ? "bg-error-token text-contrast-token"
-                            : partiallyBusy
-                              ? "border border-warning-token bg-[color-mix(in_srgb,var(--warning)_16%,white_84%)] text-warning-token"
-                              : "border border-success-token bg-[color-mix(in_srgb,var(--success)_16%,white_84%)] text-success-token"
-                        } ${!cell.isCurrentMonth ? "opacity-60" : ""} ${isSelected ? "ring-2 ring-[var(--primary)] ring-offset-1" : ""}`}
-                      >
-                        {cell.day}
-                        {isBusy && partiallyBusy ? (
-                          <span className="absolute bottom-[4px] h-1.5 w-1.5 rounded-chip bg-warning-token" aria-hidden="true" />
-                        ) : null}
-                        {informativeOnly ? (
-                          <span className="absolute bottom-[4px] h-1.5 w-1.5 rounded-chip bg-info-token" aria-hidden="true" />
-                        ) : null}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="mt-[var(--space-4)] rounded-input border border-app bg-app p-[var(--space-3)]">
-                  <h4 className="text-body-sm font-[var(--fw-semibold)]">
-                    {selectedDayDate ? formatSelectedDayLabel(selectedDayDate) : "Sin dia seleccionado"}
-                  </h4>
-
-                  <div className="mt-[var(--space-2)] space-y-2">
-                    {!selectedDayDate ? (
-                      <p className="text-body-sm text-muted">Selecciona un dia para ver sus eventos.</p>
-                    ) : selectedDayEvents.length === 0 ? (
-                      <p className="text-body-sm text-muted">Sin eventos para este dia.</p>
-                    ) : (
-                      selectedDayEvents
-                        .sort((a, b) => {
-                          if (a.allDay !== b.allDay) return a.allDay ? -1 : 1;
-                          return new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime();
-                        })
-                        .map((event) => (
-                        <div key={`selected-event-${event.id}`} className="rounded-input border border-app bg-surface p-2">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="text-body-sm font-[var(--fw-medium)]">{event.title}</span>
-                            <span className="text-caption text-muted">
-                              {event.allDay ? "Todo el dia" : formatTimeRange(event.startsAt, event.endsAt)}
-                            </span>
-                          </div>
-                          <p className="mt-1 text-caption text-tertiary">
-                            Evento | {event.category} | {event.source === "GOOGLE" ? "Google" : "Local"}
-                          </p>
-                        </div>
-                      ))
                     )}
-                  </div>
-                </div>
-              </aside>
+                  </aside>
+                </>
+              )}
             </div>
           </div>
         </main>
       </div>
     </div>
   );
+}
+
+function CalendarPageSkeleton() {
+  return (
+    <>
+      <section className="grid grid-cols-1 gap-[var(--space-4)] md:grid-cols-2" aria-hidden="true">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <article key={index} className="overflow-hidden rounded-[14px] border border-app bg-surface shadow-elev-1">
+            <div className="feed-skeleton-shimmer h-[138px] w-full" />
+            <div className="flex items-end justify-between gap-3 p-[var(--space-4)]">
+              <div className="min-w-0 flex-1 space-y-2">
+                <div className="feed-skeleton-shimmer h-7 w-[62%] rounded-full" />
+                <div className="feed-skeleton-shimmer h-4 w-[48%] rounded-full" />
+                <div className="feed-skeleton-shimmer h-3 w-[34%] rounded-full" />
+              </div>
+              <div className="feed-skeleton-shimmer h-10 w-24 rounded-[10px]" />
+            </div>
+          </article>
+        ))}
+      </section>
+
+      <aside
+        className="overflow-hidden rounded-modal border border-app bg-surface p-[var(--space-4)] shadow-elev-1 lg:sticky lg:top-[var(--space-6)] lg:self-start"
+        aria-hidden="true"
+      >
+        <div className="mb-[var(--space-2)] flex items-center justify-between">
+          <div className="feed-skeleton-shimmer h-8 w-10 rounded-input" />
+          <div className="feed-skeleton-shimmer h-4 w-24 rounded-full" />
+          <div className="feed-skeleton-shimmer h-8 w-10 rounded-input" />
+        </div>
+
+        <div className="grid grid-cols-7 gap-x-1 gap-y-2 text-center">
+          {Array.from({ length: 7 }).map((_, index) => (
+            <div key={`calendar-head-${index}`} className="feed-skeleton-shimmer mx-auto h-3 w-5 rounded-full" />
+          ))}
+        </div>
+
+        <div className="mt-2 space-y-1">
+          {Array.from({ length: 5 }).map((_, weekIndex) => (
+            <div key={`calendar-week-${weekIndex}`} className="h-[48px] p-1.5">
+              <div className="grid grid-cols-7 gap-x-1">
+                {Array.from({ length: 7 }).map((__, dayIndex) => (
+                  <div key={`calendar-day-${weekIndex}-${dayIndex}`} className="feed-skeleton-shimmer h-7" />
+                ))}
+              </div>
+              <div className="mt-1 space-y-0.5">
+                <div className="grid grid-cols-7 gap-x-1">
+                  <div className="feed-skeleton-shimmer col-span-4 h-3 rounded-full" />
+                </div>
+                <div className="grid grid-cols-7 gap-x-1">
+                  <div className="feed-skeleton-shimmer col-span-3 h-3 rounded-full" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </aside>
+    </>
+  );
+}
+
+function addDays(date: Date, amount: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + amount);
+  return startOfDay(next);
 }
 
 function addMonths(date: Date, amount: number) {
@@ -487,32 +647,8 @@ function toDayKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
-function dayKeyToDate(dayKey: string | null) {
-  if (!dayKey) return null;
-  const [year, month, day] = dayKey.split("-").map(Number);
-  return new Date(year, (month ?? 1) - 1, day ?? 1);
-}
-
 function rangesOverlap(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date) {
   return aStart <= bEnd && aEnd >= bStart;
-}
-
-function getPlanDayOccupation(plan: FeedPlanItemDto, dayDate: Date): "none" | "all_day" | "partial" {
-  const startsAt = new Date(plan.startsAt);
-  const endsAt = new Date(plan.endsAt);
-  const dayStart = startOfDay(dayDate);
-  const dayEnd = endOfDay(dayDate);
-
-  if (!rangesOverlap(startsAt, endsAt, dayStart, dayEnd)) return "none";
-  if (plan.allDay) return "all_day";
-
-  const startKey = toDayKey(startsAt);
-  const endKey = toDayKey(endsAt);
-  const currentKey = toDayKey(dayDate);
-
-  if (startKey === endKey) return "partial";
-  if (currentKey === startKey || currentKey === endKey) return "partial";
-  return "all_day";
 }
 
 function formatDateRange(startsAtIso: string, endsAtIso: string) {
@@ -528,15 +664,6 @@ function formatPlanSchedule(plan: FeedPlanItemDto) {
   return formatTimeRange(plan.startsAt, plan.endsAt);
 }
 
-function formatSelectedDayLabel(date: Date) {
-  const raw = date.toLocaleDateString("es-ES", {
-    weekday: "long",
-    day: "2-digit",
-    month: "long",
-  });
-  return raw.charAt(0).toUpperCase() + raw.slice(1);
-}
-
 function formatTimeRange(startsAtIso: string, endsAtIso: string) {
   const startsAt = new Date(startsAtIso);
   const endsAt = new Date(endsAtIso);
@@ -545,17 +672,42 @@ function formatTimeRange(startsAtIso: string, endsAtIso: string) {
   return `${startTime} - ${endTime}`;
 }
 
-function isNonBlockingGoogleHoliday(event: CalendarEventDto) {
-  if (event.source !== "GOOGLE") return false;
-  const calendarId = (event.googleCalendarId ?? "").toLowerCase();
-  const title = (event.title ?? "").toLowerCase();
+function formatDayHeading(date: Date) {
+  return date.toLocaleDateString("es-ES", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
 
-  return (
-    calendarId.includes("holiday") ||
-    calendarId.includes("festiv") ||
-    title.includes("holiday") ||
-    title.includes("festivo")
-  );
+function formatWeekdayShort(date: Date) {
+  return date
+    .toLocaleDateString("es-ES", { weekday: "short" })
+    .replace(".", "")
+    .toUpperCase();
+}
+
+function getMinutesWithinDay(iso: string, day: Date, clampToEnd = false) {
+  const value = new Date(iso);
+  const dayStart = startOfDay(day);
+  const dayEnd = endOfDay(day);
+  const clamped = value < dayStart ? dayStart : value > dayEnd ? dayEnd : value;
+
+  if (clampToEnd && toDayKey(value) !== toDayKey(day)) {
+    return 24 * 60;
+  }
+
+  return clamped.getHours() * 60 + clamped.getMinutes();
+}
+
+function clampDateTimeToDay(iso: string, day: Date, clampToEnd = false) {
+  const value = new Date(iso);
+  const dayStart = startOfDay(day);
+  const dayEnd = endOfDay(day);
+
+  if (value < dayStart) return dayStart;
+  if (value > dayEnd) return clampToEnd ? new Date(day.getFullYear(), day.getMonth(), day.getDate(), 23, 59) : dayEnd;
+  return value;
 }
 
 function buildCalendarCells(monthDate: Date): CalendarCell[] {
@@ -600,4 +752,79 @@ function buildCalendarCells(monthDate: Date): CalendarCell[] {
   }
 
   return cells;
+}
+
+function groupCalendarWeeks(cells: CalendarCell[]): CalendarWeek[] {
+  const weeks: CalendarWeek[] = [];
+
+  for (let index = 0; index < cells.length; index += 7) {
+    const days = cells.slice(index, index + 7);
+    weeks.push({
+      key: `week-${toDayKey(days[0].date)}`,
+      days,
+    });
+  }
+
+  return weeks;
+}
+
+function buildWeekPlanRows(week: CalendarWeek, plans: FeedPlanItemDto[]) {
+  const weekStart = startOfDay(week.days[0].date);
+  const weekEnd = endOfDay(week.days[6].date);
+
+  const segments = plans
+    .map((plan) => {
+      const startsAt = new Date(plan.startsAt);
+      const endsAt = new Date(plan.endsAt);
+      if (!rangesOverlap(startsAt, endsAt, weekStart, weekEnd)) return null;
+
+      const startCol = week.days.findIndex((day) => startOfDay(day.date) >= startOfDay(startsAt));
+      const endCol = [...week.days].reverse().findIndex((day) => endOfDay(day.date) <= endOfDay(endsAt));
+
+      const resolvedStartCol = startCol === -1 ? 0 : startCol;
+      const resolvedEndCol = endCol === -1 ? 6 : 6 - endCol;
+
+      return {
+        key: `${plan.id}-${week.key}`,
+        planId: plan.id,
+        title: plan.title,
+        startCol: resolvedStartCol,
+        endCol: resolvedEndCol,
+        isStart: startsAt >= weekStart,
+        isEnd: endsAt <= weekEnd,
+      } satisfies WeekPlanSegment;
+    })
+    .filter((segment): segment is WeekPlanSegment => Boolean(segment))
+    .sort((a, b) => {
+      if (a.startCol !== b.startCol) return a.startCol - b.startCol;
+      return b.endCol - a.endCol;
+    });
+
+  const lanes: WeekPlanSegment[][] = [];
+  const hidden: WeekPlanSegment[] = [];
+
+  for (const segment of segments) {
+    let placed = false;
+
+    for (const lane of lanes) {
+      const overlaps = lane.some((item) => !(segment.endCol < item.startCol || segment.startCol > item.endCol));
+      if (overlaps) continue;
+      lane.push(segment);
+      placed = true;
+      break;
+    }
+
+    if (!placed) {
+      if (lanes.length < 2) {
+        lanes.push([segment]);
+      } else {
+        hidden.push(segment);
+      }
+    }
+  }
+
+  return {
+    lanes,
+    hiddenCount: hidden.length,
+  };
 }

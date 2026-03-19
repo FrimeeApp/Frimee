@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { Capacitor } from "@capacitor/core";
 import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
 import { useAuth } from "@/providers/AuthProvider";
-import LoadingScreen from "@/components/common/LoadingScreen";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { applyThemePreference, cacheThemePreference } from "@/services/theme/preferences";
 import {
@@ -425,7 +424,7 @@ export default function SettingsPage() {
 
   const disableEditing = settingsLoading || busyAction === "save" || busyAction === "upload-image";
 
-  if (settingsLoading) return <LoadingScreen />;
+  if (settingsLoading) return <SettingsPageSkeleton />;
 
   return (
     <div className="min-h-dvh bg-app text-app">
@@ -728,6 +727,86 @@ function SettingsCard({
       <p className="mt-[var(--space-1)] text-body-sm text-muted">{subtitle}</p>
       <div className="mt-[var(--space-4)] space-y-[var(--space-2)]">{children}</div>
     </section>
+  );
+}
+
+function SettingsPageSkeleton() {
+  return (
+    <div className="min-h-dvh bg-app text-app" role="status" aria-label="Cargando ajustes">
+      <div className="container-app pb-[calc(var(--space-12)+env(safe-area-inset-bottom))] pt-[var(--space-4)] lg:pt-[var(--space-8)]">
+        <header className="rounded-modal border border-strong bg-surface p-[var(--space-4)] shadow-elev-2 lg:p-[var(--space-6)]">
+          <div className="flex items-center justify-between gap-[var(--space-3)]">
+            <div className="feed-skeleton-shimmer h-10 w-28 rounded-chip" />
+            <div className="feed-skeleton-shimmer h-8 w-20 rounded-chip" />
+          </div>
+
+          <div className="mt-[var(--space-5)] flex flex-col gap-[var(--space-4)] sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-[var(--space-4)]">
+              <div className="feed-skeleton-shimmer h-[var(--space-16)] w-[var(--space-16)] rounded-full" />
+              <div className="min-w-0 space-y-2">
+                <div className="feed-skeleton-shimmer h-7 w-44 rounded-full" />
+                <div className="feed-skeleton-shimmer h-4 w-56 rounded-full" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-[var(--space-2)]">
+              <div className="rounded-input border border-app bg-surface-2 px-[var(--space-3)] py-[var(--space-2)]">
+                <div className="feed-skeleton-shimmer h-3 w-14 rounded-full" />
+                <div className="mt-[var(--space-1)] feed-skeleton-shimmer h-4 w-20 rounded-full" />
+              </div>
+              <div className="rounded-input border border-app bg-surface-2 px-[var(--space-3)] py-[var(--space-2)]">
+                <div className="feed-skeleton-shimmer h-3 w-16 rounded-full" />
+                <div className="mt-[var(--space-1)] feed-skeleton-shimmer h-4 w-20 rounded-full" />
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <div className="mt-[var(--space-5)] grid grid-cols-1 gap-[var(--space-4)] lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          <section className="space-y-[var(--space-4)]" aria-hidden="true">
+            {Array.from({ length: 5 }).map((_, index) => (
+              <section
+                key={index}
+                className="rounded-modal border border-strong bg-surface p-[var(--space-4)] shadow-elev-1 lg:p-[var(--space-5)]"
+              >
+                <div className="feed-skeleton-shimmer h-5 w-28 rounded-full" />
+                <div className="mt-[var(--space-2)] feed-skeleton-shimmer h-4 w-52 rounded-full" />
+                <div className="mt-[var(--space-4)] space-y-[var(--space-2)]">
+                  {Array.from({ length: index === 0 ? 2 : 3 }).map((__, rowIndex) => (
+                    <div
+                      key={rowIndex}
+                      className="flex items-center justify-between gap-[var(--space-3)] rounded-input border border-app bg-surface-inset px-[var(--space-3)] py-[var(--space-3)]"
+                    >
+                      <div className="flex min-w-0 flex-1 items-start gap-[var(--space-3)]">
+                        <div className="feed-skeleton-shimmer mt-[var(--space-1)] h-5 w-5 rounded-full" />
+                        <div className="min-w-0 flex-1">
+                          <div className="feed-skeleton-shimmer h-4 w-28 rounded-full" />
+                          <div className="mt-[var(--space-1)] feed-skeleton-shimmer h-3 w-44 rounded-full" />
+                        </div>
+                      </div>
+                      <div className="feed-skeleton-shimmer h-9 w-24 rounded-input" />
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ))}
+          </section>
+
+          <aside className="space-y-[var(--space-4)]" aria-hidden="true">
+            <section className="rounded-modal border border-strong bg-surface p-[var(--space-4)] shadow-elev-1 lg:p-[var(--space-5)]">
+              <div className="feed-skeleton-shimmer h-5 w-20 rounded-full" />
+              <div className="mt-[var(--space-2)] feed-skeleton-shimmer h-4 w-44 rounded-full" />
+              <div className="mt-[var(--space-4)] space-y-[var(--space-3)]">
+                <div className="feed-skeleton-shimmer h-[46px] w-full rounded-input" />
+                <div className="feed-skeleton-shimmer h-[54px] w-full rounded-input" />
+                <div className="feed-skeleton-shimmer h-[54px] w-full rounded-input" />
+                <div className="feed-skeleton-shimmer h-4 w-36 rounded-full" />
+              </div>
+            </section>
+          </aside>
+        </div>
+      </div>
+    </div>
   );
 }
 

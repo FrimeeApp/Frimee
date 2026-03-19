@@ -49,21 +49,25 @@ async function googleFetch<T>(url: string, accessToken: string): Promise<T> {
 async function googleFetchWithMethod<T>(params: {
   url: string;
   accessToken: string;
-  method: "POST" | "PATCH";
-  body: unknown;
+  method: "POST" | "PATCH" | "DELETE";
+  body?: unknown;
 }): Promise<T> {
   const response = await fetch(params.url, {
     method: params.method,
     headers: {
       Authorization: `Bearer ${params.accessToken}`,
-      "Content-Type": "application/json",
+      ...(params.body !== undefined ? { "Content-Type": "application/json" } : {}),
     },
-    body: JSON.stringify(params.body),
+    body: params.body !== undefined ? JSON.stringify(params.body) : undefined,
   });
 
   if (!response.ok) {
     const body = await response.text();
     throw new Error(`[google-calendar] ${response.status} ${response.statusText}: ${body}`);
+  }
+
+  if (params.method === "DELETE") {
+    return undefined as T;
   }
 
   return (await response.json()) as T;
@@ -127,5 +131,20 @@ export async function updateGoogleEvent(params: {
     accessToken: params.accessToken,
     method: "PATCH",
     body: params.input,
+  });
+}
+
+export async function deleteGoogleEvent(params: {
+  accessToken: string;
+  calendarId: string;
+  eventId: string;
+}) {
+  const encodedCalendar = encodeURIComponent(params.calendarId);
+  const encodedEvent = encodeURIComponent(params.eventId);
+  const url = `${GOOGLE_API_BASE}/calendars/${encodedCalendar}/events/${encodedEvent}`;
+  return googleFetchWithMethod<void>({
+    url,
+    accessToken: params.accessToken,
+    method: "DELETE",
   });
 }

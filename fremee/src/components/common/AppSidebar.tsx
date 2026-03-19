@@ -11,6 +11,7 @@ type IconProps = {
 
 const items = [
   { key: "home", label: "Inicio", icon: HomeIcon, href: "/feed" },
+  { key: "search", label: "Buscar", icon: SearchIcon, href: "/search" },
   { key: "calendar", label: "Calendario", icon: CalendarIcon, href: "/calendar" },
   { key: "cards", label: "Mis gastos", icon: CardIcon, href: "/mis-gastos" },
   { key: "send", label: "Mensajes", icon: SendIcon, href: "#" },
@@ -205,6 +206,15 @@ function CalendarIcon({ className = "size-icon" }: IconProps = {}) {
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
       <rect x="3" y="5" width="18" height="16" rx="2" stroke="currentColor" strokeWidth="1.8" />
       <path d="M8 3V7M16 3V7M3 10.5H21" stroke="currentColor" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
+function SearchIcon({ className = "size-icon" }: IconProps = {}) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
+      <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M16 16L20.5 20.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   );
 }

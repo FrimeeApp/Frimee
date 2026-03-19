@@ -11,6 +11,7 @@ import {
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import {
   createGoogleEvent,
+  deleteGoogleEvent,
   listGoogleCalendars,
   listGoogleEventsByCalendar,
   type GoogleCalendarEvent,
@@ -87,19 +88,57 @@ export async function importGoogleCalendarEvents(params: {
   );
 
   const flatEvents = allEvents.flat();
-  const rows = flatEvents
+  const activeFlatEvents = flatEvents.filter(({ event }) => event.status !== "cancelled");
+  const rows = activeFlatEvents
     .map(({ calendarId, event }) => mapGoogleEventToRow(params.userId, calendarId, event))
     .filter((row): row is GoogleEventUpsertRow => Boolean(row));
 
-  if (rows.length === 0) {
-    return { imported: 0, calendars: calendarIds.length };
+  const activeGoogleIdSet = new Set(
+    activeFlatEvents
+      .map(({ calendarId, event }) => {
+        if (!event.id) return null;
+        return `${calendarId}::${event.id}`;
+      })
+      .filter((value): value is string => Boolean(value)),
+  );
+
+  const { data: existingGoogleRows, error: existingGoogleRowsError } = await supabase
+    .from("evento")
+    .select("id,google_calendar_id,google_event_id")
+    .eq("owner_user_id", params.userId)
+    .eq("source", "GOOGLE")
+    .is("deleted_at", null)
+    .lte("inicio_at", params.timeMax)
+    .gte("fin_at", params.timeMin)
+    .limit(3000);
+
+  if (existingGoogleRowsError) throw existingGoogleRowsError;
+
+  const idsToSoftDelete = (existingGoogleRows ?? [])
+    .filter((row) => {
+      if (!row.google_calendar_id || !row.google_event_id) return false;
+      const key = `${row.google_calendar_id}::${row.google_event_id}`;
+      return !activeGoogleIdSet.has(key);
+    })
+    .map((row) => Number(row.id));
+
+  if (idsToSoftDelete.length > 0) {
+    const { error: hardDeleteError } = await supabase
+      .from("evento")
+      .delete()
+      .in("id", idsToSoftDelete)
+      .eq("owner_user_id", params.userId);
+
+    if (hardDeleteError) throw hardDeleteError;
   }
 
-  const { error } = await supabase
-    .from("evento")
-    .upsert(rows, { onConflict: "owner_user_id,google_calendar_id,google_event_id" });
+  if (rows.length > 0) {
+    const { error } = await supabase
+      .from("evento")
+      .upsert(rows, { onConflict: "owner_user_id,google_calendar_id,google_event_id" });
 
-  if (error) throw error;
+    if (error) throw error;
+  }
 
   return { imported: rows.length, calendars: calendarIds.length };
 }
@@ -159,11 +198,73 @@ export async function syncGoogleCalendarBidirectional(params: {
         limit: 2000,
       })
     ).filter((event) => event.source === "LOCAL");
+    const localEventIdSet = new Set(localEvents.map((event) => String(event.id)));
+    const planIdSet = new Set(params.plans.map((plan) => String(plan.id)));
+
+    const existingWritableEvents = await listGoogleEventsByCalendar({
+      accessToken: params.accessToken,
+      calendarId: writableCalendar.id,
+      timeMin: params.timeMin,
+      timeMax: params.timeMax,
+    });
+
+    const googleEventByLocalEventId = new Map<string, { id: string; status?: string }>();
+    const googleEventByPlanId = new Map<string, { id: string; status?: string }>();
+    for (const event of existingWritableEvents) {
+      const ownerUserId = event.extendedProperties?.private?.fremee_owner_user_id;
+      if (ownerUserId !== params.userId || !event.id) continue;
+
+      const localEventId = event.extendedProperties?.private?.fremee_local_event_id;
+      if (localEventId) {
+        googleEventByLocalEventId.set(localEventId, { id: event.id, status: event.status });
+      }
+
+      const planId = event.extendedProperties?.private?.fremee_plan_id;
+      if (planId) {
+        googleEventByPlanId.set(planId, { id: event.id, status: event.status });
+      }
+    }
+
+    for (const [localEventId, remoteEvent] of googleEventByLocalEventId) {
+      if (localEventIdSet.has(localEventId)) continue;
+      try {
+        await deleteGoogleEvent({
+          accessToken: params.accessToken,
+          calendarId: writableCalendar.id,
+          eventId: remoteEvent.id,
+        });
+      } catch {
+        // continua con el resto; se reintentara en la siguiente sincronizacion
+      }
+    }
+
+    for (const [planId, remoteEvent] of googleEventByPlanId) {
+      if (planIdSet.has(planId)) continue;
+      try {
+        await deleteGoogleEvent({
+          accessToken: params.accessToken,
+          calendarId: writableCalendar.id,
+          eventId: remoteEvent.id,
+        });
+      } catch {
+        // continua con el resto; se reintentara en la siguiente sincronizacion
+      }
+    }
 
     let exported = 0;
     for (const localEvent of localEvents) {
       const input = mapLocalEventToGoogleInput(localEvent, params.userId);
-      let googleEventId = localEvent.googleEventId ?? null;
+      const remoteSnapshot = googleEventByLocalEventId.get(String(localEvent.id));
+      if (remoteSnapshot?.status === "cancelled") {
+        await softDeleteLocalEvent({
+          userId: params.userId,
+          eventId: localEvent.id,
+          syncError: null,
+        });
+        continue;
+      }
+
+      let googleEventId = localEvent.googleEventId ?? remoteSnapshot?.id ?? null;
       let googleCalendarId = localEvent.googleCalendarId ?? writableCalendar.id;
 
       try {
@@ -187,13 +288,12 @@ export async function syncGoogleCalendarBidirectional(params: {
         const errorMessage = error instanceof Error ? error.message : String(error);
         const isNotFound = errorMessage.includes("404");
         if (isNotFound) {
-          const created = await createGoogleEvent({
-            accessToken: params.accessToken,
-            calendarId: writableCalendar.id,
-            input,
+          await softDeleteLocalEvent({
+            userId: params.userId,
+            eventId: localEvent.id,
+            syncError: null,
           });
-          googleEventId = created.id;
-          googleCalendarId = writableCalendar.id;
+          continue;
         } else {
           continue;
         }
@@ -217,20 +317,12 @@ export async function syncGoogleCalendarBidirectional(params: {
     }
 
     if (params.googleSyncExportPlans ?? true) {
-      const existingWritableEvents = await listGoogleEventsByCalendar({
-        accessToken: params.accessToken,
-        calendarId: writableCalendar.id,
-        timeMin: params.timeMin,
-        timeMax: params.timeMax,
-      });
-
       const googlePlanEventIdByPlanId = new Map<number, string>();
-      for (const event of existingWritableEvents) {
-        const planIdRaw = event.extendedProperties?.private?.fremee_plan_id;
-        if (!planIdRaw || !event.id) continue;
+      for (const [planIdRaw, remoteEvent] of googleEventByPlanId) {
         const parsedPlanId = Number(planIdRaw);
         if (Number.isNaN(parsedPlanId)) continue;
-        googlePlanEventIdByPlanId.set(parsedPlanId, event.id);
+        if (remoteEvent.status === "cancelled") continue;
+        googlePlanEventIdByPlanId.set(parsedPlanId, remoteEvent.id);
       }
 
       for (const plan of params.plans) {
@@ -324,6 +416,17 @@ async function upsertCalendarSyncState(params: {
       hint: error.hint,
     });
   }
+}
+
+async function softDeleteLocalEvent(params: { userId: string; eventId: number; syncError: string | null }) {
+  const supabase = createBrowserSupabaseClient();
+  const { error } = await supabase
+    .from("evento")
+    .delete()
+    .eq("id", params.eventId)
+    .eq("owner_user_id", params.userId);
+
+  if (error) throw error;
 }
 
 type GoogleEventUpsertRow = {
