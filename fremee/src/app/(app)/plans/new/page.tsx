@@ -4,10 +4,12 @@ import { useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 import AppSidebar from "@/components/common/AppSidebar";
 import { useAuth } from "@/providers/AuthProvider";
+import { resolveGoogleProviderToken } from "@/services/auth/googleProviderToken";
 import { createPlan, listPlansByIdsInOrder } from "@/services/api/repositories/plans.repository";
 import { publishPlanAsPost } from "@/services/api/repositories/post.repository";
 import { syncGoogleCalendarBidirectional } from "@/services/api/repositories/events.repository";
 import { uploadPlanCoverFile } from "@/services/firebase/upload";
+import { createBrowserSupabaseClient } from "@/services/supabase/client";
 
 type VisibilityOption = "PUBLICO" | "SOLO_GRUPO" | "SOLO_AMIGOS" | "SOLO_FOLLOW";
 
@@ -53,7 +55,8 @@ function buildPlanDateTime(params: {
 
 export default function NewPlanPage() {
   const router = useRouter();
-  const { user, settings, session } = useAuth();
+  const { user, settings, session, googleProviderToken } = useAuth();
+  const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploadingCover, setUploadingCover] = useState(false);
@@ -152,7 +155,12 @@ export default function NewPlanPage() {
 
       if (settings?.google_sync_enabled && settings.google_sync_export_plans) {
         try {
-          const providerToken = (session as { provider_token?: string | null } | null)?.provider_token ?? null;
+          const providerToken = await resolveGoogleProviderToken({
+            supabase,
+            session,
+            userId: user.id,
+            cachedToken: googleProviderToken,
+          });
           if (providerToken) {
             const [createdPlan] = await listPlansByIdsInOrder([created.id]);
             if (createdPlan) {

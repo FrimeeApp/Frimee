@@ -1,61 +1,32 @@
 ﻿"use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import type { GlobeMethods } from "react-globe.gl";
 import AppSidebar from "@/components/common/AppSidebar";
 import LoadingScreen from "@/components/common/LoadingScreen";
 import { useAuth } from "@/providers/AuthProvider";
-import { listPlansByIdsInOrder } from "@/services/api/repositories/plans.repository";
-import { listPublishedPostPlanIds } from "@/services/api/repositories/feed.repository";
-import type { FeedPlanItemDto } from "@/services/api/dtos/plan.dto";
+import { getFeedPage } from "@/services/api/repositories/feed.repository";
+import type { FeedItemDto } from "@/services/api/dtos/feed.dto";
 import { publishPlanAsPost } from "@/services/api/repositories/post.repository";
-import {
-  listPlanLikeCounts,
-  listUserLikedPlanIds,
-  togglePlanLike,
-} from "@/services/api/repositories/likes.repository";
+import { togglePlanLike } from "@/services/api/repositories/likes.repository";
 import {
   createComment,
   listCommentsForPlan,
-  listPreviewCommentsForPlans,
   type CommentDto,
 } from "@/services/api/repositories/comments.repository";
 import { getPublicUserProfile } from "@/services/api/repositories/users.repository";
 
-type PostType = "plan" | "comment";
-
-type FeedPost = {
-  id: string;
-  type: PostType;
-  userName: string;
-  avatarLabel: string;
-  avatarImage?: string | null;
-  subtitle: string;
-  text: string;
-  hasImage?: boolean;
-  coverImage?: string;
-};
-
-type UiPost = FeedPost & {
-  plan: FeedPlanItemDto;
-  initiallyLiked: boolean;
-  initialLikeCount: number;
-  previewComments: CommentDto[];
-};
-
-type Suggestion = {
-  id: string;
-  name: string;
-  text: string;
-  avatarLabel: string;
-};
-
-const MOCK_SUGGESTIONS: Suggestion[] = [
-  { id: "s1", name: "Patrick", text: "Ha publicado su viaje a Oslo", avatarLabel: "P" },
-  { id: "s2", name: "Isa", text: "Ha publicado su viaje a Escocia", avatarLabel: "I" },
-];
-
 const COMMENT_AUTHOR_CACHE_TTL_MS = 60_000;
 const commentAuthorCache = new Map<string, { name: string; profileImage: string | null; cachedAt: number }>();
+const Globe = dynamic(() => import("react-globe.gl"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-[320px] w-full items-center justify-center">
+      <span className="text-body-sm text-muted">Cargando mapa...</span>
+    </div>
+  ),
+});
 
 function preloadImages(urls: string[], timeoutMs = 2500) {
   if (typeof window === "undefined" || urls.length === 0) {
@@ -90,8 +61,7 @@ export default function FeedPage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [activeFeedTab, setActiveFeedTab] = useState<"following" | "explore">("following");
   const [loadingFeed, setLoadingFeed] = useState(true);
-  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
-  const [uiPosts, setUiPosts] = useState<UiPost[]>([]);
+  const [uiPosts, setUiPosts] = useState<FeedItemDto[]>([]);
   const [reloadNonce, setReloadNonce] = useState(0);
   const lastProfileUpdatedAtRef = useRef<string | null>(null);
   const tabRowRef = useRef<HTMLDivElement | null>(null);
@@ -102,7 +72,6 @@ export default function FeedPage() {
   useEffect(() => {
     if (!currentUserId) {
       setUiPosts([]);
-      setSuggestions(MOCK_SUGGESTIONS);
       setLoadingFeed(false);
       return;
     }
@@ -112,50 +81,10 @@ export default function FeedPage() {
     const load = async () => {
       setLoadingFeed(true);
       try {
-        const publishedPlanIds = await listPublishedPostPlanIds({ limit: 20 });
-        const plans = await listPlansByIdsInOrder(publishedPlanIds);
-
+        const items = await getFeedPage({ userId: currentUserId, limit: 20 });
         if (cancelled) return;
 
-        const resolvedPlanIds = plans.map((plan) => plan.id);
-        const [likedPlanIds, likeCountsByPlanId, previewCommentsByPlanId] = await Promise.all([
-          listUserLikedPlanIds({
-            userId: currentUserId,
-            planIds: resolvedPlanIds,
-          }),
-          listPlanLikeCounts({ planIds: resolvedPlanIds }),
-          listPreviewCommentsForPlans({
-            planIds: resolvedPlanIds,
-            userId: currentUserId,
-            limitPerPlan: 2,
-          }),
-        ]);
-
-        if (cancelled) return;
-
-        const likedSet = new Set<number>(likedPlanIds);
-        const mapped: UiPost[] = plans.map((p) => {
-          const name = p.creator?.name || "Usuario";
-          const avatarLabel = (name.trim()[0] || "U").toUpperCase();
-
-          return {
-            id: String(p.id),
-            type: "plan",
-            userName: name,
-            avatarLabel,
-            avatarImage: p.creator?.profileImage ?? null,
-            subtitle: p.title,
-            text: p.description,
-            hasImage: Boolean(p.coverImage),
-            coverImage: p.coverImage ?? undefined,
-            plan: p,
-            initiallyLiked: likedSet.has(p.id),
-            initialLikeCount: likeCountsByPlanId[p.id] ?? 0,
-            previewComments: previewCommentsByPlanId[p.id] ?? [],
-          };
-        });
-
-        const imageUrlsToPreload = mapped.flatMap((post) => {
+        const imageUrlsToPreload = items.flatMap((post) => {
           const urls: string[] = [];
           if (post.coverImage) urls.push(post.coverImage);
           if (post.avatarImage) urls.push(post.avatarImage);
@@ -165,12 +94,10 @@ export default function FeedPage() {
         await preloadImages(imageUrlsToPreload);
         if (cancelled) return;
 
-        setUiPosts(mapped);
-        setSuggestions(MOCK_SUGGESTIONS);
+        setUiPosts(items);
       } catch (e) {
         console.error("[feed] load error", e);
         setUiPosts([]);
-        setSuggestions(MOCK_SUGGESTIONS);
       } finally {
         if (!cancelled) setLoadingFeed(false);
       }
@@ -234,7 +161,7 @@ export default function FeedPage() {
     return () => window.removeEventListener("resize", updateIndicator);
   }, [activeFeedTab]);
 
-  if (loading || loadingFeed) return <LoadingScreen />;
+  if (loading) return <LoadingScreen />;
 
   return (
     <div className="min-h-dvh bg-app text-app">
@@ -250,7 +177,7 @@ export default function FeedPage() {
             <section className="mx-auto w-full max-w-[760px]">
               <div
                 ref={tabRowRef}
-                className="relative flex gap-[var(--space-10)] border-b border-app text-body text-muted"
+                className="relative flex gap-[var(--space-10)] border-b border-app pb-[var(--space-2)] text-body text-muted"
               >
                 <button
                   ref={followingTabRef}
@@ -281,25 +208,36 @@ export default function FeedPage() {
                 />
               </div>
 
-              <div className="mt-[var(--space-5)] space-y-[var(--space-6)]">
-                {uiPosts.map((post) => (
-                  <FeedCard key={post.id} post={post} currentUserId={currentUserId} />
-                ))}
+              <div className="mt-[var(--space-5)]">
+                {loadingFeed ? (
+                  <FeedSkeleton />
+                ) : uiPosts.length === 0 ? (
+                  <div className="rounded-modal border border-app bg-surface p-[var(--space-5)] text-body text-muted shadow-elev-1">
+                    Aun no hay publicaciones para mostrar.
+                  </div>
+                ) : (
+                  <div className="space-y-[var(--space-6)]">
+                    {uiPosts.map((post) => (
+                      <FeedCard key={post.id} post={post} currentUserId={currentUserId} />
+                    ))}
+                  </div>
+                )}
               </div>
             </section>
 
             <aside className="hidden pt-[var(--space-10)] xl:block">
               <h3 className="text-[var(--font-h5)] font-[var(--fw-semibold)] leading-[var(--lh-h5)]">Actividad reciente</h3>
-              <div className="mt-[var(--space-4)] space-y-[var(--space-5)]">
-                {suggestions.map((item) => (
-                  <div key={item.id} className="flex items-start gap-3">
-                    <Avatar label={item.avatarLabel} />
-                    <div>
-                      <div className="text-body font-[var(--fw-semibold)] leading-none">{item.name}</div>
-                      <p className="mt-[var(--space-1)] text-body-sm leading-[1.35] text-muted">{item.text}</p>
-                    </div>
+              <div className="mt-[var(--space-4)]">
+                {loadingFeed ? (
+                  <div className="flex h-[340px] items-center justify-center text-body-sm text-muted">
+                    Cargando mapa...
                   </div>
-                ))}
+                ) : (
+                  <RecentActivityGlobe
+                    avatarImage={uiPosts[0]?.avatarImage ?? null}
+                    avatarLabel={uiPosts[0]?.avatarLabel ?? "F"}
+                  />
+                )}
               </div>
             </aside>
           </div>
@@ -309,7 +247,438 @@ export default function FeedPage() {
   );
 }
 
-function FeedCard({ post, currentUserId }: { post: UiPost; currentUserId: string | null }) {
+function RecentActivityGlobe({
+  avatarImage,
+  avatarLabel,
+}: {
+  avatarImage: string | null;
+  avatarLabel: string;
+}) {
+  type GlobeMarker = {
+    id: string;
+    locationName: string;
+    lat: number;
+    lng: number;
+    altitude: number;
+    image: string | null;
+    label: string;
+  };
+
+  const globeRef = useRef<GlobeMethods | undefined>(undefined);
+  const globeContainerRef = useRef<HTMLDivElement | null>(null);
+  const isDraggingRef = useRef(false);
+  const dragPointerIdRef = useRef<number | null>(null);
+  const lastPointerRef = useRef<{ x: number; y: number } | null>(null);
+  const autoRotateFrameRef = useRef<number | null>(null);
+  const selectedMarkerIdRef = useRef<string | null>(null);
+  const [globeReady, setGlobeReady] = useState(false);
+  const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null);
+  const globeViewportWidth = 320;
+  const globeViewportHeight = 340;
+  const globeRenderWidth = 420;
+  const globeRenderHeight = 420;
+  const lockedAltitude = 1.92;
+  const viewRef = useRef({ lat: 12, lng: 18, altitude: lockedAltitude });
+  const htmlMarkers: GlobeMarker[] = [
+    {
+      id: "tokyo",
+      locationName: "Tokyo",
+      lat: 35.6762,
+      lng: 139.6503,
+      altitude: 0.04,
+      image: avatarImage,
+      label: avatarLabel,
+    },
+    {
+      id: "madrid",
+      locationName: "Madrid",
+      lat: 40.4168,
+      lng: -3.7038,
+      altitude: 0.04,
+      image: null,
+      label: "M",
+    },
+    {
+      id: "new-york",
+      locationName: "New York",
+      lat: 40.7128,
+      lng: -74.006,
+      altitude: 0.04,
+      image: null,
+      label: "N",
+    },
+    {
+      id: "sydney",
+      locationName: "Sydney",
+      lat: -33.8688,
+      lng: 151.2093,
+      altitude: 0.04,
+      image: null,
+      label: "S",
+    },
+    {
+      id: "sao-paulo",
+      locationName: "Sao Paulo",
+      lat: -23.5505,
+      lng: -46.6333,
+      altitude: 0.04,
+      image: null,
+      label: "B",
+    },
+    {
+      id: "london",
+      locationName: "London",
+      lat: 51.5074,
+      lng: -0.1278,
+      altitude: 0.04,
+      image: null,
+      label: "L",
+    },
+    {
+      id: "paris",
+      locationName: "Paris",
+      lat: 48.8566,
+      lng: 2.3522,
+      altitude: 0.04,
+      image: null,
+      label: "P",
+    },
+    {
+      id: "singapore",
+      locationName: "Singapore",
+      lat: 1.3521,
+      lng: 103.8198,
+      altitude: 0.04,
+      image: null,
+      label: "G",
+    },
+    {
+      id: "nairobi",
+      locationName: "Nairobi",
+      lat: -1.2921,
+      lng: 36.8219,
+      altitude: 0.04,
+      image: null,
+      label: "K",
+    },
+    {
+      id: "dubai",
+      locationName: "Dubai",
+      lat: 25.2048,
+      lng: 55.2708,
+      altitude: 0.04,
+      image: null,
+      label: "D",
+    },
+  ];
+
+  useEffect(() => {
+    selectedMarkerIdRef.current = selectedMarkerId;
+  }, [selectedMarkerId]);
+
+  const centerMarker = (marker: GlobeMarker) => {
+    const nextView = {
+      lat: marker.lat,
+      lng: marker.lng,
+      altitude: lockedAltitude,
+    };
+
+    viewRef.current = nextView;
+    selectedMarkerIdRef.current = marker.id;
+    setSelectedMarkerId(marker.id);
+    globeRef.current?.pointOfView(nextView, 900);
+  };
+
+  useEffect(() => {
+    if (!globeReady) return;
+    let cancelled = false;
+    let retryFrameId: number | null = null;
+    let detach: (() => void) | null = null;
+
+    const tryAttachInteractions = () => {
+      if (cancelled) return;
+
+      const interactionLayer = globeContainerRef.current;
+      const controls = globeRef.current?.controls?.();
+      const renderer = globeRef.current?.renderer?.();
+      const canvas = renderer?.domElement;
+
+      if (!interactionLayer || !controls || !canvas) {
+        retryFrameId = window.requestAnimationFrame(tryAttachInteractions);
+        return;
+      }
+
+      viewRef.current = { lat: 12, lng: 18, altitude: lockedAltitude };
+      globeRef.current?.pointOfView(viewRef.current, 0);
+
+      controls.autoRotate = false;
+      controls.enableZoom = false;
+      controls.enablePan = false;
+      controls.enableRotate = false;
+      controls.zoomSpeed = 0;
+      controls.update();
+
+      const applyView = () => {
+        globeRef.current?.pointOfView(viewRef.current, 0);
+      };
+
+      const tickAutoRotate = () => {
+        if (!isDraggingRef.current && !selectedMarkerIdRef.current) {
+          viewRef.current = {
+            ...viewRef.current,
+            lng: ((((viewRef.current.lng + 0.025) + 180) % 360) + 360) % 360 - 180,
+          };
+          applyView();
+        }
+
+        autoRotateFrameRef.current = window.requestAnimationFrame(tickAutoRotate);
+      };
+
+      const preventZoom = (event: WheelEvent | TouchEvent) => {
+        event.preventDefault();
+        event.stopPropagation();
+        applyView();
+      };
+
+      const clearSelection = () => {
+        setSelectedMarkerId(null);
+      };
+
+      const onPointerDown = (event: PointerEvent) => {
+        const eventTarget = event.target;
+        if (eventTarget instanceof Element && eventTarget.closest("[data-globe-marker='true']")) {
+          return;
+        }
+
+        event.preventDefault();
+        clearSelection();
+        isDraggingRef.current = true;
+        dragPointerIdRef.current = event.pointerId;
+        lastPointerRef.current = { x: event.clientX, y: event.clientY };
+        interactionLayer.setPointerCapture(event.pointerId);
+      };
+
+      const onPointerMove = (event: PointerEvent) => {
+        if (
+          !isDraggingRef.current ||
+          dragPointerIdRef.current !== event.pointerId ||
+          !lastPointerRef.current
+        ) {
+          return;
+        }
+
+        event.preventDefault();
+
+        const deltaX = event.clientX - lastPointerRef.current.x;
+        const deltaY = event.clientY - lastPointerRef.current.y;
+
+        lastPointerRef.current = { x: event.clientX, y: event.clientY };
+
+        viewRef.current = {
+          lat: Math.max(-85, Math.min(85, viewRef.current.lat + deltaY * 0.24)),
+          lng: ((((viewRef.current.lng - deltaX * 0.32) + 180) % 360) + 360) % 360 - 180,
+          altitude: lockedAltitude,
+        };
+
+        applyView();
+      };
+
+      const onPointerUp = (event: PointerEvent) => {
+        if (dragPointerIdRef.current !== event.pointerId) return;
+
+        isDraggingRef.current = false;
+        dragPointerIdRef.current = null;
+        lastPointerRef.current = null;
+
+        if (interactionLayer.hasPointerCapture(event.pointerId)) {
+          interactionLayer.releasePointerCapture(event.pointerId);
+        }
+      };
+
+      canvas.style.touchAction = "none";
+      canvas.style.pointerEvents = "none";
+      interactionLayer.style.touchAction = "none";
+
+      interactionLayer.addEventListener("wheel", preventZoom, { passive: false });
+      interactionLayer.addEventListener("touchmove", preventZoom, { passive: false });
+      interactionLayer.addEventListener("pointerdown", onPointerDown);
+      interactionLayer.addEventListener("pointermove", onPointerMove);
+      interactionLayer.addEventListener("pointerup", onPointerUp);
+      interactionLayer.addEventListener("pointercancel", onPointerUp);
+      autoRotateFrameRef.current = window.requestAnimationFrame(tickAutoRotate);
+
+      detach = () => {
+        if (autoRotateFrameRef.current !== null) {
+          window.cancelAnimationFrame(autoRotateFrameRef.current);
+          autoRotateFrameRef.current = null;
+        }
+        interactionLayer.removeEventListener("wheel", preventZoom);
+        interactionLayer.removeEventListener("touchmove", preventZoom);
+        interactionLayer.removeEventListener("pointerdown", onPointerDown);
+        interactionLayer.removeEventListener("pointermove", onPointerMove);
+        interactionLayer.removeEventListener("pointerup", onPointerUp);
+        interactionLayer.removeEventListener("pointercancel", onPointerUp);
+      };
+    };
+
+    tryAttachInteractions();
+
+    return () => {
+      cancelled = true;
+      if (retryFrameId !== null) {
+        window.cancelAnimationFrame(retryFrameId);
+      }
+      detach?.();
+    };
+  }, [globeReady]);
+
+  return (
+    <div className="flex justify-center">
+      <div
+        ref={globeContainerRef}
+        className="relative"
+        style={{ width: `${globeViewportWidth}px`, height: `${globeViewportHeight}px` }}
+      >
+        <div
+          className="absolute"
+          style={{
+            width: `${globeRenderWidth}px`,
+            height: `${globeRenderHeight}px`,
+            left: "50%",
+            top: "50%",
+            transform: "translate(-50%, -50%)",
+          }}
+        >
+          <Globe
+            ref={globeRef}
+            width={globeRenderWidth}
+            height={globeRenderHeight}
+            backgroundColor="rgba(0,0,0,0)"
+            rendererConfig={{ alpha: true, antialias: true }}
+            globeImageUrl="//unpkg.com/three-globe/example/img/earth-day.jpg"
+            bumpImageUrl="//unpkg.com/three-globe/example/img/earth-topology.png"
+            showAtmosphere={false}
+            pointsData={[]}
+            htmlElementsData={htmlMarkers}
+            htmlLat="lat"
+            htmlLng="lng"
+            htmlAltitude="altitude"
+            htmlElement={(marker) => {
+        const data = marker as (typeof htmlMarkers)[number];
+        const el = document.createElement("div");
+        el.dataset.globeMarker = "true";
+        el.style.position = "relative";
+        el.style.zIndex = "20";
+        el.style.width = "40px";
+        el.style.height = "40px";
+        el.style.cursor = "pointer";
+        el.style.pointerEvents = "auto";
+        el.onclick = (event) => {
+          event.stopPropagation();
+          centerMarker(data);
+        };
+
+        const bubble = document.createElement("div");
+        bubble.dataset.globeMarker = "true";
+        bubble.style.width = "40px";
+        bubble.style.height = "40px";
+        bubble.style.borderRadius = "999px";
+        bubble.style.overflow = "hidden";
+        bubble.style.border = "2px solid white";
+        bubble.style.background = "#ff6a3d";
+        bubble.style.display = "grid";
+        bubble.style.placeItems = "center";
+        bubble.style.fontSize = "16px";
+        bubble.style.fontWeight = "700";
+        bubble.style.color = "#ffffff";
+
+        if (data.image) {
+          const img = document.createElement("img");
+          img.src = data.image;
+          img.alt = `Avatar de ${data.label}`;
+              img.style.width = "100%";
+          img.style.height = "100%";
+          img.style.objectFit = "cover";
+          img.referrerPolicy = "no-referrer";
+          bubble.appendChild(img);
+        } else {
+          bubble.textContent = data.label;
+        }
+
+        el.appendChild(bubble);
+
+        if (selectedMarkerId === data.id) {
+          const tooltip = document.createElement("div");
+          tooltip.dataset.globeMarker = "true";
+          tooltip.textContent = data.locationName;
+          tooltip.style.position = "absolute";
+          tooltip.style.left = "50%";
+          tooltip.style.bottom = "calc(100% + 10px)";
+          tooltip.style.transform = "translateX(-50%)";
+          tooltip.style.padding = "6px 10px";
+          tooltip.style.borderRadius = "999px";
+          tooltip.style.background = "rgba(15, 23, 20, 0.92)";
+          tooltip.style.color = "#ffffff";
+          tooltip.style.fontSize = "12px";
+          tooltip.style.fontWeight = "600";
+          tooltip.style.lineHeight = "1";
+          tooltip.style.whiteSpace = "nowrap";
+          tooltip.style.pointerEvents = "none";
+          el.appendChild(tooltip);
+        }
+
+        return el;
+      }}
+            onGlobeReady={() => setGlobeReady(true)}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FeedSkeleton() {
+  return (
+    <div className="space-y-[var(--space-6)]" aria-label="Cargando publicaciones" role="status">
+      {Array.from({ length: 3 }).map((_, index) => (
+        <article key={index} className="px-[var(--space-2)] py-[var(--space-3)]">
+          <div className="mb-[var(--space-4)] flex items-center gap-3">
+            <div className="feed-skeleton-shimmer h-[44px] w-[44px] rounded-full" />
+            <div className="space-y-2">
+              <div className="feed-skeleton-shimmer h-4 w-[92px] rounded-full" />
+              <div className="feed-skeleton-shimmer h-3 w-[72px] rounded-full" />
+            </div>
+          </div>
+
+          <div className="relative">
+            <div className="feed-skeleton-shimmer aspect-[4/3] w-full rounded-card" />
+            <div className="absolute inset-x-3 bottom-3 flex items-center justify-between rounded-card border border-white/20 bg-black/20 px-3 py-2 backdrop-blur-[2px]">
+              <div className="flex items-center gap-2">
+                <div className="feed-skeleton-shimmer h-4 w-10 rounded-full" />
+                <div className="feed-skeleton-shimmer h-4 w-[148px] rounded-full" />
+              </div>
+              <div className="feed-skeleton-shimmer h-8 w-[170px] rounded-card" />
+            </div>
+          </div>
+
+          <div className="mt-[var(--space-4)] flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1 space-y-3">
+              <div className="feed-skeleton-shimmer h-4 w-[72%] rounded-full" />
+              <div className="flex items-center gap-4">
+                <div className="feed-skeleton-shimmer h-6 w-6 rounded-full" />
+                <div className="feed-skeleton-shimmer h-6 w-6 rounded-full" />
+                <div className="feed-skeleton-shimmer h-4 w-[64px] rounded-full" />
+              </div>
+            </div>
+            <div className="feed-skeleton-shimmer h-6 w-6 rounded-full" />
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function FeedCard({ post, currentUserId }: { post: FeedItemDto; currentUserId: string | null }) {
   const [publishing, setPublishing] = useState(false);
   const [liked, setLiked] = useState(post.initiallyLiked);
   const [likeCount, setLikeCount] = useState(post.initialLikeCount);
@@ -318,10 +687,8 @@ function FeedCard({ post, currentUserId }: { post: UiPost; currentUserId: string
   const [commentOpen, setCommentOpen] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [commentSubmitting, setCommentSubmitting] = useState(false);
-  const [previewComments, setPreviewComments] = useState<CommentDto[]>(post.previewComments);
   const [commentsSection, setCommentsSection] = useState<CommentDto[]>([]);
   const [commentsLoading, setCommentsLoading] = useState(false);
-  const [resolvedAuthorNames, setResolvedAuthorNames] = useState<Record<string, string>>({});
 
   useEffect(() => {
     setLiked(post.initiallyLiked);
@@ -332,94 +699,10 @@ function FeedCard({ post, currentUserId }: { post: UiPost; currentUserId: string
   }, [post.initialLikeCount]);
 
   useEffect(() => {
-    setPreviewComments(post.previewComments);
-  }, [post.previewComments]);
-
-  useEffect(() => {
     if (!likeAnimating) return;
     const timeoutId = window.setTimeout(() => setLikeAnimating(false), 180);
     return () => window.clearTimeout(timeoutId);
   }, [likeAnimating]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const commentsToResolve = [...previewComments, ...commentsSection];
-    const uniqueUserIds = [...new Set(commentsToResolve.map((c) => c.userId).filter((id) => id && id.length > 0))];
-    const unresolved = uniqueUserIds.filter((userId) => {
-      if (resolvedAuthorNames[userId]) return false;
-      const cached = commentAuthorCache.get(userId);
-      return !(cached && Date.now() - cached.cachedAt < COMMENT_AUTHOR_CACHE_TTL_MS);
-    });
-
-    if (unresolved.length === 0) {
-      const hydratedFromCache: Record<string, string> = {};
-      for (const userId of uniqueUserIds) {
-        const cached = commentAuthorCache.get(userId);
-        if (cached && Date.now() - cached.cachedAt < COMMENT_AUTHOR_CACHE_TTL_MS) {
-          hydratedFromCache[userId] = cached.name;
-        }
-      }
-      if (!cancelled && Object.keys(hydratedFromCache).length > 0) {
-        setResolvedAuthorNames((prev) => {
-          let changed = false;
-          for (const [userId, name] of Object.entries(hydratedFromCache)) {
-            if (prev[userId] !== name) {
-              changed = true;
-              break;
-            }
-          }
-          if (!changed) return prev;
-          return { ...prev, ...hydratedFromCache };
-        });
-      }
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    const resolveNames = async () => {
-      const resolved: Record<string, string> = {};
-
-      await Promise.all(
-        unresolved.map(async (userId) => {
-          try {
-            const profile = await getPublicUserProfile(userId);
-            const name = profile?.nombre?.trim();
-            if (name) {
-              resolved[userId] = name;
-              commentAuthorCache.set(userId, {
-                name,
-                profileImage: profile?.profile_image ?? null,
-                cachedAt: Date.now(),
-              });
-            }
-          } catch {
-            // silent fallback to snapshot name/user placeholder
-          }
-        }),
-      );
-
-      if (!cancelled && Object.keys(resolved).length > 0) {
-        setResolvedAuthorNames((prev) => {
-          let changed = false;
-          for (const [userId, name] of Object.entries(resolved)) {
-            if (prev[userId] !== name) {
-              changed = true;
-              break;
-            }
-          }
-          if (!changed) return prev;
-          return { ...prev, ...resolved };
-        });
-      }
-    };
-
-    void resolveNames();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [previewComments, commentsSection, resolvedAuthorNames]);
 
   const onPublish = async () => {
     if (publishing) return;
@@ -463,7 +746,6 @@ function FeedCard({ post, currentUserId }: { post: UiPost; currentUserId: string
         limit: 50,
       });
       setCommentsSection(allComments);
-      setPreviewComments(allComments.slice(0, 2));
     } catch (error) {
       console.error("[feed] Error loading comments:", error);
       setCommentsSection([]);
@@ -524,7 +806,7 @@ function FeedCard({ post, currentUserId }: { post: UiPost; currentUserId: string
   };
 
   const getCommentAuthorName = (comment: CommentDto) => {
-    return resolvedAuthorNames[comment.userId] || comment.userName?.trim() || "Usuario";
+    return comment.userName?.trim() || "Usuario";
   };
 
   return (
@@ -541,7 +823,7 @@ function FeedCard({ post, currentUserId }: { post: UiPost; currentUserId: string
 
       {post.hasImage && (
         <img
-          src={post.coverImage}
+          src={post.coverImage ?? undefined}
           alt="Imagen del plan"
           className="feed-image-responsive mb-[var(--space-4)]"
         />
@@ -584,17 +866,6 @@ function FeedCard({ post, currentUserId }: { post: UiPost; currentUserId: string
       </div>
 
       <p className="mt-[var(--space-2)] text-body leading-[1.45]">{post.text}</p>
-
-      {!commentOpen && previewComments.length > 0 && (
-        <div className="mt-[var(--space-3)] space-y-[var(--space-1)]">
-          {previewComments.slice(0, 2).map((comment) => (
-            <p key={comment.commentId} className="text-body-sm leading-[1.35]">
-              <span className="font-[var(--fw-semibold)]">{getCommentAuthorName(comment)}</span>{" "}
-              {comment.content}
-            </p>
-          ))}
-        </div>
-      )}
 
       {commentOpen && (
         <div className="mt-[var(--space-3)] border-t border-app pt-[var(--space-3)]">

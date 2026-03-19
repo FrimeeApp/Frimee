@@ -19,6 +19,35 @@ export type PublicUserProfileRow = {
   profile_image: string | null;
 };
 
+export async function searchPublicUserProfiles(params: {
+  query: string;
+  limit?: number;
+  excludeUserId?: string;
+}): Promise<PublicUserProfileRow[]> {
+  const supabase = createBrowserSupabaseClient();
+  const trimmedQuery = params.query.trim();
+
+  if (!trimmedQuery) {
+    return [];
+  }
+
+  let request = supabase
+    .from("usuarios_public")
+    .select("id,nombre,profile_image")
+    .ilike("nombre", `%${trimmedQuery}%`)
+    .order("nombre", { ascending: true })
+    .limit(params.limit ?? 8);
+
+  if (params.excludeUserId) {
+    request = request.neq("id", params.excludeUserId);
+  }
+
+  const { data, error } = await request;
+
+  if (error) throw error;
+  return (data ?? []) as PublicUserProfileRow[];
+}
+
 export type UserAuthSnapshotRow = {
   profile: UserProfileRow | null;
   settings: UserSettingsRow | null;
