@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "build:mobile": "BUILD_TARGET=capacitor next build",
+    "build:mobile": "cross-env BUILD_TARGET=capacitor next build",
     "start": "next start",
     "lint": "eslint ."
   },
@@ -39,6 +39,7 @@
     "@types/react-dom": "^19",
     "@types/three": "^0.183.1",
     "babel-plugin-react-compiler": "1.0.0",
+    "cross-env": "^10.1.0",
     "eslint": "^9.39.3",
     "eslint-config-next": "^16.1.6",
     "react-globe.gl": "^2.37.0",
