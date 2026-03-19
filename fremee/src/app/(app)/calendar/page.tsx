@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import AppSidebar from "@/components/common/AppSidebar";
 import LoadingScreen from "@/components/common/LoadingScreen";
+import CreatePlanModal, { type CreatePlanPayload } from "@/components/plans/CreatePlanModal";
 import { useAuth } from "@/providers/AuthProvider";
 import { clearCachedGoogleProviderToken } from "@/services/auth/googleTokenCache";
 import { resolveGoogleProviderToken } from "@/services/auth/googleProviderToken";
@@ -54,12 +56,56 @@ export default function CalendarPage() {
   const [viewMode, setViewMode] = useState<CalendarViewMode>("month");
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const localPlanIdRef = useRef(Date.now());
   const autoSyncTriggeredRef = useRef(false);
   const hasLoadedOnceRef = useRef(false);
 
   useEffect(() => {
     autoSyncTriggeredRef.current = false;
   }, [user?.id]);
+
+  useEffect(() => {
+    if (createFromQuery === "1") {
+      setCreateModalOpen(true);
+    }
+  }, [createFromQuery]);
+
+  const closeCreateModal = () => {
+    setCreateModalOpen(false);
+    if (createFromQuery === "1") {
+      router.replace("/calendar");
+    }
+  };
+
+  const handleCreatePlan = (payload: CreatePlanPayload) => {
+    const creatorName =
+      profile?.nombre?.trim() || user?.email?.split("@")[0] || "Tu";
+    const startIso = dateInputToIso(payload.startDate, 10);
+    const endIso = dateInputToIso(payload.endDate, 18);
+
+    const newPlan: FeedPlanItemDto = {
+      id: localPlanIdRef.current++,
+      createdAt: new Date().toISOString(),
+      title: payload.title,
+      description: `Plan en ${payload.location}`,
+      locationName: payload.location,
+      startsAt: startIso,
+      endsAt: endIso,
+      allDay: true,
+      visibility: payload.visibility,
+      coverImage: payload.coverImageUrl,
+      ownerUserId: user?.id ?? undefined,
+      creator: {
+        id: user?.id ?? "local",
+        name: creatorName,
+        profileImage: profile?.profile_image ?? null,
+      },
+    };
+
+    setLocalPlans((prev) => [newPlan, ...prev]);
+    closeCreateModal();
+  };
 
   useEffect(() => {
     if (authLoading) return;
@@ -185,9 +231,13 @@ export default function CalendarPage() {
     void runGoogleSync();
   }, [authLoading, loading, runGoogleSync, settings?.google_sync_enabled, user?.id]);
 
+  const mergedPlans = useMemo(() => {
+    return [...localPlans, ...plans];
+  }, [localPlans, plans]);
+
   const visiblePlans = useMemo(() => {
     const startToday = startOfDay(new Date());
-    return plans.filter((plan) => {
+    return mergedPlans.filter((plan) => {
       const endsAt = new Date(plan.endsAt);
       return tab === "active" ? endsAt >= startToday : endsAt < startToday;
     });
@@ -230,7 +280,11 @@ export default function CalendarPage() {
   return (
     <div className="min-h-dvh bg-app text-app">
       <div className="relative mx-auto min-h-dvh max-w-[1440px]">
-        <AppSidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed((prev) => !prev)} />
+        <AppSidebar
+          collapsed={sidebarCollapsed}
+          onToggle={() => setSidebarCollapsed((prev) => !prev)}
+          onCreatePlan={() => setCreateModalOpen(true)}
+        />
 
         <main
           className={`px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-4)] transition-[padding] duration-[var(--duration-slow)] [transition-timing-function:var(--ease-standard)] lg:py-[var(--space-8)] lg:pr-[var(--space-14)] ${
@@ -554,6 +608,8 @@ export default function CalendarPage() {
           </div>
         </main>
       </div>
+
+      <CreatePlanModal open={createModalOpen} onClose={closeCreateModal} onCreate={handleCreatePlan} />
     </div>
   );
 }
@@ -633,6 +689,11 @@ function startOfMonth(date: Date) {
 
 function endOfMonth(date: Date) {
   return new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
+}
+
+function dateInputToIso(dateInput: string, hour = 12) {
+  const [year, month, day] = dateInput.split("-").map(Number);
+  return new Date(year ?? 0, (month ?? 1) - 1, day ?? 1, hour, 0, 0).toISOString();
 }
 
 function startOfDay(date: Date) {
