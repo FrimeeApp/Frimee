@@ -17,14 +17,14 @@ export function AuthSplitLayout({ children }: { children: ReactNode }) {
 
             {/* Copy block */}
             <div className="mt-[11vh] md:mt-[12vh] md:pl-[25%] lg:mt-[7vh] lg:pl-[20%]">
-              <div className="md:w-[72%] lg:w-[82%]">
-                <h1 className="text-[clamp(2.35rem,5vw,3.125rem)] font-[var(--fw-semibold)] leading-[1.2] tracking-tight text-contrast-token">
-                  <span className="block">Organiza.</span>
-                  <span className="block opacity-80">Sin preocupaciones.</span>
-                  <span className="block">Comparte.</span>
+              <div className="lg:w-[82%]">
+                <h1 className="text-[clamp(1.85rem,3.8vw,3.125rem)] font-[var(--fw-semibold)] leading-[1.2] tracking-tight text-contrast-token">
+                  <span className="block opacity-90">Organiza.</span>
+                  <span className="block opacity-90">Comparte.</span>
+                  <span className="block text-[#111827] dark:text-[#d1faf0]">Sin estrés.</span>
                 </h1>
 
-                <p className="mt-[var(--space-6)] w-full text-body text-contrast-token opacity-80">
+                <p className="mt-[var(--space-6)] w-[85%] text-body !leading-[1.3] text-contrast-token opacity-50">
                   Coordina viajes, gastos y actividades en un solo lugar para que tu grupo avance sin caos
                 </p>
               </div>
@@ -56,7 +56,7 @@ function PlaneSwoosh() {
       src="/plane-swoosh.svg"
       alt=""
       fill
-      className="origin-left scale-x-110 object-contain object-left-bottom lg:scale-x-150"
+      className="object-contain object-left-bottom"
     />
   );
 }

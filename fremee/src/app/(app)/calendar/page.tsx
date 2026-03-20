@@ -74,6 +74,10 @@ function CalendarPageInner() {
       return stored ? (JSON.parse(stored) as number[]) : [];
     } catch { return []; }
   });
+  const tabRowRef = useRef<HTMLDivElement | null>(null);
+  const activeTabRef = useRef<HTMLButtonElement | null>(null);
+  const doneTabRef = useRef<HTMLButtonElement | null>(null);
+  const [tabIndicator, setTabIndicator] = useState({ left: 0, width: 0, ready: false });
   const [reloadNonce, setReloadNonce] = useState(0);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [localPlans, setLocalPlans] = useState<FeedPlanItemDto[]>([]);
@@ -84,6 +88,20 @@ function CalendarPageInner() {
   useEffect(() => {
     autoSyncTriggeredRef.current = false;
   }, [user?.id]);
+
+  useEffect(() => {
+    const updateIndicator = () => {
+      const row = tabRowRef.current;
+      const target = tab === "active" ? activeTabRef.current : doneTabRef.current;
+      if (!row || !target) return;
+      const rowRect = row.getBoundingClientRect();
+      const tabRect = target.getBoundingClientRect();
+      setTabIndicator({ left: tabRect.left - rowRect.left, width: tabRect.width, ready: true });
+    };
+    updateIndicator();
+    window.addEventListener("resize", updateIndicator);
+    return () => window.removeEventListener("resize", updateIndicator);
+  }, [tab]);
 
   useEffect(() => {
     if (createFromQuery === "1") {
@@ -331,25 +349,34 @@ function CalendarPageInner() {
           <div className="mx-auto w-full max-w-[1120px]">
             <div className="border-b border-app pb-[var(--space-2)] text-body text-muted">
               <div className="flex flex-wrap items-end justify-between gap-[var(--space-3)]">
-                <div className="flex items-center gap-[var(--space-10)]">
+                <div ref={tabRowRef} className="relative flex items-center gap-[var(--space-10)]">
                   <button
+                    ref={activeTabRef}
                     type="button"
                     onClick={() => setTab("active")}
-                    className={`pb-[2px] font-[var(--fw-medium)] transition-colors duration-[var(--duration-base)] ${
+                    className={`pb-[var(--space-2)] font-[var(--fw-medium)] transition-colors duration-[var(--duration-base)] ${
                       tab === "active" ? "text-app" : "hover:text-app"
                     }`}
                   >
                     Activos
                   </button>
                   <button
+                    ref={doneTabRef}
                     type="button"
                     onClick={() => setTab("done")}
-                    className={`pb-[2px] font-[var(--fw-medium)] transition-colors duration-[var(--duration-base)] ${
+                    className={`pb-[var(--space-2)] font-[var(--fw-medium)] transition-colors duration-[var(--duration-base)] ${
                       tab === "done" ? "text-app" : "hover:text-app"
                     }`}
                   >
                     Finalizados
                   </button>
+                  <span
+                    className={`pointer-events-none absolute bottom-0 h-[2px] bg-black transition-[left,width,opacity] duration-[220ms] [transition-timing-function:var(--ease-standard)] dark:bg-white ${
+                      tabIndicator.ready ? "opacity-100" : "opacity-0"
+                    }`}
+                    style={{ left: tabIndicator.left, width: tabIndicator.width }}
+                    aria-hidden="true"
+                  />
                 </div>
 
                 <div className="flex items-center gap-[var(--space-3)]">
