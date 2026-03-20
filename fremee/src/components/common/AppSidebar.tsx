@@ -72,7 +72,7 @@ export default function AppSidebar({ collapsed, onToggle, onCreatePlan }: AppSid
           mobileNavVisible ? "translate-y-0" : "translate-y-full"
         }`}
       >
-        {items.map((item) => (
+        {items.slice(0, 2).map((item) => (
           <Link
             key={item.key}
             href={item.href}
@@ -91,6 +91,17 @@ export default function AppSidebar({ collapsed, onToggle, onCreatePlan }: AppSid
         >
           <PlusIcon className="size-icon" />
         </button>
+
+        {items.slice(2).map((item) => (
+          <Link
+            key={item.key}
+            href={item.href}
+            aria-label={item.label}
+            className="text-app transition-opacity duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] active:opacity-[var(--disabled-opacity)]"
+          >
+            <item.icon className="size-icon" />
+          </Link>
+        ))}
 
         <button
           type="button"

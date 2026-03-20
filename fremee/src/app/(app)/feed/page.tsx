@@ -17,6 +17,22 @@ import {
 } from "@/services/api/repositories/comments.repository";
 import { getPublicUserProfile } from "@/services/api/repositories/users.repository";
 
+const EMOJI_LIST = [
+  "😀","😃","😄","😁","😆","😅","🤣","😂","🙂","😊",
+  "😇","🥰","😍","🤩","😘","😗","😚","😙","🥲","😋",
+  "😛","😜","🤪","😝","🤑","🤗","🤭","🫢","🤫","🤔",
+  "😐","😑","😶","🫡","😏","😒","🙄","😬","😮‍💨","🤥",
+  "😌","😔","😪","🤤","😴","😷","🤒","🤕","🤢","🤮",
+  "🥵","🥶","🥴","😵","🤯","🤠","🥳","🥸","😎","🤓",
+  "❤️","🧡","💛","💚","💙","💜","🖤","🤍","🤎","💔",
+  "❤️‍🔥","💕","💞","💓","💗","💖","💘","💝","💟","♥️",
+  "👍","👎","👏","🙌","🤝","🤜","🤛","✊","👊","🫶",
+  "🤞","✌️","🤟","🤘","👌","🤌","👋","🤚","✋","🖖",
+  "🔥","✨","🌟","💫","⭐","🎉","🎊","🎈","🎁","🏆",
+  "✈️","🌍","🌎","🌏","🗺️","🏖️","🏔️","🌅","🌄","🌠",
+  "🍕","🍔","🍟","🌮","🍣","🍩","🍪","🎂","🍰","☕",
+  "💪","🦾","👀","👁️","🫣","😈","👿","💀","☠️","👻",
+];
 const COMMENT_AUTHOR_CACHE_TTL_MS = 60_000;
 const commentAuthorCache = new Map<string, { name: string; profileImage: string | null; cachedAt: number }>();
 const Globe = dynamic(() => import("react-globe.gl"), {
@@ -200,7 +216,7 @@ export default function FeedPage() {
                   Explorar
                 </button>
                 <span
-                  className={`pointer-events-none absolute bottom-0 h-[2px] bg-warning-token transition-[left,width,opacity] duration-[220ms] [transition-timing-function:var(--ease-standard)] ${
+                  className={`pointer-events-none absolute bottom-0 h-[2px] bg-black transition-[left,width,opacity] duration-[220ms] [transition-timing-function:var(--ease-standard)] dark:bg-white ${
                     tabIndicator.ready ? "opacity-100" : "opacity-0"
                   }`}
                   style={{ left: tabIndicator.left, width: tabIndicator.width }}
@@ -684,11 +700,15 @@ function FeedCard({ post, currentUserId }: { post: FeedItemDto; currentUserId: s
   const [likeCount, setLikeCount] = useState(post.initialLikeCount);
   const [likeLoading, setLikeLoading] = useState(false);
   const [likeAnimating, setLikeAnimating] = useState(false);
-  const [commentOpen, setCommentOpen] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [commentSubmitting, setCommentSubmitting] = useState(false);
   const [commentsSection, setCommentsSection] = useState<CommentDto[]>([]);
   const [commentsLoading, setCommentsLoading] = useState(false);
+  const [visibleCommentIndex, setVisibleCommentIndex] = useState(0);
+  const [commentsExpanded, setCommentsExpanded] = useState(false);
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
+  const commentInputRef = useRef<HTMLInputElement | null>(null);
+  const emojiPickerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setLiked(post.initiallyLiked);
@@ -703,6 +723,56 @@ function FeedCard({ post, currentUserId }: { post: FeedItemDto; currentUserId: s
     const timeoutId = window.setTimeout(() => setLikeAnimating(false), 180);
     return () => window.clearTimeout(timeoutId);
   }, [likeAnimating]);
+
+  // Load comments on mount
+  useEffect(() => {
+    if (!post.plan.id) return;
+    let cancelled = false;
+    const load = async () => {
+      setCommentsLoading(true);
+      try {
+        const allComments = await listCommentsForPlan({
+          planId: post.plan.id,
+          userId: currentUserId ?? undefined,
+          limit: 50,
+        });
+        if (!cancelled) setCommentsSection(allComments);
+      } catch (error) {
+        console.error("[feed] Error loading comments:", error);
+      } finally {
+        if (!cancelled) setCommentsLoading(false);
+      }
+    };
+    void load();
+    return () => { cancelled = true; };
+  }, [post.plan.id, currentUserId]);
+
+  // Close emoji picker on outside click
+  useEffect(() => {
+    if (!emojiPickerOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target as Node)) {
+        setEmojiPickerOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [emojiPickerOpen]);
+
+  const insertEmoji = (emoji: string) => {
+    setCommentText((prev) => prev + emoji);
+    setEmojiPickerOpen(false);
+    commentInputRef.current?.focus();
+  };
+
+  // Cycle through comments every 5 seconds (pause when expanded)
+  useEffect(() => {
+    if (commentsSection.length <= 1 || commentsExpanded) return;
+    const intervalId = window.setInterval(() => {
+      setVisibleCommentIndex((prev) => (prev + 1) % commentsSection.length);
+    }, 5000);
+    return () => window.clearInterval(intervalId);
+  }, [commentsSection.length, commentsExpanded]);
 
   const onPublish = async () => {
     if (publishing) return;
@@ -736,9 +806,7 @@ function FeedCard({ post, currentUserId }: { post: FeedItemDto; currentUserId: s
     }
   };
 
-  const openCommentsSection = async () => {
-    setCommentOpen(true);
-    setCommentsLoading(true);
+  const reloadComments = async () => {
     try {
       const allComments = await listCommentsForPlan({
         planId: post.plan.id,
@@ -748,9 +816,6 @@ function FeedCard({ post, currentUserId }: { post: FeedItemDto; currentUserId: s
       setCommentsSection(allComments);
     } catch (error) {
       console.error("[feed] Error loading comments:", error);
-      setCommentsSection([]);
-    } finally {
-      setCommentsLoading(false);
     }
   };
 
@@ -783,7 +848,7 @@ function FeedCard({ post, currentUserId }: { post: FeedItemDto; currentUserId: s
         content,
       });
       setCommentText("");
-      await openCommentsSection();
+      await reloadComments();
     } catch (e) {
       console.error("[feed] Error creating comment:", e);
     } finally {
@@ -797,40 +862,163 @@ function FeedCard({ post, currentUserId }: { post: FeedItemDto; currentUserId: s
     await onSubmitComment();
   };
 
-  const onToggleCommentsSection = async () => {
-    if (commentOpen) {
-      setCommentOpen(false);
-      return;
-    }
-    await openCommentsSection();
-  };
-
   const getCommentAuthorName = (comment: CommentDto) => {
     return comment.userName?.trim() || "Usuario";
   };
 
+  const getCommentAuthorColor = (userId: string) => {
+    const colors = [
+      "#7DD3FC", // sky-300
+      "#FCA5A5", // red-300
+      "#86EFAC", // green-300
+      "#FDE68A", // amber-200
+      "#C4B5FD", // violet-300
+      "#F9A8D4", // pink-300
+      "#6EE7B7", // emerald-300
+      "#93C5FD", // blue-300
+      "#FDBA74", // orange-300
+      "#A5B4FC", // indigo-300
+      "#5EEAD4", // teal-300
+      "#FCA5CF", // fuchsia-300
+    ];
+    let hash = 0;
+    for (let i = 0; i < userId.length; i++) {
+      hash = ((hash << 5) - hash + userId.charCodeAt(i)) | 0;
+    }
+    return colors[Math.abs(hash) % colors.length];
+  };
+
   return (
-    <article className="border-b border-app pb-[var(--space-6)]">
-      <header className="mb-[var(--space-3)] flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Avatar label={post.avatarLabel} image={post.avatarImage ?? null} />
-          <div>
-            <div className="text-body font-[var(--fw-semibold)] leading-none">{post.userName}</div>
-            <p className="mt-[var(--space-1)] text-body-sm leading-none text-muted">{post.subtitle}</p>
-          </div>
+    <article className="border-b border-app pb-[var(--space-4)]">
+      {/* Header */}
+      <header className="mb-[var(--space-3)] flex items-center gap-3">
+        <Avatar label={post.avatarLabel} image={post.avatarImage ?? null} />
+        <div>
+          <div className="text-body font-[var(--fw-semibold)] leading-none">{post.userName}</div>
+          <p className="mt-[var(--space-1)] text-body-sm leading-none text-muted">{post.subtitle}</p>
         </div>
       </header>
 
+      {/* Image + comment overlay */}
       {post.hasImage && (
-        <img
-          src={post.coverImage ?? undefined}
-          alt="Imagen del plan"
-          className="feed-image-responsive mb-[var(--space-4)]"
-        />
+        <div className="relative">
+          <img
+            src={post.coverImage ?? undefined}
+            alt="Imagen del plan"
+            className="feed-image-responsive"
+          />
+          {/* Integrated comment overlay */}
+          <div className="absolute inset-x-3 bottom-3 max-h-[calc(100%-24px)] rounded-[12px] bg-black/60 backdrop-blur-sm transition-all duration-300 ease-out">
+            {/* Expanded comments list */}
+            <div
+              className={`overflow-hidden transition-[max-height,opacity] ease-out ${
+                commentsExpanded && commentsSection.length > 0
+                  ? "max-h-[calc(100vh)] opacity-100 duration-700"
+                  : "max-h-0 opacity-0 duration-300"
+              }`}
+            >
+              <div className="max-h-[180px] space-y-[var(--space-2)] overflow-y-auto overscroll-contain px-[var(--space-3)] pt-[var(--space-2)]">
+                {commentsSection.map((comment) => (
+                  <div key={comment.commentId} className="flex items-start justify-between gap-2">
+                    <p className="min-w-0 flex-1 text-body-sm leading-[1.4] text-white">
+                      <span className="font-[var(--fw-semibold)]" style={{ color: getCommentAuthorColor(comment.userId) }}>{getCommentAuthorName(comment)}:</span>{" "}
+                      {comment.content}
+                    </p>
+                    {comment.userId === currentUserId && (
+                      <button
+                        type="button"
+                        className="mt-0.5 shrink-0 p-0.5 text-red-500/60"
+                        aria-label="Eliminar comentario"
+                        title="Eliminar comentario"
+                      >
+                        <TrashIcon />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+            {/* Comment bar */}
+            <div className="flex items-center gap-[var(--space-2)] px-[var(--space-3)] py-[var(--space-2)]">
+              {/* Left: cycling comments (click to expand) */}
+              <button
+                type="button"
+                className="relative min-h-[20px] min-w-0 flex-1 overflow-hidden text-left"
+                onClick={() => commentsSection.length > 0 && setCommentsExpanded((prev) => !prev)}
+              >
+                {commentsSection.length > 0 ? (
+                  commentsSection.map((comment, idx) => (
+                    <p
+                      key={comment.commentId}
+                      className={`text-body-sm leading-snug text-white transition-opacity duration-500 ${idx === visibleCommentIndex ? "relative opacity-100" : "absolute inset-0 opacity-0"}`}
+                    >
+                      <span className="font-[var(--fw-semibold)]" style={{ color: getCommentAuthorColor(comment.userId) }}>{getCommentAuthorName(comment)}:</span>{" "}
+                      {comment.content}
+                    </p>
+                  ))
+                ) : (
+                  <p className="text-body-sm leading-snug text-white/60">Sin comentarios</p>
+                )}
+              </button>
+              {/* Right: comment input + send */}
+              <div ref={emojiPickerRef} className="relative flex shrink-0 items-center rounded-[6px] bg-white/15 px-[var(--space-2)] ring-0 ring-white/30 transition-shadow focus-within:ring-[1px]">
+                <button
+                  type="button"
+                  className="mr-[var(--space-2)] flex items-center justify-center text-white/70"
+                  aria-label="Emoticonos"
+                  onClick={() => setEmojiPickerOpen((prev) => !prev)}
+                >
+                  <SmileyIcon />
+                </button>
+                {emojiPickerOpen && (
+                  <div className="absolute bottom-[calc(100%+8px)] right-0 z-50 w-[256px] rounded-[10px] bg-[#1a1a1a]/95 p-2 shadow-lg backdrop-blur-md">
+                    <div className="grid max-h-[180px] grid-cols-8 gap-0.5 overflow-y-auto overscroll-contain">
+                      {EMOJI_LIST.map((emoji) => (
+                        <button
+                          key={emoji}
+                          type="button"
+                          className="flex size-[30px] items-center justify-center rounded-[6px] text-[18px] transition-colors hover:bg-white/15"
+                          onClick={() => insertEmoji(emoji)}
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <input
+                  ref={commentInputRef}
+                  type="text"
+                  value={commentText}
+                  onChange={(e) => setCommentText(e.target.value)}
+                  onKeyDown={onCommentKeyDown}
+                  placeholder="Comentar..."
+                  className="w-[130px] bg-transparent py-[6px] text-body-sm text-white outline-none ring-0 placeholder:text-white/50 focus:ring-0"
+                  disabled={!currentUserId || commentSubmitting}
+                />
+                <button
+                  type="button"
+                  onClick={onSubmitComment}
+                  disabled={!currentUserId || commentSubmitting || !commentText.trim()}
+                  className="ml-1 flex items-center justify-center text-white/70 disabled:opacity-40"
+                >
+                  <SendIcon small />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
-      <div className="flex items-center justify-between text-app">
-        <div className="flex items-center gap-4">
+      {/* Text */}
+      <p className="mt-[var(--space-3)] text-body leading-[1.45]">
+        <span className="font-[var(--fw-semibold)]">{post.userName}</span>{" "}
+        {post.text}
+      </p>
+
+      {/* Actions */}
+      <div className="mt-[var(--space-2)] flex items-center justify-between text-app">
+        <div className="flex items-center gap-[var(--space-3)]">
           <button
             type="button"
             className="flex items-center gap-1 p-1 disabled:opacity-50"
@@ -839,78 +1027,30 @@ function FeedCard({ post, currentUserId }: { post: FeedItemDto; currentUserId: s
             disabled={!currentUserId || likeLoading}
             title={liked ? "Quitar like" : "Dar like"}
           >
-            <HeartIcon liked={liked} animating={likeAnimating} />
-            <span className="text-body-sm font-[var(--fw-medium)] tabular-nums">{likeCount}</span>
+            <PlaneIcon liked={liked} animating={likeAnimating} />
           </button>
           <button
             type="button"
             className="p-1 disabled:opacity-50"
-            aria-label={commentOpen ? "Cerrar comentarios" : "Abrir comentarios"}
-            onClick={onToggleCommentsSection}
-            title={commentOpen ? "Cerrar comentarios" : "Abrir comentarios"}
-          >
-            <CommentIcon />
-          </button>
-          <button
-            type="button"
-            className="p-1 disabled:opacity-50"
-            aria-label="Publicar"
+            aria-label="Compartir"
             onClick={onPublish}
             disabled={publishing}
-            title={publishing ? "Publicando..." : "Publicar en Firebase"}
+            title={publishing ? "Publicando..." : "Compartir"}
           >
             <SendIcon />
           </button>
+          <button
+            type="button"
+            className="text-body-sm font-[var(--fw-semibold)] text-primary-token"
+          >
+            Ver plan
+          </button>
         </div>
-        <BookmarkIcon />
+        <button type="button" className="p-1" aria-label="Guardar">
+          <BookmarkIcon />
+        </button>
       </div>
 
-      <p className="mt-[var(--space-2)] text-body leading-[1.45]">{post.text}</p>
-
-      {commentOpen && (
-        <div className="mt-[var(--space-3)] border-t border-app pt-[var(--space-3)]">
-          <p className="text-body-sm font-[var(--fw-semibold)]">Comentarios</p>
-
-          <div className="mt-[var(--space-2)] space-y-[var(--space-2)]">
-            {commentsLoading ? (
-              <p className="text-body-sm text-muted">Cargando comentarios...</p>
-            ) : commentsSection.length === 0 ? (
-              <p className="text-body-sm text-muted">Aun no hay comentarios. Se el primero.</p>
-            ) : (
-              commentsSection.map((comment) => (
-                <p key={comment.commentId} className="text-body-sm leading-[1.35]">
-                  <span className="font-[var(--fw-semibold)]">{getCommentAuthorName(comment)}</span>{" "}
-                  {comment.content}
-                </p>
-              ))
-            )}
-          </div>
-
-          <div className="mt-[var(--space-3)] flex items-center gap-2">
-            <input
-              type="text"
-              value={commentText}
-              onChange={(e) => setCommentText(e.target.value)}
-              onKeyDown={onCommentKeyDown}
-              placeholder="Escribe un comentario..."
-              className="flex-1 rounded-card border border-app bg-app px-3 py-2 text-body-sm outline-none"
-              disabled={!currentUserId || commentSubmitting}
-            />
-            <button
-              type="button"
-              onClick={onSubmitComment}
-              disabled={!currentUserId || commentSubmitting || !commentText.trim()}
-              className="rounded-card border border-app px-3 py-2 text-body-sm font-[var(--fw-semibold)] disabled:opacity-50"
-            >
-              Enviar
-            </button>
-          </div>
-        </div>
-      )}
-
-      <button type="button" className="mt-[var(--space-3)] text-body-sm font-[var(--fw-semibold)] text-primary-token">
-        Ver plan
-      </button>
     </article>
   );
 }
@@ -934,20 +1074,20 @@ function Avatar({ label, image }: { label: string; image?: string | null }) {
   );
 }
 
-function HeartIcon({ liked, animating, small }: { liked: boolean; animating: boolean; small?: boolean }) {
+function PlaneIcon({ liked, animating }: { liked: boolean; animating: boolean }) {
   return (
     <svg
-      width={small ? "18" : "31"}
-      height={small ? "18" : "31"}
+      width="28"
+      height="28"
       viewBox="0 0 24 24"
       fill={liked ? "currentColor" : "none"}
       aria-hidden="true"
-      className={`transition-all duration-150 ${liked ? "text-warning-token" : "text-app"} ${animating ? "scale-[1.2]" : "scale-100"}`}
+      className={`transition-all duration-150 ${liked ? "text-primary-token" : "text-app"} ${animating ? "scale-[1.2]" : "scale-100"}`}
     >
       <path
-        d="M2.5 11.2H8.6L12.6 4.2H14.5L13.5 11.2H20.8L21.8 12.8L13.5 13.8L14.5 20.8H12.6L8.6 13.8H2.5V11.2Z"
+        d="M21 16V14L13 9V3.5C13 2.67 12.33 2 11.5 2C10.67 2 10 2.67 10 3.5V9L2 14V16L10 13.5V19L8 20.5V22L11.5 21L15 22V20.5L13 19V13.5L21 16Z"
         stroke="currentColor"
-        strokeWidth="1.7"
+        strokeWidth="1.5"
         strokeLinejoin="round"
         strokeLinecap="round"
       />
@@ -955,9 +1095,9 @@ function HeartIcon({ liked, animating, small }: { liked: boolean; animating: boo
   );
 }
 
-function CommentIcon() {
+function CommentIcon({ small }: { small?: boolean }) {
   return (
-    <svg width="31" height="31" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <svg width={small ? "16" : "28"} height={small ? "16" : "28"} viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path
         d="M4 5.5A1.5 1.5 0 0 1 5.5 4H18.5A1.5 1.5 0 0 1 20 5.5V14.5A1.5 1.5 0 0 1 18.5 16H9L4 20V5.5Z"
         stroke="currentColor"
@@ -967,11 +1107,34 @@ function CommentIcon() {
   );
 }
 
-function SendIcon() {
+function SendIcon({ small }: { small?: boolean }) {
   return (
-    <svg width="31" height="31" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <svg width={small ? "16" : "28"} height={small ? "16" : "28"} viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path d="M21 3L10 14" stroke="currentColor" strokeWidth="1.7" />
       <path d="M21 3L14.5 21L10 14L3 9.5L21 3Z" stroke="currentColor" strokeWidth="1.7" />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M3 6H5H21" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      <path d="M8 6V4C8 3.45 8.45 3 9 3H15C15.55 3 16 3.45 16 4V6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      <path d="M6 6V20C6 20.55 6.45 21 7 21H17C17.55 21 18 20.55 18 20V6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      <path d="M10 10V17" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      <path d="M14 10V17" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function SmileyIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.7" />
+      <circle cx="9" cy="10" r="1.2" fill="currentColor" />
+      <circle cx="15" cy="10" r="1.2" fill="currentColor" />
+      <path d="M8.5 14.5C9.2 16 10.5 17 12 17C13.5 17 14.8 16 15.5 14.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
     </svg>
   );
 }

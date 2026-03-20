@@ -306,7 +306,7 @@ function MisGastosContent() {
                 )}
               </button>
               <span
-                className={`pointer-events-none absolute bottom-0 h-[2px] bg-warning-token transition-[left,width,opacity] duration-[220ms] [transition-timing-function:var(--ease-standard)] ${
+                className={`pointer-events-none absolute bottom-0 h-[2px] bg-black transition-[left,width,opacity] duration-[220ms] [transition-timing-function:var(--ease-standard)] dark:bg-white ${
                   indicator.ready ? "opacity-100" : "opacity-0"
                 }`}
                 style={{ left: indicator.left, width: indicator.width }}
