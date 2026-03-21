@@ -17,6 +17,7 @@ type CreateCommentInput = {
   planId: number;
   userId: string;
   userName: string;
+  userProfileImage?: string | null;
   content: string;
 };
 
@@ -147,6 +148,7 @@ export async function createCommentRoute(input: CreateCommentInput): Promise<Cre
     planId: input.planId,
     user_id: input.userId,
     user_name: input.userName,
+    profile_image: input.userProfileImage ?? null,
     content,
     likeCount: 0,
     created_at: serverTimestamp(),

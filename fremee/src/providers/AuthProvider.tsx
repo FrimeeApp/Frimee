@@ -171,7 +171,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         setSession(nextSession);
         setUser(nextSession?.user ?? null);
-        const providerTokenFromSession = (nextSession as { provider_token?: string | null } | null)?.provider_token ?? null;
+        const sess = nextSession as { provider_token?: string | null; provider_refresh_token?: string | null } | null;
+        const providerTokenFromSession = sess?.provider_token ?? null;
+        const providerRefreshToken = sess?.provider_refresh_token ?? null;
+
         if (providerTokenFromSession && nextSession?.user?.id) {
           cacheGoogleProviderToken(nextSession.user.id, providerTokenFromSession);
           setGoogleProviderToken(providerTokenFromSession);
@@ -180,6 +183,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           setGoogleProviderToken(null);
         }
+
+        if (providerRefreshToken && nextSession?.user?.id) {
+          void supabase.rpc("fn_user_update_google_refresh_token", {
+            p_refresh_token: providerRefreshToken,
+          });
+        }
+
         await loadUserSnapshot(nextSession?.user ?? null);
 
         if (!cancelled && mountedRef.current) {

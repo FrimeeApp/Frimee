@@ -6,6 +6,7 @@ import AppSidebar from "@/components/common/AppSidebar";
 import LoadingScreen from "@/components/common/LoadingScreen";
 import { useAuth } from "@/providers/AuthProvider";
 import { getPublicUserProfile } from "@/services/api/repositories/users.repository";
+import { sendFriendRequest } from "@/services/api/endpoints/users.endpoint";
 import { listUserRelatedPlans } from "@/services/api/repositories/plans.repository";
 import {
   uploadProfileImage,
@@ -31,6 +32,23 @@ export default function ProfilePage() {
 
   // Follow state (local only — will connect to DB later)
   const [following, setFollowing] = useState(false);
+
+  // Friend request state
+  const [friendRequestSent, setFriendRequestSent] = useState(false);
+  const [sendingFriendRequest, setSendingFriendRequest] = useState(false);
+
+  const handleAddFriend = async () => {
+    if (friendRequestSent || sendingFriendRequest) return;
+    setSendingFriendRequest(true);
+    try {
+      await sendFriendRequest(id);
+      setFriendRequestSent(true);
+    } catch (err) {
+      console.error("[profile] Error sending friend request:", err);
+    } finally {
+      setSendingFriendRequest(false);
+    }
+  };
 
   // Edit state
   const [editing, setEditing] = useState(false);
@@ -280,19 +298,29 @@ export default function ProfilePage() {
                 {isOwnProfile ? "Tu perfil" : `Perfil de ${profileData.nombre}`}
               </p>
 
-              {/* Follow button - other profiles only */}
+              {/* Follow + Add friend buttons - other profiles only */}
               {!isOwnProfile && user && (
-                <button
-                  type="button"
-                  onClick={() => setFollowing((prev) => !prev)}
-                  className={`mt-[var(--space-3)] rounded-full px-6 py-[6px] text-body-sm font-[var(--fw-semibold)] transition-all ${
-                    following
-                      ? "border border-app bg-transparent text-app hover:border-red-400 hover:text-red-400"
-                      : "bg-[var(--text-primary)] text-contrast-token hover:opacity-80"
-                  }`}
-                >
-                  {following ? "Siguiendo" : "Seguir"}
-                </button>
+                <div className="mt-[var(--space-3)] flex gap-[var(--space-2)]">
+                  <button
+                    type="button"
+                    onClick={() => setFollowing((prev) => !prev)}
+                    className={`rounded-full px-6 py-[6px] text-body-sm font-[var(--fw-semibold)] transition-all ${
+                      following
+                        ? "border border-app bg-transparent text-app hover:border-red-400 hover:text-red-400"
+                        : "bg-[var(--text-primary)] text-contrast-token hover:opacity-80"
+                    }`}
+                  >
+                    {following ? "Siguiendo" : "Seguir"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleAddFriend}
+                    disabled={friendRequestSent || sendingFriendRequest}
+                    className="rounded-full border border-app px-6 py-[6px] text-body-sm font-[var(--fw-semibold)] transition-colors hover:bg-surface disabled:opacity-50"
+                  >
+                    {friendRequestSent ? "Solicitud enviada" : sendingFriendRequest ? "..." : "Añadir amigo"}
+                  </button>
+                </div>
               )}
 
               {/* Stats */}

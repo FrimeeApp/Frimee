@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import AppSidebar from "@/components/common/AppSidebar";
 import LoadingScreen from "@/components/common/LoadingScreen";
 import { useAuth } from "@/providers/AuthProvider";
-import { getFeedPage } from "@/services/api/repositories/feed.repository";
+import { getFeedPostsOnly, getFeedLikes } from "@/services/api/repositories/feed.repository";
 import type { FeedItemDto } from "@/services/api/dtos/feed.dto";
 import { publishPlanAsPost } from "@/services/api/repositories/post.repository";
 import { togglePlanLike } from "@/services/api/repositories/likes.repository";
@@ -15,6 +15,16 @@ import {
   type CommentDto,
 } from "@/services/api/repositories/comments.repository";
 import { getPublicUserProfile } from "@/services/api/repositories/users.repository";
+import {
+  listChats,
+  listMensajes,
+  sendMensaje,
+  markChatRead,
+  resolveChatName,
+  resolveChatAvatar,
+  formatChatTime,
+} from "@/services/api/repositories/chat.repository";
+import { createBrowserSupabaseClient } from "@/services/supabase/client";
 
 const EMOJI_LIST = [
   "😀","😃","😄","😁","😆","😅","🤣","😂","🙂","😊",
@@ -35,38 +45,39 @@ const EMOJI_LIST = [
 const COMMENT_AUTHOR_CACHE_TTL_MS = 60_000;
 const commentAuthorCache = new Map<string, { name: string; profileImage: string | null; cachedAt: number }>();
 
-function preloadImages(urls: string[], timeoutMs = 2500) {
-  if (typeof window === "undefined" || urls.length === 0) {
-    return Promise.resolve();
-  }
+const FEED_CACHE_KEY = "fremee:feed:v2";
+const FEED_CACHE_TTL_MS = 5 * 60 * 1000;
 
+function readFeedCache(userId: string): FeedItemDto[] | null {
+  try {
+    const raw = localStorage.getItem(`${FEED_CACHE_KEY}:${userId}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { items: FeedItemDto[]; savedAt: number };
+    if (Date.now() - parsed.savedAt > FEED_CACHE_TTL_MS) return null;
+    return parsed.items;
+  } catch { return null; }
+}
+
+function writeFeedCache(userId: string, items: FeedItemDto[]) {
+  try {
+    localStorage.setItem(`${FEED_CACHE_KEY}:${userId}`, JSON.stringify({ items, savedAt: Date.now() }));
+  } catch { /* ignorar errores de storage */ }
+}
+
+function preloadImagesBackground(urls: string[]) {
   const uniqueUrls = [...new Set(urls.filter(Boolean))];
-  if (uniqueUrls.length === 0) return Promise.resolve();
-
-  const loadAll = Promise.allSettled(
-    uniqueUrls.map(
-      (url) =>
-        new Promise<void>((resolve) => {
-          const img = new Image();
-          img.onload = () => resolve();
-          img.onerror = () => resolve();
-          img.src = url;
-        }),
-    ),
-  ).then(() => undefined);
-
-  const timeout = new Promise<void>((resolve) => {
-    window.setTimeout(resolve, timeoutMs);
+  uniqueUrls.forEach((url) => {
+    const img = new Image();
+    img.src = url;
   });
-
-  return Promise.race([loadAll, timeout]);
 }
 
 export default function FeedPage() {
-  const { user, loading } = useAuth();
+  const { user, loading, profile } = useAuth();
   const currentUserId = user?.id ?? null;
   const [activeFeedTab, setActiveFeedTab] = useState<"following" | "explore">("following");
   const [loadingFeed, setLoadingFeed] = useState(true);
+  const [firstImageReady, setFirstImageReady] = useState(false);
   const [uiPosts, setUiPosts] = useState<FeedItemDto[]>([]);
   const [reloadNonce, setReloadNonce] = useState(0);
   const lastProfileUpdatedAtRef = useRef<string | null>(null);
@@ -85,35 +96,55 @@ export default function FeedPage() {
     let cancelled = false;
 
     const load = async () => {
-      setLoadingFeed(true);
+      // 1. Mostrar caché inmediatamente — sin skeleton si hay datos previos
+      const cached = readFeedCache(currentUserId);
+      if (cached && cached.length > 0) {
+        setUiPosts(cached);
+        setLoadingFeed(false);
+      } else {
+        setLoadingFeed(true);
+      }
+
       try {
-        const items = await getFeedPage({ userId: currentUserId, limit: 20 });
+        // 2. Fetch posts (sin likes) — se muestran en cuanto llegan
+        const posts = await getFeedPostsOnly({ limit: 20 });
         if (cancelled) return;
 
-        const imageUrlsToPreload = items.flatMap((post) => {
-          const urls: string[] = [];
-          if (post.coverImage) urls.push(post.coverImage);
-          if (post.avatarImage) urls.push(post.avatarImage);
-          return urls;
-        });
+        const firstWithImage = posts.find((p) => p.coverImage);
+        if (!firstWithImage) setFirstImageReady(true);
+        setUiPosts(posts);
+        setLoadingFeed(false);
+        writeFeedCache(currentUserId, posts);
 
-        await preloadImages(imageUrlsToPreload);
-        if (cancelled) return;
+        // 3. Precargar imágenes en background — no bloquea nada
+        const imageUrls = posts.flatMap((p) =>
+          [p.coverImage, p.avatarImage].filter((u): u is string => Boolean(u))
+        );
+        preloadImagesBackground(imageUrls);
 
-        setUiPosts(items);
+        // 4. Fetch likes en background — actualiza sin re-renderizar todo
+        const planIds = posts.map((p) => p.plan.id);
+        if (planIds.length > 0) {
+          const { likedSet, counts } = await getFeedLikes({ userId: currentUserId, planIds });
+          if (cancelled) return;
+          setUiPosts((prev) =>
+            prev.map((p) => ({
+              ...p,
+              initiallyLiked: likedSet.has(p.plan.id),
+              initialLikeCount: counts[p.plan.id] ?? 0,
+            }))
+          );
+        }
       } catch (e) {
         console.error("[feed] load error", e);
-        setUiPosts([]);
-      } finally {
+        if (!cached || cached.length === 0) setUiPosts([]);
         if (!cancelled) setLoadingFeed(false);
       }
     };
 
     void load();
 
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [currentUserId, reloadNonce]);
 
   useEffect(() => {
@@ -223,8 +254,17 @@ export default function FeedPage() {
               </div>
 
               <div className="mt-[var(--space-5)]">
-                {loadingFeed ? (
-                  <FeedSkeleton />
+                {loadingFeed || !firstImageReady ? (
+                  <>
+                    <FeedSkeleton />
+                    {!loadingFeed && uiPosts.length > 0 && (
+                      <div className="sr-only" aria-hidden="true">
+                        {uiPosts.filter((p) => p.coverImage).slice(0, 1).map((post) => (
+                          <img key={post.id} src={post.coverImage!} onLoad={() => setFirstImageReady(true)} onError={() => setFirstImageReady(true)} alt="" />
+                        ))}
+                      </div>
+                    )}
+                  </>
                 ) : uiPosts.length === 0 ? (
                   <div className="rounded-modal border border-app bg-surface p-[var(--space-5)] text-body text-muted shadow-elev-1">
                     Aun no hay publicaciones para mostrar.
@@ -232,7 +272,7 @@ export default function FeedPage() {
                 ) : (
                   <div className="space-y-[var(--space-3)]">
                     {uiPosts.map((post, idx) => (
-                      <FeedCard key={post.id} post={post} currentUserId={currentUserId} nextPostHasImage={uiPosts[idx + 1]?.hasImage ?? true} />
+                      <FeedCard key={post.id} post={post} currentUserId={currentUserId} currentUserName={profile?.nombre ?? null} currentUserProfileImage={profile?.profile_image ?? null} nextPostHasImage={uiPosts[idx + 1]?.hasImage ?? true} />
                     ))}
                   </div>
                 )}
@@ -241,7 +281,7 @@ export default function FeedPage() {
 
             <aside className="hidden xl:block">
               <div className="sticky top-[var(--space-8)]">
-                <FeedChatPanel />
+                <FeedChatPanel currentUserId={currentUserId} />
               </div>
             </aside>
           </div>
@@ -251,111 +291,136 @@ export default function FeedPage() {
   );
 }
 
-// Mock chats — will be replaced with real data later
-const MOCK_CHATS = [
-  { id: "1", name: "Ana García", avatar: null, lastMessage: "Nos vemos mañana!", time: "14:32", unread: true, isGroup: false },
-  { id: "2", name: "Plan Roma 🇮🇹", avatar: null, lastMessage: "He reservado el hotel", time: "12:05", unread: true, isGroup: true },
-  { id: "3", name: "Carlos López", avatar: null, lastMessage: "Genial, gracias!", time: "Ayer", unread: false, isGroup: false },
-  { id: "4", name: "María Ruiz", avatar: null, lastMessage: "¿Quedamos el viernes?", time: "Ayer", unread: false, isGroup: false },
-  { id: "5", name: "Plan Barcelona", avatar: null, lastMessage: "Yo llego el sábado", time: "Lun", unread: false, isGroup: true },
-  { id: "6", name: "Pedro Sánchez", avatar: null, lastMessage: "Perfecto 👍", time: "Lun", unread: false, isGroup: false },
-];
-
-type FeedChatMessage = { id: string; senderId: string; senderName: string; text: string; time: string };
-
-function getFeedChatMessages(chat: typeof MOCK_CHATS[number]): FeedChatMessage[] {
-  if (chat.isGroup) {
-    return [
-      { id: "m1", senderId: "u1", senderName: "Ana García", text: "Hola!", time: "10:02" },
-      { id: "m2", senderId: "u1", senderName: "Ana García", text: "Alguien mira vuelos?", time: "10:03" },
-      { id: "m3", senderId: "me", senderName: "", text: "Sí, los vi ayer", time: "10:05" },
-      { id: "m4", senderId: "u2", senderName: "Carlos", text: chat.lastMessage, time: chat.time },
-    ];
-  }
-  return [
-    { id: "m1", senderId: "other", senderName: chat.name, text: "Hola! Qué tal?", time: "10:02" },
-    { id: "m2", senderId: "me", senderName: "", text: "Hey! Todo bien", time: "10:05" },
-    { id: "m3", senderId: "other", senderName: chat.name, text: chat.lastMessage, time: chat.time },
-  ];
-}
-
-function FeedChatPanel() {
+function FeedChatPanel({ currentUserId }: { currentUserId: string | null }) {
+  const supabase = createBrowserSupabaseClient();
+  const [chats, setChats] = useState<import("@/services/api/repositories/chat.repository").ChatListItem[]>([]);
   const [openChatId, setOpenChatId] = useState<string | null>(null);
-  const [message, setMessage] = useState("");
-  const openChat = MOCK_CHATS.find((c) => c.id === openChatId);
+  const [messages, setMessages] = useState<import("@/services/api/repositories/chat.repository").MensajeRow[]>([]);
+  const [msgLoading, setMsgLoading] = useState(false);
+  const [text, setText] = useState("");
+  const [sending, setSending] = useState(false);
+  const bottomRef = useRef<HTMLDivElement | null>(null);
 
-  if (openChat) {
+  const openChat = chats.find((c) => c.chat_id === openChatId) ?? null;
+
+  useEffect(() => {
+    if (!currentUserId) return;
+    void listChats().then(setChats).catch(console.error);
+  }, [currentUserId]);
+
+  // Cargar mensajes al abrir chat
+  useEffect(() => {
+    if (!openChatId) return;
+    setMsgLoading(true);
+    void listMensajes({ chatId: openChatId })
+      .then(setMessages)
+      .catch(console.error)
+      .finally(() => setMsgLoading(false));
+    void markChatRead(openChatId);
+  }, [openChatId]);
+
+  // Realtime mensajes
+  useEffect(() => {
+    if (!openChatId || !openChat) return;
+    const channel = supabase
+      .channel(`feed-chat:${openChatId}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "mensajes", filter: `chat_id=eq.${openChatId}` },
+        (payload) => {
+          const row = payload.new as { id: number; sender_id: string; texto: string; created_at: string };
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === row.id)) return prev;
+            const miembro = openChat.miembros.find((m) => m.id === row.sender_id);
+            return [...prev, { id: row.id, sender_id: row.sender_id, sender_nombre: miembro?.nombre ?? "", sender_profile_image: miembro?.profile_image ?? null, texto: row.texto, created_at: row.created_at }];
+          });
+          void markChatRead(openChatId);
+        })
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [openChatId, openChat, supabase]);
+
+  // Scroll al último mensaje
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const onSend = async () => {
+    const trimmed = text.trim();
+    if (!trimmed || sending || !openChatId) return;
+    setText("");
+    setSending(true);
+    try {
+      await sendMensaje({ chatId: openChatId, texto: trimmed });
+    } catch (e) {
+      console.error("[feed-chat] Error enviando:", e);
+      setText(trimmed);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  if (openChat && currentUserId) {
+    const chatName = resolveChatName(openChat, currentUserId);
+    const chatAvatar = resolveChatAvatar(openChat, currentUserId);
+
     return (
       <div className="pt-[var(--space-10)]">
-        {/* Chat header */}
         <div className="flex items-center gap-[var(--space-2)]">
-          <button
-            type="button"
-            onClick={() => { setOpenChatId(null); setMessage(""); }}
-            className="flex size-[28px] items-center justify-center rounded-full transition-colors hover:bg-surface"
-            aria-label="Volver"
-          >
+          <button type="button" onClick={() => { setOpenChatId(null); setText(""); void listChats().then(setChats); }}
+            className="flex size-[28px] items-center justify-center rounded-full transition-colors hover:bg-surface" aria-label="Volver">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[16px]">
               <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
-          <div className="flex avatar-sm items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-[11px] font-[var(--fw-semibold)] text-app">
-            {openChat.name[0].toUpperCase()}
+          <div className="avatar-sm flex items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-[11px] font-[var(--fw-semibold)] text-app">
+            {chatAvatar ? <img src={chatAvatar} alt={chatName} className="h-full w-full object-cover" referrerPolicy="no-referrer" /> : (chatName[0] ?? "?").toUpperCase()}
           </div>
-          <span className="min-w-0 truncate text-body-sm font-[var(--fw-semibold)]">{openChat.name}</span>
+          <span className="min-w-0 truncate text-body-sm font-[var(--fw-semibold)]">{chatName}</span>
         </div>
 
-        {/* Messages */}
-        <div className="mt-[var(--space-4)] flex max-h-[340px] flex-col justify-end overflow-y-auto overscroll-contain">
-          <div className="space-y-[1px]">
-            {getFeedChatMessages(openChat).map((msg, idx, arr) => {
-              const isMe = msg.senderId === "me";
-              const prevMsg = arr[idx - 1];
-              const isFirstInGroup = !prevMsg || prevMsg.senderId !== msg.senderId;
-
-              return (
-                <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"} ${isFirstInGroup ? "mt-[var(--space-2)]" : "mt-[2px]"}`}>
-                  {!isMe && openChat.isGroup && (
-                    <div className="mr-[6px] w-[20px] shrink-0">
-                      {isFirstInGroup && (
-                        <div className="flex size-[20px] items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-[9px] font-[var(--fw-semibold)] text-app">
-                          {msg.senderName[0].toUpperCase()}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  <div className={`max-w-[85%] rounded-[14px] px-3 py-[6px] ${
-                    isMe
-                      ? "bg-[var(--text-primary)] text-contrast-token"
-                      : "bg-surface-inset"
-                  }`}>
-                    {!isMe && openChat.isGroup && isFirstInGroup && (
-                      <p className="mb-[2px] text-[10px] font-[var(--fw-semibold)] text-muted">{msg.senderName}</p>
+        <div className="scrollbar-thin mt-[var(--space-4)] flex max-h-[340px] flex-col justify-end overflow-y-auto overscroll-contain">
+          {msgLoading ? (
+            <p className="py-4 text-center text-body-sm text-muted">Cargando...</p>
+          ) : (
+            <div className="space-y-[1px]">
+              {messages.map((msg, idx, arr) => {
+                const isMe = msg.sender_id === currentUserId;
+                const prevMsg = arr[idx - 1];
+                const isFirstInGroup = !prevMsg || prevMsg.sender_id !== msg.sender_id;
+                return (
+                  <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"} ${isFirstInGroup ? "mt-[var(--space-2)]" : "mt-[2px]"}`}>
+                    {!isMe && openChat.tipo === "GRUPO" && (
+                      <div className="mr-[6px] w-[20px] shrink-0">
+                        {isFirstInGroup && (
+                          <div className="flex size-[20px] items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-[9px] font-[var(--fw-semibold)] text-app">
+                            {msg.sender_profile_image
+                              ? <img src={msg.sender_profile_image} alt={msg.sender_nombre} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                              : (msg.sender_nombre[0] ?? "?").toUpperCase()}
+                          </div>
+                        )}
+                      </div>
                     )}
-                    <p className="text-body-sm">{msg.text}</p>
-                    <p className={`mt-[2px] text-right text-[10px] ${isMe ? "text-contrast-token/60" : "text-muted"}`}>{msg.time}</p>
+                    <div className={`max-w-[85%] rounded-[14px] px-3 py-[6px] ${isMe ? "bg-[var(--text-primary)] text-contrast-token" : "bg-surface-inset"}`}>
+                      {!isMe && openChat.tipo === "GRUPO" && isFirstInGroup && (
+                        <p className="mb-[2px] text-[10px] font-[var(--fw-semibold)] text-muted">{msg.sender_nombre}</p>
+                      )}
+                      <p className="text-body-sm">{msg.texto}</p>
+                      <p className={`mt-[2px] text-right text-[10px] ${isMe ? "text-contrast-token/60" : "text-muted"}`}>{formatChatTime(msg.created_at)}</p>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+              <div ref={bottomRef} />
+            </div>
+          )}
         </div>
 
-        {/* Input */}
         <div className="mt-[var(--space-3)] flex items-center gap-[var(--space-2)]">
-          <input
-            type="text"
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
+          <input type="text" value={text} onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void onSend(); } }}
             placeholder="Escribe un mensaje..."
-            className="min-w-0 flex-1 rounded-full border border-app bg-surface px-3 py-[6px] text-body-sm text-app outline-none transition-colors focus:border-[var(--border-strong)]"
-          />
-          <button
-            type="button"
-            disabled={!message.trim()}
-            className="flex size-[30px] shrink-0 items-center justify-center rounded-full bg-[var(--text-primary)] text-contrast-token transition-opacity hover:opacity-80 disabled:opacity-30"
-            aria-label="Enviar"
-          >
+            className="min-w-0 flex-1 rounded-full border border-app bg-surface px-3 py-[6px] text-body-sm text-app outline-none transition-colors focus:border-[var(--border-strong)]" />
+          <button type="button" onClick={() => void onSend()} disabled={!text.trim() || sending}
+            className="flex size-[30px] shrink-0 items-center justify-center rounded-full bg-[var(--text-primary)] text-contrast-token transition-opacity hover:opacity-80 disabled:opacity-30" aria-label="Enviar">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[14px]">
               <path d="M22 2L11 13" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
               <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
@@ -373,32 +438,33 @@ function FeedChatPanel() {
         <Link href="/messages" className="text-body-sm text-muted transition-opacity hover:opacity-70">Ver todos</Link>
       </div>
       <div className="mt-[var(--space-4)] space-y-[2px]">
-        {MOCK_CHATS.slice(0, 4).map((chat) => (
-          <button
-            key={chat.id}
-            type="button"
-            onClick={() => setOpenChatId(chat.id)}
-            className="flex w-full items-center gap-[var(--space-3)] rounded-[10px] px-2 py-[10px] text-left transition-colors hover:bg-surface"
-          >
-            <div className="relative shrink-0">
-              <div className="flex avatar-md items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">
-                {chat.avatar ? (
-                  <img src={chat.avatar} alt={chat.name} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
-                ) : (
-                  chat.name[0].toUpperCase()
-                )}
-              </div>
-              {chat.unread && (
-                <span className="absolute -right-[2px] -top-[2px] size-[10px] rounded-full border-2 border-[var(--bg)] bg-[#ff6a3d]" />
-              )}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className={`truncate text-body-sm ${chat.unread ? "font-[var(--fw-semibold)] text-app" : "text-app"}`}>{chat.name}</p>
-              <p className={`truncate text-[12px] leading-[16px] ${chat.unread ? "font-[var(--fw-medium)] text-app" : "text-muted"}`}>{chat.lastMessage}</p>
-            </div>
-            <span className="shrink-0 text-[11px] text-muted">{chat.time}</span>
-          </button>
-        ))}
+        {chats.length === 0 ? (
+          <p className="text-body-sm text-muted">No tienes conversaciones aún</p>
+        ) : (
+          chats.slice(0, 4).map((chat) => {
+            const name = resolveChatName(chat, currentUserId ?? "");
+            const avatar = resolveChatAvatar(chat, currentUserId ?? "");
+            const hasUnread = chat.unread_count > 0;
+            return (
+              <button key={chat.chat_id} type="button" onClick={() => setOpenChatId(chat.chat_id)}
+                className="flex w-full items-center gap-[var(--space-3)] rounded-[10px] px-2 py-[10px] text-left transition-colors hover:bg-surface">
+                <div className="relative shrink-0">
+                  <div className="avatar-md flex items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">
+                    {avatar ? <img src={avatar} alt={name} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                      : chat.tipo === "GRUPO" ? <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[16px] text-muted"><circle cx="9" cy="7" r="3" stroke="currentColor" strokeWidth="1.6" /><path d="M2 19c1-3 3.5-4.5 7-4.5s6 1.5 7 4.5" stroke="currentColor" strokeWidth="1.6" /></svg>
+                      : (name[0] ?? "?").toUpperCase()}
+                  </div>
+                  {hasUnread && <span className="absolute -right-[2px] -top-[2px] size-[10px] rounded-full border-2 border-[var(--bg)] bg-[#ff6a3d]" />}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className={`truncate text-body-sm ${hasUnread ? "font-[var(--fw-semibold)]" : ""} text-app`}>{name}</p>
+                  <p className={`truncate text-[12px] leading-[16px] ${hasUnread ? "font-[var(--fw-medium)] text-app" : "text-muted"}`}>{chat.last_message ?? ""}</p>
+                </div>
+                <span className="shrink-0 text-[11px] text-muted">{formatChatTime(chat.last_message_at)}</span>
+              </button>
+            );
+          })
+        )}
       </div>
     </div>
   );
@@ -450,7 +516,7 @@ function FeedSkeleton() {
   );
 }
 
-function FeedCard({ post, currentUserId, nextPostHasImage }: { post: FeedItemDto; currentUserId: string | null; nextPostHasImage: boolean }) {
+function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImage, nextPostHasImage }: { post: FeedItemDto; currentUserId: string | null; currentUserName: string | null; currentUserProfileImage: string | null; nextPostHasImage: boolean }) {
   const [publishing, setPublishing] = useState(false);
   const [liked, setLiked] = useState(post.initiallyLiked);
   const [likeCount, setLikeCount] = useState(post.initialLikeCount);
@@ -512,8 +578,20 @@ function FeedCard({ post, currentUserId, nextPostHasImage }: { post: FeedItemDto
 
     const fetchAvatars = async () => {
       const results: Record<string, string | null> = {};
+
+      // Inyectar datos del usuario logueado directamente (evita RLS)
+      if (currentUserId && missing.includes(currentUserId)) {
+        const currentUserProfileImage = post.avatarImage ?? null;
+        results[currentUserId] = currentUserProfileImage;
+        commentAuthorCache.set(currentUserId, {
+          name: currentUserName ?? "Usuario",
+          profileImage: currentUserProfileImage,
+          cachedAt: Date.now(),
+        });
+      }
+
       await Promise.all(
-        missing.map(async (uid) => {
+        missing.filter((uid) => uid !== currentUserId).map(async (uid) => {
           const cached = commentAuthorCache.get(uid);
           if (cached && Date.now() - cached.cachedAt < COMMENT_AUTHOR_CACHE_TTL_MS) {
             results[uid] = cached.profileImage;
@@ -607,25 +685,13 @@ function FeedCard({ post, currentUserId, nextPostHasImage }: { post: FeedItemDto
 
     setCommentSubmitting(true);
     try {
-      const cachedCurrentUser = commentAuthorCache.get(currentUserId);
-      let currentUserName =
-        cachedCurrentUser && Date.now() - cachedCurrentUser.cachedAt < COMMENT_AUTHOR_CACHE_TTL_MS
-          ? cachedCurrentUser.name
-          : "";
-      if (!currentUserName) {
-        const profile = await getPublicUserProfile(currentUserId);
-        currentUserName = profile?.nombre?.trim() || "Usuario";
-        commentAuthorCache.set(currentUserId, {
-          name: currentUserName,
-          profileImage: profile?.profile_image ?? null,
-          cachedAt: Date.now(),
-        });
-      }
+      const nameToStore = currentUserName?.trim() || "Usuario";
 
       await createComment({
         planId: post.plan.id,
         userId: currentUserId,
-        userName: currentUserName,
+        userName: nameToStore,
+        userProfileImage: currentUserProfileImage,
         content,
       });
       setCommentText("");
@@ -644,6 +710,11 @@ function FeedCard({ post, currentUserId, nextPostHasImage }: { post: FeedItemDto
   };
 
   const getCommentAuthorName = (comment: CommentDto) => {
+    if (comment.userId === currentUserId && currentUserName) return currentUserName;
+    const cached = commentAuthorCache.get(comment.userId);
+    if (cached && Date.now() - cached.cachedAt < COMMENT_AUTHOR_CACHE_TTL_MS && cached.name && cached.name !== "Usuario") {
+      return cached.name;
+    }
     return comment.userName?.trim() || "Usuario";
   };
 
@@ -732,7 +803,7 @@ function FeedCard({ post, currentUserId, nextPostHasImage }: { post: FeedItemDto
             )}
             {/* Expanded comments */}
             {commentsExpanded && commentsSection.length > 0 && (
-              <div className="mt-[var(--space-2)] max-h-[120px] space-y-[var(--space-2)] overflow-y-auto overscroll-contain">
+              <div className="scrollbar-thin mt-[var(--space-2)] max-h-[120px] space-y-[var(--space-2)] overflow-y-auto overscroll-contain">
                 {commentsSection.map((comment) => {
                   const avatarImg = authorAvatars[comment.userId] ?? null;
                   const initial = (getCommentAuthorName(comment)[0] || "U").toUpperCase();
@@ -766,7 +837,7 @@ function FeedCard({ post, currentUserId, nextPostHasImage }: { post: FeedItemDto
               </button>
               {emojiPickerOpen && (
                 <div className="absolute bottom-[calc(100%+8px)] left-0 z-50 w-[256px] rounded-[10px] bg-[#1a1a1a]/95 p-2 shadow-lg backdrop-blur-md">
-                  <div className="grid max-h-[180px] grid-cols-8 gap-0.5 overflow-y-auto overscroll-contain">
+                  <div className="scrollbar-thin grid max-h-[180px] grid-cols-8 gap-0.5 overflow-x-hidden overflow-y-auto overscroll-contain">
                     {EMOJI_LIST.map((emoji) => (
                       <button key={emoji} type="button" className="flex size-[30px] items-center justify-center rounded-[6px] text-[18px] transition-colors hover:bg-white/15" onClick={() => insertEmoji(emoji)}>
                         {emoji}
@@ -833,7 +904,7 @@ function FeedCard({ post, currentUserId, nextPostHasImage }: { post: FeedItemDto
 
           {/* Expanded comments */}
           {commentsExpanded && commentsSection.length > 0 && (
-            <div className="mt-[var(--space-2)] max-h-[120px] space-y-[var(--space-2)] overflow-y-auto overscroll-contain px-[var(--space-1)]">
+            <div className="scrollbar-thin mt-[var(--space-2)] max-h-[120px] space-y-[var(--space-2)] overflow-y-auto overscroll-contain px-[var(--space-1)]">
               {commentsSection.map((comment) => {
                 const avatarImg = authorAvatars[comment.userId] ?? null;
                 const initial = (getCommentAuthorName(comment)[0] || "U").toUpperCase();
@@ -868,7 +939,7 @@ function FeedCard({ post, currentUserId, nextPostHasImage }: { post: FeedItemDto
             </button>
             {emojiPickerOpen && (
               <div className="absolute bottom-[calc(100%+8px)] left-0 z-50 w-[256px] rounded-[10px] bg-[#1a1a1a]/95 p-2 shadow-lg backdrop-blur-md">
-                <div className="grid max-h-[180px] grid-cols-8 gap-0.5 overflow-y-auto overscroll-contain">
+                <div className="scrollbar-thin grid max-h-[180px] grid-cols-8 gap-0.5 overflow-x-hidden overflow-y-auto overscroll-contain">
                   {EMOJI_LIST.map((emoji) => (
                     <button key={emoji} type="button" className="flex size-[30px] items-center justify-center rounded-[6px] text-[18px] transition-colors hover:bg-white/15" onClick={() => insertEmoji(emoji)}>
                       {emoji}
