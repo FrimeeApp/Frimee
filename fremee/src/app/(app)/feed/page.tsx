@@ -1,8 +1,7 @@
 ﻿"use client";
 
-import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import type { GlobeMethods } from "react-globe.gl";
 import AppSidebar from "@/components/common/AppSidebar";
 import LoadingScreen from "@/components/common/LoadingScreen";
 import { useAuth } from "@/providers/AuthProvider";
@@ -35,14 +34,6 @@ const EMOJI_LIST = [
 ];
 const COMMENT_AUTHOR_CACHE_TTL_MS = 60_000;
 const commentAuthorCache = new Map<string, { name: string; profileImage: string | null; cachedAt: number }>();
-const Globe = dynamic(() => import("react-globe.gl"), {
-  ssr: false,
-  loading: () => (
-    <div className="flex h-[320px] w-full items-center justify-center">
-      <span className="text-body-sm text-muted">Cargando mapa...</span>
-    </div>
-  ),
-});
 
 function preloadImages(urls: string[], timeoutMs = 2500) {
   if (typeof window === "undefined" || urls.length === 0) {
@@ -74,7 +65,6 @@ function preloadImages(urls: string[], timeoutMs = 2500) {
 export default function FeedPage() {
   const { user, loading } = useAuth();
   const currentUserId = user?.id ?? null;
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [activeFeedTab, setActiveFeedTab] = useState<"following" | "explore">("following");
   const [loadingFeed, setLoadingFeed] = useState(true);
   const [uiPosts, setUiPosts] = useState<FeedItemDto[]>([]);
@@ -182,12 +172,10 @@ export default function FeedPage() {
   return (
     <div className="min-h-dvh bg-app text-app">
       <div className="relative mx-auto min-h-dvh max-w-[1440px]">
-        <AppSidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed((prev) => !prev)} />
+        <AppSidebar />
 
         <main
-          className={`px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-4)] transition-[padding] duration-[var(--duration-slow)] [transition-timing-function:var(--ease-standard)] lg:py-[var(--space-8)] lg:pr-[var(--space-14)] ${
-            sidebarCollapsed ? "lg:pl-[56px]" : "lg:pl-[136px]"
-          }`}
+          className={`px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-4)] transition-[padding] duration-[var(--duration-slow)] [transition-timing-function:var(--ease-standard)] md:py-[var(--space-8)] md:pr-[var(--space-14)]`}
         >
           <div className="mx-auto grid max-w-[1160px] grid-cols-1 gap-[var(--space-8)] xl:grid-cols-[minmax(0,1fr)_300px] xl:gap-[var(--space-10)]">
             <section className="mx-auto w-full max-w-[760px]">
@@ -215,6 +203,16 @@ export default function FeedPage() {
                 >
                   Explorar
                 </button>
+                <Link
+                  href="/search"
+                  aria-label="Buscar"
+                  className="ml-auto pb-[var(--space-2)] text-app transition-opacity duration-[var(--duration-base)] hover:opacity-70"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[20px]">
+                    <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.8" />
+                    <path d="M16 16L20.5 20.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                  </svg>
+                </Link>
                 <span
                   className={`pointer-events-none absolute bottom-0 h-[2px] bg-black transition-[left,width,opacity] duration-[220ms] [transition-timing-function:var(--ease-standard)] dark:bg-white ${
                     tabIndicator.ready ? "opacity-100" : "opacity-0"
@@ -232,28 +230,18 @@ export default function FeedPage() {
                     Aun no hay publicaciones para mostrar.
                   </div>
                 ) : (
-                  <div className="space-y-[var(--space-6)]">
-                    {uiPosts.map((post) => (
-                      <FeedCard key={post.id} post={post} currentUserId={currentUserId} />
+                  <div className="space-y-[var(--space-3)]">
+                    {uiPosts.map((post, idx) => (
+                      <FeedCard key={post.id} post={post} currentUserId={currentUserId} nextPostHasImage={uiPosts[idx + 1]?.hasImage ?? true} />
                     ))}
                   </div>
                 )}
               </div>
             </section>
 
-            <aside className="hidden pt-[var(--space-10)] xl:block">
-              <h3 className="text-[var(--font-h5)] font-[var(--fw-semibold)] leading-[var(--lh-h5)]">Actividad reciente</h3>
-              <div className="mt-[var(--space-4)]">
-                {loadingFeed ? (
-                  <div className="flex h-[340px] items-center justify-center text-body-sm text-muted">
-                    Cargando mapa...
-                  </div>
-                ) : (
-                  <RecentActivityGlobe
-                    avatarImage={uiPosts[0]?.avatarImage ?? null}
-                    avatarLabel={uiPosts[0]?.avatarLabel ?? "F"}
-                  />
-                )}
+            <aside className="hidden xl:block">
+              <div className="sticky top-[var(--space-8)]">
+                <FeedChatPanel />
               </div>
             </aside>
           </div>
@@ -263,391 +251,154 @@ export default function FeedPage() {
   );
 }
 
-function RecentActivityGlobe({
-  avatarImage,
-  avatarLabel,
-}: {
-  avatarImage: string | null;
-  avatarLabel: string;
-}) {
-  type GlobeMarker = {
-    id: string;
-    locationName: string;
-    lat: number;
-    lng: number;
-    altitude: number;
-    image: string | null;
-    label: string;
-  };
+// Mock chats — will be replaced with real data later
+const MOCK_CHATS = [
+  { id: "1", name: "Ana García", avatar: null, lastMessage: "Nos vemos mañana!", time: "14:32", unread: true, isGroup: false },
+  { id: "2", name: "Plan Roma 🇮🇹", avatar: null, lastMessage: "He reservado el hotel", time: "12:05", unread: true, isGroup: true },
+  { id: "3", name: "Carlos López", avatar: null, lastMessage: "Genial, gracias!", time: "Ayer", unread: false, isGroup: false },
+  { id: "4", name: "María Ruiz", avatar: null, lastMessage: "¿Quedamos el viernes?", time: "Ayer", unread: false, isGroup: false },
+  { id: "5", name: "Plan Barcelona", avatar: null, lastMessage: "Yo llego el sábado", time: "Lun", unread: false, isGroup: true },
+  { id: "6", name: "Pedro Sánchez", avatar: null, lastMessage: "Perfecto 👍", time: "Lun", unread: false, isGroup: false },
+];
 
-  const globeRef = useRef<GlobeMethods | undefined>(undefined);
-  const globeContainerRef = useRef<HTMLDivElement | null>(null);
-  const isDraggingRef = useRef(false);
-  const dragPointerIdRef = useRef<number | null>(null);
-  const lastPointerRef = useRef<{ x: number; y: number } | null>(null);
-  const autoRotateFrameRef = useRef<number | null>(null);
-  const selectedMarkerIdRef = useRef<string | null>(null);
-  const [globeReady, setGlobeReady] = useState(false);
-  const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null);
-  const globeViewportWidth = 320;
-  const globeViewportHeight = 340;
-  const globeRenderWidth = 420;
-  const globeRenderHeight = 420;
-  const lockedAltitude = 1.92;
-  const viewRef = useRef({ lat: 12, lng: 18, altitude: lockedAltitude });
-  const htmlMarkers: GlobeMarker[] = [
-    {
-      id: "tokyo",
-      locationName: "Tokyo",
-      lat: 35.6762,
-      lng: 139.6503,
-      altitude: 0.04,
-      image: avatarImage,
-      label: avatarLabel,
-    },
-    {
-      id: "madrid",
-      locationName: "Madrid",
-      lat: 40.4168,
-      lng: -3.7038,
-      altitude: 0.04,
-      image: null,
-      label: "M",
-    },
-    {
-      id: "new-york",
-      locationName: "New York",
-      lat: 40.7128,
-      lng: -74.006,
-      altitude: 0.04,
-      image: null,
-      label: "N",
-    },
-    {
-      id: "sydney",
-      locationName: "Sydney",
-      lat: -33.8688,
-      lng: 151.2093,
-      altitude: 0.04,
-      image: null,
-      label: "S",
-    },
-    {
-      id: "sao-paulo",
-      locationName: "Sao Paulo",
-      lat: -23.5505,
-      lng: -46.6333,
-      altitude: 0.04,
-      image: null,
-      label: "B",
-    },
-    {
-      id: "london",
-      locationName: "London",
-      lat: 51.5074,
-      lng: -0.1278,
-      altitude: 0.04,
-      image: null,
-      label: "L",
-    },
-    {
-      id: "paris",
-      locationName: "Paris",
-      lat: 48.8566,
-      lng: 2.3522,
-      altitude: 0.04,
-      image: null,
-      label: "P",
-    },
-    {
-      id: "singapore",
-      locationName: "Singapore",
-      lat: 1.3521,
-      lng: 103.8198,
-      altitude: 0.04,
-      image: null,
-      label: "G",
-    },
-    {
-      id: "nairobi",
-      locationName: "Nairobi",
-      lat: -1.2921,
-      lng: 36.8219,
-      altitude: 0.04,
-      image: null,
-      label: "K",
-    },
-    {
-      id: "dubai",
-      locationName: "Dubai",
-      lat: 25.2048,
-      lng: 55.2708,
-      altitude: 0.04,
-      image: null,
-      label: "D",
-    },
+type FeedChatMessage = { id: string; senderId: string; senderName: string; text: string; time: string };
+
+function getFeedChatMessages(chat: typeof MOCK_CHATS[number]): FeedChatMessage[] {
+  if (chat.isGroup) {
+    return [
+      { id: "m1", senderId: "u1", senderName: "Ana García", text: "Hola!", time: "10:02" },
+      { id: "m2", senderId: "u1", senderName: "Ana García", text: "Alguien mira vuelos?", time: "10:03" },
+      { id: "m3", senderId: "me", senderName: "", text: "Sí, los vi ayer", time: "10:05" },
+      { id: "m4", senderId: "u2", senderName: "Carlos", text: chat.lastMessage, time: chat.time },
+    ];
+  }
+  return [
+    { id: "m1", senderId: "other", senderName: chat.name, text: "Hola! Qué tal?", time: "10:02" },
+    { id: "m2", senderId: "me", senderName: "", text: "Hey! Todo bien", time: "10:05" },
+    { id: "m3", senderId: "other", senderName: chat.name, text: chat.lastMessage, time: chat.time },
   ];
+}
 
-  useEffect(() => {
-    selectedMarkerIdRef.current = selectedMarkerId;
-  }, [selectedMarkerId]);
+function FeedChatPanel() {
+  const [openChatId, setOpenChatId] = useState<string | null>(null);
+  const [message, setMessage] = useState("");
+  const openChat = MOCK_CHATS.find((c) => c.id === openChatId);
 
-  const centerMarker = (marker: GlobeMarker) => {
-    const nextView = {
-      lat: marker.lat,
-      lng: marker.lng,
-      altitude: lockedAltitude,
-    };
+  if (openChat) {
+    return (
+      <div className="pt-[var(--space-10)]">
+        {/* Chat header */}
+        <div className="flex items-center gap-[var(--space-2)]">
+          <button
+            type="button"
+            onClick={() => { setOpenChatId(null); setMessage(""); }}
+            className="flex size-[28px] items-center justify-center rounded-full transition-colors hover:bg-surface"
+            aria-label="Volver"
+          >
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[16px]">
+              <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+          <div className="flex avatar-sm items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-[11px] font-[var(--fw-semibold)] text-app">
+            {openChat.name[0].toUpperCase()}
+          </div>
+          <span className="min-w-0 truncate text-body-sm font-[var(--fw-semibold)]">{openChat.name}</span>
+        </div>
 
-    viewRef.current = nextView;
-    selectedMarkerIdRef.current = marker.id;
-    setSelectedMarkerId(marker.id);
-    globeRef.current?.pointOfView(nextView, 900);
-  };
+        {/* Messages */}
+        <div className="mt-[var(--space-4)] flex max-h-[340px] flex-col justify-end overflow-y-auto overscroll-contain">
+          <div className="space-y-[1px]">
+            {getFeedChatMessages(openChat).map((msg, idx, arr) => {
+              const isMe = msg.senderId === "me";
+              const prevMsg = arr[idx - 1];
+              const isFirstInGroup = !prevMsg || prevMsg.senderId !== msg.senderId;
 
-  useEffect(() => {
-    if (!globeReady) return;
-    let cancelled = false;
-    let retryFrameId: number | null = null;
-    let detach: (() => void) | null = null;
+              return (
+                <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"} ${isFirstInGroup ? "mt-[var(--space-2)]" : "mt-[2px]"}`}>
+                  {!isMe && openChat.isGroup && (
+                    <div className="mr-[6px] w-[20px] shrink-0">
+                      {isFirstInGroup && (
+                        <div className="flex size-[20px] items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-[9px] font-[var(--fw-semibold)] text-app">
+                          {msg.senderName[0].toUpperCase()}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <div className={`max-w-[85%] rounded-[14px] px-3 py-[6px] ${
+                    isMe
+                      ? "bg-[var(--text-primary)] text-contrast-token"
+                      : "bg-surface-inset"
+                  }`}>
+                    {!isMe && openChat.isGroup && isFirstInGroup && (
+                      <p className="mb-[2px] text-[10px] font-[var(--fw-semibold)] text-muted">{msg.senderName}</p>
+                    )}
+                    <p className="text-body-sm">{msg.text}</p>
+                    <p className={`mt-[2px] text-right text-[10px] ${isMe ? "text-contrast-token/60" : "text-muted"}`}>{msg.time}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
 
-    const tryAttachInteractions = () => {
-      if (cancelled) return;
-
-      const interactionLayer = globeContainerRef.current;
-      const controls = globeRef.current?.controls?.();
-      const renderer = globeRef.current?.renderer?.();
-      const canvas = renderer?.domElement;
-
-      if (!interactionLayer || !controls || !canvas) {
-        retryFrameId = window.requestAnimationFrame(tryAttachInteractions);
-        return;
-      }
-
-      viewRef.current = { lat: 12, lng: 18, altitude: lockedAltitude };
-      globeRef.current?.pointOfView(viewRef.current, 0);
-
-      controls.autoRotate = false;
-      controls.enableZoom = false;
-      controls.enablePan = false;
-      controls.enableRotate = false;
-      controls.zoomSpeed = 0;
-      controls.update();
-
-      const applyView = () => {
-        globeRef.current?.pointOfView(viewRef.current, 0);
-      };
-
-      const tickAutoRotate = () => {
-        if (!isDraggingRef.current && !selectedMarkerIdRef.current) {
-          viewRef.current = {
-            ...viewRef.current,
-            lng: ((((viewRef.current.lng + 0.025) + 180) % 360) + 360) % 360 - 180,
-          };
-          applyView();
-        }
-
-        autoRotateFrameRef.current = window.requestAnimationFrame(tickAutoRotate);
-      };
-
-      const preventZoom = (event: WheelEvent | TouchEvent) => {
-        event.preventDefault();
-        event.stopPropagation();
-        applyView();
-      };
-
-      const clearSelection = () => {
-        setSelectedMarkerId(null);
-      };
-
-      const onPointerDown = (event: PointerEvent) => {
-        const eventTarget = event.target;
-        if (eventTarget instanceof Element && eventTarget.closest("[data-globe-marker='true']")) {
-          return;
-        }
-
-        event.preventDefault();
-        clearSelection();
-        isDraggingRef.current = true;
-        dragPointerIdRef.current = event.pointerId;
-        lastPointerRef.current = { x: event.clientX, y: event.clientY };
-        interactionLayer.setPointerCapture(event.pointerId);
-      };
-
-      const onPointerMove = (event: PointerEvent) => {
-        if (
-          !isDraggingRef.current ||
-          dragPointerIdRef.current !== event.pointerId ||
-          !lastPointerRef.current
-        ) {
-          return;
-        }
-
-        event.preventDefault();
-
-        const deltaX = event.clientX - lastPointerRef.current.x;
-        const deltaY = event.clientY - lastPointerRef.current.y;
-
-        lastPointerRef.current = { x: event.clientX, y: event.clientY };
-
-        viewRef.current = {
-          lat: Math.max(-85, Math.min(85, viewRef.current.lat + deltaY * 0.24)),
-          lng: ((((viewRef.current.lng - deltaX * 0.32) + 180) % 360) + 360) % 360 - 180,
-          altitude: lockedAltitude,
-        };
-
-        applyView();
-      };
-
-      const onPointerUp = (event: PointerEvent) => {
-        if (dragPointerIdRef.current !== event.pointerId) return;
-
-        isDraggingRef.current = false;
-        dragPointerIdRef.current = null;
-        lastPointerRef.current = null;
-
-        if (interactionLayer.hasPointerCapture(event.pointerId)) {
-          interactionLayer.releasePointerCapture(event.pointerId);
-        }
-      };
-
-      canvas.style.touchAction = "none";
-      canvas.style.pointerEvents = "none";
-      interactionLayer.style.touchAction = "none";
-
-      interactionLayer.addEventListener("wheel", preventZoom, { passive: false });
-      interactionLayer.addEventListener("touchmove", preventZoom, { passive: false });
-      interactionLayer.addEventListener("pointerdown", onPointerDown);
-      interactionLayer.addEventListener("pointermove", onPointerMove);
-      interactionLayer.addEventListener("pointerup", onPointerUp);
-      interactionLayer.addEventListener("pointercancel", onPointerUp);
-      autoRotateFrameRef.current = window.requestAnimationFrame(tickAutoRotate);
-
-      detach = () => {
-        if (autoRotateFrameRef.current !== null) {
-          window.cancelAnimationFrame(autoRotateFrameRef.current);
-          autoRotateFrameRef.current = null;
-        }
-        interactionLayer.removeEventListener("wheel", preventZoom);
-        interactionLayer.removeEventListener("touchmove", preventZoom);
-        interactionLayer.removeEventListener("pointerdown", onPointerDown);
-        interactionLayer.removeEventListener("pointermove", onPointerMove);
-        interactionLayer.removeEventListener("pointerup", onPointerUp);
-        interactionLayer.removeEventListener("pointercancel", onPointerUp);
-      };
-    };
-
-    tryAttachInteractions();
-
-    return () => {
-      cancelled = true;
-      if (retryFrameId !== null) {
-        window.cancelAnimationFrame(retryFrameId);
-      }
-      detach?.();
-    };
-  }, [globeReady]);
+        {/* Input */}
+        <div className="mt-[var(--space-3)] flex items-center gap-[var(--space-2)]">
+          <input
+            type="text"
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            placeholder="Escribe un mensaje..."
+            className="min-w-0 flex-1 rounded-full border border-app bg-surface px-3 py-[6px] text-body-sm text-app outline-none transition-colors focus:border-[var(--border-strong)]"
+          />
+          <button
+            type="button"
+            disabled={!message.trim()}
+            className="flex size-[30px] shrink-0 items-center justify-center rounded-full bg-[var(--text-primary)] text-contrast-token transition-opacity hover:opacity-80 disabled:opacity-30"
+            aria-label="Enviar"
+          >
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[14px]">
+              <path d="M22 2L11 13" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex justify-center">
-      <div
-        ref={globeContainerRef}
-        className="relative"
-        style={{ width: `${globeViewportWidth}px`, height: `${globeViewportHeight}px` }}
-      >
-        <div
-          className="absolute"
-          style={{
-            width: `${globeRenderWidth}px`,
-            height: `${globeRenderHeight}px`,
-            left: "50%",
-            top: "50%",
-            transform: "translate(-50%, -50%)",
-          }}
-        >
-          <Globe
-            ref={globeRef}
-            width={globeRenderWidth}
-            height={globeRenderHeight}
-            backgroundColor="rgba(0,0,0,0)"
-            rendererConfig={{ alpha: true, antialias: true }}
-            globeImageUrl="//unpkg.com/three-globe/example/img/earth-day.jpg"
-            bumpImageUrl="//unpkg.com/three-globe/example/img/earth-topology.png"
-            showAtmosphere={false}
-            pointsData={[]}
-            htmlElementsData={htmlMarkers}
-            htmlLat="lat"
-            htmlLng="lng"
-            htmlAltitude="altitude"
-            htmlElement={(marker) => {
-        const data = marker as (typeof htmlMarkers)[number];
-        const el = document.createElement("div");
-        el.dataset.globeMarker = "true";
-        el.style.position = "relative";
-        el.style.zIndex = "20";
-        el.style.width = "40px";
-        el.style.height = "40px";
-        el.style.cursor = "pointer";
-        el.style.pointerEvents = "auto";
-        el.onclick = (event) => {
-          event.stopPropagation();
-          centerMarker(data);
-        };
-
-        const bubble = document.createElement("div");
-        bubble.dataset.globeMarker = "true";
-        bubble.style.width = "40px";
-        bubble.style.height = "40px";
-        bubble.style.borderRadius = "999px";
-        bubble.style.overflow = "hidden";
-        bubble.style.border = "2px solid white";
-        bubble.style.background = "#ff6a3d";
-        bubble.style.display = "grid";
-        bubble.style.placeItems = "center";
-        bubble.style.fontSize = "16px";
-        bubble.style.fontWeight = "700";
-        bubble.style.color = "#ffffff";
-
-        if (data.image) {
-          const img = document.createElement("img");
-          img.src = data.image;
-          img.alt = `Avatar de ${data.label}`;
-              img.style.width = "100%";
-          img.style.height = "100%";
-          img.style.objectFit = "cover";
-          img.referrerPolicy = "no-referrer";
-          bubble.appendChild(img);
-        } else {
-          bubble.textContent = data.label;
-        }
-
-        el.appendChild(bubble);
-
-        if (selectedMarkerId === data.id) {
-          const tooltip = document.createElement("div");
-          tooltip.dataset.globeMarker = "true";
-          tooltip.textContent = data.locationName;
-          tooltip.style.position = "absolute";
-          tooltip.style.left = "50%";
-          tooltip.style.bottom = "calc(100% + 10px)";
-          tooltip.style.transform = "translateX(-50%)";
-          tooltip.style.padding = "6px 10px";
-          tooltip.style.borderRadius = "999px";
-          tooltip.style.background = "rgba(15, 23, 20, 0.92)";
-          tooltip.style.color = "#ffffff";
-          tooltip.style.fontSize = "12px";
-          tooltip.style.fontWeight = "600";
-          tooltip.style.lineHeight = "1";
-          tooltip.style.whiteSpace = "nowrap";
-          tooltip.style.pointerEvents = "none";
-          el.appendChild(tooltip);
-        }
-
-        return el;
-      }}
-            onGlobeReady={() => setGlobeReady(true)}
-          />
-        </div>
+    <div className="pt-[var(--space-10)]">
+      <div className="flex items-center justify-between">
+        <h3 className="text-[var(--font-h5)] font-[var(--fw-semibold)] leading-[var(--lh-h5)]">Mensajes</h3>
+        <Link href="/messages" className="text-body-sm text-muted transition-opacity hover:opacity-70">Ver todos</Link>
+      </div>
+      <div className="mt-[var(--space-4)] space-y-[2px]">
+        {MOCK_CHATS.slice(0, 4).map((chat) => (
+          <button
+            key={chat.id}
+            type="button"
+            onClick={() => setOpenChatId(chat.id)}
+            className="flex w-full items-center gap-[var(--space-3)] rounded-[10px] px-2 py-[10px] text-left transition-colors hover:bg-surface"
+          >
+            <div className="relative shrink-0">
+              <div className="flex avatar-md items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">
+                {chat.avatar ? (
+                  <img src={chat.avatar} alt={chat.name} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                ) : (
+                  chat.name[0].toUpperCase()
+                )}
+              </div>
+              {chat.unread && (
+                <span className="absolute -right-[2px] -top-[2px] size-[10px] rounded-full border-2 border-[var(--bg)] bg-[#ff6a3d]" />
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className={`truncate text-body-sm ${chat.unread ? "font-[var(--fw-semibold)] text-app" : "text-app"}`}>{chat.name}</p>
+              <p className={`truncate text-[12px] leading-[16px] ${chat.unread ? "font-[var(--fw-medium)] text-app" : "text-muted"}`}>{chat.lastMessage}</p>
+            </div>
+            <span className="shrink-0 text-[11px] text-muted">{chat.time}</span>
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -655,46 +406,51 @@ function RecentActivityGlobe({
 
 function FeedSkeleton() {
   return (
-    <div className="space-y-[var(--space-6)]" aria-label="Cargando publicaciones" role="status">
-      {Array.from({ length: 3 }).map((_, index) => (
-        <article key={index} className="px-[var(--space-2)] py-[var(--space-3)]">
-          <div className="mb-[var(--space-4)] flex items-center gap-3">
-            <div className="feed-skeleton-shimmer h-[44px] w-[44px] rounded-full" />
-            <div className="space-y-2">
-              <div className="feed-skeleton-shimmer h-4 w-[92px] rounded-full" />
-              <div className="feed-skeleton-shimmer h-3 w-[72px] rounded-full" />
+    <div className="space-y-[var(--space-3)]" aria-label="Cargando publicaciones" role="status">
+      {/* Image post skeleton */}
+      {[0, 1].map((i) => (
+        <article key={`img-${i}`} className="pb-[var(--space-2)]">
+          <div className="feed-image-container relative overflow-hidden">
+            <div className="feed-skeleton-shimmer aspect-[4/3] w-full" />
+            {/* Top overlay shimmer — avatar + name */}
+            <div className="absolute inset-x-0 top-0 flex items-center gap-[var(--space-2)] px-[var(--space-4)] pt-[var(--space-3)]">
+              <div className="size-[32px] rounded-full bg-white/20" />
+              <div className="h-3 w-[80px] rounded-full bg-white/20" />
+            </div>
+            {/* Bottom overlay shimmer — location + date */}
+            <div className="absolute inset-x-0 bottom-0 px-[var(--space-4)] pb-[var(--space-3)]">
+              <div className="h-4 w-[140px] rounded-full bg-white/20" />
+              <div className="mt-[6px] h-3 w-[100px] rounded-full bg-white/20" />
             </div>
           </div>
-
-          <div className="relative">
-            <div className="feed-skeleton-shimmer aspect-[4/3] w-full rounded-card" />
-            <div className="absolute inset-x-3 bottom-3 flex items-center justify-between rounded-card border border-white/20 bg-black/20 px-3 py-2 backdrop-blur-[2px]">
-              <div className="flex items-center gap-2">
-                <div className="feed-skeleton-shimmer h-4 w-10 rounded-full" />
-                <div className="feed-skeleton-shimmer h-4 w-[148px] rounded-full" />
-              </div>
-              <div className="feed-skeleton-shimmer h-8 w-[170px] rounded-card" />
-            </div>
-          </div>
-
-          <div className="mt-[var(--space-4)] flex items-start justify-between gap-3">
-            <div className="min-w-0 flex-1 space-y-3">
-              <div className="feed-skeleton-shimmer h-4 w-[72%] rounded-full" />
-              <div className="flex items-center gap-4">
-                <div className="feed-skeleton-shimmer h-6 w-6 rounded-full" />
-                <div className="feed-skeleton-shimmer h-6 w-6 rounded-full" />
-                <div className="feed-skeleton-shimmer h-4 w-[64px] rounded-full" />
-              </div>
-            </div>
-            <div className="feed-skeleton-shimmer h-6 w-6 rounded-full" />
+          {/* Actions + text shimmer */}
+          <div className="mt-[var(--space-2)] flex items-center gap-[var(--space-2)] px-[var(--space-1)]">
+            <div className="feed-skeleton-shimmer h-[24px] w-[24px] rounded-full" />
+            <div className="feed-skeleton-shimmer h-3 w-[120px] rounded-full" />
           </div>
         </article>
       ))}
+      {/* Text-only post skeleton (Twitter style) */}
+      <article className="pb-[var(--space-2)]">
+        <div className="flex gap-[var(--space-2)] px-[var(--space-1)]">
+          <div className="feed-skeleton-shimmer size-[32px] shrink-0 rounded-full" />
+          <div className="min-w-0 flex-1">
+            <div className="feed-skeleton-shimmer h-3 w-[90px] rounded-full" />
+            <div className="feed-skeleton-shimmer mt-[6px] h-3 w-[85%] rounded-full" />
+            <div className="feed-skeleton-shimmer mt-[4px] h-3 w-[60%] rounded-full" />
+            <div className="mt-[var(--space-2)] flex items-center gap-[var(--space-4)]">
+              <div className="feed-skeleton-shimmer h-[24px] w-[24px] rounded-full" />
+              <div className="feed-skeleton-shimmer h-[24px] w-[24px] rounded-full" />
+              <div className="feed-skeleton-shimmer h-[24px] w-[24px] rounded-full" />
+            </div>
+          </div>
+        </div>
+      </article>
     </div>
   );
 }
 
-function FeedCard({ post, currentUserId }: { post: FeedItemDto; currentUserId: string | null }) {
+function FeedCard({ post, currentUserId, nextPostHasImage }: { post: FeedItemDto; currentUserId: string | null; nextPostHasImage: boolean }) {
   const [publishing, setPublishing] = useState(false);
   const [liked, setLiked] = useState(post.initiallyLiked);
   const [likeCount, setLikeCount] = useState(post.initialLikeCount);
@@ -704,9 +460,9 @@ function FeedCard({ post, currentUserId }: { post: FeedItemDto; currentUserId: s
   const [commentSubmitting, setCommentSubmitting] = useState(false);
   const [commentsSection, setCommentsSection] = useState<CommentDto[]>([]);
   const [commentsLoading, setCommentsLoading] = useState(false);
-  const [visibleCommentIndex, setVisibleCommentIndex] = useState(0);
   const [commentsExpanded, setCommentsExpanded] = useState(false);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
+  const [authorAvatars, setAuthorAvatars] = useState<Record<string, string | null>>({});
   const commentInputRef = useRef<HTMLInputElement | null>(null);
   const emojiPickerRef = useRef<HTMLDivElement | null>(null);
 
@@ -747,6 +503,40 @@ function FeedCard({ post, currentUserId }: { post: FeedItemDto; currentUserId: s
     return () => { cancelled = true; };
   }, [post.plan.id, currentUserId]);
 
+  // Fetch avatars for comment authors
+  useEffect(() => {
+    if (commentsSection.length === 0) return;
+    const userIds = [...new Set(commentsSection.map((c) => c.userId))];
+    const missing = userIds.filter((uid) => !(uid in authorAvatars));
+    if (missing.length === 0) return;
+
+    const fetchAvatars = async () => {
+      const results: Record<string, string | null> = {};
+      await Promise.all(
+        missing.map(async (uid) => {
+          const cached = commentAuthorCache.get(uid);
+          if (cached && Date.now() - cached.cachedAt < COMMENT_AUTHOR_CACHE_TTL_MS) {
+            results[uid] = cached.profileImage;
+            return;
+          }
+          try {
+            const profile = await getPublicUserProfile(uid);
+            results[uid] = profile?.profile_image ?? null;
+            commentAuthorCache.set(uid, {
+              name: profile?.nombre ?? "Usuario",
+              profileImage: profile?.profile_image ?? null,
+              cachedAt: Date.now(),
+            });
+          } catch {
+            results[uid] = null;
+          }
+        }),
+      );
+      setAuthorAvatars((prev) => ({ ...prev, ...results }));
+    };
+    void fetchAvatars();
+  }, [commentsSection]);
+
   // Close emoji picker on outside click
   useEffect(() => {
     if (!emojiPickerOpen) return;
@@ -764,15 +554,6 @@ function FeedCard({ post, currentUserId }: { post: FeedItemDto; currentUserId: s
     setEmojiPickerOpen(false);
     commentInputRef.current?.focus();
   };
-
-  // Cycle through comments every 5 seconds (pause when expanded)
-  useEffect(() => {
-    if (commentsSection.length <= 1 || commentsExpanded) return;
-    const intervalId = window.setInterval(() => {
-      setVisibleCommentIndex((prev) => (prev + 1) % commentsSection.length);
-    }, 5000);
-    return () => window.clearInterval(intervalId);
-  }, [commentsSection.length, commentsExpanded]);
 
   const onPublish = async () => {
     if (publishing) return;
@@ -866,219 +647,268 @@ function FeedCard({ post, currentUserId }: { post: FeedItemDto; currentUserId: s
     return comment.userName?.trim() || "Usuario";
   };
 
-  const getCommentAuthorColor = (userId: string) => {
-    const colors = [
-      "#7DD3FC", // sky-300
-      "#FCA5A5", // red-300
-      "#86EFAC", // green-300
-      "#FDE68A", // amber-200
-      "#C4B5FD", // violet-300
-      "#F9A8D4", // pink-300
-      "#6EE7B7", // emerald-300
-      "#93C5FD", // blue-300
-      "#FDBA74", // orange-300
-      "#A5B4FC", // indigo-300
-      "#5EEAD4", // teal-300
-      "#FCA5CF", // fuchsia-300
-    ];
-    let hash = 0;
-    for (let i = 0; i < userId.length; i++) {
-      hash = ((hash << 5) - hash + userId.charCodeAt(i)) | 0;
-    }
-    return colors[Math.abs(hash) % colors.length];
+
+  const formatDate = (iso: string) => {
+    const d = new Date(iso);
+    const day = d.getDate();
+    const months = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+    return `${day} ${months[d.getMonth()]}`;
   };
 
   return (
-    <article className="border-b border-app pb-[var(--space-4)]">
-      {/* Header */}
-      <header className="mb-[var(--space-3)] flex items-center gap-3">
-        <Avatar label={post.avatarLabel} image={post.avatarImage ?? null} />
-        <div>
-          <div className="text-body font-[var(--fw-semibold)] leading-none">{post.userName}</div>
-          <p className="mt-[var(--space-1)] text-body-sm leading-none text-muted">{post.subtitle}</p>
-        </div>
-      </header>
-
-      {/* Image + comment overlay */}
+    <article className="pb-[var(--space-2)]">
+      {/* Image with overlays */}
       {post.hasImage && (
-        <div className="relative">
+        <div className="feed-image-container relative overflow-hidden">
           <img
             src={post.coverImage ?? undefined}
             alt="Imagen del plan"
             className="feed-image-responsive"
           />
-          {/* Integrated comment overlay */}
-          <div className="absolute inset-x-3 bottom-3 max-h-[calc(100%-24px)] rounded-[12px] bg-black/60 backdrop-blur-sm transition-all duration-300 ease-out">
-            {/* Expanded comments list */}
-            <div
-              className={`overflow-hidden transition-[max-height,opacity] ease-out ${
-                commentsExpanded && commentsSection.length > 0
-                  ? "max-h-[calc(100vh)] opacity-100 duration-700"
-                  : "max-h-0 opacity-0 duration-300"
-              }`}
-            >
-              <div className="max-h-[180px] space-y-[var(--space-2)] overflow-y-auto overscroll-contain px-[var(--space-3)] pt-[var(--space-2)]">
-                {commentsSection.map((comment) => (
-                  <div key={comment.commentId} className="flex items-start justify-between gap-2">
-                    <p className="min-w-0 flex-1 text-body-sm leading-[1.4] text-white">
-                      <span className="font-[var(--fw-semibold)]" style={{ color: getCommentAuthorColor(comment.userId) }}>{getCommentAuthorName(comment)}:</span>{" "}
-                      {comment.content}
-                    </p>
-                    {comment.userId === currentUserId && (
-                      <button
-                        type="button"
-                        className="mt-0.5 shrink-0 p-0.5 text-red-500/60"
-                        aria-label="Eliminar comentario"
-                        title="Eliminar comentario"
-                      >
-                        <TrashIcon />
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
+
+          {/* Top overlay — avatar + username */}
+          <div className="absolute inset-x-0 top-0 flex items-center gap-[var(--space-2)] bg-gradient-to-b from-black/50 to-transparent px-[var(--space-4)] pb-[var(--space-8)] pt-[var(--space-3)]">
+            <div className="flex size-[32px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/30 bg-white/20">
+              {post.avatarImage ? (
+                <img src={post.avatarImage} alt={post.avatarLabel} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+              ) : (
+                <span className="text-[13px] font-[var(--fw-semibold)] text-white">{post.avatarLabel}</span>
+              )}
             </div>
-            {/* Comment bar */}
-            <div className="flex items-center gap-[var(--space-2)] px-[var(--space-3)] py-[var(--space-2)]">
-              {/* Left: cycling comments (click to expand) */}
-              <button
-                type="button"
-                className="relative min-h-[20px] min-w-0 flex-1 overflow-hidden text-left"
-                onClick={() => commentsSection.length > 0 && setCommentsExpanded((prev) => !prev)}
-              >
-                {commentsSection.length > 0 ? (
-                  commentsSection.map((comment, idx) => (
-                    <p
-                      key={comment.commentId}
-                      className={`text-body-sm leading-snug text-white transition-opacity duration-500 ${idx === visibleCommentIndex ? "relative opacity-100" : "absolute inset-0 opacity-0"}`}
-                    >
-                      <span className="font-[var(--fw-semibold)]" style={{ color: getCommentAuthorColor(comment.userId) }}>{getCommentAuthorName(comment)}:</span>{" "}
-                      {comment.content}
-                    </p>
-                  ))
-                ) : (
-                  <p className="text-body-sm leading-snug text-white/60">Sin comentarios</p>
-                )}
+            <span className="text-body-sm font-[var(--fw-semibold)] text-white drop-shadow-sm">{post.userName}</span>
+          </div>
+
+          {/* Bottom overlay — location + dates */}
+          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-[var(--space-4)] pb-[var(--space-3)] pt-[var(--space-10)]">
+            {post.plan.locationName && (
+              <p className="text-body font-[var(--fw-semibold)] leading-tight text-white drop-shadow-sm">
+                {post.plan.locationName}
+              </p>
+            )}
+            <p className="mt-[2px] text-body-sm text-white/70">
+              {formatDate(post.plan.startsAt)} - {formatDate(post.plan.endsAt)}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* No-image layout: avatar left, content right (Twitter style) */}
+      {!post.hasImage && (
+        <div className="flex gap-[var(--space-2)] px-[var(--space-1)]">
+          <div className="flex size-[32px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset">
+            {post.avatarImage ? (
+              <img src={post.avatarImage} alt={post.avatarLabel} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+            ) : (
+              <span className="text-[13px] font-[var(--fw-semibold)] text-app">{post.avatarLabel}</span>
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <span className="text-body-sm font-[var(--fw-semibold)]">{post.userName}</span>
+            {post.text && (
+              <p className="mt-[2px] text-body-sm leading-[1.45]">{post.text}</p>
+            )}
+            {/* Actions */}
+            <div className="mt-[var(--space-2)] flex items-center gap-[var(--space-4)]">
+              <button type="button" className="flex items-center gap-[6px] disabled:opacity-50" aria-label={liked ? "Quitar like" : "Dar like"} onClick={onLikeToggle} disabled={!currentUserId || likeLoading}>
+                <PlaneIcon liked={liked} animating={likeAnimating} />
+                {likeCount > 0 && <span className="text-body-sm font-[var(--fw-semibold)]">{likeCount}</span>}
               </button>
-              {/* Right: comment input + send */}
-              <div ref={emojiPickerRef} className="relative flex shrink-0 items-center rounded-[6px] bg-white/15 px-[var(--space-2)] ring-0 ring-white/30 transition-shadow focus-within:ring-[1px]">
-                <button
-                  type="button"
-                  className="mr-[var(--space-2)] flex items-center justify-center text-white/70"
-                  aria-label="Emoticonos"
-                  onClick={() => setEmojiPickerOpen((prev) => !prev)}
-                >
-                  <SmileyIcon />
-                </button>
-                {emojiPickerOpen && (
-                  <div className="absolute bottom-[calc(100%+8px)] right-0 z-50 w-[256px] rounded-[10px] bg-[#1a1a1a]/95 p-2 shadow-lg backdrop-blur-md">
-                    <div className="grid max-h-[180px] grid-cols-8 gap-0.5 overflow-y-auto overscroll-contain">
-                      {EMOJI_LIST.map((emoji) => (
-                        <button
-                          key={emoji}
-                          type="button"
-                          className="flex size-[30px] items-center justify-center rounded-[6px] text-[18px] transition-colors hover:bg-white/15"
-                          onClick={() => insertEmoji(emoji)}
-                        >
-                          {emoji}
+              <button type="button" className="flex items-center gap-[6px]" onClick={() => setCommentsExpanded((prev) => !prev)}>
+                <CommentIcon />
+                {commentsSection.length > 0 && <span className="text-body-sm font-[var(--fw-semibold)]">{commentsSection.length}</span>}
+              </button>
+              <button type="button" className="disabled:opacity-50" aria-label="Compartir" onClick={onPublish} disabled={publishing}>
+                <ShareIcon />
+              </button>
+              <button type="button" className="ml-auto text-body-sm font-[var(--fw-semibold)] text-[var(--primary)] transition-opacity hover:opacity-70">
+                Ver plan
+              </button>
+            </div>
+            {/* View comments link */}
+            {commentsSection.length > 0 && !commentsExpanded && (
+              <button type="button" onClick={() => setCommentsExpanded(true)} className="mt-[var(--space-1)] text-body-sm text-muted">
+                Ver los {commentsSection.length} comentarios
+              </button>
+            )}
+            {/* Expanded comments */}
+            {commentsExpanded && commentsSection.length > 0 && (
+              <div className="mt-[var(--space-2)] max-h-[120px] space-y-[var(--space-2)] overflow-y-auto overscroll-contain">
+                {commentsSection.map((comment) => {
+                  const avatarImg = authorAvatars[comment.userId] ?? null;
+                  const initial = (getCommentAuthorName(comment)[0] || "U").toUpperCase();
+                  return (
+                    <div key={comment.commentId} className="flex items-start gap-[var(--space-2)]">
+                      <div className="flex size-[24px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset">
+                        {avatarImg ? (
+                          <img src={avatarImg} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                        ) : (
+                          <span className="text-[10px] font-[var(--fw-semibold)] text-app">{initial}</span>
+                        )}
+                      </div>
+                      <p className="min-w-0 flex-1 text-body-sm leading-[1.4]">
+                        <span className="font-[var(--fw-semibold)]">{getCommentAuthorName(comment)}</span>{" "}
+                        {comment.content}
+                      </p>
+                      {comment.userId === currentUserId && (
+                        <button type="button" className="mt-0.5 shrink-0 p-0.5 text-muted opacity-50" aria-label="Eliminar comentario">
+                          <TrashIcon />
                         </button>
-                      ))}
+                      )}
                     </div>
-                  </div>
-                )}
-                <input
-                  ref={commentInputRef}
-                  type="text"
-                  value={commentText}
-                  onChange={(e) => setCommentText(e.target.value)}
-                  onKeyDown={onCommentKeyDown}
-                  placeholder="Comentar..."
-                  className="w-[130px] bg-transparent py-[6px] text-body-sm text-white outline-none ring-0 placeholder:text-white/50 focus:ring-0"
-                  disabled={!currentUserId || commentSubmitting}
-                />
-                <button
-                  type="button"
-                  onClick={onSubmitComment}
-                  disabled={!currentUserId || commentSubmitting || !commentText.trim()}
-                  className="ml-1 flex items-center justify-center text-white/70 disabled:opacity-40"
-                >
-                  <SendIcon small />
-                </button>
+                  );
+                })}
               </div>
+            )}
+            {/* Comment input */}
+            <div ref={emojiPickerRef} className="relative mt-[var(--space-2)] flex items-center gap-[var(--space-2)]">
+              <button type="button" className="flex items-center justify-center text-muted" aria-label="Emoticonos" onClick={() => setEmojiPickerOpen((prev) => !prev)}>
+                <SmileyIcon />
+              </button>
+              {emojiPickerOpen && (
+                <div className="absolute bottom-[calc(100%+8px)] left-0 z-50 w-[256px] rounded-[10px] bg-[#1a1a1a]/95 p-2 shadow-lg backdrop-blur-md">
+                  <div className="grid max-h-[180px] grid-cols-8 gap-0.5 overflow-y-auto overscroll-contain">
+                    {EMOJI_LIST.map((emoji) => (
+                      <button key={emoji} type="button" className="flex size-[30px] items-center justify-center rounded-[6px] text-[18px] transition-colors hover:bg-white/15" onClick={() => insertEmoji(emoji)}>
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <input
+                ref={commentInputRef}
+                type="text"
+                value={commentText}
+                onChange={(e) => setCommentText(e.target.value)}
+                onKeyDown={onCommentKeyDown}
+                placeholder="Añade un comentario..."
+                className="min-w-0 flex-1 bg-transparent py-[4px] text-body-sm text-app outline-none placeholder:text-muted"
+                disabled={!currentUserId || commentSubmitting}
+              />
+              {commentText.trim() && (
+                <button type="button" onClick={onSubmitComment} disabled={!currentUserId || commentSubmitting} className="text-body-sm font-[var(--fw-semibold)] text-[var(--primary)] disabled:opacity-40">
+                  Publicar
+                </button>
+              )}
             </div>
           </div>
         </div>
       )}
 
-      {/* Text */}
-      <p className="mt-[var(--space-3)] text-body leading-[1.45]">
-        <span className="font-[var(--fw-semibold)]">{post.userName}</span>{" "}
-        {post.text}
-      </p>
+      {/* Image layout: actions + comments below image */}
+      {post.hasImage && (
+        <>
+          {/* Actions row */}
+          <div className="mt-[var(--space-2)] flex items-center gap-[var(--space-4)] px-[var(--space-1)]">
+            <button type="button" className="flex items-center gap-[6px] disabled:opacity-50" aria-label={liked ? "Quitar like" : "Dar like"} onClick={onLikeToggle} disabled={!currentUserId || likeLoading}>
+              <PlaneIcon liked={liked} animating={likeAnimating} />
+              {likeCount > 0 && <span className="text-body-sm font-[var(--fw-semibold)]">{likeCount}</span>}
+            </button>
+            <button type="button" className="flex items-center gap-[6px]" onClick={() => setCommentsExpanded((prev) => !prev)}>
+              <CommentIcon />
+              {commentsSection.length > 0 && <span className="text-body-sm font-[var(--fw-semibold)]">{commentsSection.length}</span>}
+            </button>
+            <button type="button" className="disabled:opacity-50" aria-label="Compartir" onClick={onPublish} disabled={publishing}>
+              <ShareIcon />
+            </button>
+            <button type="button" className="ml-auto text-body-sm font-[var(--fw-semibold)] text-[var(--primary)] transition-opacity hover:opacity-70">
+              Ver plan
+            </button>
+          </div>
 
-      {/* Actions */}
-      <div className="mt-[var(--space-2)] flex items-center justify-between text-app">
-        <div className="flex items-center gap-[var(--space-3)]">
-          <button
-            type="button"
-            className="flex items-center gap-1 p-1 disabled:opacity-50"
-            aria-label={liked ? "Quitar like" : "Dar like"}
-            onClick={onLikeToggle}
-            disabled={!currentUserId || likeLoading}
-            title={liked ? "Quitar like" : "Dar like"}
-          >
-            <PlaneIcon liked={liked} animating={likeAnimating} />
-          </button>
-          <button
-            type="button"
-            className="p-1 disabled:opacity-50"
-            aria-label="Compartir"
-            onClick={onPublish}
-            disabled={publishing}
-            title={publishing ? "Publicando..." : "Compartir"}
-          >
-            <SendIcon />
-          </button>
-          <button
-            type="button"
-            className="text-body-sm font-[var(--fw-semibold)] text-primary-token"
-          >
-            Ver plan
-          </button>
-        </div>
-        <button type="button" className="p-1" aria-label="Guardar">
-          <BookmarkIcon />
-        </button>
-      </div>
+          {/* Username + description */}
+          {post.text && (
+            <p className="mt-[var(--space-3)] px-[var(--space-1)] text-body-sm leading-[1.45]">
+              <span className="font-[var(--fw-semibold)]">{post.userName}</span>{" "}
+              {post.text}
+            </p>
+          )}
 
+          {/* View comments link */}
+          {commentsSection.length > 0 && !commentsExpanded && (
+            <button type="button" onClick={() => setCommentsExpanded(true)} className="mt-[var(--space-1)] px-[var(--space-1)] text-body-sm text-muted">
+              Ver los {commentsSection.length} comentarios
+            </button>
+          )}
+
+          {/* Expanded comments */}
+          {commentsExpanded && commentsSection.length > 0 && (
+            <div className="mt-[var(--space-2)] max-h-[120px] space-y-[var(--space-2)] overflow-y-auto overscroll-contain px-[var(--space-1)]">
+              {commentsSection.map((comment) => {
+                const avatarImg = authorAvatars[comment.userId] ?? null;
+                const initial = (getCommentAuthorName(comment)[0] || "U").toUpperCase();
+                return (
+                  <div key={comment.commentId} className="flex items-start gap-[var(--space-2)]">
+                    <div className="flex size-[24px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset">
+                      {avatarImg ? (
+                        <img src={avatarImg} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                      ) : (
+                        <span className="text-[10px] font-[var(--fw-semibold)] text-app">{initial}</span>
+                      )}
+                    </div>
+                    <p className="min-w-0 flex-1 text-body-sm leading-[1.4]">
+                      <span className="font-[var(--fw-semibold)]">{getCommentAuthorName(comment)}</span>{" "}
+                      {comment.content}
+                    </p>
+                    {comment.userId === currentUserId && (
+                      <button type="button" className="mt-0.5 shrink-0 p-0.5 text-muted opacity-50" aria-label="Eliminar comentario">
+                        <TrashIcon />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Comment input */}
+          <div ref={emojiPickerRef} className="relative mt-[var(--space-2)] flex items-center gap-[var(--space-2)] px-[var(--space-1)]">
+            <button type="button" className="flex items-center justify-center text-muted" aria-label="Emoticonos" onClick={() => setEmojiPickerOpen((prev) => !prev)}>
+              <SmileyIcon />
+            </button>
+            {emojiPickerOpen && (
+              <div className="absolute bottom-[calc(100%+8px)] left-0 z-50 w-[256px] rounded-[10px] bg-[#1a1a1a]/95 p-2 shadow-lg backdrop-blur-md">
+                <div className="grid max-h-[180px] grid-cols-8 gap-0.5 overflow-y-auto overscroll-contain">
+                  {EMOJI_LIST.map((emoji) => (
+                    <button key={emoji} type="button" className="flex size-[30px] items-center justify-center rounded-[6px] text-[18px] transition-colors hover:bg-white/15" onClick={() => insertEmoji(emoji)}>
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <input
+              ref={commentInputRef}
+              type="text"
+              value={commentText}
+              onChange={(e) => setCommentText(e.target.value)}
+              onKeyDown={onCommentKeyDown}
+              placeholder="Añade un comentario..."
+              className="min-w-0 flex-1 bg-transparent py-[4px] text-body-sm text-app outline-none placeholder:text-muted"
+              disabled={!currentUserId || commentSubmitting}
+            />
+            {commentText.trim() && (
+              <button type="button" onClick={onSubmitComment} disabled={!currentUserId || commentSubmitting} className="text-body-sm font-[var(--fw-semibold)] text-[var(--primary)] disabled:opacity-40">
+                Publicar
+              </button>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Divider — only between image post followed by no-image post */}
+      {post.hasImage && !nextPostHasImage && (
+        <div className="feed-divider mt-[var(--space-2)] border-t border-app" />
+      )}
     </article>
-  );
-}
-
-function Avatar({ label, image }: { label: string; image?: string | null }) {
-  if (image) {
-    return (
-      <img
-        src={image}
-        alt={`Avatar de ${label}`}
-        className="avatar-lg rounded-full border border-app object-cover"
-        referrerPolicy="no-referrer"
-      />
-    );
-  }
-
-  return (
-    <div className="flex avatar-lg items-center justify-center border border-app bg-surface-inset text-body font-[var(--fw-semibold)] text-app">
-      {label}
-    </div>
   );
 }
 
 function PlaneIcon({ liked, animating }: { liked: boolean; animating: boolean }) {
   return (
     <svg
-      width="28"
-      height="28"
+      width="24"
+      height="24"
       viewBox="0 0 24 24"
       fill={liked ? "currentColor" : "none"}
       aria-hidden="true"
@@ -1095,9 +925,9 @@ function PlaneIcon({ liked, animating }: { liked: boolean; animating: boolean })
   );
 }
 
-function CommentIcon({ small }: { small?: boolean }) {
+function CommentIcon() {
   return (
-    <svg width={small ? "16" : "28"} height={small ? "16" : "28"} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path
         d="M4 5.5A1.5 1.5 0 0 1 5.5 4H18.5A1.5 1.5 0 0 1 20 5.5V14.5A1.5 1.5 0 0 1 18.5 16H9L4 20V5.5Z"
         stroke="currentColor"
@@ -1107,11 +937,12 @@ function CommentIcon({ small }: { small?: boolean }) {
   );
 }
 
-function SendIcon({ small }: { small?: boolean }) {
+function ShareIcon() {
   return (
-    <svg width={small ? "16" : "28"} height={small ? "16" : "28"} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M21 3L10 14" stroke="currentColor" strokeWidth="1.7" />
-      <path d="M21 3L14.5 21L10 14L3 9.5L21 3Z" stroke="currentColor" strokeWidth="1.7" />
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M4 12V20C4 20.55 4.45 21 5 21H19C19.55 21 20 20.55 20 20V12" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      <path d="M12 3V15" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      <path d="M8 7L12 3L16 7" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -1139,14 +970,3 @@ function SmileyIcon() {
   );
 }
 
-function BookmarkIcon() {
-  return (
-    <svg width="29" height="29" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d="M7.5 4H16.5A1 1 0 0 1 17.5 5V20L12 16.8L6.5 20V5A1 1 0 0 1 7.5 4Z"
-        stroke="currentColor"
-        strokeWidth="1.7"
-      />
-    </svg>
-  );
-}

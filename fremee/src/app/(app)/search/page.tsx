@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
 import type { GlobeMethods } from "react-globe.gl";
@@ -20,7 +21,6 @@ const Globe = dynamic(() => import("react-globe.gl"), {
 export default function SearchPage() {
   const { user, loading } = useAuth();
   const currentUserId = user?.id ?? null;
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [searchValue, setSearchValue] = useState("");
   const [searchResults, setSearchResults] = useState<PublicUserProfileDto[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
@@ -71,65 +71,67 @@ export default function SearchPage() {
   return (
     <div className="min-h-dvh bg-app text-app">
       <div className="relative mx-auto min-h-dvh max-w-[1440px]">
-        <AppSidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed((prev) => !prev)} />
+        <AppSidebar />
 
         <main
-          className={`px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-4)] transition-[padding] duration-[var(--duration-slow)] [transition-timing-function:var(--ease-standard)] lg:py-[var(--space-8)] lg:pr-[var(--space-14)] ${
-            sidebarCollapsed ? "lg:pl-[56px]" : "lg:pl-[136px]"
-          }`}
+          className={`px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-4)] transition-[padding] duration-[var(--duration-slow)] [transition-timing-function:var(--ease-standard)] md:py-[var(--space-8)] md:pr-[var(--space-14)]`}
         >
           <div className="mx-auto w-full max-w-[760px]">
-            <div className="border-b border-app pb-[var(--space-2)]">
-              <h1 className="text-[var(--font-h4)] font-[var(--fw-semibold)] leading-[var(--lh-h4)]">Buscar</h1>
-            </div>
-
-            <div className="mt-[var(--space-5)]">
+            <div className="relative">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="pointer-events-none absolute left-4 top-1/2 z-10 size-[18px] -translate-y-1/2 text-muted">
+                <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.8" />
+                <path d="M16 16L20.5 20.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
               <input
                 id="app-user-search"
                 type="search"
                 value={searchValue}
                 onChange={(e) => setSearchValue(e.target.value)}
                 placeholder="Buscar usuarios"
-                className="w-full rounded-card border border-app bg-app px-4 py-3 text-body text-app outline-none"
+                className="w-full rounded-card border border-app bg-surface py-3 pl-11 pr-10 text-body text-app outline-none transition-colors focus:border-[var(--border-strong)] [&::-webkit-search-cancel-button]:hidden"
               />
+              {searchValue && (
+                <button
+                  type="button"
+                  onClick={() => setSearchValue("")}
+                  className="absolute right-4 top-1/2 z-10 -translate-y-1/2 text-app opacity-50 transition-opacity hover:opacity-80"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[18px]">
+                    <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                </button>
+              )}
             </div>
 
-            <div className="mt-[var(--space-5)] rounded-modal border border-app bg-surface p-[var(--space-4)] shadow-elev-1">
-              <RecentActivityGlobe />
-            </div>
-
-            <div className="mt-[var(--space-5)]">
-              {searchValue.trim().length < 2 ? (
-                <div className="rounded-modal border border-app bg-surface p-[var(--space-5)] text-body text-muted shadow-elev-1">
-                  Escribe al menos 2 caracteres para buscar usuarios.
-                </div>
-              ) : searchLoading ? (
-                <div className="rounded-modal border border-app bg-surface p-[var(--space-5)] text-body text-muted shadow-elev-1">
-                  Buscando usuarios...
-                </div>
-              ) : searchResults.length === 0 ? (
-                <div className="rounded-modal border border-app bg-surface p-[var(--space-5)] text-body text-muted shadow-elev-1">
-                  No se han encontrado usuarios.
-                </div>
-              ) : (
-                <div className="space-y-[var(--space-4)]">
+            <div className="mt-[var(--space-3)]">
+              {searchValue.trim().length >= 2 && searchLoading ? (
+                <p className="px-1 py-2 text-body-sm text-muted">Buscando...</p>
+              ) : searchValue.trim().length >= 2 && searchResults.length === 0 ? (
+                <p className="px-1 py-2 text-body-sm text-muted">No se han encontrado usuarios.</p>
+              ) : searchResults.length > 0 ? (
+                <div className="space-y-[2px]">
                   {searchResults.map((result) => {
                     const avatarLabel = (result.nombre.trim()[0] || "U").toUpperCase();
 
                     return (
-                      <article
+                      <Link
                         key={result.id}
-                        className="flex items-center gap-3 rounded-modal border border-app bg-surface p-[var(--space-4)] shadow-elev-1"
+                        href={`/profile/${result.id}`}
+                        className="flex items-center gap-[var(--space-2)] rounded-[8px] px-2 py-[6px] transition-colors hover:bg-surface"
                       >
                         <Avatar label={avatarLabel} image={result.profile_image} />
                         <div className="min-w-0">
-                          <p className="truncate text-body font-[var(--fw-semibold)] text-app">{result.nombre}</p>
+                          <p className="truncate text-body-sm font-[var(--fw-semibold)] text-app">{result.nombre}</p>
                         </div>
-                      </article>
+                      </Link>
                     );
                   })}
                 </div>
-              )}
+              ) : null}
+            </div>
+
+            <div className="mt-[var(--space-5)] rounded-modal border border-app bg-surface p-[var(--space-4)] shadow-elev-1">
+              <RecentActivityGlobe />
             </div>
           </div>
         </main>
@@ -602,14 +604,14 @@ function Avatar({ label, image }: { label: string; image?: string | null }) {
       <img
         src={image}
         alt={`Avatar de ${label}`}
-        className="avatar-lg rounded-full border border-app object-cover"
+        className="avatar-md rounded-full border border-app object-cover"
         referrerPolicy="no-referrer"
       />
     );
   }
 
   return (
-    <div className="flex avatar-lg items-center justify-center border border-app bg-surface-inset text-body font-[var(--fw-semibold)] text-app">
+    <div className="flex avatar-md items-center justify-center rounded-full border border-app bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">
       {label}
     </div>
   );
