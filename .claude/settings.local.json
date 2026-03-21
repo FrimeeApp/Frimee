@@ -16,7 +16,12 @@
       "Bash(xargs ls:*)",
       "Bash(find /Users/vicky/Desktop/Frimee/fremee/src/app/api -type f -name *.ts)",
       "Bash(ls -la \"/Users/vicky/Desktop/Frimee/fremee/src/app/\\(app\\)/profile/\")",
-      "Bash(xargs cat:*)"
+      "Bash(xargs cat:*)",
+      "Bash(supabase --version)",
+      "Bash(winget install:*)",
+      "Bash(curl -L \"https://github.com/supabase/cli/releases/latest/download/supabase_windows_amd64.tar.gz\" -o \"$TEMP/supabase.tar.gz\")",
+      "Bash(ls \"c:/Users/cayet/Desktop/Proyectos/Frimee/fremee/src/app/\\(app\\)/\")",
+      "Bash(ls \"c:/Users/cayet/Desktop/Proyectos/Frimee/fremee/src/app/\\(app\\)/messages/\")"
     ]
   }
 }

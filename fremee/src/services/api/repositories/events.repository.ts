@@ -102,40 +102,37 @@ export async function importGoogleCalendarEvents(params: {
       .filter((value): value is string => Boolean(value)),
   );
 
-  const { data: existingGoogleRows, error: existingGoogleRowsError } = await supabase
-    .from("evento")
-    .select("id,google_calendar_id,google_event_id")
-    .eq("owner_user_id", params.userId)
-    .eq("source", "GOOGLE")
-    .is("deleted_at", null)
-    .lte("inicio_at", params.timeMax)
-    .gte("fin_at", params.timeMin)
-    .limit(3000);
+  const { data: existingGoogleRows, error: existingGoogleRowsError } = await supabase.rpc(
+    "fn_eventos_get_google_for_sync",
+    {
+      p_time_min: params.timeMin,
+      p_time_max: params.timeMax,
+      p_limit: 3000,
+    },
+  );
 
   if (existingGoogleRowsError) throw existingGoogleRowsError;
 
   const idsToSoftDelete = (existingGoogleRows ?? [])
-    .filter((row) => {
+    .filter((row: { id: number; google_calendar_id: string | null; google_event_id: string | null }) => {
       if (!row.google_calendar_id || !row.google_event_id) return false;
       const key = `${row.google_calendar_id}::${row.google_event_id}`;
       return !activeGoogleIdSet.has(key);
     })
-    .map((row) => Number(row.id));
+    .map((row: { id: number }) => Number(row.id));
 
   if (idsToSoftDelete.length > 0) {
-    const { error: hardDeleteError } = await supabase
-      .from("evento")
-      .delete()
-      .in("id", idsToSoftDelete)
-      .eq("owner_user_id", params.userId);
+    const { error: hardDeleteError } = await supabase.rpc("fn_eventos_delete_batch", {
+      p_event_ids: idsToSoftDelete,
+    });
 
     if (hardDeleteError) throw hardDeleteError;
   }
 
   if (rows.length > 0) {
-    const { error } = await supabase
-      .from("evento")
-      .upsert(rows, { onConflict: "owner_user_id,google_calendar_id,google_event_id" });
+    const { error } = await supabase.rpc("fn_eventos_upsert_google_batch", {
+      p_events: rows,
+    });
 
     if (error) throw error;
   }
@@ -171,7 +168,6 @@ export async function syncGoogleCalendarBidirectional(params: {
     };
   }
 
-  const supabase = createBrowserSupabaseClient();
   await upsertCalendarSyncState({
     userId: params.userId,
     syncEnabledSnapshot: true,
@@ -300,17 +296,11 @@ export async function syncGoogleCalendarBidirectional(params: {
       }
 
       if (googleEventId && googleCalendarId) {
-        const { error } = await supabase
-          .from("evento")
-          .update({
-            google_calendar_id: googleCalendarId,
-            google_event_id: googleEventId,
-            last_synced_at: new Date().toISOString(),
-            sync_status: "SYNCED",
-            sync_error: null,
-          })
-          .eq("id", localEvent.id)
-          .eq("owner_user_id", params.userId);
+        const { error } = await supabase.rpc("fn_evento_update_sync_info", {
+          p_event_id:           localEvent.id,
+          p_google_calendar_id: googleCalendarId,
+          p_google_event_id:    googleEventId,
+        });
         if (error) throw error;
         exported += 1;
       }
@@ -394,20 +384,19 @@ async function upsertCalendarSyncState(params: {
 }) {
   const supabase = createBrowserSupabaseClient();
   const nowIso = new Date().toISOString();
-  const basePayload = {
-    user_id: params.userId,
-    sync_enabled_snapshot: params.syncEnabledSnapshot,
-    export_plans_snapshot: params.exportPlansSnapshot,
-    last_status: params.status,
-    last_error: params.errorMessage,
-    last_started_at: params.status === "RUNNING" ? nowIso : undefined,
-    last_finished_at: params.status === "RUNNING" ? undefined : nowIso,
-    last_imported_count: params.importedCount ?? 0,
-    last_exported_count: params.exportedCount ?? 0,
-    last_calendars_count: params.calendarsCount ?? 0,
-  };
 
-  const { error } = await supabase.from("calendar_sync_state").upsert(basePayload, { onConflict: "user_id" });
+  const { error } = await supabase.rpc("fn_calendar_sync_state_upsert", {
+    p_sync_enabled_snapshot: params.syncEnabledSnapshot,
+    p_export_plans_snapshot: params.exportPlansSnapshot,
+    p_last_status:           params.status,
+    p_last_error:            params.errorMessage,
+    p_last_started_at:       params.status === "RUNNING" ? nowIso : null,
+    p_last_finished_at:      params.status === "RUNNING" ? null : nowIso,
+    p_last_imported_count:   params.importedCount ?? 0,
+    p_last_exported_count:   params.exportedCount ?? 0,
+    p_last_calendars_count:  params.calendarsCount ?? 0,
+  });
+
   if (error) {
     console.warn("[calendar-sync] state upsert failed", {
       message: error.message,
@@ -420,12 +409,7 @@ async function upsertCalendarSyncState(params: {
 
 async function softDeleteLocalEvent(params: { userId: string; eventId: number; syncError: string | null }) {
   const supabase = createBrowserSupabaseClient();
-  const { error } = await supabase
-    .from("evento")
-    .delete()
-    .eq("id", params.eventId)
-    .eq("owner_user_id", params.userId);
-
+  const { error } = await supabase.rpc("fn_evento_delete", { p_event_id: params.eventId });
   if (error) throw error;
 }
 

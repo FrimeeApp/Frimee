@@ -5,7 +5,12 @@ import { useSearchParams } from "next/navigation";
 import AppSidebar from "@/components/common/AppSidebar";
 import LoadingScreen from "@/components/common/LoadingScreen";
 import { useAuth } from "@/providers/AuthProvider";
-import { createBrowserSupabaseClient } from "@/services/supabase/client";
+import {
+  listLiquidacionesForUserEndpoint,
+  requestConfirmationEndpoint,
+  confirmReceiptEndpoint,
+  rejectReceiptEndpoint,
+} from "@/services/api/endpoints/liquidaciones.endpoint";
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(false);
@@ -77,60 +82,29 @@ function MisGastosContent() {
     if (!user) return;
     const load = async () => {
       setDataLoading(true);
-      const supabase = createBrowserSupabaseClient();
-
-      const { data: liquidaciones } = await supabase
-        .from("liquidaciones")
-        .select("id, plan_id, from_user_id, to_user_id, importe, fecha, nota, estado, plan:plan(id, titulo)")
-        .or(`from_user_id.eq.${user.id},to_user_id.eq.${user.id}`)
-        .in("estado", ["PENDIENTE", "EN_REVISION", "CONFIRMADA"])
-        .order("fecha", { ascending: false });
-
-      if (!liquidaciones?.length) {
-        setItems([]);
-        setDataLoading(false);
-        return;
-      }
-
-      const counterpartyIds = [
-        ...new Set(
-          liquidaciones.map((l) =>
-            l.from_user_id === user.id ? l.to_user_id : l.from_user_id
-          )
-        ),
-      ];
-
-      const { data: profiles } = await supabase
-        .from("usuarios_public")
-        .select("id, nombre, profile_image")
-        .in("id", counterpartyIds);
-
-      const profileMap = Object.fromEntries(
-        (profiles ?? []).map((p) => [p.id, p])
-      );
-
-      setItems(
-        liquidaciones.map((l) => {
-          const isOutgoing = l.from_user_id === user.id;
-          const counterpartyId = isOutgoing ? l.to_user_id : l.from_user_id;
-          const plan = Array.isArray(l.plan) ? l.plan[0] : l.plan;
-          return {
+      try {
+        const rows = await listLiquidacionesForUserEndpoint();
+        setItems(
+          rows.map((l) => ({
             id: l.id,
             amount: l.importe,
             date: l.fecha,
-            direction: isOutgoing ? "outgoing" : "incoming",
-            counterparty: profileMap[counterpartyId]?.nombre ?? "Usuario",
-            counterpartyId,
-            planName: plan?.titulo ?? `Plan ${l.plan_id}`,
+            direction: l.from_user_id === user.id ? "outgoing" : "incoming",
+            counterparty: l.counterparty_nombre ?? "Usuario",
+            counterpartyId: l.counterparty_id,
+            planName: l.plan_titulo ?? `Plan ${l.plan_id}`,
             planId: l.plan_id,
             concept: l.nota,
-            estado: l.estado as EstadoLiquidacion,
-          };
-        })
-      );
-      setDataLoading(false);
+            estado: l.estado,
+          }))
+        );
+      } catch {
+        setItems([]);
+      } finally {
+        setDataLoading(false);
+      }
     };
-    load();
+    void load();
   }, [user]);
 
   useEffect(() => {
@@ -197,15 +171,8 @@ function MisGastosContent() {
   const handleRequestConfirmation = async (item: ExpenseItem) => {
     setActingId(item.id);
     try {
-      const supabase = createBrowserSupabaseClient();
-      const { error } = await supabase
-        .from("liquidaciones")
-        .update({ estado: "EN_REVISION" })
-        .eq("id", item.id);
-      if (error) throw error;
-      setItems((prev) =>
-        prev.map((i) => (i.id === item.id ? { ...i, estado: "EN_REVISION" } : i))
-      );
+      await requestConfirmationEndpoint(item.id);
+      setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, estado: "EN_REVISION" } : i)));
     } catch {
       alert("No se pudo enviar la solicitud. Inténtalo de nuevo.");
     } finally {
@@ -217,15 +184,8 @@ function MisGastosContent() {
   const handleConfirmReceipt = async (item: ExpenseItem) => {
     setActingId(item.id);
     try {
-      const supabase = createBrowserSupabaseClient();
-      const { error } = await supabase
-        .from("liquidaciones")
-        .update({ estado: "CONFIRMADA" })
-        .eq("id", item.id);
-      if (error) throw error;
-      setItems((prev) =>
-        prev.map((i) => (i.id === item.id ? { ...i, estado: "CONFIRMADA" } : i))
-      );
+      await confirmReceiptEndpoint(item.id);
+      setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, estado: "CONFIRMADA" } : i)));
       setActiveTab("paid");
     } catch {
       alert("No se pudo confirmar. Inténtalo de nuevo.");
@@ -238,15 +198,8 @@ function MisGastosContent() {
   const handleRejectReceipt = async (item: ExpenseItem) => {
     setActingId(item.id);
     try {
-      const supabase = createBrowserSupabaseClient();
-      const { error } = await supabase
-        .from("liquidaciones")
-        .update({ estado: "PENDIENTE" })
-        .eq("id", item.id);
-      if (error) throw error;
-      setItems((prev) =>
-        prev.map((i) => (i.id === item.id ? { ...i, estado: "PENDIENTE" } : i))
-      );
+      await rejectReceiptEndpoint(item.id);
+      setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, estado: "PENDIENTE" } : i)));
     } catch {
       alert("No se pudo rechazar. Inténtalo de nuevo.");
     } finally {

@@ -55,12 +55,12 @@ function buildPlanDateTime(params: {
 
 export default function NewPlanPage() {
   const router = useRouter();
-  const { user, settings, session, googleProviderToken } = useAuth();
+  const { user, profile, settings, session, googleProviderToken } = useAuth();
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   const [saving, setSaving] = useState(false);
   const [uploadingCover, setUploadingCover] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [publishRetryPlanId, setPublishRetryPlanId] = useState<number | null>(null);
+  const [publishRetryPlan, setPublishRetryPlan] = useState<import("@/services/api/mappers/post.mapper").PublishablePlan | null>(null);
   const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
   const [form, setForm] = useState<PlanForm>(DEFAULT_FORM);
   const coverInputRef = useRef<HTMLInputElement | null>(null);
@@ -125,7 +125,7 @@ export default function NewPlanPage() {
 
     setSaving(true);
     setErrorMsg(null);
-    setPublishRetryPlanId(null);
+    setPublishRetryPlan(null);
 
     try {
       const created = await createPlan({
@@ -182,11 +182,35 @@ export default function NewPlanPage() {
       }
 
       try {
-        await publishPlanAsPost({ id: created.id });
+        await publishPlanAsPost({
+          id: created.id,
+          title: form.titulo.trim(),
+          description: form.descripcion.trim(),
+          locationName: form.ubicacionNombre.trim(),
+          startsAt: buildPlanDateTime({ date: form.inicioDate, time: form.inicioTime, allDay: form.allDay, isEnd: false }),
+          endsAt: buildPlanDateTime({ date: form.finDate, time: form.finTime, allDay: form.allDay, isEnd: true }),
+          allDay: form.allDay,
+          visibility: form.visibilidad,
+          coverImage: coverImageUrl ?? null,
+          ownerUserId: user.id,
+          creator: { id: user.id, name: profile?.nombre ?? "", profileImage: profile?.profile_image ?? null },
+        });
         router.replace("/feed");
       } catch (publishError) {
         console.warn("[plans/new] publish to firebase error:", publishError);
-        setPublishRetryPlanId(created.id);
+        setPublishRetryPlan({
+          id: created.id,
+          title: form.titulo.trim(),
+          description: form.descripcion.trim(),
+          locationName: form.ubicacionNombre.trim(),
+          startsAt: buildPlanDateTime({ date: form.inicioDate, time: form.inicioTime, allDay: form.allDay, isEnd: false }),
+          endsAt: buildPlanDateTime({ date: form.finDate, time: form.finTime, allDay: form.allDay, isEnd: true }),
+          allDay: form.allDay,
+          visibility: form.visibilidad,
+          coverImage: coverImageUrl ?? null,
+          ownerUserId: user.id,
+          creator: { id: user.id, name: profile?.nombre ?? "", profileImage: profile?.profile_image ?? null },
+        });
         setErrorMsg("Plan creado, pero no se pudo publicar en el feed. Puedes reintentar o ir al feed.");
       }
     } catch (error) {
@@ -201,13 +225,13 @@ export default function NewPlanPage() {
   };
 
   const retryPublish = async () => {
-    if (!publishRetryPlanId || saving) return;
+    if (!publishRetryPlan || saving) return;
 
     setSaving(true);
     setErrorMsg(null);
 
     try {
-      await publishPlanAsPost({ id: publishRetryPlanId });
+      await publishPlanAsPost(publishRetryPlan);
       router.replace("/feed");
     } catch (error) {
       const message =
@@ -413,7 +437,7 @@ export default function NewPlanPage() {
                 >
                   {saving ? "Creando..." : uploadingCover ? "Subiendo imagen..." : "Crear plan"}
                 </button>
-                {publishRetryPlanId && (
+                {publishRetryPlan && (
                   <>
                     <button
                       type="button"

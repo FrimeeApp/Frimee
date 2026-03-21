@@ -24,25 +24,15 @@ export async function searchPublicUserProfiles(params: {
   limit?: number;
   excludeUserId?: string;
 }): Promise<PublicUserProfileRow[]> {
-  const supabase = createBrowserSupabaseClient();
   const trimmedQuery = params.query.trim();
+  if (!trimmedQuery) return [];
 
-  if (!trimmedQuery) {
-    return [];
-  }
-
-  let request = supabase
-    .from("usuarios_public")
-    .select("id,nombre,profile_image")
-    .ilike("nombre", `%${trimmedQuery}%`)
-    .order("nombre", { ascending: true })
-    .limit(params.limit ?? 8);
-
-  if (params.excludeUserId) {
-    request = request.neq("id", params.excludeUserId);
-  }
-
-  const { data, error } = await request;
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_users_search_public", {
+    p_query: trimmedQuery,
+    p_limit: params.limit ?? 8,
+    p_exclude_user_id: params.excludeUserId ?? null,
+  });
 
   if (error) throw error;
   return (data ?? []) as PublicUserProfileRow[];
@@ -79,20 +69,28 @@ type UserAuthSnapshotRpcRow = {
 export async function fetchPublicUserProfileById(userId: string): Promise<PublicUserProfileRow | null> {
   const supabase = createBrowserSupabaseClient();
 
-  const { data, error } = await supabase
-    .from("usuarios_public")
-    .select("id,nombre,profile_image")
-    .eq("id", userId)
-    .maybeSingle();
-
-  console.log("[users] usuarios_public by id", {
-    userId,
-    data,
-    error: error ? { message: error.message, code: error.code, details: error.details } : null,
+  const { data, error } = await supabase.rpc("fn_user_profile_get_public", {
+    p_user_id: userId,
   });
 
   if (error) throw error;
-  return (data as PublicUserProfileRow | null) ?? null;
+  const rows = (data ?? []) as PublicUserProfileRow[];
+  return rows[0] ?? null;
+}
+
+export async function fetchActiveFriends(): Promise<PublicUserProfileRow[]> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_friends_list_active");
+  if (error) throw error;
+  return (data ?? []) as PublicUserProfileRow[];
+}
+
+export async function sendFriendRequest(targetUserId: string): Promise<void> {
+  const supabase = createBrowserSupabaseClient();
+  const { error } = await supabase.rpc("fn_friend_request_send", {
+    p_target_user_id: targetUserId,
+  });
+  if (error) throw error;
 }
 
 export async function fetchUserAuthSnapshotById(userId: string): Promise<UserAuthSnapshotRow> {

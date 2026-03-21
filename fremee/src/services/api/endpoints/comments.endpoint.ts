@@ -13,6 +13,7 @@ export type CreateCommentParams = {
   planId: number;
   userId: string;
   userName: string;
+  userProfileImage?: string | null;
   content: string;
 };
 

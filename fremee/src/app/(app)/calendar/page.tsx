@@ -60,6 +60,7 @@ function CalendarPageInner() {
   const [backgroundRefreshing, setBackgroundRefreshing] = useState(false);
 
   const [syncingGoogle, setSyncingGoogle] = useState(false);
+  const [needsGoogleReconnect, setNeedsGoogleReconnect] = useState(false);
   const [plans, setPlans] = useState<FeedPlanItemDto[]>([]);
   const [tab, setTab] = useState<PlanTab>("active");
   const [planSearch, setPlanSearch] = useState("");
@@ -200,7 +201,14 @@ function CalendarPageInner() {
             name: loadError.name,
           });
         } else {
-          console.error("[calendar] error loading calendar data", loadError);
+          const e = loadError as Record<string, unknown>;
+          console.error("[calendar] error loading calendar data", {
+            message: e?.message,
+            code: e?.code,
+            details: e?.details,
+            hint: e?.hint,
+            raw: String(loadError),
+          });
         }
         setPlans([]);
       } finally {
@@ -228,11 +236,13 @@ function CalendarPageInner() {
     });
 
     if (!providerToken) {
-      console.error("[calendar] No se pudo obtener el token de Google Calendar.");
+      setNeedsGoogleReconnect(true);
       return;
     }
+    setNeedsGoogleReconnect(false);
 
     setSyncingGoogle(true);
+    console.log("[google-sync] Iniciando sincronización con Google Calendar...");
 
     try {
       const timeMin = startOfMonth(addMonths(new Date(), -12)).toISOString();
@@ -246,6 +256,7 @@ function CalendarPageInner() {
         googleSyncEnabled: settings?.google_sync_enabled,
         googleSyncExportPlans: settings?.google_sync_export_plans,
       });
+      console.log("[google-sync] Sincronización completada.");
       setReloadNonce((prev) => prev + 1);
     } catch (syncError) {
       if (syncError instanceof Error) {
@@ -254,12 +265,12 @@ function CalendarPageInner() {
         const isGoogle403 = message.includes("[google-calendar] 403");
         if (isGoogle401 || isGoogle403) {
           if (user?.id) clearCachedGoogleProviderToken(user.id);
-          console.error("[calendar] Google Calendar 401/403 — reautoriza Google.");
+          console.log("[google-sync] Token expirado (401/403) — se intentará renovar en próxima sync.");
         } else {
-          console.error("[calendar] Error sincronizando Google Calendar:", message);
+          console.log("[google-sync] Error en sincronización:", message);
         }
       } else {
-        console.error("[calendar] Error sincronizando Google Calendar:", syncError);
+        console.log("[google-sync] Error en sincronización:", syncError);
       }
     } finally {
       setSyncingGoogle(false);
@@ -274,6 +285,18 @@ function CalendarPageInner() {
     supabase,
     user?.id,
   ]);
+
+  const reconnectGoogle = useCallback(async () => {
+    const redirectTo = `${window.location.origin}/auth/callback`;
+    await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo,
+        scopes: "https://www.googleapis.com/auth/calendar",
+        queryParams: { access_type: "offline", prompt: "consent" },
+      },
+    });
+  }, [supabase]);
 
   useEffect(() => {
     if (authLoading || loading) return;
@@ -381,9 +404,15 @@ function CalendarPageInner() {
                     className="h-[36px] w-full min-w-[180px] rounded-input border border-app bg-app px-3 text-body-sm text-app outline-none sm:w-[220px]"
                   />
 
-                  {syncingGoogle ? <span className="text-body-sm text-muted">Sincronizando Google...</span> : null}
-                  {!syncingGoogle && backgroundRefreshing ? (
-                    <span className="text-body-sm text-muted">Actualizando...</span>
+                  {needsGoogleReconnect && settings?.google_sync_enabled ? (
+                    <button
+                      type="button"
+                      onClick={() => void reconnectGoogle()}
+                      className="flex items-center gap-1.5 rounded-button border border-warning/40 bg-warning/10 px-3 py-1.5 text-body-sm text-warning transition-colors hover:bg-warning/20"
+                    >
+                      <span>⚠</span>
+                      Reconectar Google Calendar
+                    </button>
                   ) : null}
                 </div>
               </div>

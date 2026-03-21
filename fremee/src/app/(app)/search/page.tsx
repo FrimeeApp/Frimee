@@ -8,6 +8,7 @@ import AppSidebar from "@/components/common/AppSidebar";
 import LoadingScreen from "@/components/common/LoadingScreen";
 import { useAuth } from "@/providers/AuthProvider";
 import { searchUsers, type PublicUserProfileDto } from "@/services/api/repositories/users.repository";
+import { sendFriendRequest } from "@/services/api/endpoints/users.endpoint";
 
 const Globe = dynamic(() => import("react-globe.gl"), {
   ssr: false,
@@ -24,6 +25,8 @@ export default function SearchPage() {
   const [searchValue, setSearchValue] = useState("");
   const [searchResults, setSearchResults] = useState<PublicUserProfileDto[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [sentRequests, setSentRequests] = useState<Set<string>>(new Set());
+  const [sendingId, setSendingId] = useState<string | null>(null);
 
   useEffect(() => {
     const trimmedQuery = searchValue.trim();
@@ -112,18 +115,43 @@ export default function SearchPage() {
                 <div className="space-y-[2px]">
                   {searchResults.map((result) => {
                     const avatarLabel = (result.nombre.trim()[0] || "U").toUpperCase();
+                    const alreadySent = sentRequests.has(result.id);
+                    const isSending = sendingId === result.id;
+
+                    const handleAddFriend = async (e: React.MouseEvent) => {
+                      e.preventDefault();
+                      if (alreadySent || isSending) return;
+                      setSendingId(result.id);
+                      try {
+                        await sendFriendRequest(result.id);
+                        setSentRequests((prev) => new Set(prev).add(result.id));
+                      } catch (err) {
+                        console.error("[search] Error sending friend request:", err);
+                      } finally {
+                        setSendingId(null);
+                      }
+                    };
 
                     return (
-                      <Link
+                      <div
                         key={result.id}
-                        href={`/profile/${result.id}`}
                         className="flex items-center gap-[var(--space-2)] rounded-[8px] px-2 py-[6px] transition-colors hover:bg-surface"
                       >
-                        <Avatar label={avatarLabel} image={result.profile_image} />
-                        <div className="min-w-0">
-                          <p className="truncate text-body-sm font-[var(--fw-semibold)] text-app">{result.nombre}</p>
-                        </div>
-                      </Link>
+                        <Link href={`/profile/${result.id}`} className="flex min-w-0 flex-1 items-center gap-[var(--space-2)]">
+                          <Avatar label={avatarLabel} image={result.profile_image} />
+                          <div className="min-w-0">
+                            <p className="truncate text-body-sm font-[var(--fw-semibold)] text-app">{result.nombre}</p>
+                          </div>
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={handleAddFriend}
+                          disabled={alreadySent || isSending}
+                          className="shrink-0 rounded-full border border-app px-3 py-1 text-body-sm font-[var(--fw-semibold)] transition-colors disabled:opacity-50"
+                        >
+                          {alreadySent ? "Enviada" : isSending ? "..." : "Añadir"}
+                        </button>
+                      </div>
                     );
                   })}
                 </div>
