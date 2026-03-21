@@ -63,7 +63,6 @@ export default function MisGastosPage() {
 function MisGastosContent() {
   const { user } = useAuth();
   const isMobile = useIsMobile();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [activeTab, setActiveTab] = useState<ExpenseTab>("pending");
   const [items, setItems] = useState<ExpenseItem[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
@@ -258,23 +257,12 @@ function MisGastosContent() {
   return (
     <div className="min-h-dvh bg-app text-app">
       <div className="relative mx-auto min-h-dvh max-w-[1440px]">
-        <AppSidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed((p) => !p)} />
+        <AppSidebar />
 
         <main
-          className={`px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-4)] transition-[padding] duration-[var(--duration-slow)] [transition-timing-function:var(--ease-standard)] lg:py-[var(--space-8)] lg:pr-[var(--space-14)] ${
-            sidebarCollapsed ? "lg:pl-[56px]" : "lg:pl-[136px]"
-          }`}
+          className={`px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-4)] transition-[padding] duration-[var(--duration-slow)] [transition-timing-function:var(--ease-standard)] md:py-[var(--space-8)] md:pr-[var(--space-14)]`}
         >
           <section className="mx-auto w-full max-w-[860px]">
-            <header className="mb-[var(--space-6)]">
-              <h1 className="text-[var(--font-h2)] font-[var(--fw-semibold)] leading-[var(--lh-h2)]">
-                Mis gastos
-              </h1>
-              <p className="mt-[var(--space-2)] text-body-sm text-muted">
-                Consulta lo que has pagado, lo que te han pagado y lo que sigue pendiente por plan.
-              </p>
-            </header>
-
             {/* Tabs */}
             <div
               ref={tabRowRef}

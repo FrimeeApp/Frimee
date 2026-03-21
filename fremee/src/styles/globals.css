@@ -9,7 +9,7 @@
 
 :root {
   --bg: #ffffff;
-  --surface: #f5f5f6;
+  --surface: #ffffff;
   --surface-2: #ededef;
   --surface-inset: #eaeaec;
   --overlay: rgb(28 28 34 / 0.45);
@@ -169,7 +169,7 @@
 
 .dark {
   --bg: #111111;
-  --surface: #191919;
+  --surface: #1A1A1F;
   --surface-2: #222222;
   --surface-inset: #161616;
   --overlay: rgb(0 0 0 / 0.58);
@@ -597,6 +597,12 @@
     padding-right: max(var(--page-margin-x), env(safe-area-inset-right));
   }
 
+  @media (min-width: 768px) {
+    .px-safe {
+      padding-left: 136px;
+    }
+  }
+
   .pb-safe-nav {
     padding-bottom: max(var(--space-4), env(safe-area-inset-bottom));
   }
@@ -666,22 +672,35 @@
     );
   }
 
-  .feed-image-responsive {
+  .feed-image-container,
+  .feed-divider {
     margin-left: calc(-1 * max(var(--page-margin-x), env(safe-area-inset-left)));
     margin-right: calc(-1 * max(var(--page-margin-x), env(safe-area-inset-right)));
     width: calc(100% + max(var(--page-margin-x), env(safe-area-inset-left)) + max(var(--page-margin-x), env(safe-area-inset-right)));
     max-width: none;
+  }
+
+  .feed-image-responsive {
+    width: 100%;
     border-radius: 0;
     border: 0;
     display: block;
     object-fit: cover;
   }
 
-  @media (min-width: 800px) {
-    .feed-image-responsive {
+  @media (min-width: 768px) {
+    .feed-image-container,
+    .feed-divider {
       margin-left: 0;
       margin-right: 0;
       width: 100%;
+    }
+
+    .feed-image-container {
+      border-radius: 14px;
+    }
+
+    .feed-image-responsive {
       border-radius: 14px;
       border: 1px solid var(--border);
     }

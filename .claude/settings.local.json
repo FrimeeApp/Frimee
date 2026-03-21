@@ -5,7 +5,18 @@
       "Bash(node -e \"require\\(''stripe''\\); console.log\\(''stripe ok''\\)\")",
       "Bash(npm run:*)",
       "Bash(ls \"c:\\\\Users\\\\cayet\\\\Desktop\\\\Proyectos\\\\Frimee\\\\fremee\\\\src\\\\app\\\\\\(app\\)\\\\calendario\"\")",
-      "Bash(find \"c:/Users/cayet/Desktop/Proyectos/Frimee/fremee/src/app/\\(app\\)/calendario\" -type f)"
+      "Bash(find \"c:/Users/cayet/Desktop/Proyectos/Frimee/fremee/src/app/\\(app\\)/calendario\" -type f)",
+      "Bash(npx tsc:*)",
+      "Bash(ls -la \"/Users/vicky/Desktop/Frimee/fremee/src/app/\\(app\\)/\")",
+      "Bash(find /Users/vicky/Desktop/Frimee/fremee/src/app -name \"\\\\[*\\\\]\" -o -name \"\\(*\\)\")",
+      "Bash(ls /Users/vicky/Desktop/Frimee/fremee/src/app/\\\\\\(app\\\\\\)/)",
+      "Bash(find /Users/vicky/Desktop/Frimee/fremee/src/services/api -type f -name *.ts)",
+      "Bash(find /Users/vicky/Desktop/Frimee -name *.sql -o -name *.pgsql)",
+      "Bash(find /Users/vicky/Desktop/Frimee -name *.sql -type f)",
+      "Bash(xargs ls:*)",
+      "Bash(find /Users/vicky/Desktop/Frimee/fremee/src/app/api -type f -name *.ts)",
+      "Bash(ls -la \"/Users/vicky/Desktop/Frimee/fremee/src/app/\\(app\\)/profile/\")",
+      "Bash(xargs cat:*)"
     ]
   }
 }

@@ -56,7 +56,6 @@ function CalendarPageInner() {
   const searchParams = useSearchParams();
   const createFromQuery = searchParams.get("create");
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [backgroundRefreshing, setBackgroundRefreshing] = useState(false);
 
@@ -335,16 +334,10 @@ function CalendarPageInner() {
   return (
     <div className="min-h-dvh bg-app text-app">
       <div className="relative mx-auto min-h-dvh max-w-[1440px]">
-        <AppSidebar
-          collapsed={sidebarCollapsed}
-          onToggle={() => setSidebarCollapsed((prev) => !prev)}
-          onCreatePlan={() => setCreateModalOpen(true)}
-        />
+        <AppSidebar onCreatePlan={() => setCreateModalOpen(true)} />
 
         <main
-          className={`px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-4)] transition-[padding] duration-[var(--duration-slow)] [transition-timing-function:var(--ease-standard)] lg:py-[var(--space-8)] lg:pr-[var(--space-14)] ${
-            sidebarCollapsed ? "lg:pl-[56px]" : "lg:pl-[136px]"
-          }`}
+          className={`px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-4)] transition-[padding] duration-[var(--duration-slow)] [transition-timing-function:var(--ease-standard)] md:py-[var(--space-8)] md:pr-[var(--space-14)]`}
         >
           <div className="mx-auto w-full max-w-[1120px]">
             <div className="border-b border-app pb-[var(--space-2)] text-body text-muted">
@@ -396,12 +389,12 @@ function CalendarPageInner() {
               </div>
             </div>
 
-            <div className="mt-[var(--space-5)] grid grid-cols-1 gap-[var(--space-6)] lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-[var(--space-8)]">
+            <div className="mt-[var(--space-5)] grid grid-cols-1 gap-[var(--space-6)] md:grid-cols-[minmax(0,1fr)_320px] md:gap-[var(--space-8)]">
               {loading ? (
                 <CalendarPageSkeleton />
               ) : (
                 <>
-                  <aside className={`lg:col-start-2 lg:row-start-1 flex flex-col rounded-modal border border-app bg-surface shadow-elev-1 lg:sticky lg:top-[var(--space-6)] lg:self-start transition-all duration-300 ${calendarOpen ? (viewMode === "day" ? "h-[380px] lg:h-[420px]" : "lg:h-[420px]") : "lg:h-auto"}`}>
+                  <aside className={`md:col-start-2 md:row-start-1 flex flex-col rounded-modal border border-app bg-surface shadow-elev-1 md:sticky md:top-[var(--space-6)] md:self-start transition-all duration-300 ${calendarOpen ? (viewMode === "day" ? "h-[380px] md:h-[420px]" : "md:h-[420px]") : "md:h-auto"}`}>
                     <button
                       type="button"
                       onClick={() => setCalendarOpen((prev) => !prev)}
@@ -420,7 +413,7 @@ function CalendarPageInner() {
                       </span>
                     </button>
 
-                    <div className={`min-h-0 flex-1 overflow-hidden p-[var(--space-4)] pt-0 lg:pt-0 ${calendarOpen ? "block" : "hidden"}`}>
+                    <div className={`min-h-0 flex-1 overflow-hidden p-[var(--space-4)] pt-0 md:pt-0 ${calendarOpen ? "block" : "hidden"}`}>
                     {viewMode === "month" ? (
                       <>
                         <div className="mb-[var(--space-2)] flex items-center justify-between">
@@ -628,7 +621,7 @@ function CalendarPageInner() {
                     </div>
 
                     {!calendarOpen && (
-                      <div className="hidden border-t border-app/50 px-[var(--space-3)] pb-[var(--space-3)] lg:block">
+                      <div className="hidden border-t border-app/50 px-[var(--space-3)] pb-[var(--space-3)] md:block">
                         {pinnedPlanIds.length === 0 ? (
                           <p className="pt-[var(--space-3)] text-center text-[11px] text-muted">
                             Ancla hasta 3 planes con 📌
@@ -666,7 +659,7 @@ function CalendarPageInner() {
                     )}
                   </aside>
 
-                  <section className="space-y-[var(--space-4)] lg:col-start-1 lg:row-start-1">
+                  <section className="space-y-[var(--space-4)] md:col-start-1 md:row-start-1">
                     {filteredPlans.length === 0 ? (
                       <p className="rounded-modal border border-app bg-surface p-[var(--space-4)] text-body text-muted">
                         {planSearch.trim()
@@ -707,7 +700,7 @@ function CalendarPageInner() {
                                 type="button"
                                 onClick={() => togglePin(plan.id)}
                                 aria-label={pinnedPlanIds.includes(plan.id) ? "Desanclar" : "Anclar"}
-                                className={`absolute left-3 top-3 hidden h-7 w-7 items-center justify-center rounded-full text-[13px] shadow-sm transition-opacity lg:flex ${
+                                className={`absolute left-3 top-3 hidden h-7 w-7 items-center justify-center rounded-full text-[13px] shadow-sm transition-opacity md:flex ${
                                   pinnedPlanIds.includes(plan.id)
                                     ? "bg-warning-token/90 opacity-100"
                                     : "bg-white/80 opacity-0 group-hover:opacity-100"
