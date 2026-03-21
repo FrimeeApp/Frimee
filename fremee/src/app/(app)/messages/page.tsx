@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import AppSidebar from "@/components/common/AppSidebar";
 import LoadingScreen from "@/components/common/LoadingScreen";
 import { useAuth } from "@/providers/AuthProvider";
-import { createBrowserSupabaseClient } from "@/services/supabase/client";
+import { createBrowserSupabaseClient } from "@/services/supabase/client"; // usado en ChatConversation
 import {
   listChats,
   getOrCreateDirectoChat,
@@ -236,7 +236,8 @@ function ChatConversation({
   const [sending, setSending] = useState(false);
   const [text, setText] = useState("");
   const bottomRef = useRef<HTMLDivElement | null>(null);
-  const supabase = createBrowserSupabaseClient();
+  const supabaseRef = useRef(createBrowserSupabaseClient());
+  const channelRef = useRef<ReturnType<typeof supabaseRef.current.channel> | null>(null);
 
   const name = resolveChatName(chat, currentUserId);
   const avatar = resolveChatAvatar(chat, currentUserId);
@@ -257,48 +258,28 @@ function ChatConversation({
     void markChatRead(chat.chat_id);
   }, [chat.chat_id]);
 
-  // Realtime — escucha mensajes nuevos
+  // Realtime — Broadcast: el emisor publica, todos los suscriptores reciben al instante
   useEffect(() => {
+    const supabase = supabaseRef.current;
     const channel = supabase
       .channel(`chat:${chat.chat_id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "mensajes",
-          filter: `chat_id=eq.${chat.chat_id}`,
-        },
-        (payload) => {
-          const row = payload.new as {
-            id: number;
-            sender_id: string;
-            texto: string;
-            created_at: string;
-          };
-          // Añadir el mensaje nuevo — el nombre/avatar lo inferimos si es el propio usuario
-          setMessages((prev) => {
-            if (prev.some((m) => m.id === row.id)) return prev;
-            const senderMiembro = chat.miembros.find((m) => m.id === row.sender_id);
-            return [
-              ...prev,
-              {
-                id: row.id,
-                sender_id: row.sender_id,
-                sender_nombre: senderMiembro?.nombre ?? "",
-                sender_profile_image: senderMiembro?.profile_image ?? null,
-                texto: row.texto,
-                created_at: row.created_at,
-              },
-            ];
-          });
-          void markChatRead(chat.chat_id);
-        },
-      )
+      .on("broadcast", { event: "new_message" }, ({ payload }) => {
+        const msg = payload as MensajeRow;
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === msg.id)) return prev;
+          return [...prev, msg];
+        });
+        void markChatRead(chat.chat_id);
+      })
       .subscribe();
 
-    return () => { void supabase.removeChannel(channel); };
-  }, [chat.chat_id, chat.miembros, supabase]);
+    channelRef.current = channel;
+
+    return () => {
+      void supabase.removeChannel(channel);
+      channelRef.current = null;
+    };
+  }, [chat.chat_id]);
 
   // Scroll al último mensaje
   useEffect(() => {
@@ -313,19 +294,26 @@ function ChatConversation({
     try {
       const newId = await sendMensaje({ chatId: chat.chat_id, texto: trimmed });
       const me = chat.miembros.find((m) => m.id === currentUserId);
+      const newMsg: MensajeRow = {
+        id: newId,
+        sender_id: currentUserId,
+        sender_nombre: me?.nombre ?? "",
+        sender_profile_image: me?.profile_image ?? null,
+        texto: trimmed,
+        created_at: new Date().toISOString(),
+      };
+
+      // Publicar al canal para que el receptor lo reciba al instante
+      void channelRef.current?.send({
+        type: "broadcast",
+        event: "new_message",
+        payload: newMsg,
+      });
+
+      // Añadir al estado local del emisor
       setMessages((prev) => {
         if (prev.some((m) => m.id === newId)) return prev;
-        return [
-          ...prev,
-          {
-            id: newId,
-            sender_id: currentUserId,
-            sender_nombre: me?.nombre ?? "",
-            sender_profile_image: me?.profile_image ?? null,
-            texto: trimmed,
-            created_at: new Date().toISOString(),
-          },
-        ];
+        return [...prev, newMsg];
       });
     } catch (e) {
       console.error("[chat] Error enviando mensaje:", e);
