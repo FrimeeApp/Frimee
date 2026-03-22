@@ -22,7 +22,12 @@
       "Bash(curl -L \"https://github.com/supabase/cli/releases/latest/download/supabase_windows_amd64.tar.gz\" -o \"$TEMP/supabase.tar.gz\")",
       "Bash(ls \"c:/Users/cayet/Desktop/Proyectos/Frimee/fremee/src/app/\\(app\\)/\")",
       "Bash(ls \"c:/Users/cayet/Desktop/Proyectos/Frimee/fremee/src/app/\\(app\\)/messages/\")",
-      "Bash(wc -l \"/c/Users/cayet/Desktop/Proyectos/Frimee/fremee/src/app/\\(app\\)/feed/page.tsx\" \"/c/Users/cayet/Desktop/Proyectos/Frimee/fremee/src/app/\\(app\\)/messages/page.tsx\" \"/c/Users/cayet/Desktop/Proyectos/Frimee/fremee/src/app/\\(app\\)/calendar/page.tsx\")"
+      "Bash(wc -l \"/c/Users/cayet/Desktop/Proyectos/Frimee/fremee/src/app/\\(app\\)/feed/page.tsx\" \"/c/Users/cayet/Desktop/Proyectos/Frimee/fremee/src/app/\\(app\\)/messages/page.tsx\" \"/c/Users/cayet/Desktop/Proyectos/Frimee/fremee/src/app/\\(app\\)/calendar/page.tsx\")",
+      "Bash(ls -la /Users/vicky/Desktop/Frimee/fremee/src/app/\\\\\\(app\\\\\\)/)",
+      "Bash(ls -la /Users/vicky/Desktop/Frimee/fremee/src/app/\\\\\\(app\\\\\\)/plans/)",
+      "Bash(ls /Users/vicky/Desktop/Frimee/fremee/src/app/\\\\\\(app\\\\\\)/plans/)",
+      "Bash(npx next:*)",
+      "Bash(npm ls:*)"
     ]
   }
 }
