@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Client, TravelMode, UnitSystem } from "@googlemaps/google-maps-services-js";
+import { Client, TravelMode, UnitSystem, Language } from "@googlemaps/google-maps-services-js";
 import { createSupabaseServiceClient } from "@/services/supabase/server";
 
 const client = new Client({});
@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
         optimize: false,
         mode,
         units: UnitSystem.metric,
-        language: "es",
+        language: Language.es,
         key: process.env.GOOGLE_MAPS_SERVER_KEY!,
       },
     });

@@ -632,6 +632,7 @@ function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClos
         ubicacion_fin_lat: esTransporte ? (ubicacionFinCoords?.lat ?? null) : null,
         ubicacion_fin_lng: esTransporte ? (ubicacionFinCoords?.lng ?? null) : null,
         transporte_llegada: hayActividadEseDia ? transporteLlegada : null,
+        duracion_viaje: null, distancia_viaje: null, ruta_polyline: null,
         orden: 0, estado: "ACTIVO",
         creado_por_user_id: "", created_at: new Date().toISOString(),
       };
