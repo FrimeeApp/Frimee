@@ -705,7 +705,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
     if (publishing) return;
     setPublishing(true);
     try {
-      await publishPlanAsPost(post.plan);
+      await publishPlanAsPost({ ...post.plan, allDay: post.plan.allDay ?? false, ownerUserId: post.plan.ownerUserId ?? "" });
       console.log("Publicado en Firebase:", post.plan.id);
     } catch (e) {
       console.error("Error publicando:", e);
