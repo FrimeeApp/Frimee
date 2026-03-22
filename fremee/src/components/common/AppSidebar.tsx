@@ -10,7 +10,7 @@ type IconProps = {
 
 const items = [
   { key: "home", label: "Inicio", icon: HomeIcon, href: "/feed" },
-  { key: "calendar", label: "Calendario", icon: CalendarIcon, href: "/calendar" },
+  { key: "calendar", label: "Mis planes", icon: PlansIcon, href: "/calendar" },
   { key: "cards", label: "Mis gastos", icon: CardIcon, href: "/mis-gastos" },
   { key: "send", label: "Mensajes", icon: SendIcon, href: "/messages" },
 ];
@@ -216,11 +216,11 @@ function HomeIcon({ className = "size-icon" }: IconProps = {}) {
   );
 }
 
-function CalendarIcon({ className = "size-icon" }: IconProps = {}) {
+function PlansIcon({ className = "size-icon" }: IconProps = {}) {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <rect x="3" y="5" width="18" height="16" rx="2" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M8 3V7M16 3V7M3 10.5H21" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M9 3L3 6V21L9 18L15 21L21 18V3L15 6L9 3Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+      <path d="M9 3V18M15 6V21" stroke="currentColor" strokeWidth="1.8" />
     </svg>
   );
 }

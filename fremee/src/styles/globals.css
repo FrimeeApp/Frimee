@@ -717,6 +717,165 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+/* ── Popover ── */
+@keyframes popover-in {
+  from { opacity: 0; transform: scale(0.96) translateY(-4px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes popover-out {
+  from { opacity: 1; transform: scale(1) translateY(0); }
+  to   { opacity: 0; transform: scale(0.96) translateY(-4px); }
+}
+.popover-content[data-state="open"] {
+  animation: popover-in 150ms ease-out;
+}
+.popover-content[data-state="closed"] {
+  animation: popover-out 100ms ease-in;
+}
+
+/* ── Calendar (react-day-picker) ── */
+.rdp-calendar {
+  --rdp-cell: 36px;
+  font-family: var(--font-sans);
+}
+
+.rdp-months {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.rdp-month {
+  position: relative;
+}
+
+.rdp-month_caption {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  margin-bottom: var(--space-2);
+  font-size: var(--font-body);
+  font-weight: var(--fw-semibold);
+  color: var(--text-primary);
+  text-transform: capitalize;
+}
+
+.rdp-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  justify-content: space-between;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.rdp-nav-btn {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-chip);
+  color: var(--text-secondary);
+  transition: background 150ms, color 150ms;
+}
+.rdp-nav-btn:hover {
+  background: var(--interactive-hover-surface);
+  color: var(--text-primary);
+}
+
+.rdp-weekdays {
+  display: flex;
+}
+.rdp-weekday {
+  width: var(--rdp-cell);
+  height: var(--rdp-cell);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: var(--fw-medium);
+  color: var(--text-tertiary);
+  text-transform: capitalize;
+}
+
+.rdp-week {
+  display: flex;
+}
+
+.rdp-day {
+  width: var(--rdp-cell);
+  height: var(--rdp-cell);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.rdp-day-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-chip);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-body-sm);
+  font-weight: var(--fw-medium);
+  color: var(--text-primary);
+  transition: background 150ms, color 150ms;
+  cursor: pointer;
+}
+.rdp-day-btn:hover {
+  background: var(--interactive-hover-surface);
+}
+
+.rdp-today .rdp-day-btn {
+  font-weight: var(--fw-bold);
+  color: var(--primary);
+}
+
+.rdp-selected .rdp-day-btn {
+  background: var(--primary);
+  color: var(--contrast);
+  font-weight: var(--fw-semibold);
+}
+.rdp-selected .rdp-day-btn:hover {
+  background: var(--primary-hover);
+  color: var(--contrast);
+}
+
+.rdp-outside .rdp-day-btn {
+  color: var(--text-tertiary);
+  opacity: 0.4;
+}
+
+.rdp-disabled .rdp-day-btn {
+  color: var(--disabled-text);
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+.rdp-disabled .rdp-day-btn:hover {
+  background: transparent;
+}
+
+.rdp-range-start .rdp-day-btn,
+.rdp-range-end .rdp-day-btn {
+  background: var(--primary);
+  color: var(--contrast);
+}
+
+.rdp-range-middle .rdp-day-btn {
+  background: var(--interactive-selected-surface);
+  color: var(--text-primary);
+  border-radius: 0;
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;

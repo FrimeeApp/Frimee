@@ -11,7 +11,8 @@ import { clearCachedGoogleProviderToken } from "@/services/auth/googleTokenCache
 import { resolveGoogleProviderToken } from "@/services/auth/googleProviderToken";
 import type { FeedPlanItemDto } from "@/services/api/dtos/plan.dto";
 import { syncGoogleCalendarBidirectional } from "@/services/api/repositories/events.repository";
-import { listUserRelatedPlans } from "@/services/api/repositories/plans.repository";
+import { createPlan, listPlansByIdsInOrder, listUserRelatedPlans } from "@/services/api/repositories/plans.repository";
+import { publishPlanAsPost } from "@/services/api/repositories/post.repository";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 
 type PlanTab = "active" | "done";
@@ -80,8 +81,7 @@ function CalendarPageInner() {
   const [tabIndicator, setTabIndicator] = useState({ left: 0, width: 0, ready: false });
   const [reloadNonce, setReloadNonce] = useState(0);
   const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [localPlans, setLocalPlans] = useState<FeedPlanItemDto[]>([]);
-  const localPlanIdRef = useRef(Date.now());
+  const [localPlans] = useState<FeedPlanItemDto[]>([]);
   const autoSyncTriggeredRef = useRef(false);
   const hasLoadedOnceRef = useRef(false);
 
@@ -140,33 +140,97 @@ function CalendarPageInner() {
     }
   };
 
-  const handleCreatePlan = (payload: CreatePlanPayload) => {
-    const creatorName =
-      profile?.nombre?.trim() || user?.email?.split("@")[0] || "Tu";
-    const startIso = dateInputToIso(payload.startDate, 10);
-    const endIso = dateInputToIso(payload.endDate, 18);
+  const [savingPlan, setSavingPlan] = useState(false);
 
-    const newPlan: FeedPlanItemDto = {
-      id: localPlanIdRef.current++,
-      createdAt: new Date().toISOString(),
-      title: payload.title,
-      description: `Plan en ${payload.location}`,
-      locationName: payload.location,
-      startsAt: startIso,
-      endsAt: endIso,
-      allDay: true,
-      visibility: payload.visibility,
-      coverImage: payload.coverImageUrl,
-      ownerUserId: user?.id ?? undefined,
-      creator: {
-        id: user?.id ?? "local",
-        name: creatorName,
-        profileImage: profile?.profile_image ?? null,
-      },
-    };
+  const handleCreatePlan = async (payload: CreatePlanPayload) => {
+    if (!user?.id || savingPlan) return;
 
-    setLocalPlans((prev) => [newPlan, ...prev]);
-    closeCreateModal();
+    setSavingPlan(true);
+
+    try {
+      let coverUrl: string | null = null;
+
+      if (payload.coverFile) {
+        const { uploadPlanCoverFile } = await import("@/services/firebase/upload");
+        const { downloadUrl } = await uploadPlanCoverFile({ file: payload.coverFile, userId: user.id });
+        coverUrl = downloadUrl;
+      }
+
+      const startIso = dateInputToIso(payload.startDate, 10);
+      const endIso = dateInputToIso(payload.endDate, 18);
+
+      const created = await createPlan({
+        titulo: payload.title,
+        descripcion: `Plan en ${payload.location}`,
+        inicioAt: startIso,
+        finAt: endIso,
+        ubicacionNombre: payload.location,
+        fotoPortada: coverUrl,
+        allDay: true,
+        visibilidad: payload.visibility,
+        ownerUserId: user.id,
+        creadoPorUserId: user.id,
+      });
+
+      try {
+        await publishPlanAsPost({
+          id: created.id,
+          title: payload.title,
+          description: `Plan en ${payload.location}`,
+          locationName: payload.location,
+          startsAt: startIso,
+          endsAt: endIso,
+          allDay: true,
+          visibility: payload.visibility,
+          coverImage: coverUrl,
+          ownerUserId: user.id,
+          creator: {
+            id: user.id,
+            name: profile?.nombre ?? "",
+            profileImage: profile?.profile_image ?? null,
+          },
+        });
+      } catch (publishErr) {
+        console.warn("[calendar] publish to firebase error:", publishErr);
+      }
+
+      if (settings?.google_sync_enabled && settings.google_sync_export_plans) {
+        try {
+          const providerToken = await resolveGoogleProviderToken({
+            supabase,
+            session,
+            userId: user.id,
+            cachedToken: googleProviderToken,
+          });
+          if (providerToken) {
+            const [createdPlan] = await listPlansByIdsInOrder([created.id]);
+            if (createdPlan) {
+              const timeMin = startOfMonth(addMonths(new Date(), -12)).toISOString();
+              const timeMax = endOfMonth(addMonths(new Date(), 12)).toISOString();
+              await syncGoogleCalendarBidirectional({
+                userId: user.id,
+                accessToken: providerToken,
+                timeMin,
+                timeMax,
+                plans: [createdPlan],
+                googleSyncEnabled: settings.google_sync_enabled,
+                googleSyncExportPlans: settings.google_sync_export_plans,
+              });
+            }
+          }
+        } catch (syncErr) {
+          console.warn("[calendar] google sync after create failed:", syncErr);
+        }
+      }
+
+      setReloadNonce((prev) => prev + 1);
+      setSavingPlan(false);
+      closeCreateModal();
+    } catch (err) {
+      console.error("[calendar] create plan error:", err);
+      setSavingPlan(false);
+      throw err;
+    }
   };
 
   useEffect(() => {
@@ -363,7 +427,7 @@ function CalendarPageInner() {
           className={`px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-4)] transition-[padding] duration-[var(--duration-slow)] [transition-timing-function:var(--ease-standard)] md:py-[var(--space-8)] md:pr-[var(--space-14)]`}
         >
           <div className="mx-auto w-full max-w-[1120px]">
-            <div className="border-b border-app pb-[var(--space-2)] text-body text-muted">
+            <div className="border-b border-app text-body text-muted">
               <div className="flex flex-wrap items-end justify-between gap-[var(--space-3)]">
                 <div ref={tabRowRef} className="relative flex items-center gap-[var(--space-10)]">
                   <button
@@ -395,26 +459,16 @@ function CalendarPageInner() {
                   />
                 </div>
 
-                <div className="flex items-center gap-[var(--space-3)]">
-                  <input
-                    type="text"
-                    value={planSearch}
-                    onChange={(e) => setPlanSearch(e.target.value)}
-                    placeholder="Buscar plan..."
-                    className="h-[36px] w-full min-w-[180px] rounded-input border border-app bg-app px-3 text-body-sm text-app outline-none sm:w-[220px]"
-                  />
-
-                  {needsGoogleReconnect && settings?.google_sync_enabled ? (
-                    <button
-                      type="button"
-                      onClick={() => void reconnectGoogle()}
-                      className="flex items-center gap-1.5 rounded-button border border-warning/40 bg-warning/10 px-3 py-1.5 text-body-sm text-warning transition-colors hover:bg-warning/20"
-                    >
-                      <span>⚠</span>
-                      Reconectar Google Calendar
-                    </button>
-                  ) : null}
-                </div>
+                {needsGoogleReconnect && settings?.google_sync_enabled ? (
+                  <button
+                    type="button"
+                    onClick={() => void reconnectGoogle()}
+                    className="flex items-center gap-1.5 rounded-button border border-warning/40 bg-warning/10 px-3 py-1.5 text-body-sm text-warning transition-colors hover:bg-warning/20"
+                  >
+                    <span>⚠</span>
+                    Reconectar Google Calendar
+                  </button>
+                ) : null}
               </div>
             </div>
 
@@ -424,25 +478,7 @@ function CalendarPageInner() {
               ) : (
                 <>
                   <aside className={`md:col-start-2 md:row-start-1 flex flex-col rounded-modal border border-app bg-surface shadow-elev-1 md:sticky md:top-[var(--space-6)] md:self-start transition-all duration-300 ${calendarOpen ? (viewMode === "day" ? "h-[380px] md:h-[420px]" : "md:h-[420px]") : "md:h-auto"}`}>
-                    <button
-                      type="button"
-                      onClick={() => setCalendarOpen((prev) => !prev)}
-                      className="flex w-full items-center justify-between p-[var(--space-4)]"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="text-[15px]">✈</span>
-                        <span className="text-body-sm font-[var(--fw-medium)] text-app">
-                          {viewMode === "month" ? monthLabel : formatDayHeading(selectedDayValue)}
-                        </span>
-                      </div>
-                      <span
-                        className={`text-muted transition-transform duration-[var(--duration-base)] ${calendarOpen ? "rotate-180" : ""}`}
-                      >
-                        ▾
-                      </span>
-                    </button>
-
-                    <div className={`min-h-0 flex-1 overflow-hidden p-[var(--space-4)] pt-0 md:pt-0 ${calendarOpen ? "block" : "hidden"}`}>
+                    <div className={`min-h-0 flex-1 overflow-hidden p-[var(--space-4)] ${calendarOpen ? "block" : "hidden"}`}>
                     {viewMode === "month" ? (
                       <>
                         <div className="mb-[var(--space-2)] flex items-center justify-between">
@@ -490,7 +526,7 @@ function CalendarPageInner() {
                                       }}
                                       className={`flex h-7 items-center justify-center text-body-sm transition-colors ${
                                         cell.isCurrentMonth ? "text-app" : "text-tertiary"
-                                      } ${isToday ? "bg-[color-mix(in_srgb,var(--warning)_25%,transparent_75%)] font-[var(--fw-semibold)]" : "hover:bg-app/50"}`}
+                                      } ${isToday ? "rounded-full bg-[#E8841A] font-[var(--fw-semibold)] text-white" : "hover:bg-app/50"}`}
                                     >
                                       {cell.day}
                                     </button>
@@ -507,11 +543,12 @@ function CalendarPageInner() {
                                         ? lane.map((segment) => (
                                             <div
                                               key={segment.key}
-                                              className="h-3 rounded-full bg-[linear-gradient(90deg,#cc37b0_0%,#f06ebc_100%)] px-1.5 text-[8px] font-[var(--fw-semibold)] leading-[12px] text-white"
+                                              className="h-3 cursor-pointer rounded-full bg-[linear-gradient(90deg,#cc37b0_0%,#f06ebc_100%)] px-1.5 text-[8px] font-[var(--fw-semibold)] leading-[12px] text-white transition-opacity hover:opacity-90"
                                               style={{
                                                 gridColumn: `${segment.startCol + 1} / ${segment.endCol + 2}`,
                                               }}
                                               title={segment.title}
+                                              onClick={() => router.push(`/plans/${segment.planId}`)}
                                             >
                                               <span className="block truncate">{segment.title}</span>
                                             </div>
@@ -533,18 +570,22 @@ function CalendarPageInner() {
                       </>
                     ) : (
                       <div className="flex h-full min-h-0 flex-col">
-                        <div className="mb-3 flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedDay(startOfDay(new Date()));
-                                setMonthDate(startOfMonth(new Date()));
-                              }}
-                              className="rounded-full border border-app px-3 py-1.5 text-body-sm"
-                            >
-                              Hoy
-                            </button>
+                        <div className="mb-4 flex items-center justify-between gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMonthDate(startOfMonth(selectedDayValue));
+                              setViewMode("month");
+                            }}
+                            className="flex items-center gap-1 rounded-full border border-app py-1 pl-2 pr-3 text-body-sm font-[var(--fw-medium)] text-muted transition-colors hover:text-app"
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" className="size-[14px]" aria-hidden="true">
+                              <path d="M15 19L8 12L15 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                            {selectedDayValue.toLocaleDateString("es-ES", { month: "long" }).replace(/^\w/, (c) => c.toUpperCase())}
+                          </button>
+
+                          <div className="flex items-center gap-1">
                             <button
                               type="button"
                               aria-label="Dia anterior"
@@ -553,9 +594,21 @@ function CalendarPageInner() {
                                 setSelectedDay(nextDay);
                                 setMonthDate(startOfMonth(nextDay));
                               }}
-                              className="rounded-input border border-app px-3 py-1 text-body"
+                              className="flex h-8 w-8 items-center justify-center rounded-full border border-app text-muted transition-colors hover:text-app"
                             >
-                              {"<"}
+                              <svg viewBox="0 0 24 24" fill="none" className="size-[14px]" aria-hidden="true">
+                                <path d="M15 19L8 12L15 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                              </svg>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedDay(startOfDay(new Date()));
+                                setMonthDate(startOfMonth(new Date()));
+                              }}
+                              className="rounded-full border border-app px-3 py-1 text-body-sm font-[var(--fw-medium)]"
+                            >
+                              Hoy
                             </button>
                             <button
                               type="button"
@@ -565,32 +618,18 @@ function CalendarPageInner() {
                                 setSelectedDay(nextDay);
                                 setMonthDate(startOfMonth(nextDay));
                               }}
-                              className="rounded-input border border-app px-3 py-1 text-body"
+                              className="flex h-8 w-8 items-center justify-center rounded-full border border-app text-muted transition-colors hover:text-app"
                             >
-                              {">"}
+                              <svg viewBox="0 0 24 24" fill="none" className="size-[14px]" aria-hidden="true">
+                                <path d="M9 5L16 12L9 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                              </svg>
                             </button>
                           </div>
-
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setMonthDate(startOfMonth(selectedDayValue));
-                              setViewMode("month");
-                            }}
-                            className="rounded-full border border-app px-3 py-1.5 text-body-sm"
-                          >
-                            Mes
-                          </button>
                         </div>
 
-                        <div className="mb-4">
-                          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">
-                            {formatWeekdayShort(selectedDayValue)}
-                          </p>
-                          <h3 className="mt-1 text-[20px] font-[var(--fw-semibold)] leading-tight text-app">
-                            {formatDayHeading(selectedDayValue)}
-                          </h3>
-                        </div>
+                        <h3 className="mb-4 text-[var(--font-h2)] font-[var(--fw-bold)] leading-[var(--lh-h2)] text-app">
+                          {formatDayHeading(selectedDayValue)}
+                        </h3>
 
                         {allDayPlans.length ? (
                           <div className="mb-4 space-y-2">
@@ -625,12 +664,13 @@ function CalendarPageInner() {
                                 return (
                                   <div
                                     key={`day-plan-${plan.id}`}
-                                    className="absolute left-2 right-2 overflow-hidden rounded-[12px] bg-[linear-gradient(90deg,#cc37b0_0%,#f06ebc_100%)] px-3 py-2 text-white shadow-sm"
+                                    className="absolute left-2 right-2 cursor-pointer overflow-hidden rounded-[12px] bg-[linear-gradient(90deg,#cc37b0_0%,#f06ebc_100%)] px-3 py-2 text-white shadow-sm transition-opacity hover:opacity-90"
                                     style={{
                                       top: `${(startMinutes / 60) * 64}px`,
                                       height: `${Math.max((duration / 60) * 64, 24)}px`,
                                     }}
                                     title={plan.title}
+                                    onClick={() => router.push(`/plans/${plan.id}`)}
                                   >
                                     <p className="truncate text-body-sm font-[var(--fw-semibold)]">{plan.title}</p>
                                     <p className="mt-0.5 truncate text-[11px] text-white/90">
@@ -662,7 +702,8 @@ function CalendarPageInner() {
                               .map((p) => (
                                 <div
                                   key={`pinboard-${p.id}`}
-                                  className="group relative flex overflow-hidden rounded-[10px] border border-app bg-app"
+                                  className="group relative flex cursor-pointer overflow-hidden rounded-[10px] border border-app bg-app transition-shadow hover:shadow-elev-1"
+                                  onClick={() => router.push(`/plans/${p.id}`)}
                                 >
                                   <div
                                     className="h-12 w-12 shrink-0 bg-cover bg-center"
@@ -674,7 +715,7 @@ function CalendarPageInner() {
                                   </div>
                                   <button
                                     type="button"
-                                    onClick={() => togglePin(p.id)}
+                                    onClick={(e) => { e.stopPropagation(); togglePin(p.id); }}
                                     aria-label="Desanclar"
                                     className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/20 text-[10px] opacity-0 transition-opacity group-hover:opacity-100"
                                   >
@@ -689,15 +730,35 @@ function CalendarPageInner() {
                   </aside>
 
                   <section className="space-y-[var(--space-4)] md:col-start-1 md:row-start-1">
+                    <div className="relative">
+                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-[16px] -translate-y-1/2 text-muted">
+                        <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.8" />
+                        <path d="M16 16L20.5 20.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                      </svg>
+                      <input
+                        type="text"
+                        value={planSearch}
+                        onChange={(e) => setPlanSearch(e.target.value)}
+                        placeholder="Buscar plan"
+                        className="w-full rounded-full border border-app bg-surface py-[7px] pl-9 pr-8 text-body-sm text-app outline-none transition-colors focus:border-[var(--border-strong)] [&::-webkit-search-cancel-button]:hidden"
+                      />
+                      {planSearch && (
+                        <button type="button" onClick={() => setPlanSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted">
+                          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[14px]">
+                            <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
                     {filteredPlans.length === 0 ? (
-                      <p className="rounded-modal border border-app bg-surface p-[var(--space-4)] text-body text-muted">
+                      <p className="text-body-sm text-muted">
                         {planSearch.trim()
                           ? "No hay planes con ese nombre."
                           : "No hay planes para mostrar."}
                       </p>
                     ) : null}
 
-                    <div className="grid grid-cols-1 gap-[var(--space-4)] md:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-[var(--space-3)] sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2">
                       {filteredPlans.map((plan) => {
                         const creatorLabel = plan.creator.id === user?.id ? "Creado por ti" : `De ${plan.creator.name}`;
                         const scheduleLabel = formatPlanSchedule(plan);
@@ -710,10 +771,11 @@ function CalendarPageInner() {
                         return (
                           <article
                             key={`plan-${plan.id}`}
-                            className="group overflow-hidden rounded-[14px] border border-app bg-surface shadow-elev-1"
+                            className="group flex cursor-pointer flex-row overflow-hidden rounded-[14px] border border-app bg-surface shadow-elev-1 transition-shadow hover:shadow-elev-2 lg:flex-col"
+                            onClick={() => router.push(`/plans/${plan.id}`)}
                           >
                             <div
-                              className="relative h-[138px] bg-cover bg-center bg-no-repeat"
+                              className="relative h-auto min-h-[90px] w-[90px] shrink-0 bg-cover bg-center bg-no-repeat sm:w-[110px] lg:h-[138px] lg:w-full"
                               role="img"
                               aria-label={plan.title}
                               style={{
@@ -721,15 +783,15 @@ function CalendarPageInner() {
                               }}
                             >
                               <span
-                                className={`absolute right-3 top-3 rounded-chip border px-2.5 py-1 text-[11px] font-[var(--fw-medium)] leading-none ${statusClass}`}
+                                className={`absolute right-3 top-3 hidden rounded-chip border px-2.5 py-1 text-[11px] font-[var(--fw-medium)] leading-none lg:inline-flex ${statusClass}`}
                               >
                                 {statusLabel}
                               </span>
                               <button
                                 type="button"
-                                onClick={() => togglePin(plan.id)}
+                                onClick={(e) => { e.stopPropagation(); togglePin(plan.id); }}
                                 aria-label={pinnedPlanIds.includes(plan.id) ? "Desanclar" : "Anclar"}
-                                className={`absolute left-3 top-3 hidden h-7 w-7 items-center justify-center rounded-full text-[13px] shadow-sm transition-opacity md:flex ${
+                                className={`absolute left-3 top-3 hidden h-7 w-7 items-center justify-center rounded-full text-[13px] shadow-sm transition-opacity lg:flex ${
                                   pinnedPlanIds.includes(plan.id)
                                     ? "bg-warning-token/90 opacity-100"
                                     : "bg-white/80 opacity-0 group-hover:opacity-100"
@@ -739,17 +801,17 @@ function CalendarPageInner() {
                               </button>
                             </div>
 
-                            <div className="flex items-end justify-between gap-3 p-[var(--space-4)]">
+                            <div className="flex min-w-0 flex-1 items-center justify-between gap-2 p-[var(--space-3)] lg:items-end lg:p-[var(--space-4)]">
                               <div className="min-w-0">
-                                <h2 className="truncate text-[26px] font-[var(--fw-medium)] leading-[1.15] text-app">
+                                <h2 className="truncate text-body-sm font-[var(--fw-semibold)] leading-[1.2] text-app lg:text-[22px] lg:font-[var(--fw-medium)] lg:leading-[1.15]">
                                   {plan.title}
                                 </h2>
-                                <p className="mt-1 text-body-sm text-muted">{formatDateRange(plan.startsAt, plan.endsAt)}</p>
-                                <p className="mt-1 truncate text-caption text-tertiary">{creatorLabel}</p>
+                                <p className="mt-0.5 text-caption text-muted lg:mt-1 lg:text-body-sm">{formatDateRange(plan.startsAt, plan.endsAt)}</p>
+                                <p className="mt-0.5 truncate text-caption text-tertiary lg:mt-1">{creatorLabel}</p>
                               </div>
 
-                              <span className="shrink-0 rounded-[10px] border border-success-token bg-[color-mix(in_srgb,var(--success)_20%,transparent_80%)] px-3 py-2 text-[12px] font-[var(--fw-medium)] leading-none text-success-token">
-                                {scheduleLabel}
+                              <span className={`shrink-0 rounded-chip border px-2 py-1 text-[10px] font-[var(--fw-medium)] leading-none lg:rounded-[10px] lg:px-3 lg:py-2 lg:text-[12px] ${statusClass}`}>
+                                {statusLabel}
                               </span>
                             </div>
                           </article>
