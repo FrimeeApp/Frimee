@@ -280,6 +280,25 @@
     text-rendering: optimizeLegibility;
     scroll-behavior: smooth;
     background: var(--bg);
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+  }
+
+  html::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  html::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  html::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border-radius: 3px;
+  }
+
+  html::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
   }
 
   body {
@@ -607,6 +626,13 @@
     padding-bottom: max(var(--space-4), env(safe-area-inset-bottom));
   }
 
+  .scrollbar-hide {
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
   .scrollbar-thin {
     scrollbar-width: thin;
     scrollbar-color: var(--border-strong) transparent;
@@ -749,7 +775,8 @@
   position: relative;
 }
 
-.rdp-month_caption {
+.rdp-month_caption,
+.rdp-month-caption {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -759,6 +786,15 @@
   font-weight: var(--fw-semibold);
   color: var(--text-primary);
   text-transform: capitalize;
+}
+
+.rdp-month_caption_label,
+.rdp-month-caption-label {
+  display: block;
+  width: 100%;
+  text-align: center;
+  text-transform: capitalize;
+  pointer-events: none;
 }
 
 .rdp-nav {

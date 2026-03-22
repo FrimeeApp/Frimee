@@ -7,7 +7,7 @@ export type FeedPlanItemDto = {
   startsAt: string;
   endsAt: string;
   allDay?: boolean;
-  visibility: "PUBLICO" | "PÚBLICO" | "SOLO_GRUPO" | "SOLO_AMIGOS" | "SOLO_FOLLOW";
+  visibility: "PÚBLICO" | "SOLO_GRUPO" | "SOLO_AMIGOS" | "SOLO_FOLLOW";
   coverImage: string | null;
   ownerUserId?: string;
   creator: {
