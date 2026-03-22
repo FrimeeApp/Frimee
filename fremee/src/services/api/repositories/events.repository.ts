@@ -296,6 +296,7 @@ export async function syncGoogleCalendarBidirectional(params: {
       }
 
       if (googleEventId && googleCalendarId) {
+        const supabase = createBrowserSupabaseClient();
         const { error } = await supabase.rpc("fn_evento_update_sync_info", {
           p_event_id:           localEvent.id,
           p_google_calendar_id: googleCalendarId,

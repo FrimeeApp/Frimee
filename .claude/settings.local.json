@@ -27,7 +27,13 @@
       "Bash(ls -la /Users/vicky/Desktop/Frimee/fremee/src/app/\\\\\\(app\\\\\\)/plans/)",
       "Bash(ls /Users/vicky/Desktop/Frimee/fremee/src/app/\\\\\\(app\\\\\\)/plans/)",
       "Bash(npx next:*)",
-      "Bash(npm ls:*)"
+      "Bash(npm ls:*)",
+      "Bash(head -20 \"c:/Users/cayet/Desktop/Proyectos/Frimee/fremee/src/app/\\(app\\)/profile/[id]/page.tsx\")",
+      "Bash(ls \"c:/Users/cayet/Desktop/Proyectos/Frimee/fremee/src/app/\\(app\\)/profile/[id]/\")",
+      "Bash(cross-env BUILD_TARGET=capacitor npx next build --no-turbopack)",
+      "Bash(BUILD_TARGET=capacitor node_modules/.bin/next build --no-turbopack)",
+      "Bash(BUILD_TARGET=capacitor node_modules/.bin/next build)",
+      "Bash(TURBOPACK=0 BUILD_TARGET=capacitor npx next build)"
     ]
   }
 }
