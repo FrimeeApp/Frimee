@@ -7,6 +7,14 @@ import {
   markChatReadEndpoint,
   getChatMiembrosEndpoint,
   leaveChatEndpoint,
+  updateChatFotoEndpoint,
+  addChatMemberEndpoint,
+  editMensajeEndpoint,
+  deleteMensajeEndpoint,
+  reactMensajeEndpoint,
+  getMyReaccionesEndpoint,
+  pollVoteEndpoint,
+  pollGetVotesEndpoint,
   type ChatListItem,
   type MensajeRow,
   type ChatMiembro,
@@ -43,6 +51,12 @@ export async function listMensajes(params: {
 export async function sendMensaje(params: {
   chatId: string;
   texto: string;
+  replyToId?: number | null;
+  audioUrl?: string | null;
+  documentUrl?: string | null;
+  documentName?: string | null;
+  imageUrl?: string | null;
+  imageType?: string | null;
 }): Promise<number> {
   return sendMensajeEndpoint(params);
 }
@@ -57,6 +71,42 @@ export async function getChatMiembros(chatId: string): Promise<ChatMiembro[]> {
 
 export async function leaveChat(chatId: string): Promise<void> {
   return leaveChatEndpoint(chatId);
+}
+
+export async function updateChatFoto(chatId: string, foto: string): Promise<void> {
+  return updateChatFotoEndpoint(chatId, foto);
+}
+
+export async function addChatMember(chatId: string, userId: string): Promise<void> {
+  return addChatMemberEndpoint(chatId, userId);
+}
+
+export async function editMensaje(mensajeId: number, texto: string): Promise<void> {
+  return editMensajeEndpoint(mensajeId, texto);
+}
+
+export async function deleteMensaje(mensajeId: number): Promise<void> {
+  return deleteMensajeEndpoint(mensajeId);
+}
+
+export async function reactMensaje(mensajeId: number, emoji: string): Promise<void> {
+  return reactMensajeEndpoint(mensajeId, emoji);
+}
+
+export async function getMyReacciones(
+  chatId: string
+): Promise<Array<{ mensaje_id: number; emoji: string }>> {
+  return getMyReaccionesEndpoint(chatId);
+}
+
+export async function pollVote(mensajeId: number, optionIndex: number): Promise<void> {
+  return pollVoteEndpoint(mensajeId, optionIndex);
+}
+
+export async function pollGetVotes(
+  mensajeId: number
+): Promise<Array<{ option_index: number; vote_count: number; voted_by_me: boolean }>> {
+  return pollGetVotesEndpoint(mensajeId);
 }
 
 // Devuelve el nombre a mostrar para un chat

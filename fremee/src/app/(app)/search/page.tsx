@@ -8,7 +8,7 @@ import AppSidebar from "@/components/common/AppSidebar";
 import LoadingScreen from "@/components/common/LoadingScreen";
 import { useAuth } from "@/providers/AuthProvider";
 import { searchUsers, type PublicUserProfileDto } from "@/services/api/repositories/users.repository";
-import { sendFriendRequest } from "@/services/api/endpoints/users.endpoint";
+import { sendFriendRequest, getFriendshipStatuses, cancelFriendRequest, removeFriend } from "@/services/api/endpoints/users.endpoint";
 
 const Globe = dynamic(() => import("react-globe.gl"), {
   ssr: false,
@@ -25,8 +25,9 @@ export default function SearchPage() {
   const [searchValue, setSearchValue] = useState("");
   const [searchResults, setSearchResults] = useState<PublicUserProfileDto[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
-  const [sentRequests, setSentRequests] = useState<Set<string>>(new Set());
-  const [sendingId, setSendingId] = useState<string | null>(null);
+  const [statuses, setStatuses] = useState<Record<string, "none" | "pending" | "friends">>({});
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<{ userId: string; nombre: string; type: "cancel" | "unfriend" } | null>(null);
 
   useEffect(() => {
     const trimmedQuery = searchValue.trim();
@@ -50,6 +51,10 @@ export default function SearchPage() {
 
         if (!cancelled) {
           setSearchResults(results);
+          if (results.length > 0) {
+            const s = await getFriendshipStatuses(results.map((r) => r.id));
+            if (!cancelled) setStatuses(s);
+          }
         }
       } catch (error) {
         console.error("[search] Error searching users:", error);
@@ -115,22 +120,32 @@ export default function SearchPage() {
                 <div className="space-y-[2px]">
                   {searchResults.map((result) => {
                     const avatarLabel = (result.nombre.trim()[0] || "U").toUpperCase();
-                    const alreadySent = sentRequests.has(result.id);
-                    const isSending = sendingId === result.id;
+                    const status = statuses[result.id] ?? "none";
+                    const isLoading = loadingId === result.id;
 
-                    const handleAddFriend = async (e: React.MouseEvent) => {
+                    const handleButtonClick = async (e: React.MouseEvent) => {
                       e.preventDefault();
-                      if (alreadySent || isSending) return;
-                      setSendingId(result.id);
-                      try {
-                        await sendFriendRequest(result.id);
-                        setSentRequests((prev) => new Set(prev).add(result.id));
-                      } catch (err) {
-                        console.error("[search] Error sending friend request:", err);
-                      } finally {
-                        setSendingId(null);
+                      if (isLoading) return;
+                      if (status === "none") {
+                        setLoadingId(result.id);
+                        try {
+                          await sendFriendRequest(result.id);
+                          setStatuses((prev) => ({ ...prev, [result.id]: "pending" }));
+                        } catch (err) { console.error("[search] Error:", err); }
+                        finally { setLoadingId(null); }
+                      } else if (status === "pending") {
+                        setConfirmDialog({ userId: result.id, nombre: result.nombre, type: "cancel" });
+                      } else if (status === "friends") {
+                        setConfirmDialog({ userId: result.id, nombre: result.nombre, type: "unfriend" });
                       }
                     };
+
+                    const buttonLabel = isLoading ? "..." : status === "friends" ? "Amigos" : status === "pending" ? "Pendiente" : "Añadir";
+                    const buttonStyle = status === "none"
+                      ? "bg-[var(--text-primary)] text-contrast-token border-transparent"
+                      : status === "friends"
+                      ? "bg-surface border-app text-app"
+                      : "bg-surface border-app text-muted";
 
                     return (
                       <div
@@ -145,11 +160,11 @@ export default function SearchPage() {
                         </Link>
                         <button
                           type="button"
-                          onClick={handleAddFriend}
-                          disabled={alreadySent || isSending}
-                          className="shrink-0 rounded-full border border-app px-3 py-1 text-body-sm font-[var(--fw-semibold)] transition-colors disabled:opacity-50"
+                          onClick={(e) => void handleButtonClick(e)}
+                          disabled={isLoading}
+                          className={`shrink-0 rounded-full border px-3 py-1 text-body-sm font-[var(--fw-semibold)] transition-colors disabled:opacity-50 ${buttonStyle}`}
                         >
-                          {alreadySent ? "Enviada" : isSending ? "..." : "Añadir"}
+                          {buttonLabel}
                         </button>
                       </div>
                     );
@@ -157,6 +172,44 @@ export default function SearchPage() {
                 </div>
               ) : null}
             </div>
+
+            {/* Confirm dialog */}
+            {confirmDialog && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setConfirmDialog(null)}>
+                <div className="w-full max-w-[320px] rounded-[16px] bg-app p-[var(--space-5)] shadow-[0_8px_32px_rgba(0,0,0,0.3)]" onClick={(e) => e.stopPropagation()}>
+                  <p className="mb-[6px] text-body font-[var(--fw-semibold)] text-app">
+                    {confirmDialog.type === "cancel" ? "Cancelar solicitud" : "Eliminar amigo"}
+                  </p>
+                  <p className="mb-[var(--space-4)] text-body-sm text-muted">
+                    {confirmDialog.type === "cancel"
+                      ? `¿Cancelar la solicitud de amistad a ${confirmDialog.nombre}?`
+                      : `¿Dejar de ser amigo de ${confirmDialog.nombre}?`}
+                  </p>
+                  <div className="flex gap-[var(--space-2)]">
+                    <button type="button" onClick={() => setConfirmDialog(null)} className="flex-1 rounded-full border border-app py-[10px] text-body-sm font-[var(--fw-semibold)] text-app transition-colors hover:bg-surface">
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const { userId, type } = confirmDialog;
+                        setConfirmDialog(null);
+                        setLoadingId(userId);
+                        try {
+                          if (type === "cancel") await cancelFriendRequest(userId);
+                          else await removeFriend(userId);
+                          setStatuses((prev) => ({ ...prev, [userId]: "none" }));
+                        } catch (err) { console.error("[search] Error:", err); }
+                        finally { setLoadingId(null); }
+                      }}
+                      className="flex-1 rounded-full bg-red-500 py-[10px] text-body-sm font-[var(--fw-semibold)] text-white transition-opacity hover:opacity-80"
+                    >
+                      {confirmDialog.type === "cancel" ? "Cancelar solicitud" : "Eliminar"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="mt-[var(--space-5)] rounded-modal border border-app bg-surface p-[var(--space-4)] shadow-elev-1">
               <RecentActivityGlobe />
