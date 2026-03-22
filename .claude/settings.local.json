@@ -33,7 +33,10 @@
       "Bash(cross-env BUILD_TARGET=capacitor npx next build --no-turbopack)",
       "Bash(BUILD_TARGET=capacitor node_modules/.bin/next build --no-turbopack)",
       "Bash(BUILD_TARGET=capacitor node_modules/.bin/next build)",
-      "Bash(TURBOPACK=0 BUILD_TARGET=capacitor npx next build)"
+      "Bash(TURBOPACK=0 BUILD_TARGET=capacitor npx next build)",
+      "Bash(xargs grep:*)",
+      "Bash(tail -20 \"c:/Users/cayet/Desktop/Proyectos/Frimee/fremee/src/app/\\(app\\)/plans/[id]/page.tsx\")",
+      "Bash(npm uninstall:*)"
     ]
   }
 }

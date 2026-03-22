@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/providers/AuthProvider";
+import CreatePlanModal, { type CreatePlanPayload } from "@/components/plans/CreatePlanModal";
+import { createPlan } from "@/services/api/repositories/plans.repository";
 type IconProps = {
   className?: string;
 };
@@ -19,12 +21,18 @@ type AppSidebarProps = {
   onCreatePlan?: () => void;
 };
 
+function dateInputToIso(dateInput: string, hour = 12) {
+  const [year, month, day] = dateInput.split("-").map(Number);
+  return new Date(year ?? 0, (month ?? 1) - 1, day ?? 1, hour, 0, 0).toISOString();
+}
+
 export default function AppSidebar({ onCreatePlan }: AppSidebarProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [mobileNavVisible, setMobileNavVisible] = useState(true);
   const lastScrollYRef = useRef(0);
   const [hovered, setHovered] = useState(false);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
 
   const { user, profile } = useAuth();
   const hasProfileImage = Boolean(profile?.profile_image);
@@ -63,7 +71,37 @@ export default function AppSidebar({ onCreatePlan }: AppSidebarProps) {
       onCreatePlan();
       return;
     }
-    router.push("/plans/new");
+    setCreateModalOpen(true);
+  };
+
+  const handleCreatePlan = async (payload: CreatePlanPayload) => {
+    if (!user?.id) return;
+
+    let coverUrl: string | null = null;
+    if (payload.coverFile) {
+      const { uploadPlanCoverFile } = await import("@/services/firebase/upload");
+      const { downloadUrl } = await uploadPlanCoverFile({ file: payload.coverFile, userId: user.id });
+      coverUrl = downloadUrl;
+    }
+
+    const startIso = dateInputToIso(payload.startDate, 10);
+    const endIso = dateInputToIso(payload.endDate, 18);
+
+    const created = await createPlan({
+      titulo: payload.title,
+      descripcion: `Plan en ${payload.location}`,
+      inicioAt: startIso,
+      finAt: endIso,
+      ubicacionNombre: payload.location,
+      fotoPortada: coverUrl,
+      allDay: true,
+      visibilidad: payload.visibility,
+      ownerUserId: user.id,
+      creadoPorUserId: user.id,
+    });
+
+    setCreateModalOpen(false);
+    router.push(`/plans/${created.id}`);
   };
 
   const isActive = (href: string) => {
@@ -199,6 +237,12 @@ export default function AppSidebar({ onCreatePlan }: AppSidebarProps) {
           </button>
         </div>
       </aside>
+
+      <CreatePlanModal
+        open={createModalOpen}
+        onClose={() => setCreateModalOpen(false)}
+        onCreate={handleCreatePlan}
+      />
     </>
   );
 }

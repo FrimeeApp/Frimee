@@ -58,7 +58,7 @@ export type CreatePlanParams = {
   ubicacionDireccion?: string | null;
   fotoPortada?: string | null;
   allDay?: boolean;
-  visibilidad?: "PUBLICO" | "SOLO_GRUPO" | "SOLO_AMIGOS" | "SOLO_FOLLOW";
+  visibilidad?: "PÚBLICO" | "SOLO_GRUPO" | "SOLO_AMIGOS" | "SOLO_FOLLOW";
   ownerUserId: string;
   creadoPorUserId: string;
 };

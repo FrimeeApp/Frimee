@@ -13,6 +13,7 @@ function Calendar({ className = "", classNames, ...props }: DayPickerProps) {
         months: "rdp-months",
         month: "rdp-month",
         month_caption: "rdp-month-caption",
+        caption_label: "rdp-month-caption-label",
         nav: "rdp-nav",
         button_previous: "rdp-nav-btn rdp-nav-prev",
         button_next: "rdp-nav-btn rdp-nav-next",

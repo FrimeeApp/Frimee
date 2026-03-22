@@ -17,7 +17,7 @@ export type CreatePlanPayload = {
   endAllDay: boolean;
   coverImageUrl: string | null;
   coverFile: File | null;
-  visibility: "PUBLICO" | "SOLO_GRUPO";
+  visibility: "PÚBLICO" | "SOLO_GRUPO";
   inviteMode: "now" | "later";
 };
 
@@ -377,13 +377,13 @@ export default function CreatePlanModal({ open, onClose, onCreate }: CreatePlanM
                 <div className="relative flex h-input items-center rounded-chip border border-app bg-app p-[3px]">
                   <div
                     className="absolute top-[3px] bottom-[3px] w-[calc(50%-3px)] rounded-chip bg-primary-token shadow-sm transition-transform duration-200 ease-out"
-                    style={{ transform: visibility === "PUBLICO" ? "translateX(0)" : "translateX(100%)" }}
+                    style={{ transform: visibility === "PÚBLICO" ? "translateX(0)" : "translateX(100%)" }}
                   />
                   <button
                     type="button"
-                    onClick={() => setVisibility("PUBLICO")}
+                    onClick={() => setVisibility("PÚBLICO")}
                     className={`relative z-10 flex h-full flex-1 items-center justify-center rounded-chip text-body-sm font-[var(--fw-medium)] transition-colors duration-200 ${
-                      visibility === "PUBLICO" ? "text-contrast-token" : "text-muted"
+                      visibility === "PÚBLICO" ? "text-contrast-token" : "text-muted"
                     }`}
                   >
                     Público

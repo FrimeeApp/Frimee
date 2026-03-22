@@ -12,7 +12,6 @@ import { resolveGoogleProviderToken } from "@/services/auth/googleProviderToken"
 import type { FeedPlanItemDto } from "@/services/api/dtos/plan.dto";
 import { syncGoogleCalendarBidirectional } from "@/services/api/repositories/events.repository";
 import { createPlan, listPlansByIdsInOrder, listUserRelatedPlans } from "@/services/api/repositories/plans.repository";
-import { publishPlanAsPost } from "@/services/api/repositories/post.repository";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 
 type PlanTab = "active" | "done";
@@ -61,7 +60,6 @@ function CalendarPageInner() {
   const [backgroundRefreshing, setBackgroundRefreshing] = useState(false);
 
   const [syncingGoogle, setSyncingGoogle] = useState(false);
-  const [needsGoogleReconnect, setNeedsGoogleReconnect] = useState(false);
   const [plans, setPlans] = useState<FeedPlanItemDto[]>([]);
   const [tab, setTab] = useState<PlanTab>("active");
   const [planSearch, setPlanSearch] = useState("");
@@ -172,28 +170,6 @@ function CalendarPageInner() {
         creadoPorUserId: user.id,
       });
 
-      try {
-        await publishPlanAsPost({
-          id: created.id,
-          title: payload.title,
-          description: `Plan en ${payload.location}`,
-          locationName: payload.location,
-          startsAt: startIso,
-          endsAt: endIso,
-          allDay: true,
-          visibility: payload.visibility,
-          coverImage: coverUrl,
-          ownerUserId: user.id,
-          creator: {
-            id: user.id,
-            name: profile?.nombre ?? "",
-            profileImage: profile?.profile_image ?? null,
-          },
-        });
-      } catch (publishErr) {
-        console.warn("[calendar] publish to firebase error:", publishErr);
-      }
-
       if (settings?.google_sync_enabled && settings.google_sync_export_plans) {
         try {
           const providerToken = await resolveGoogleProviderToken({
@@ -223,9 +199,8 @@ function CalendarPageInner() {
         }
       }
 
-      setReloadNonce((prev) => prev + 1);
       setSavingPlan(false);
-      closeCreateModal();
+      router.push(`/plans/${created.id}`);
     } catch (err) {
       console.error("[calendar] create plan error:", err);
       setSavingPlan(false);
@@ -299,11 +274,7 @@ function CalendarPageInner() {
       cachedToken: googleProviderToken,
     });
 
-    if (!providerToken) {
-      setNeedsGoogleReconnect(true);
-      return;
-    }
-    setNeedsGoogleReconnect(false);
+    if (!providerToken) return;
 
     setSyncingGoogle(true);
     console.log("[google-sync] Iniciando sincronización con Google Calendar...");
@@ -350,17 +321,6 @@ function CalendarPageInner() {
     user?.id,
   ]);
 
-  const reconnectGoogle = useCallback(async () => {
-    const redirectTo = `${window.location.origin}/auth/callback`;
-    await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo,
-        scopes: "https://www.googleapis.com/auth/calendar",
-        queryParams: { access_type: "offline", prompt: "consent" },
-      },
-    });
-  }, [supabase]);
 
   useEffect(() => {
     if (authLoading || loading) return;
@@ -459,16 +419,6 @@ function CalendarPageInner() {
                   />
                 </div>
 
-                {needsGoogleReconnect && settings?.google_sync_enabled ? (
-                  <button
-                    type="button"
-                    onClick={() => void reconnectGoogle()}
-                    className="flex items-center gap-1.5 rounded-button border border-warning/40 bg-warning/10 px-3 py-1.5 text-body-sm text-warning transition-colors hover:bg-warning/20"
-                  >
-                    <span>⚠</span>
-                    Reconectar Google Calendar
-                  </button>
-                ) : null}
               </div>
             </div>
 

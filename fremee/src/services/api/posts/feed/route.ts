@@ -79,7 +79,7 @@ export async function listPublishedPostPlanIdsRoute(params: { limit: number }): 
       startsAt: doc.startsAt ?? p?.startsAt ?? "",
       endsAt: doc.endsAt ?? p?.endsAt ?? "",
       allDay: doc.allDay ?? p?.allDay ?? false,
-      visibility: doc.visibility ?? p?.visibility ?? "PUBLICO",
+      visibility: doc.visibility ?? p?.visibility ?? "PÚBLICO",
       coverImage: doc.coverImage ?? p?.coverImage ?? null,
       ownerUserId: doc.ownerUserId ?? p?.ownerUserId ?? "",
       creator: c?.id && c?.name ? { id: c.id, name: c.name, profileImage: c.profileImage ?? null } : null,

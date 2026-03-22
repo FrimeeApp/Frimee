@@ -814,7 +814,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                 <span className="text-[13px] font-[var(--fw-semibold)] text-white">{post.avatarLabel}</span>
               )}
             </div>
-            <span className="text-body-sm font-[var(--fw-semibold)] text-white drop-shadow-sm">{post.userName}</span>
+            <Link href={`/profile/${post.plan.ownerUserId}`} className="text-body-sm font-[var(--fw-semibold)] text-white drop-shadow-sm">{post.userName}</Link>
           </div>
 
           {/* Bottom overlay — location + dates */}
@@ -825,7 +825,9 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
               </p>
             )}
             <p className="mt-[2px] text-body-sm text-white/70">
-              {formatDate(post.plan.startsAt)} - {formatDate(post.plan.endsAt)}
+              {formatDate(post.plan.startsAt) === formatDate(post.plan.endsAt)
+                ? formatDate(post.plan.startsAt)
+                : `${formatDate(post.plan.startsAt)} - ${formatDate(post.plan.endsAt)}`}
             </p>
           </div>
         </div>
@@ -842,7 +844,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
             )}
           </div>
           <div className="min-w-0 flex-1">
-            <span className="text-body-sm font-[var(--fw-semibold)]">{post.userName}</span>
+            <Link href={`/profile/${post.plan.ownerUserId}`} className="text-body-sm font-[var(--fw-semibold)]">{post.userName}</Link>
             {post.text && (
               <p className="mt-[2px] text-body-sm leading-[1.45]">{post.text}</p>
             )}
@@ -885,7 +887,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                         )}
                       </div>
                       <p className="min-w-0 flex-1 text-body-sm leading-[1.4]">
-                        <span className="font-[var(--fw-semibold)]">{getCommentAuthorName(comment)}</span>{" "}
+                        <Link href={`/profile/${comment.userId}`} className="font-[var(--fw-semibold)]">{getCommentAuthorName(comment)}</Link>{" "}
                         {comment.content}
                       </p>
                       {comment.userId === currentUserId && (
@@ -958,7 +960,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
           {/* Username + description */}
           {post.text && (
             <p className="mt-[var(--space-3)] px-[var(--space-1)] text-body-sm leading-[1.45]">
-              <span className="font-[var(--fw-semibold)]">{post.userName}</span>{" "}
+              <Link href={`/profile/${post.plan.ownerUserId}`} className="font-[var(--fw-semibold)]">{post.userName}</Link>{" "}
               {post.text}
             </p>
           )}
@@ -986,7 +988,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                       )}
                     </div>
                     <p className="min-w-0 flex-1 text-body-sm leading-[1.4]">
-                      <span className="font-[var(--fw-semibold)]">{getCommentAuthorName(comment)}</span>{" "}
+                      <Link href={`/profile/${comment.userId}`} className="font-[var(--fw-semibold)]">{getCommentAuthorName(comment)}</Link>{" "}
                       {comment.content}
                     </p>
                     {comment.userId === currentUserId && (
