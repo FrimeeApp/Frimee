@@ -67,20 +67,14 @@ export type UserProfileAndSettingsRow = {
 
 const profileImagesBucket = process.env.NEXT_PUBLIC_SUPABASE_PROFILE_BUCKET ?? "profile-images";
 
-export async function fetchUserSettingsByUserId(userId: string): Promise<UserSettingsRow | null> {
+export async function fetchUserSettingsByUserId(_userId: string): Promise<UserSettingsRow | null> {
   const supabase = createBrowserSupabaseClient();
 
-  const { data, error } = await supabase
-    .from("user_settings")
-    .select(
-      "user_id,theme,language,timezone,notify_push,notify_email,notify_in_app,profile_visibility,allow_friend_requests,google_sync_enabled,google_sync_export_plans",
-    )
-    .eq("user_id", userId)
-    .is("deleted_at", null)
-    .maybeSingle();
+  const { data, error } = await supabase.rpc("fn_user_settings_get");
 
   if (error) throw error;
-  return (data as UserSettingsRow | null) ?? null;
+  const rows = (data ?? []) as UserSettingsRow[];
+  return rows[0] ?? null;
 }
 
 export async function upsertUserSettingsRpc(params: UpsertUserSettingsParams): Promise<UserSettingsRow> {

@@ -1,97 +1,85 @@
 ﻿"use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import AppSidebar from "@/components/common/AppSidebar";
 import LoadingScreen from "@/components/common/LoadingScreen";
 import { useAuth } from "@/providers/AuthProvider";
-import { listPlansByIdsInOrder } from "@/services/api/repositories/plans.repository";
-import { listPublishedPostPlanIds } from "@/services/api/repositories/feed.repository";
-import type { FeedPlanItemDto } from "@/services/api/dtos/plan.dto";
+import { getFeedPostsOnly, getFeedLikes } from "@/services/api/repositories/feed.repository";
+import type { FeedItemDto } from "@/services/api/dtos/feed.dto";
 import { publishPlanAsPost } from "@/services/api/repositories/post.repository";
-import {
-  listPlanLikeCounts,
-  listUserLikedPlanIds,
-  togglePlanLike,
-} from "@/services/api/repositories/likes.repository";
+import { togglePlanLike } from "@/services/api/repositories/likes.repository";
 import {
   createComment,
   listCommentsForPlan,
-  listPreviewCommentsForPlans,
   type CommentDto,
 } from "@/services/api/repositories/comments.repository";
 import { getPublicUserProfile } from "@/services/api/repositories/users.repository";
+import {
+  listChats,
+  listMensajes,
+  sendMensaje,
+  markChatRead,
+  resolveChatName,
+  resolveChatAvatar,
+  formatChatTime,
+} from "@/services/api/repositories/chat.repository";
+import { createBrowserSupabaseClient } from "@/services/supabase/client";
+import AudioPlayer from "@/components/common/AudioPlayer";
 
-type PostType = "plan" | "comment";
-
-type FeedPost = {
-  id: string;
-  type: PostType;
-  userName: string;
-  avatarLabel: string;
-  avatarImage?: string | null;
-  subtitle: string;
-  text: string;
-  hasImage?: boolean;
-  coverImage?: string;
-};
-
-type UiPost = FeedPost & {
-  plan: FeedPlanItemDto;
-  initiallyLiked: boolean;
-  initialLikeCount: number;
-  previewComments: CommentDto[];
-};
-
-type Suggestion = {
-  id: string;
-  name: string;
-  text: string;
-  avatarLabel: string;
-};
-
-const MOCK_SUGGESTIONS: Suggestion[] = [
-  { id: "s1", name: "Patrick", text: "Ha publicado su viaje a Oslo", avatarLabel: "P" },
-  { id: "s2", name: "Isa", text: "Ha publicado su viaje a Escocia", avatarLabel: "I" },
+const EMOJI_LIST = [
+  "😀","😃","😄","😁","😆","😅","🤣","😂","🙂","😊",
+  "😇","🥰","😍","🤩","😘","😗","😚","😙","🥲","😋",
+  "😛","😜","🤪","😝","🤑","🤗","🤭","🫢","🤫","🤔",
+  "😐","😑","😶","🫡","😏","😒","🙄","😬","😮‍💨","🤥",
+  "😌","😔","😪","🤤","😴","😷","🤒","🤕","🤢","🤮",
+  "🥵","🥶","🥴","😵","🤯","🤠","🥳","🥸","😎","🤓",
+  "❤️","🧡","💛","💚","💙","💜","🖤","🤍","🤎","💔",
+  "❤️‍🔥","💕","💞","💓","💗","💖","💘","💝","💟","♥️",
+  "👍","👎","👏","🙌","🤝","🤜","🤛","✊","👊","🫶",
+  "🤞","✌️","🤟","🤘","👌","🤌","👋","🤚","✋","🖖",
+  "🔥","✨","🌟","💫","⭐","🎉","🎊","🎈","🎁","🏆",
+  "✈️","🌍","🌎","🌏","🗺️","🏖️","🏔️","🌅","🌄","🌠",
+  "🍕","🍔","🍟","🌮","🍣","🍩","🍪","🎂","🍰","☕",
+  "💪","🦾","👀","👁️","🫣","😈","👿","💀","☠️","👻",
 ];
-
 const COMMENT_AUTHOR_CACHE_TTL_MS = 60_000;
 const commentAuthorCache = new Map<string, { name: string; profileImage: string | null; cachedAt: number }>();
 
-function preloadImages(urls: string[], timeoutMs = 2500) {
-  if (typeof window === "undefined" || urls.length === 0) {
-    return Promise.resolve();
-  }
+const FEED_CACHE_KEY = "fremee:feed:v2";
+const FEED_CACHE_TTL_MS = 5 * 60 * 1000;
 
+function readFeedCache(userId: string): FeedItemDto[] | null {
+  try {
+    const raw = localStorage.getItem(`${FEED_CACHE_KEY}:${userId}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { items: FeedItemDto[]; savedAt: number };
+    if (Date.now() - parsed.savedAt > FEED_CACHE_TTL_MS) return null;
+    return parsed.items;
+  } catch { return null; }
+}
+
+function writeFeedCache(userId: string, items: FeedItemDto[]) {
+  try {
+    localStorage.setItem(`${FEED_CACHE_KEY}:${userId}`, JSON.stringify({ items, savedAt: Date.now() }));
+  } catch { /* ignorar errores de storage */ }
+}
+
+function preloadImagesBackground(urls: string[]) {
   const uniqueUrls = [...new Set(urls.filter(Boolean))];
-  if (uniqueUrls.length === 0) return Promise.resolve();
-
-  const loadAll = Promise.allSettled(
-    uniqueUrls.map(
-      (url) =>
-        new Promise<void>((resolve) => {
-          const img = new Image();
-          img.onload = () => resolve();
-          img.onerror = () => resolve();
-          img.src = url;
-        }),
-    ),
-  ).then(() => undefined);
-
-  const timeout = new Promise<void>((resolve) => {
-    window.setTimeout(resolve, timeoutMs);
+  uniqueUrls.forEach((url) => {
+    const img = new Image();
+    img.src = url;
   });
-
-  return Promise.race([loadAll, timeout]);
 }
 
 export default function FeedPage() {
-  const { user, loading } = useAuth();
+  const { user, loading, profile } = useAuth();
   const currentUserId = user?.id ?? null;
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [activeFeedTab, setActiveFeedTab] = useState<"following" | "explore">("following");
   const [loadingFeed, setLoadingFeed] = useState(true);
-  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
-  const [uiPosts, setUiPosts] = useState<UiPost[]>([]);
+  const [firstImageReady, setFirstImageReady] = useState(false);
+  const [uiPosts, setUiPosts] = useState<FeedItemDto[]>([]);
   const [reloadNonce, setReloadNonce] = useState(0);
   const lastProfileUpdatedAtRef = useRef<string | null>(null);
   const tabRowRef = useRef<HTMLDivElement | null>(null);
@@ -102,7 +90,6 @@ export default function FeedPage() {
   useEffect(() => {
     if (!currentUserId) {
       setUiPosts([]);
-      setSuggestions(MOCK_SUGGESTIONS);
       setLoadingFeed(false);
       return;
     }
@@ -110,77 +97,55 @@ export default function FeedPage() {
     let cancelled = false;
 
     const load = async () => {
-      setLoadingFeed(true);
+      // 1. Mostrar caché inmediatamente — sin skeleton si hay datos previos
+      const cached = readFeedCache(currentUserId);
+      if (cached && cached.length > 0) {
+        setUiPosts(cached);
+        setLoadingFeed(false);
+      } else {
+        setLoadingFeed(true);
+      }
+
       try {
-        const publishedPlanIds = await listPublishedPostPlanIds({ limit: 20 });
-        const plans = await listPlansByIdsInOrder(publishedPlanIds);
-
+        // 2. Fetch posts (sin likes) — se muestran en cuanto llegan
+        const posts = await getFeedPostsOnly({ limit: 20 });
         if (cancelled) return;
 
-        const resolvedPlanIds = plans.map((plan) => plan.id);
-        const [likedPlanIds, likeCountsByPlanId, previewCommentsByPlanId] = await Promise.all([
-          listUserLikedPlanIds({
-            userId: currentUserId,
-            planIds: resolvedPlanIds,
-          }),
-          listPlanLikeCounts({ planIds: resolvedPlanIds }),
-          listPreviewCommentsForPlans({
-            planIds: resolvedPlanIds,
-            userId: currentUserId,
-            limitPerPlan: 2,
-          }),
-        ]);
+        const firstWithImage = posts.find((p) => p.coverImage);
+        if (!firstWithImage) setFirstImageReady(true);
+        setUiPosts(posts);
+        setLoadingFeed(false);
+        writeFeedCache(currentUserId, posts);
 
-        if (cancelled) return;
+        // 3. Precargar imágenes en background — no bloquea nada
+        const imageUrls = posts.flatMap((p) =>
+          [p.coverImage, p.avatarImage].filter((u): u is string => Boolean(u))
+        );
+        preloadImagesBackground(imageUrls);
 
-        const likedSet = new Set<number>(likedPlanIds);
-        const mapped: UiPost[] = plans.map((p) => {
-          const name = p.creator?.name || "Usuario";
-          const avatarLabel = (name.trim()[0] || "U").toUpperCase();
-
-          return {
-            id: String(p.id),
-            type: "plan",
-            userName: name,
-            avatarLabel,
-            avatarImage: p.creator?.profileImage ?? null,
-            subtitle: p.title,
-            text: p.description,
-            hasImage: Boolean(p.coverImage),
-            coverImage: p.coverImage ?? undefined,
-            plan: p,
-            initiallyLiked: likedSet.has(p.id),
-            initialLikeCount: likeCountsByPlanId[p.id] ?? 0,
-            previewComments: previewCommentsByPlanId[p.id] ?? [],
-          };
-        });
-
-        const imageUrlsToPreload = mapped.flatMap((post) => {
-          const urls: string[] = [];
-          if (post.coverImage) urls.push(post.coverImage);
-          if (post.avatarImage) urls.push(post.avatarImage);
-          return urls;
-        });
-
-        await preloadImages(imageUrlsToPreload);
-        if (cancelled) return;
-
-        setUiPosts(mapped);
-        setSuggestions(MOCK_SUGGESTIONS);
+        // 4. Fetch likes en background — actualiza sin re-renderizar todo
+        const planIds = posts.map((p) => p.plan.id);
+        if (planIds.length > 0) {
+          const { likedSet, counts } = await getFeedLikes({ userId: currentUserId, planIds });
+          if (cancelled) return;
+          setUiPosts((prev) =>
+            prev.map((p) => ({
+              ...p,
+              initiallyLiked: likedSet.has(p.plan.id),
+              initialLikeCount: counts[p.plan.id] ?? 0,
+            }))
+          );
+        }
       } catch (e) {
         console.error("[feed] load error", e);
-        setUiPosts([]);
-        setSuggestions(MOCK_SUGGESTIONS);
-      } finally {
+        if (!cached || cached.length === 0) setUiPosts([]);
         if (!cancelled) setLoadingFeed(false);
       }
     };
 
     void load();
 
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [currentUserId, reloadNonce]);
 
   useEffect(() => {
@@ -234,23 +199,21 @@ export default function FeedPage() {
     return () => window.removeEventListener("resize", updateIndicator);
   }, [activeFeedTab]);
 
-  if (loading || loadingFeed) return <LoadingScreen />;
+  if (loading) return <LoadingScreen />;
 
   return (
     <div className="min-h-dvh bg-app text-app">
       <div className="relative mx-auto min-h-dvh max-w-[1440px]">
-        <AppSidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed((prev) => !prev)} />
+        <AppSidebar />
 
         <main
-          className={`px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-4)] transition-[padding] duration-[var(--duration-slow)] [transition-timing-function:var(--ease-standard)] lg:py-[var(--space-8)] lg:pr-[var(--space-14)] ${
-            sidebarCollapsed ? "lg:pl-[56px]" : "lg:pl-[136px]"
-          }`}
+          className={`px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-4)] transition-[padding] duration-[var(--duration-slow)] [transition-timing-function:var(--ease-standard)] md:py-[var(--space-8)] md:pr-[var(--space-14)]`}
         >
           <div className="mx-auto grid max-w-[1160px] grid-cols-1 gap-[var(--space-8)] xl:grid-cols-[minmax(0,1fr)_300px] xl:gap-[var(--space-10)]">
             <section className="mx-auto w-full max-w-[760px]">
               <div
                 ref={tabRowRef}
-                className="relative flex gap-[var(--space-10)] border-b border-app text-body text-muted"
+                className="relative flex gap-[var(--space-10)] border-b border-app pb-[var(--space-2)] text-body text-muted"
               >
                 <button
                   ref={followingTabRef}
@@ -272,8 +235,18 @@ export default function FeedPage() {
                 >
                   Explorar
                 </button>
+                <Link
+                  href="/search"
+                  aria-label="Buscar"
+                  className="ml-auto pb-[var(--space-2)] text-app transition-opacity duration-[var(--duration-base)] hover:opacity-70"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[20px]">
+                    <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.8" />
+                    <path d="M16 16L20.5 20.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                  </svg>
+                </Link>
                 <span
-                  className={`pointer-events-none absolute bottom-0 h-[2px] bg-warning-token transition-[left,width,opacity] duration-[220ms] [transition-timing-function:var(--ease-standard)] ${
+                  className={`pointer-events-none absolute bottom-0 h-[2px] bg-black transition-[left,width,opacity] duration-[220ms] [transition-timing-function:var(--ease-standard)] dark:bg-white ${
                     tabIndicator.ready ? "opacity-100" : "opacity-0"
                   }`}
                   style={{ left: tabIndicator.left, width: tabIndicator.width }}
@@ -281,25 +254,35 @@ export default function FeedPage() {
                 />
               </div>
 
-              <div className="mt-[var(--space-5)] space-y-[var(--space-6)]">
-                {uiPosts.map((post) => (
-                  <FeedCard key={post.id} post={post} currentUserId={currentUserId} />
-                ))}
+              <div className="mt-[var(--space-5)]">
+                {loadingFeed || !firstImageReady ? (
+                  <>
+                    <FeedSkeleton />
+                    {!loadingFeed && uiPosts.length > 0 && (
+                      <div className="sr-only" aria-hidden="true">
+                        {uiPosts.filter((p) => p.coverImage).slice(0, 1).map((post) => (
+                          <img key={post.id} src={post.coverImage!} onLoad={() => setFirstImageReady(true)} onError={() => setFirstImageReady(true)} alt="" />
+                        ))}
+                      </div>
+                    )}
+                  </>
+                ) : uiPosts.length === 0 ? (
+                  <div className="rounded-modal border border-app bg-surface p-[var(--space-5)] text-body text-muted shadow-elev-1">
+                    Aun no hay publicaciones para mostrar.
+                  </div>
+                ) : (
+                  <div className="space-y-[var(--space-3)]">
+                    {uiPosts.map((post, idx) => (
+                      <FeedCard key={post.id} post={post} currentUserId={currentUserId} currentUserName={profile?.nombre ?? null} currentUserProfileImage={profile?.profile_image ?? null} nextPostHasImage={uiPosts[idx + 1]?.hasImage ?? true} />
+                    ))}
+                  </div>
+                )}
               </div>
             </section>
 
-            <aside className="hidden pt-[var(--space-10)] xl:block">
-              <h3 className="text-[var(--font-h5)] font-[var(--fw-semibold)] leading-[var(--lh-h5)]">Actividad reciente</h3>
-              <div className="mt-[var(--space-4)] space-y-[var(--space-5)]">
-                {suggestions.map((item) => (
-                  <div key={item.id} className="flex items-start gap-3">
-                    <Avatar label={item.avatarLabel} />
-                    <div>
-                      <div className="text-body font-[var(--fw-semibold)] leading-none">{item.name}</div>
-                      <p className="mt-[var(--space-1)] text-body-sm leading-[1.35] text-muted">{item.text}</p>
-                    </div>
-                  </div>
-                ))}
+            <aside className="hidden xl:block">
+              <div className="sticky top-[var(--space-8)]">
+                <FeedChatPanel currentUserId={currentUserId} />
               </div>
             </aside>
           </div>
@@ -309,19 +292,313 @@ export default function FeedPage() {
   );
 }
 
-function FeedCard({ post, currentUserId }: { post: UiPost; currentUserId: string | null }) {
+function FeedChatPanel({ currentUserId }: { currentUserId: string | null }) {
+  const supabase = createBrowserSupabaseClient();
+  const [chats, setChats] = useState<import("@/services/api/repositories/chat.repository").ChatListItem[]>([]);
+  const [openChatId, setOpenChatId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<import("@/services/api/repositories/chat.repository").MensajeRow[]>([]);
+  const [msgLoading, setMsgLoading] = useState(false);
+  const [text, setText] = useState("");
+  const [sending, setSending] = useState(false);
+  const bottomRef = useRef<HTMLDivElement | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const channelsMapRef = useRef(new Map<string, ReturnType<typeof supabase.channel>>());
+  const openChatIdRef = useRef<string | null>(null);
+  openChatIdRef.current = openChatId;
+
+  const openChat = chats.find((c) => c.chat_id === openChatId) ?? null;
+
+  useEffect(() => {
+    if (!currentUserId) return;
+    void listChats().then(setChats).catch(console.error);
+  }, [currentUserId]);
+
+  // Detectar cuando el usuario es añadido a un nuevo chat
+  useEffect(() => {
+    if (!currentUserId) return;
+    const ch = supabase
+      .channel(`user-join:${currentUserId}`)
+      .on("broadcast", { event: "chat_added" }, () => {
+        void listChats().then(setChats).catch(console.error);
+      })
+      .subscribe();
+    return () => { void supabase.removeChannel(ch); };
+  }, [currentUserId, supabase]);
+
+  // Un canal msg:${chatId} por chat — actualiza preview siempre y mensajes si está abierto
+  const chatIdsKey = chats.map((c) => c.chat_id).join(",");
+  useEffect(() => {
+    if (chats.length === 0) return;
+    const map = new Map<string, ReturnType<typeof supabase.channel>>();
+    chats.forEach((c) => {
+      const ch = supabase
+        .channel(`msg:${c.chat_id}`)
+        .on("broadcast", { event: "new_message" }, ({ payload }) => {
+          const msg = payload as import("@/services/api/repositories/chat.repository").MensajeRow;
+          const isOpen = openChatIdRef.current === c.chat_id;
+          const preview = msg.audio_url ? "🎤 Nota de voz" : msg.document_url ? `📄 ${msg.document_name ?? "Documento"}` : msg.image_url ? (msg.image_type?.startsWith("video/") ? "🎥 Vídeo" : "📷 Foto") : msg.texto;
+          setChats((prev) => prev.map((chat) =>
+            chat.chat_id !== c.chat_id ? chat : {
+              ...chat,
+              last_message: preview,
+              last_message_at: msg.created_at,
+              unread_count: (isOpen || msg.sender_id === currentUserId) ? chat.unread_count : chat.unread_count + 1,
+            }
+          ));
+          if (isOpen) {
+            setMessages((prev) => prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]);
+            void markChatRead(c.chat_id);
+          }
+        })
+        .subscribe();
+      map.set(c.chat_id, ch);
+    });
+    channelsMapRef.current = map;
+    return () => {
+      map.forEach((ch) => void supabase.removeChannel(ch));
+      channelsMapRef.current = new Map();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatIdsKey]);
+
+  // Cargar mensajes al abrir chat
+  useEffect(() => {
+    if (!openChatId) return;
+    setMsgLoading(true);
+    void listMensajes({ chatId: openChatId })
+      .then(setMessages)
+      .catch(console.error)
+      .finally(() => setMsgLoading(false));
+    void markChatRead(openChatId);
+    setChats((prev) => prev.map((c) =>
+      c.chat_id !== openChatId ? c : { ...c, unread_count: 0 }
+    ));
+  }, [openChatId]);
+
+  // Scroll al último mensaje dentro del contenedor
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages]);
+
+  const onSend = async () => {
+    const trimmed = text.trim();
+    if (!trimmed || sending || !openChatId || !openChat) return;
+    setText("");
+    setSending(true);
+    try {
+      const newId = await sendMensaje({ chatId: openChatId, texto: trimmed });
+      const me = openChat.miembros.find((m) => m.id === currentUserId);
+      const newMsg: import("@/services/api/repositories/chat.repository").MensajeRow = {
+        id: newId,
+        sender_id: currentUserId ?? "",
+        sender_nombre: me?.nombre ?? "",
+        sender_profile_image: me?.profile_image ?? null,
+        texto: trimmed,
+        created_at: new Date().toISOString(),
+      };
+      setMessages((prev) => prev.some((m) => m.id === newId) ? prev : [...prev, newMsg]);
+      setChats((prev) => prev.map((c) =>
+        c.chat_id !== openChatId ? c : { ...c, last_message: trimmed, last_message_at: newMsg.created_at }
+      ));
+      void channelsMapRef.current.get(openChatId)?.send({ type: "broadcast", event: "new_message", payload: newMsg });
+    } catch (e) {
+      console.error("[feed-chat] Error enviando:", e);
+      setText(trimmed);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  if (openChat && currentUserId) {
+    const chatName = resolveChatName(openChat, currentUserId);
+    const chatAvatar = resolveChatAvatar(openChat, currentUserId);
+
+    return (
+      <div className="pt-[var(--space-10)]">
+        <div className="flex items-center gap-[var(--space-2)]">
+          <button type="button" onClick={() => { setOpenChatId(null); setText(""); void listChats().then(setChats); }}
+            className="flex size-[28px] items-center justify-center rounded-full transition-colors hover:bg-surface" aria-label="Volver">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[16px]">
+              <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+          <div className="avatar-sm flex items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-[11px] font-[var(--fw-semibold)] text-app">
+            {chatAvatar ? <img src={chatAvatar} alt={chatName} className="h-full w-full object-cover" referrerPolicy="no-referrer" /> : (chatName[0] ?? "?").toUpperCase()}
+          </div>
+          <span className="min-w-0 truncate text-body-sm font-[var(--fw-semibold)]">{chatName}</span>
+        </div>
+
+        <div ref={scrollContainerRef} className="scrollbar-thin mt-[var(--space-4)] max-h-[340px] overflow-x-hidden overflow-y-auto overscroll-contain">
+          {msgLoading ? (
+            <p className="py-4 text-center text-body-sm text-muted">Cargando...</p>
+          ) : (
+            <div className="space-y-[1px]">
+              {messages.map((msg, idx, arr) => {
+                const isMe = msg.sender_id === currentUserId;
+                const prevMsg = arr[idx - 1];
+                const isFirstInGroup = !prevMsg || prevMsg.sender_id !== msg.sender_id;
+                return (
+                  <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"} ${isFirstInGroup ? "mt-[var(--space-2)]" : "mt-[2px]"}`}>
+                    {!isMe && openChat.tipo === "GRUPO" && (
+                      <div className="mr-[6px] w-[20px] shrink-0">
+                        {isFirstInGroup && (
+                          <div className="flex size-[20px] items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-[9px] font-[var(--fw-semibold)] text-app">
+                            {msg.sender_profile_image
+                              ? <img src={msg.sender_profile_image} alt={msg.sender_nombre} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                              : (msg.sender_nombre[0] ?? "?").toUpperCase()}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <div className={`max-w-[85%] rounded-[14px] px-3 py-[6px] ${isMe ? "bg-[var(--text-primary)] text-contrast-token" : "bg-surface-inset"}`}>
+                      {!isMe && openChat.tipo === "GRUPO" && isFirstInGroup && (
+                        <p className="mb-[2px] text-[10px] font-[var(--fw-semibold)] text-muted">{msg.sender_nombre}</p>
+                      )}
+                      {msg.audio_url ? (
+                        <AudioPlayer src={msg.audio_url} isMe={isMe} />
+                      ) : msg.document_url ? (
+                        <div className="flex items-center gap-[8px] py-[2px] opacity-80">
+                          <span className="text-[18px]">📄</span>
+                          <span className="truncate text-[13px]">{msg.document_name ?? "Documento"}</span>
+                        </div>
+                      ) : msg.image_url ? (
+                        msg.image_type?.startsWith("video/") ? (
+                          <video src={msg.image_url} controls playsInline className="max-w-[200px] rounded-[8px]" style={{ maxHeight: 200 }} />
+                        ) : (
+                          <a href={msg.image_url} target="_blank" rel="noopener noreferrer">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={msg.image_url} alt="Imagen" className="max-w-[200px] rounded-[8px] object-cover" style={{ maxHeight: 200 }} referrerPolicy="no-referrer" />
+                          </a>
+                        )
+                      ) : (() => { try { const p = JSON.parse(msg.texto); if (p?.type === "poll") return <div className="flex items-center gap-[6px] py-[2px] opacity-80"><span className="text-[16px]">📊</span><span className="text-[13px]">{p.question as string}</span></div>; } catch { /* noop */ } return <p className="break-all text-body-sm">{msg.texto}</p>; })()}
+                      <p className={`mt-[2px] text-right text-[10px] ${isMe ? "text-contrast-token/60" : "text-muted"}`}>{formatChatTime(msg.created_at)}</p>
+                    </div>
+                  </div>
+                );
+              })}
+              <div ref={bottomRef} />
+            </div>
+          )}
+        </div>
+
+        <div className="mt-[var(--space-3)] flex items-center gap-[var(--space-2)]">
+          <input type="text" value={text} onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void onSend(); } }}
+            placeholder="Escribe un mensaje..."
+            className="min-w-0 flex-1 rounded-full border border-app bg-surface px-3 py-[6px] text-body-sm text-app outline-none transition-colors focus:border-[var(--border-strong)]" />
+          <button type="button" onClick={() => void onSend()} disabled={!text.trim() || sending}
+            className="flex size-[30px] shrink-0 items-center justify-center rounded-full bg-[var(--text-primary)] text-contrast-token transition-opacity hover:opacity-80 disabled:opacity-30" aria-label="Enviar">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[14px]">
+              <path d="M22 2L11 13" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="pt-[var(--space-10)]">
+      <div className="flex items-center justify-between">
+        <h3 className="text-[var(--font-h5)] font-[var(--fw-semibold)] leading-[var(--lh-h5)]">Mensajes</h3>
+        <Link href="/messages" className="text-body-sm text-muted transition-opacity hover:opacity-70">Ver todos</Link>
+      </div>
+      <div className="mt-[var(--space-4)] space-y-[2px]">
+        {chats.length === 0 ? (
+          <p className="text-body-sm text-muted">No tienes conversaciones aún</p>
+        ) : (
+          chats.slice(0, 4).map((chat) => {
+            const name = resolveChatName(chat, currentUserId ?? "");
+            const avatar = resolveChatAvatar(chat, currentUserId ?? "");
+            const hasUnread = chat.unread_count > 0;
+            return (
+              <button key={chat.chat_id} type="button" onClick={() => setOpenChatId(chat.chat_id)}
+                className="flex w-full items-center gap-[var(--space-3)] rounded-[10px] px-2 py-[10px] text-left transition-colors hover:bg-surface">
+                <div className="relative shrink-0">
+                  <div className="avatar-md flex items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">
+                    {avatar ? <img src={avatar} alt={name} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                      : chat.tipo === "GRUPO" ? <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[16px] text-muted"><circle cx="9" cy="7" r="3" stroke="currentColor" strokeWidth="1.6" /><path d="M2 19c1-3 3.5-4.5 7-4.5s6 1.5 7 4.5" stroke="currentColor" strokeWidth="1.6" /></svg>
+                      : (name[0] ?? "?").toUpperCase()}
+                  </div>
+                  {hasUnread && <span className="absolute -right-[2px] -top-[2px] size-[10px] rounded-full border-2 border-[var(--bg)] bg-[#ff6a3d]" />}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className={`truncate text-body-sm ${hasUnread ? "font-[var(--fw-semibold)]" : ""} text-app`}>{name}</p>
+                  <p className={`truncate text-[12px] leading-[16px] ${hasUnread ? "font-[var(--fw-medium)] text-app" : "text-muted"}`}>{(() => { const m = chat.last_message ?? ""; try { return JSON.parse(m)?.type === "poll" ? "📊 Encuesta" : m; } catch { return m; } })()}</p>
+                </div>
+                <span className="shrink-0 text-[11px] text-muted">{formatChatTime(chat.last_message_at)}</span>
+              </button>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
+function FeedSkeleton() {
+  return (
+    <div className="space-y-[var(--space-3)]" aria-label="Cargando publicaciones" role="status">
+      {/* Image post skeleton */}
+      {[0, 1].map((i) => (
+        <article key={`img-${i}`} className="pb-[var(--space-2)]">
+          <div className="feed-image-container relative overflow-hidden">
+            <div className="feed-skeleton-shimmer aspect-[4/3] w-full" />
+            {/* Top overlay shimmer — avatar + name */}
+            <div className="absolute inset-x-0 top-0 flex items-center gap-[var(--space-2)] px-[var(--space-4)] pt-[var(--space-3)]">
+              <div className="size-[32px] rounded-full bg-white/20" />
+              <div className="h-3 w-[80px] rounded-full bg-white/20" />
+            </div>
+            {/* Bottom overlay shimmer — location + date */}
+            <div className="absolute inset-x-0 bottom-0 px-[var(--space-4)] pb-[var(--space-3)]">
+              <div className="h-4 w-[140px] rounded-full bg-white/20" />
+              <div className="mt-[6px] h-3 w-[100px] rounded-full bg-white/20" />
+            </div>
+          </div>
+          {/* Actions + text shimmer */}
+          <div className="mt-[var(--space-2)] flex items-center gap-[var(--space-2)] px-[var(--space-1)]">
+            <div className="feed-skeleton-shimmer h-[24px] w-[24px] rounded-full" />
+            <div className="feed-skeleton-shimmer h-3 w-[120px] rounded-full" />
+          </div>
+        </article>
+      ))}
+      {/* Text-only post skeleton (Twitter style) */}
+      <article className="pb-[var(--space-2)]">
+        <div className="flex gap-[var(--space-2)] px-[var(--space-1)]">
+          <div className="feed-skeleton-shimmer size-[32px] shrink-0 rounded-full" />
+          <div className="min-w-0 flex-1">
+            <div className="feed-skeleton-shimmer h-3 w-[90px] rounded-full" />
+            <div className="feed-skeleton-shimmer mt-[6px] h-3 w-[85%] rounded-full" />
+            <div className="feed-skeleton-shimmer mt-[4px] h-3 w-[60%] rounded-full" />
+            <div className="mt-[var(--space-2)] flex items-center gap-[var(--space-4)]">
+              <div className="feed-skeleton-shimmer h-[24px] w-[24px] rounded-full" />
+              <div className="feed-skeleton-shimmer h-[24px] w-[24px] rounded-full" />
+              <div className="feed-skeleton-shimmer h-[24px] w-[24px] rounded-full" />
+            </div>
+          </div>
+        </div>
+      </article>
+    </div>
+  );
+}
+
+function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImage, nextPostHasImage }: { post: FeedItemDto; currentUserId: string | null; currentUserName: string | null; currentUserProfileImage: string | null; nextPostHasImage: boolean }) {
   const [publishing, setPublishing] = useState(false);
   const [liked, setLiked] = useState(post.initiallyLiked);
   const [likeCount, setLikeCount] = useState(post.initialLikeCount);
   const [likeLoading, setLikeLoading] = useState(false);
   const [likeAnimating, setLikeAnimating] = useState(false);
-  const [commentOpen, setCommentOpen] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [commentSubmitting, setCommentSubmitting] = useState(false);
-  const [previewComments, setPreviewComments] = useState<CommentDto[]>(post.previewComments);
   const [commentsSection, setCommentsSection] = useState<CommentDto[]>([]);
   const [commentsLoading, setCommentsLoading] = useState(false);
-  const [resolvedAuthorNames, setResolvedAuthorNames] = useState<Record<string, string>>({});
+  const [commentsExpanded, setCommentsExpanded] = useState(false);
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
+  const [authorAvatars, setAuthorAvatars] = useState<Record<string, string | null>>({});
+  const commentInputRef = useRef<HTMLInputElement | null>(null);
+  const emojiPickerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setLiked(post.initiallyLiked);
@@ -332,100 +609,103 @@ function FeedCard({ post, currentUserId }: { post: UiPost; currentUserId: string
   }, [post.initialLikeCount]);
 
   useEffect(() => {
-    setPreviewComments(post.previewComments);
-  }, [post.previewComments]);
-
-  useEffect(() => {
     if (!likeAnimating) return;
     const timeoutId = window.setTimeout(() => setLikeAnimating(false), 180);
     return () => window.clearTimeout(timeoutId);
   }, [likeAnimating]);
 
+  // Load comments on mount
   useEffect(() => {
+    if (!post.plan.id) return;
     let cancelled = false;
-    const commentsToResolve = [...previewComments, ...commentsSection];
-    const uniqueUserIds = [...new Set(commentsToResolve.map((c) => c.userId).filter((id) => id && id.length > 0))];
-    const unresolved = uniqueUserIds.filter((userId) => {
-      if (resolvedAuthorNames[userId]) return false;
-      const cached = commentAuthorCache.get(userId);
-      return !(cached && Date.now() - cached.cachedAt < COMMENT_AUTHOR_CACHE_TTL_MS);
-    });
-
-    if (unresolved.length === 0) {
-      const hydratedFromCache: Record<string, string> = {};
-      for (const userId of uniqueUserIds) {
-        const cached = commentAuthorCache.get(userId);
-        if (cached && Date.now() - cached.cachedAt < COMMENT_AUTHOR_CACHE_TTL_MS) {
-          hydratedFromCache[userId] = cached.name;
-        }
+    const load = async () => {
+      setCommentsLoading(true);
+      try {
+        const allComments = await listCommentsForPlan({
+          planId: post.plan.id,
+          userId: currentUserId ?? undefined,
+          limit: 50,
+        });
+        if (!cancelled) setCommentsSection(allComments);
+      } catch (error) {
+        console.error("[feed] Error loading comments:", error);
+      } finally {
+        if (!cancelled) setCommentsLoading(false);
       }
-      if (!cancelled && Object.keys(hydratedFromCache).length > 0) {
-        setResolvedAuthorNames((prev) => {
-          let changed = false;
-          for (const [userId, name] of Object.entries(hydratedFromCache)) {
-            if (prev[userId] !== name) {
-              changed = true;
-              break;
-            }
-          }
-          if (!changed) return prev;
-          return { ...prev, ...hydratedFromCache };
+    };
+    void load();
+    return () => { cancelled = true; };
+  }, [post.plan.id, currentUserId]);
+
+  // Fetch avatars for comment authors
+  useEffect(() => {
+    if (commentsSection.length === 0) return;
+    const userIds = [...new Set(commentsSection.map((c) => c.userId))];
+    const missing = userIds.filter((uid) => !(uid in authorAvatars));
+    if (missing.length === 0) return;
+
+    const fetchAvatars = async () => {
+      const results: Record<string, string | null> = {};
+
+      // Inyectar datos del usuario logueado directamente (evita RLS)
+      if (currentUserId && missing.includes(currentUserId)) {
+        const currentUserProfileImage = post.avatarImage ?? null;
+        results[currentUserId] = currentUserProfileImage;
+        commentAuthorCache.set(currentUserId, {
+          name: currentUserName ?? "Usuario",
+          profileImage: currentUserProfileImage,
+          cachedAt: Date.now(),
         });
       }
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    const resolveNames = async () => {
-      const resolved: Record<string, string> = {};
 
       await Promise.all(
-        unresolved.map(async (userId) => {
+        missing.filter((uid) => uid !== currentUserId).map(async (uid) => {
+          const cached = commentAuthorCache.get(uid);
+          if (cached && Date.now() - cached.cachedAt < COMMENT_AUTHOR_CACHE_TTL_MS) {
+            results[uid] = cached.profileImage;
+            return;
+          }
           try {
-            const profile = await getPublicUserProfile(userId);
-            const name = profile?.nombre?.trim();
-            if (name) {
-              resolved[userId] = name;
-              commentAuthorCache.set(userId, {
-                name,
-                profileImage: profile?.profile_image ?? null,
-                cachedAt: Date.now(),
-              });
-            }
+            const profile = await getPublicUserProfile(uid);
+            results[uid] = profile?.profile_image ?? null;
+            commentAuthorCache.set(uid, {
+              name: profile?.nombre ?? "Usuario",
+              profileImage: profile?.profile_image ?? null,
+              cachedAt: Date.now(),
+            });
           } catch {
-            // silent fallback to snapshot name/user placeholder
+            results[uid] = null;
           }
         }),
       );
+      setAuthorAvatars((prev) => ({ ...prev, ...results }));
+    };
+    void fetchAvatars();
+  }, [commentsSection]);
 
-      if (!cancelled && Object.keys(resolved).length > 0) {
-        setResolvedAuthorNames((prev) => {
-          let changed = false;
-          for (const [userId, name] of Object.entries(resolved)) {
-            if (prev[userId] !== name) {
-              changed = true;
-              break;
-            }
-          }
-          if (!changed) return prev;
-          return { ...prev, ...resolved };
-        });
+  // Close emoji picker on outside click
+  useEffect(() => {
+    if (!emojiPickerOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target as Node)) {
+        setEmojiPickerOpen(false);
       }
     };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [emojiPickerOpen]);
 
-    void resolveNames();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [previewComments, commentsSection, resolvedAuthorNames]);
+  const insertEmoji = (emoji: string) => {
+    setCommentText((prev) => prev + emoji);
+    setEmojiPickerOpen(false);
+    commentInputRef.current?.focus();
+  };
 
   const onPublish = async () => {
     if (publishing) return;
     setPublishing(true);
     try {
-      await publishPlanAsPost(post.plan);
+      await publishPlanAsPost({ ...post.plan, allDay: post.plan.allDay ?? false, ownerUserId: post.plan.ownerUserId ?? "" });
       console.log("Publicado en Firebase:", post.plan.id);
     } catch (e) {
       console.error("Error publicando:", e);
@@ -453,9 +733,7 @@ function FeedCard({ post, currentUserId }: { post: UiPost; currentUserId: string
     }
   };
 
-  const openCommentsSection = async () => {
-    setCommentOpen(true);
-    setCommentsLoading(true);
+  const reloadComments = async () => {
     try {
       const allComments = await listCommentsForPlan({
         planId: post.plan.id,
@@ -463,12 +741,8 @@ function FeedCard({ post, currentUserId }: { post: UiPost; currentUserId: string
         limit: 50,
       });
       setCommentsSection(allComments);
-      setPreviewComments(allComments.slice(0, 2));
     } catch (error) {
       console.error("[feed] Error loading comments:", error);
-      setCommentsSection([]);
-    } finally {
-      setCommentsLoading(false);
     }
   };
 
@@ -479,29 +753,17 @@ function FeedCard({ post, currentUserId }: { post: UiPost; currentUserId: string
 
     setCommentSubmitting(true);
     try {
-      const cachedCurrentUser = commentAuthorCache.get(currentUserId);
-      let currentUserName =
-        cachedCurrentUser && Date.now() - cachedCurrentUser.cachedAt < COMMENT_AUTHOR_CACHE_TTL_MS
-          ? cachedCurrentUser.name
-          : "";
-      if (!currentUserName) {
-        const profile = await getPublicUserProfile(currentUserId);
-        currentUserName = profile?.nombre?.trim() || "Usuario";
-        commentAuthorCache.set(currentUserId, {
-          name: currentUserName,
-          profileImage: profile?.profile_image ?? null,
-          cachedAt: Date.now(),
-        });
-      }
+      const nameToStore = currentUserName?.trim() || "Usuario";
 
       await createComment({
         planId: post.plan.id,
         userId: currentUserId,
-        userName: currentUserName,
+        userName: nameToStore,
+        userProfileImage: currentUserProfileImage,
         content,
       });
       setCommentText("");
-      await openCommentsSection();
+      await reloadComments();
     } catch (e) {
       console.error("[feed] Error creating comment:", e);
     } finally {
@@ -515,168 +777,288 @@ function FeedCard({ post, currentUserId }: { post: UiPost; currentUserId: string
     await onSubmitComment();
   };
 
-  const onToggleCommentsSection = async () => {
-    if (commentOpen) {
-      setCommentOpen(false);
-      return;
+  const getCommentAuthorName = (comment: CommentDto) => {
+    if (comment.userId === currentUserId && currentUserName) return currentUserName;
+    const cached = commentAuthorCache.get(comment.userId);
+    if (cached && Date.now() - cached.cachedAt < COMMENT_AUTHOR_CACHE_TTL_MS && cached.name && cached.name !== "Usuario") {
+      return cached.name;
     }
-    await openCommentsSection();
+    return comment.userName?.trim() || "Usuario";
   };
 
-  const getCommentAuthorName = (comment: CommentDto) => {
-    return resolvedAuthorNames[comment.userId] || comment.userName?.trim() || "Usuario";
+
+  const formatDate = (iso: string) => {
+    const d = new Date(iso);
+    const day = d.getDate();
+    const months = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+    return `${day} ${months[d.getMonth()]}`;
   };
 
   return (
-    <article className="border-b border-app pb-[var(--space-6)]">
-      <header className="mb-[var(--space-3)] flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Avatar label={post.avatarLabel} image={post.avatarImage ?? null} />
-          <div>
-            <div className="text-body font-[var(--fw-semibold)] leading-none">{post.userName}</div>
-            <p className="mt-[var(--space-1)] text-body-sm leading-none text-muted">{post.subtitle}</p>
+    <article className="pb-[var(--space-2)]">
+      {/* Image with overlays */}
+      {post.hasImage && (
+        <div className="feed-image-container relative overflow-hidden">
+          <img
+            src={post.coverImage ?? undefined}
+            alt="Imagen del plan"
+            className="feed-image-responsive"
+          />
+
+          {/* Top overlay — avatar + username */}
+          <div className="absolute inset-x-0 top-0 flex items-center gap-[var(--space-2)] bg-gradient-to-b from-black/50 to-transparent px-[var(--space-4)] pb-[var(--space-8)] pt-[var(--space-3)]">
+            <div className="flex size-[32px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/30 bg-white/20">
+              {post.avatarImage ? (
+                <img src={post.avatarImage} alt={post.avatarLabel} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+              ) : (
+                <span className="text-[13px] font-[var(--fw-semibold)] text-white">{post.avatarLabel}</span>
+              )}
+            </div>
+            <Link href={`/profile/${post.plan.ownerUserId}`} className="text-body-sm font-[var(--fw-semibold)] text-white drop-shadow-sm">{post.userName}</Link>
+          </div>
+
+          {/* Bottom overlay — location + dates */}
+          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-[var(--space-4)] pb-[var(--space-3)] pt-[var(--space-10)]">
+            {post.plan.locationName && (
+              <p className="text-body font-[var(--fw-semibold)] leading-tight text-white drop-shadow-sm">
+                {post.plan.locationName}
+              </p>
+            )}
+            <p className="mt-[2px] text-body-sm text-white/70">
+              {formatDate(post.plan.startsAt) === formatDate(post.plan.endsAt)
+                ? formatDate(post.plan.startsAt)
+                : `${formatDate(post.plan.startsAt)} - ${formatDate(post.plan.endsAt)}`}
+            </p>
           </div>
         </div>
-      </header>
-
-      {post.hasImage && (
-        <img
-          src={post.coverImage}
-          alt="Imagen del plan"
-          className="feed-image-responsive mb-[var(--space-4)]"
-        />
       )}
 
-      <div className="flex items-center justify-between text-app">
-        <div className="flex items-center gap-4">
-          <button
-            type="button"
-            className="flex items-center gap-1 p-1 disabled:opacity-50"
-            aria-label={liked ? "Quitar like" : "Dar like"}
-            onClick={onLikeToggle}
-            disabled={!currentUserId || likeLoading}
-            title={liked ? "Quitar like" : "Dar like"}
-          >
-            <HeartIcon liked={liked} animating={likeAnimating} />
-            <span className="text-body-sm font-[var(--fw-medium)] tabular-nums">{likeCount}</span>
-          </button>
-          <button
-            type="button"
-            className="p-1 disabled:opacity-50"
-            aria-label={commentOpen ? "Cerrar comentarios" : "Abrir comentarios"}
-            onClick={onToggleCommentsSection}
-            title={commentOpen ? "Cerrar comentarios" : "Abrir comentarios"}
-          >
-            <CommentIcon />
-          </button>
-          <button
-            type="button"
-            className="p-1 disabled:opacity-50"
-            aria-label="Publicar"
-            onClick={onPublish}
-            disabled={publishing}
-            title={publishing ? "Publicando..." : "Publicar en Firebase"}
-          >
-            <SendIcon />
-          </button>
-        </div>
-        <BookmarkIcon />
-      </div>
-
-      <p className="mt-[var(--space-2)] text-body leading-[1.45]">{post.text}</p>
-
-      {!commentOpen && previewComments.length > 0 && (
-        <div className="mt-[var(--space-3)] space-y-[var(--space-1)]">
-          {previewComments.slice(0, 2).map((comment) => (
-            <p key={comment.commentId} className="text-body-sm leading-[1.35]">
-              <span className="font-[var(--fw-semibold)]">{getCommentAuthorName(comment)}</span>{" "}
-              {comment.content}
-            </p>
-          ))}
-        </div>
-      )}
-
-      {commentOpen && (
-        <div className="mt-[var(--space-3)] border-t border-app pt-[var(--space-3)]">
-          <p className="text-body-sm font-[var(--fw-semibold)]">Comentarios</p>
-
-          <div className="mt-[var(--space-2)] space-y-[var(--space-2)]">
-            {commentsLoading ? (
-              <p className="text-body-sm text-muted">Cargando comentarios...</p>
-            ) : commentsSection.length === 0 ? (
-              <p className="text-body-sm text-muted">Aun no hay comentarios. Se el primero.</p>
+      {/* No-image layout: avatar left, content right (Twitter style) */}
+      {!post.hasImage && (
+        <div className="flex gap-[var(--space-2)] px-[var(--space-1)]">
+          <div className="flex size-[32px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset">
+            {post.avatarImage ? (
+              <img src={post.avatarImage} alt={post.avatarLabel} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
             ) : (
-              commentsSection.map((comment) => (
-                <p key={comment.commentId} className="text-body-sm leading-[1.35]">
-                  <span className="font-[var(--fw-semibold)]">{getCommentAuthorName(comment)}</span>{" "}
-                  {comment.content}
-                </p>
-              ))
+              <span className="text-[13px] font-[var(--fw-semibold)] text-app">{post.avatarLabel}</span>
             )}
           </div>
+          <div className="min-w-0 flex-1">
+            <Link href={`/profile/${post.plan.ownerUserId}`} className="text-body-sm font-[var(--fw-semibold)]">{post.userName}</Link>
+            {post.text && (
+              <p className="mt-[2px] text-body-sm leading-[1.45]">{post.text}</p>
+            )}
+            {/* Actions */}
+            <div className="mt-[var(--space-2)] flex items-center gap-[var(--space-4)]">
+              <button type="button" className="flex items-center gap-[6px] disabled:opacity-50" aria-label={liked ? "Quitar like" : "Dar like"} onClick={onLikeToggle} disabled={!currentUserId || likeLoading}>
+                <PlaneIcon liked={liked} animating={likeAnimating} />
+                {likeCount > 0 && <span className="text-body-sm font-[var(--fw-semibold)]">{likeCount}</span>}
+              </button>
+              <button type="button" className="flex items-center gap-[6px]" onClick={() => setCommentsExpanded((prev) => !prev)}>
+                <CommentIcon />
+                {commentsSection.length > 0 && <span className="text-body-sm font-[var(--fw-semibold)]">{commentsSection.length}</span>}
+              </button>
+              <button type="button" className="disabled:opacity-50" aria-label="Compartir" onClick={onPublish} disabled={publishing}>
+                <ShareIcon />
+              </button>
+              <button type="button" className="ml-auto text-body-sm font-[var(--fw-semibold)] text-[var(--primary)] transition-opacity hover:opacity-70">
+                Ver plan
+              </button>
+            </div>
+            {/* View comments link */}
+            {commentsSection.length > 0 && !commentsExpanded && (
+              <button type="button" onClick={() => setCommentsExpanded(true)} className="mt-[var(--space-1)] text-body-sm text-muted">
+                Ver los {commentsSection.length} comentarios
+              </button>
+            )}
+            {/* Expanded comments */}
+            {commentsExpanded && commentsSection.length > 0 && (
+              <div className="scrollbar-thin mt-[var(--space-2)] max-h-[120px] space-y-[var(--space-2)] overflow-y-auto overscroll-contain">
+                {commentsSection.map((comment) => {
+                  const avatarImg = authorAvatars[comment.userId] ?? null;
+                  const initial = (getCommentAuthorName(comment)[0] || "U").toUpperCase();
+                  return (
+                    <div key={comment.commentId} className="flex items-start gap-[var(--space-2)]">
+                      <div className="flex size-[24px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset">
+                        {avatarImg ? (
+                          <img src={avatarImg} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                        ) : (
+                          <span className="text-[10px] font-[var(--fw-semibold)] text-app">{initial}</span>
+                        )}
+                      </div>
+                      <p className="min-w-0 flex-1 text-body-sm leading-[1.4]">
+                        <Link href={`/profile/${comment.userId}`} className="font-[var(--fw-semibold)]">{getCommentAuthorName(comment)}</Link>{" "}
+                        {comment.content}
+                      </p>
+                      {comment.userId === currentUserId && (
+                        <button type="button" className="mt-0.5 shrink-0 p-0.5 text-muted opacity-50" aria-label="Eliminar comentario">
+                          <TrashIcon />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {/* Comment input */}
+            <div ref={emojiPickerRef} className="relative mt-[var(--space-2)] flex items-center gap-[var(--space-2)]">
+              <button type="button" className="flex items-center justify-center text-muted" aria-label="Emoticonos" onClick={() => setEmojiPickerOpen((prev) => !prev)}>
+                <SmileyIcon />
+              </button>
+              {emojiPickerOpen && (
+                <div className="absolute bottom-[calc(100%+8px)] left-0 z-50 w-[256px] rounded-[10px] bg-[#1a1a1a]/95 p-2 shadow-lg backdrop-blur-md">
+                  <div className="scrollbar-thin grid max-h-[180px] grid-cols-8 gap-0.5 overflow-x-hidden overflow-y-auto overscroll-contain">
+                    {EMOJI_LIST.map((emoji) => (
+                      <button key={emoji} type="button" className="flex size-[30px] items-center justify-center rounded-[6px] text-[18px] transition-colors hover:bg-white/15" onClick={() => insertEmoji(emoji)}>
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <input
+                ref={commentInputRef}
+                type="text"
+                value={commentText}
+                onChange={(e) => setCommentText(e.target.value)}
+                onKeyDown={onCommentKeyDown}
+                placeholder="Añade un comentario..."
+                className="min-w-0 flex-1 bg-transparent py-[4px] text-body-sm text-app outline-none placeholder:text-muted"
+                disabled={!currentUserId || commentSubmitting}
+              />
+              {commentText.trim() && (
+                <button type="button" onClick={onSubmitComment} disabled={!currentUserId || commentSubmitting} className="text-body-sm font-[var(--fw-semibold)] text-[var(--primary)] disabled:opacity-40">
+                  Publicar
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
-          <div className="mt-[var(--space-3)] flex items-center gap-2">
+      {/* Image layout: actions + comments below image */}
+      {post.hasImage && (
+        <>
+          {/* Actions row */}
+          <div className="mt-[var(--space-2)] flex items-center gap-[var(--space-4)] px-[var(--space-1)]">
+            <button type="button" className="flex items-center gap-[6px] disabled:opacity-50" aria-label={liked ? "Quitar like" : "Dar like"} onClick={onLikeToggle} disabled={!currentUserId || likeLoading}>
+              <PlaneIcon liked={liked} animating={likeAnimating} />
+              {likeCount > 0 && <span className="text-body-sm font-[var(--fw-semibold)]">{likeCount}</span>}
+            </button>
+            <button type="button" className="flex items-center gap-[6px]" onClick={() => setCommentsExpanded((prev) => !prev)}>
+              <CommentIcon />
+              {commentsSection.length > 0 && <span className="text-body-sm font-[var(--fw-semibold)]">{commentsSection.length}</span>}
+            </button>
+            <button type="button" className="disabled:opacity-50" aria-label="Compartir" onClick={onPublish} disabled={publishing}>
+              <ShareIcon />
+            </button>
+            <button type="button" className="ml-auto text-body-sm font-[var(--fw-semibold)] text-[var(--primary)] transition-opacity hover:opacity-70">
+              Ver plan
+            </button>
+          </div>
+
+          {/* Username + description */}
+          {post.text && (
+            <p className="mt-[var(--space-3)] px-[var(--space-1)] text-body-sm leading-[1.45]">
+              <Link href={`/profile/${post.plan.ownerUserId}`} className="font-[var(--fw-semibold)]">{post.userName}</Link>{" "}
+              {post.text}
+            </p>
+          )}
+
+          {/* View comments link */}
+          {commentsSection.length > 0 && !commentsExpanded && (
+            <button type="button" onClick={() => setCommentsExpanded(true)} className="mt-[var(--space-1)] px-[var(--space-1)] text-body-sm text-muted">
+              Ver los {commentsSection.length} comentarios
+            </button>
+          )}
+
+          {/* Expanded comments */}
+          {commentsExpanded && commentsSection.length > 0 && (
+            <div className="scrollbar-thin mt-[var(--space-2)] max-h-[120px] space-y-[var(--space-2)] overflow-y-auto overscroll-contain px-[var(--space-1)]">
+              {commentsSection.map((comment) => {
+                const avatarImg = authorAvatars[comment.userId] ?? null;
+                const initial = (getCommentAuthorName(comment)[0] || "U").toUpperCase();
+                return (
+                  <div key={comment.commentId} className="flex items-start gap-[var(--space-2)]">
+                    <div className="flex size-[24px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset">
+                      {avatarImg ? (
+                        <img src={avatarImg} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                      ) : (
+                        <span className="text-[10px] font-[var(--fw-semibold)] text-app">{initial}</span>
+                      )}
+                    </div>
+                    <p className="min-w-0 flex-1 text-body-sm leading-[1.4]">
+                      <Link href={`/profile/${comment.userId}`} className="font-[var(--fw-semibold)]">{getCommentAuthorName(comment)}</Link>{" "}
+                      {comment.content}
+                    </p>
+                    {comment.userId === currentUserId && (
+                      <button type="button" className="mt-0.5 shrink-0 p-0.5 text-muted opacity-50" aria-label="Eliminar comentario">
+                        <TrashIcon />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Comment input */}
+          <div ref={emojiPickerRef} className="relative mt-[var(--space-2)] flex items-center gap-[var(--space-2)] px-[var(--space-1)]">
+            <button type="button" className="flex items-center justify-center text-muted" aria-label="Emoticonos" onClick={() => setEmojiPickerOpen((prev) => !prev)}>
+              <SmileyIcon />
+            </button>
+            {emojiPickerOpen && (
+              <div className="absolute bottom-[calc(100%+8px)] left-0 z-50 w-[256px] rounded-[10px] bg-[#1a1a1a]/95 p-2 shadow-lg backdrop-blur-md">
+                <div className="scrollbar-thin grid max-h-[180px] grid-cols-8 gap-0.5 overflow-x-hidden overflow-y-auto overscroll-contain">
+                  {EMOJI_LIST.map((emoji) => (
+                    <button key={emoji} type="button" className="flex size-[30px] items-center justify-center rounded-[6px] text-[18px] transition-colors hover:bg-white/15" onClick={() => insertEmoji(emoji)}>
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <input
+              ref={commentInputRef}
               type="text"
               value={commentText}
               onChange={(e) => setCommentText(e.target.value)}
               onKeyDown={onCommentKeyDown}
-              placeholder="Escribe un comentario..."
-              className="flex-1 rounded-card border border-app bg-app px-3 py-2 text-body-sm outline-none"
+              placeholder="Añade un comentario..."
+              className="min-w-0 flex-1 bg-transparent py-[4px] text-body-sm text-app outline-none placeholder:text-muted"
               disabled={!currentUserId || commentSubmitting}
             />
-            <button
-              type="button"
-              onClick={onSubmitComment}
-              disabled={!currentUserId || commentSubmitting || !commentText.trim()}
-              className="rounded-card border border-app px-3 py-2 text-body-sm font-[var(--fw-semibold)] disabled:opacity-50"
-            >
-              Enviar
-            </button>
+            {commentText.trim() && (
+              <button type="button" onClick={onSubmitComment} disabled={!currentUserId || commentSubmitting} className="text-body-sm font-[var(--fw-semibold)] text-[var(--primary)] disabled:opacity-40">
+                Publicar
+              </button>
+            )}
           </div>
-        </div>
+        </>
       )}
 
-      <button type="button" className="mt-[var(--space-3)] text-body-sm font-[var(--fw-semibold)] text-primary-token">
-        Ver plan
-      </button>
+      {/* Divider — only between image post followed by no-image post */}
+      {post.hasImage && !nextPostHasImage && (
+        <div className="feed-divider mt-[var(--space-2)] border-t border-app" />
+      )}
     </article>
   );
 }
 
-function Avatar({ label, image }: { label: string; image?: string | null }) {
-  if (image) {
-    return (
-      <img
-        src={image}
-        alt={`Avatar de ${label}`}
-        className="avatar-lg rounded-full border border-app object-cover"
-        referrerPolicy="no-referrer"
-      />
-    );
-  }
-
-  return (
-    <div className="flex avatar-lg items-center justify-center border border-app bg-surface-inset text-body font-[var(--fw-semibold)] text-app">
-      {label}
-    </div>
-  );
-}
-
-function HeartIcon({ liked, animating, small }: { liked: boolean; animating: boolean; small?: boolean }) {
+function PlaneIcon({ liked, animating }: { liked: boolean; animating: boolean }) {
   return (
     <svg
-      width={small ? "18" : "31"}
-      height={small ? "18" : "31"}
+      width="24"
+      height="24"
       viewBox="0 0 24 24"
       fill={liked ? "currentColor" : "none"}
       aria-hidden="true"
-      className={`transition-all duration-150 ${liked ? "text-warning-token" : "text-app"} ${animating ? "scale-[1.2]" : "scale-100"}`}
+      className={`transition-all duration-150 ${liked ? "text-primary-token" : "text-app"} ${animating ? "scale-[1.2]" : "scale-100"}`}
     >
       <path
-        d="M2.5 11.2H8.6L12.6 4.2H14.5L13.5 11.2H20.8L21.8 12.8L13.5 13.8L14.5 20.8H12.6L8.6 13.8H2.5V11.2Z"
+        d="M21 16V14L13 9V3.5C13 2.67 12.33 2 11.5 2C10.67 2 10 2.67 10 3.5V9L2 14V16L10 13.5V19L8 20.5V22L11.5 21L15 22V20.5L13 19V13.5L21 16Z"
         stroke="currentColor"
-        strokeWidth="1.7"
+        strokeWidth="1.5"
         strokeLinejoin="round"
         strokeLinecap="round"
       />
@@ -686,7 +1068,7 @@ function HeartIcon({ liked, animating, small }: { liked: boolean; animating: boo
 
 function CommentIcon() {
   return (
-    <svg width="31" height="31" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path
         d="M4 5.5A1.5 1.5 0 0 1 5.5 4H18.5A1.5 1.5 0 0 1 20 5.5V14.5A1.5 1.5 0 0 1 18.5 16H9L4 20V5.5Z"
         stroke="currentColor"
@@ -696,23 +1078,36 @@ function CommentIcon() {
   );
 }
 
-function SendIcon() {
+function ShareIcon() {
   return (
-    <svg width="31" height="31" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M21 3L10 14" stroke="currentColor" strokeWidth="1.7" />
-      <path d="M21 3L14.5 21L10 14L3 9.5L21 3Z" stroke="currentColor" strokeWidth="1.7" />
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M4 12V20C4 20.55 4.45 21 5 21H19C19.55 21 20 20.55 20 20V12" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      <path d="M12 3V15" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      <path d="M8 7L12 3L16 7" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
 
-function BookmarkIcon() {
+function TrashIcon() {
   return (
-    <svg width="29" height="29" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d="M7.5 4H16.5A1 1 0 0 1 17.5 5V20L12 16.8L6.5 20V5A1 1 0 0 1 7.5 4Z"
-        stroke="currentColor"
-        strokeWidth="1.7"
-      />
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M3 6H5H21" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      <path d="M8 6V4C8 3.45 8.45 3 9 3H15C15.55 3 16 3.45 16 4V6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      <path d="M6 6V20C6 20.55 6.45 21 7 21H17C17.55 21 18 20.55 18 20V6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      <path d="M10 10V17" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      <path d="M14 10V17" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
     </svg>
   );
 }
+
+function SmileyIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.7" />
+      <circle cx="9" cy="10" r="1.2" fill="currentColor" />
+      <circle cx="15" cy="10" r="1.2" fill="currentColor" />
+      <path d="M8.5 14.5C9.2 16 10.5 17 12 17C13.5 17 14.8 16 15.5 14.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
+  );
+}
+

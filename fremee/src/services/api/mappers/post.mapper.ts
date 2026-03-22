@@ -1,5 +1,15 @@
 export type PublishablePlan = {
   id: number;
+  title: string;
+  description: string;
+  locationName: string;
+  startsAt: string;
+  endsAt: string;
+  allDay: boolean;
+  visibility: string;
+  coverImage: string | null;
+  ownerUserId: string;
+  creator?: { id: string; name: string; profileImage: string | null } | null;
 };
 
 export type PublishPostPayload = {

@@ -19,6 +19,25 @@ export type PublicUserProfileRow = {
   profile_image: string | null;
 };
 
+export async function searchPublicUserProfiles(params: {
+  query: string;
+  limit?: number;
+  excludeUserId?: string;
+}): Promise<PublicUserProfileRow[]> {
+  const trimmedQuery = params.query.trim();
+  if (!trimmedQuery) return [];
+
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_users_search_public", {
+    p_query: trimmedQuery,
+    p_limit: params.limit ?? 8,
+    p_exclude_user_id: params.excludeUserId ?? null,
+  });
+
+  if (error) throw error;
+  return (data ?? []) as PublicUserProfileRow[];
+}
+
 export type UserAuthSnapshotRow = {
   profile: UserProfileRow | null;
   settings: UserSettingsRow | null;
@@ -50,20 +69,60 @@ type UserAuthSnapshotRpcRow = {
 export async function fetchPublicUserProfileById(userId: string): Promise<PublicUserProfileRow | null> {
   const supabase = createBrowserSupabaseClient();
 
-  const { data, error } = await supabase
-    .from("usuarios_public")
-    .select("id,nombre,profile_image")
-    .eq("id", userId)
-    .maybeSingle();
-
-  console.log("[users] usuarios_public by id", {
-    userId,
-    data,
-    error: error ? { message: error.message, code: error.code, details: error.details } : null,
+  const { data, error } = await supabase.rpc("fn_user_profile_get_public", {
+    p_user_id: userId,
   });
 
   if (error) throw error;
-  return (data as PublicUserProfileRow | null) ?? null;
+  const rows = (data ?? []) as PublicUserProfileRow[];
+  return rows[0] ?? null;
+}
+
+export async function fetchActiveFriends(): Promise<PublicUserProfileRow[]> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_friends_list_active");
+  if (error) throw error;
+  return (data ?? []) as PublicUserProfileRow[];
+}
+
+export async function sendFriendRequest(targetUserId: string): Promise<void> {
+  const supabase = createBrowserSupabaseClient();
+  const { error } = await supabase.rpc("fn_friend_request_send", {
+    p_target_user_id: targetUserId,
+  });
+  if (error) throw error;
+}
+
+export async function getFriendshipStatuses(
+  userIds: string[]
+): Promise<Record<string, "none" | "pending" | "friends">> {
+  if (userIds.length === 0) return {};
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_friendship_statuses", {
+    p_user_ids: userIds,
+  });
+  if (error) throw error;
+  const result: Record<string, "none" | "pending" | "friends"> = {};
+  for (const row of (data ?? []) as Array<{ other_user_id: string; status: string }>) {
+    result[row.other_user_id] = row.status as "none" | "pending" | "friends";
+  }
+  return result;
+}
+
+export async function cancelFriendRequest(targetUserId: string): Promise<void> {
+  const supabase = createBrowserSupabaseClient();
+  const { error } = await supabase.rpc("fn_friend_request_cancel", {
+    p_target_user_id: targetUserId,
+  });
+  if (error) throw error;
+}
+
+export async function removeFriend(otherUserId: string): Promise<void> {
+  const supabase = createBrowserSupabaseClient();
+  const { error } = await supabase.rpc("fn_friend_remove", {
+    p_other_user_id: otherUserId,
+  });
+  if (error) throw error;
 }
 
 export async function fetchUserAuthSnapshotById(userId: string): Promise<UserAuthSnapshotRow> {
