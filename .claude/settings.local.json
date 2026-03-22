@@ -1,0 +1,42 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(node -e \"require\\(''stripe''\\); console.log\\(''stripe ok''\\)\")",
+      "Bash(npm run:*)",
+      "Bash(ls \"c:\\\\Users\\\\cayet\\\\Desktop\\\\Proyectos\\\\Frimee\\\\fremee\\\\src\\\\app\\\\\\(app\\)\\\\calendario\"\")",
+      "Bash(find \"c:/Users/cayet/Desktop/Proyectos/Frimee/fremee/src/app/\\(app\\)/calendario\" -type f)",
+      "Bash(npx tsc:*)",
+      "Bash(ls -la \"/Users/vicky/Desktop/Frimee/fremee/src/app/\\(app\\)/\")",
+      "Bash(find /Users/vicky/Desktop/Frimee/fremee/src/app -name \"\\\\[*\\\\]\" -o -name \"\\(*\\)\")",
+      "Bash(ls /Users/vicky/Desktop/Frimee/fremee/src/app/\\\\\\(app\\\\\\)/)",
+      "Bash(find /Users/vicky/Desktop/Frimee/fremee/src/services/api -type f -name *.ts)",
+      "Bash(find /Users/vicky/Desktop/Frimee -name *.sql -o -name *.pgsql)",
+      "Bash(find /Users/vicky/Desktop/Frimee -name *.sql -type f)",
+      "Bash(xargs ls:*)",
+      "Bash(find /Users/vicky/Desktop/Frimee/fremee/src/app/api -type f -name *.ts)",
+      "Bash(ls -la \"/Users/vicky/Desktop/Frimee/fremee/src/app/\\(app\\)/profile/\")",
+      "Bash(xargs cat:*)",
+      "Bash(supabase --version)",
+      "Bash(winget install:*)",
+      "Bash(curl -L \"https://github.com/supabase/cli/releases/latest/download/supabase_windows_amd64.tar.gz\" -o \"$TEMP/supabase.tar.gz\")",
+      "Bash(ls \"c:/Users/cayet/Desktop/Proyectos/Frimee/fremee/src/app/\\(app\\)/\")",
+      "Bash(ls \"c:/Users/cayet/Desktop/Proyectos/Frimee/fremee/src/app/\\(app\\)/messages/\")",
+      "Bash(wc -l \"/c/Users/cayet/Desktop/Proyectos/Frimee/fremee/src/app/\\(app\\)/feed/page.tsx\" \"/c/Users/cayet/Desktop/Proyectos/Frimee/fremee/src/app/\\(app\\)/messages/page.tsx\" \"/c/Users/cayet/Desktop/Proyectos/Frimee/fremee/src/app/\\(app\\)/calendar/page.tsx\")",
+      "Bash(ls -la /Users/vicky/Desktop/Frimee/fremee/src/app/\\\\\\(app\\\\\\)/)",
+      "Bash(ls -la /Users/vicky/Desktop/Frimee/fremee/src/app/\\\\\\(app\\\\\\)/plans/)",
+      "Bash(ls /Users/vicky/Desktop/Frimee/fremee/src/app/\\\\\\(app\\\\\\)/plans/)",
+      "Bash(npx next:*)",
+      "Bash(npm ls:*)",
+      "Bash(head -20 \"c:/Users/cayet/Desktop/Proyectos/Frimee/fremee/src/app/\\(app\\)/profile/[id]/page.tsx\")",
+      "Bash(ls \"c:/Users/cayet/Desktop/Proyectos/Frimee/fremee/src/app/\\(app\\)/profile/[id]/\")",
+      "Bash(cross-env BUILD_TARGET=capacitor npx next build --no-turbopack)",
+      "Bash(BUILD_TARGET=capacitor node_modules/.bin/next build --no-turbopack)",
+      "Bash(BUILD_TARGET=capacitor node_modules/.bin/next build)",
+      "Bash(TURBOPACK=0 BUILD_TARGET=capacitor npx next build)",
+      "Bash(xargs grep:*)",
+      "Bash(tail -20 \"c:/Users/cayet/Desktop/Proyectos/Frimee/fremee/src/app/\\(app\\)/plans/[id]/page.tsx\")",
+      "Bash(npm uninstall:*)"
+    ]
+  }
+}

@@ -6,6 +6,11 @@ import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { getUserAuthSnapshot, type UserAuthSnapshotDto } from "@/services/api/repositories/users.repository";
 import { cacheUserSnapshot, readCachedUserSnapshot } from "@/services/auth/snapshotCache";
 import {
+  cacheGoogleProviderToken,
+  clearCachedGoogleProviderToken,
+  readCachedGoogleProviderToken,
+} from "@/services/auth/googleTokenCache";
+import {
   applyThemePreference,
   cacheThemePreference,
   readCachedThemePreference,
@@ -27,6 +32,7 @@ type Profile = {
 type AuthState = {
   loading: boolean;
   session: Session | null;
+  googleProviderToken: string | null;
   user: User | null;
   profile: Profile | null;
   settings: UserSettingsDto | null;
@@ -43,6 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState<Session | null>(null);
+  const [googleProviderToken, setGoogleProviderToken] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [settings, setSettings] = useState<UserSettingsDto | null>(null);
@@ -106,17 +113,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [applySnapshot]);
 
   const signOut = useCallback(async () => {
+    const currentUserId = user?.id ?? null;
     const { error } = await supabase.auth.signOut();
     if (error) {
       console.warn("[auth] signOut error:", error.message);
     }
 
     if (!mountedRef.current) return;
+    if (currentUserId) {
+      clearCachedGoogleProviderToken(currentUserId);
+    }
     setSession(null);
+    setGoogleProviderToken(null);
     setUser(null);
     applySnapshot(null);
     setLoading(false);
-  }, [supabase, applySnapshot]);
+  }, [supabase, applySnapshot, user?.id]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -134,6 +146,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         setSession(data.session ?? null);
         setUser(data.session?.user ?? null);
+        const providerTokenFromSession = (data.session as { provider_token?: string | null } | null)?.provider_token ?? null;
+        if (providerTokenFromSession && data.session?.user?.id) {
+          cacheGoogleProviderToken(data.session.user.id, providerTokenFromSession);
+          setGoogleProviderToken(providerTokenFromSession);
+        } else if (data.session?.user?.id) {
+          setGoogleProviderToken(readCachedGoogleProviderToken(data.session.user.id));
+        } else {
+          setGoogleProviderToken(null);
+        }
         await loadUserSnapshot(data.session?.user ?? null);
       } finally {
         if (!cancelled && mountedRef.current) {
@@ -150,6 +171,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         setSession(nextSession);
         setUser(nextSession?.user ?? null);
+        const sess = nextSession as { provider_token?: string | null; provider_refresh_token?: string | null } | null;
+        const providerTokenFromSession = sess?.provider_token ?? null;
+        const providerRefreshToken = sess?.provider_refresh_token ?? null;
+
+        if (providerTokenFromSession && nextSession?.user?.id) {
+          cacheGoogleProviderToken(nextSession.user.id, providerTokenFromSession);
+          setGoogleProviderToken(providerTokenFromSession);
+        } else if (nextSession?.user?.id) {
+          setGoogleProviderToken(readCachedGoogleProviderToken(nextSession.user.id));
+        } else {
+          setGoogleProviderToken(null);
+        }
+
+        if (providerRefreshToken && nextSession?.user?.id) {
+          void supabase.rpc("fn_user_update_google_refresh_token", {
+            p_refresh_token: providerRefreshToken,
+          });
+        }
+
         await loadUserSnapshot(nextSession?.user ?? null);
 
         if (!cancelled && mountedRef.current) {
@@ -168,6 +208,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value: AuthState = {
     loading,
     session,
+    googleProviderToken,
     user,
     profile,
     settings,

@@ -36,48 +36,8 @@ export async function fetchUserCalendarEventsByRange(params: {
     p_limit: params.limit,
   });
 
-  if (!error) {
-    return (data ?? []) as CalendarEventRow[];
-  }
-
-  // Fallback para cuando la RPC aun no esta disponible en cache/permisos.
-  const { data: fallbackData, error: fallbackError } = await supabase
-    .from("evento")
-    .select(
-      "id,created_at,updated_at,owner_user_id,creado_por_user_id,titulo,descripcion,categoria,inicio_at,fin_at,all_day,color,ubicacion_nombre,ubicacion_direccion,source,google_calendar_id,google_event_id,sync_status",
-    )
-    .eq("owner_user_id", params.userId)
-    .is("deleted_at", null)
-    .eq("estado", "ACTIVO")
-    .lte("inicio_at", params.rangeEndAt)
-    .gte("fin_at", params.rangeStartAt)
-    .order("inicio_at", { ascending: true })
-    .limit(params.limit);
-
-  if (fallbackError) {
-    const rpcError = {
-      message: error.message,
-      code: error.code,
-      details: error.details,
-      hint: error.hint,
-    };
-    const directError = {
-      message: fallbackError.message,
-      code: fallbackError.code,
-      details: fallbackError.details,
-      hint: fallbackError.hint,
-    };
-    throw new Error(`[events] rpc+fallback failed: ${JSON.stringify({ rpcError, directError })}`);
-  }
-
-  console.warn("[events] RPC fn_evento_list_by_range failed, fallback query used", {
-    message: error.message,
-    code: error.code,
-    details: error.details,
-    hint: error.hint,
-  });
-
-  return (fallbackData ?? []) as CalendarEventRow[];
+  if (error) throw error;
+  return (data ?? []) as CalendarEventRow[];
 }
 
 export async function insertLocalCalendarEvent(params: {
@@ -94,27 +54,18 @@ export async function insertLocalCalendarEvent(params: {
 }) {
   const supabase = createBrowserSupabaseClient();
 
-  const { data, error } = await supabase
-    .from("evento")
-    .insert({
-      owner_user_id: params.userId,
-      creado_por_user_id: params.userId,
-      titulo: params.title,
-      descripcion: params.description,
-      categoria: params.category,
-      inicio_at: params.startsAt,
-      fin_at: params.endsAt,
-      all_day: params.allDay,
-      color: params.color,
-      ubicacion_nombre: params.locationName,
-      ubicacion_direccion: params.locationAddress,
-      source: "LOCAL",
-      sync_status: "SYNCED",
-      estado: "ACTIVO",
-    })
-    .select("id")
-    .single();
+  const { data, error } = await supabase.rpc("fn_evento_insert_local", {
+    p_title:            params.title,
+    p_description:      params.description,
+    p_category:         params.category,
+    p_starts_at:        params.startsAt,
+    p_ends_at:          params.endsAt,
+    p_all_day:          params.allDay,
+    p_color:            params.color,
+    p_location_name:    params.locationName,
+    p_location_address: params.locationAddress,
+  });
 
   if (error) throw error;
-  return { id: Number(data.id) };
+  return { id: Number(data) };
 }

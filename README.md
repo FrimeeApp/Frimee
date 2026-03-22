@@ -4,7 +4,7 @@ Frimee es una web/app pensada para organizar viajes y planes en grupo de forma m
 
 La aplicacion centraliza toda esa gestión en un solo espacio. Cada viaje o plan puede dividirse en subplanes, controlar gastos, reunir personas, consultar disponibilidad del grupo y seguir el detalle de lo que falta por decidir. Además, Frimee incorpora una parte social para convertir la organización en una experiencia más viva, con un feed donde ver los viajes y planes publicados por amigos o por la comunidad.
 
-## 📖 Explicacion idea del proyecto
+## 📖 Explicación idea del proyecto
 
 El proyecto consiste en una plataforma digital orientada a la planificación colaborativa de viajes, escapadas, eventos y planes compartidos. Su objetivo principal es facilitar que un grupo pueda organizarse mejor antes, durante y después de un plan.
 
@@ -82,14 +82,14 @@ La planificacion del proyecto puede organizarse en fases para reflejar su evoluc
 - Sistema de likes y comentarios.
 - Exploración de actividad de amigos o comunidad.
 
-**Fase 5. Integracion y mejora**
+**Fase 5. Integración y mejora**
 
 - Sincronización con calendario externo.
-- Adaptacion a formato movil con Capacitor.
+- Adaptación a formato móvil con Capacitor.
 - Mejora de experiencia de usuario, rendimiento y validaciones.
 
 Como soporte visual de la planificacion, este desarrollo puede acompañarse con:
 
 - `Trello`, para dividir tareas por columnas como pendiente, en proceso y terminado.
-- `Roadmap`, para visualizar la evolucion general del producto.
+- `Roadmap`, para visualizar la evolución general del producto.
 - `Gantt`, para repartir fases, tiempos y dependencias del proyecto.
