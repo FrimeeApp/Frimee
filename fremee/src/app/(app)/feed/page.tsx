@@ -25,6 +25,7 @@ import {
   formatChatTime,
 } from "@/services/api/repositories/chat.repository";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
+import AudioPlayer from "@/components/common/AudioPlayer";
 
 const EMOJI_LIST = [
   "😀","😃","😄","😁","😆","😅","🤣","😂","🙂","😊",
@@ -300,6 +301,10 @@ function FeedChatPanel({ currentUserId }: { currentUserId: string | null }) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const channelsMapRef = useRef(new Map<string, ReturnType<typeof supabase.channel>>());
+  const openChatIdRef = useRef<string | null>(null);
+  openChatIdRef.current = openChatId;
 
   const openChat = chats.find((c) => c.chat_id === openChatId) ?? null;
 
@@ -307,6 +312,54 @@ function FeedChatPanel({ currentUserId }: { currentUserId: string | null }) {
     if (!currentUserId) return;
     void listChats().then(setChats).catch(console.error);
   }, [currentUserId]);
+
+  // Detectar cuando el usuario es añadido a un nuevo chat
+  useEffect(() => {
+    if (!currentUserId) return;
+    const ch = supabase
+      .channel(`user-join:${currentUserId}`)
+      .on("broadcast", { event: "chat_added" }, () => {
+        void listChats().then(setChats).catch(console.error);
+      })
+      .subscribe();
+    return () => { void supabase.removeChannel(ch); };
+  }, [currentUserId, supabase]);
+
+  // Un canal msg:${chatId} por chat — actualiza preview siempre y mensajes si está abierto
+  const chatIdsKey = chats.map((c) => c.chat_id).join(",");
+  useEffect(() => {
+    if (chats.length === 0) return;
+    const map = new Map<string, ReturnType<typeof supabase.channel>>();
+    chats.forEach((c) => {
+      const ch = supabase
+        .channel(`msg:${c.chat_id}`)
+        .on("broadcast", { event: "new_message" }, ({ payload }) => {
+          const msg = payload as import("@/services/api/repositories/chat.repository").MensajeRow;
+          const isOpen = openChatIdRef.current === c.chat_id;
+          const preview = msg.audio_url ? "🎤 Nota de voz" : msg.document_url ? `📄 ${msg.document_name ?? "Documento"}` : msg.image_url ? (msg.image_type?.startsWith("video/") ? "🎥 Vídeo" : "📷 Foto") : msg.texto;
+          setChats((prev) => prev.map((chat) =>
+            chat.chat_id !== c.chat_id ? chat : {
+              ...chat,
+              last_message: preview,
+              last_message_at: msg.created_at,
+              unread_count: (isOpen || msg.sender_id === currentUserId) ? chat.unread_count : chat.unread_count + 1,
+            }
+          ));
+          if (isOpen) {
+            setMessages((prev) => prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]);
+            void markChatRead(c.chat_id);
+          }
+        })
+        .subscribe();
+      map.set(c.chat_id, ch);
+    });
+    channelsMapRef.current = map;
+    return () => {
+      map.forEach((ch) => void supabase.removeChannel(ch));
+      channelsMapRef.current = new Map();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatIdsKey]);
 
   // Cargar mensajes al abrir chat
   useEffect(() => {
@@ -317,39 +370,38 @@ function FeedChatPanel({ currentUserId }: { currentUserId: string | null }) {
       .catch(console.error)
       .finally(() => setMsgLoading(false));
     void markChatRead(openChatId);
+    setChats((prev) => prev.map((c) =>
+      c.chat_id !== openChatId ? c : { ...c, unread_count: 0 }
+    ));
   }, [openChatId]);
 
-  // Realtime mensajes
+  // Scroll al último mensaje dentro del contenedor
   useEffect(() => {
-    if (!openChatId || !openChat) return;
-    const channel = supabase
-      .channel(`feed-chat:${openChatId}`)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "mensajes", filter: `chat_id=eq.${openChatId}` },
-        (payload) => {
-          const row = payload.new as { id: number; sender_id: string; texto: string; created_at: string };
-          setMessages((prev) => {
-            if (prev.some((m) => m.id === row.id)) return prev;
-            const miembro = openChat.miembros.find((m) => m.id === row.sender_id);
-            return [...prev, { id: row.id, sender_id: row.sender_id, sender_nombre: miembro?.nombre ?? "", sender_profile_image: miembro?.profile_image ?? null, texto: row.texto, created_at: row.created_at }];
-          });
-          void markChatRead(openChatId);
-        })
-      .subscribe();
-    return () => { void supabase.removeChannel(channel); };
-  }, [openChatId, openChat, supabase]);
-
-  // Scroll al último mensaje
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = scrollContainerRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
   }, [messages]);
 
   const onSend = async () => {
     const trimmed = text.trim();
-    if (!trimmed || sending || !openChatId) return;
+    if (!trimmed || sending || !openChatId || !openChat) return;
     setText("");
     setSending(true);
     try {
-      await sendMensaje({ chatId: openChatId, texto: trimmed });
+      const newId = await sendMensaje({ chatId: openChatId, texto: trimmed });
+      const me = openChat.miembros.find((m) => m.id === currentUserId);
+      const newMsg: import("@/services/api/repositories/chat.repository").MensajeRow = {
+        id: newId,
+        sender_id: currentUserId ?? "",
+        sender_nombre: me?.nombre ?? "",
+        sender_profile_image: me?.profile_image ?? null,
+        texto: trimmed,
+        created_at: new Date().toISOString(),
+      };
+      setMessages((prev) => prev.some((m) => m.id === newId) ? prev : [...prev, newMsg]);
+      setChats((prev) => prev.map((c) =>
+        c.chat_id !== openChatId ? c : { ...c, last_message: trimmed, last_message_at: newMsg.created_at }
+      ));
+      void channelsMapRef.current.get(openChatId)?.send({ type: "broadcast", event: "new_message", payload: newMsg });
     } catch (e) {
       console.error("[feed-chat] Error enviando:", e);
       setText(trimmed);
@@ -377,7 +429,7 @@ function FeedChatPanel({ currentUserId }: { currentUserId: string | null }) {
           <span className="min-w-0 truncate text-body-sm font-[var(--fw-semibold)]">{chatName}</span>
         </div>
 
-        <div className="scrollbar-thin mt-[var(--space-4)] flex max-h-[340px] flex-col justify-end overflow-y-auto overscroll-contain">
+        <div ref={scrollContainerRef} className="scrollbar-thin mt-[var(--space-4)] max-h-[340px] overflow-x-hidden overflow-y-auto overscroll-contain">
           {msgLoading ? (
             <p className="py-4 text-center text-body-sm text-muted">Cargando...</p>
           ) : (
@@ -403,7 +455,23 @@ function FeedChatPanel({ currentUserId }: { currentUserId: string | null }) {
                       {!isMe && openChat.tipo === "GRUPO" && isFirstInGroup && (
                         <p className="mb-[2px] text-[10px] font-[var(--fw-semibold)] text-muted">{msg.sender_nombre}</p>
                       )}
-                      <p className="text-body-sm">{msg.texto}</p>
+                      {msg.audio_url ? (
+                        <AudioPlayer src={msg.audio_url} isMe={isMe} />
+                      ) : msg.document_url ? (
+                        <div className="flex items-center gap-[8px] py-[2px] opacity-80">
+                          <span className="text-[18px]">📄</span>
+                          <span className="truncate text-[13px]">{msg.document_name ?? "Documento"}</span>
+                        </div>
+                      ) : msg.image_url ? (
+                        msg.image_type?.startsWith("video/") ? (
+                          <video src={msg.image_url} controls playsInline className="max-w-[200px] rounded-[8px]" style={{ maxHeight: 200 }} />
+                        ) : (
+                          <a href={msg.image_url} target="_blank" rel="noopener noreferrer">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={msg.image_url} alt="Imagen" className="max-w-[200px] rounded-[8px] object-cover" style={{ maxHeight: 200 }} referrerPolicy="no-referrer" />
+                          </a>
+                        )
+                      ) : (() => { try { const p = JSON.parse(msg.texto); if (p?.type === "poll") return <div className="flex items-center gap-[6px] py-[2px] opacity-80"><span className="text-[16px]">📊</span><span className="text-[13px]">{p.question as string}</span></div>; } catch { /* noop */ } return <p className="break-all text-body-sm">{msg.texto}</p>; })()}
                       <p className={`mt-[2px] text-right text-[10px] ${isMe ? "text-contrast-token/60" : "text-muted"}`}>{formatChatTime(msg.created_at)}</p>
                     </div>
                   </div>
@@ -458,7 +526,7 @@ function FeedChatPanel({ currentUserId }: { currentUserId: string | null }) {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className={`truncate text-body-sm ${hasUnread ? "font-[var(--fw-semibold)]" : ""} text-app`}>{name}</p>
-                  <p className={`truncate text-[12px] leading-[16px] ${hasUnread ? "font-[var(--fw-medium)] text-app" : "text-muted"}`}>{chat.last_message ?? ""}</p>
+                  <p className={`truncate text-[12px] leading-[16px] ${hasUnread ? "font-[var(--fw-medium)] text-app" : "text-muted"}`}>{(() => { const m = chat.last_message ?? ""; try { return JSON.parse(m)?.type === "poll" ? "📊 Encuesta" : m; } catch { return m; } })()}</p>
                 </div>
                 <span className="shrink-0 text-[11px] text-muted">{formatChatTime(chat.last_message_at)}</span>
               </button>
