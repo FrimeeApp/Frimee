@@ -79,7 +79,7 @@ export default function ProfilePage() {
 
         const userPlans = await listUserRelatedPlans({ userId: id, limit: 50 });
         const publicPlans = userPlans.filter(
-          (p) => p.visibility === "PUBLICO" || p.visibility === "PÚBLICO" || isOwnProfile
+          (p) => p.visibility === "PÚBLICO" || isOwnProfile
         );
         setPlans(publicPlans);
       } catch (err) {
