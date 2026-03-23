@@ -4,6 +4,9 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import AppSidebar from "@/components/common/AppSidebar";
 import LoadingScreen from "@/components/common/LoadingScreen";
 import { useAuth } from "@/providers/AuthProvider";
+import { useCall } from "@/hooks/useCall";
+import CallRoom from "@/components/calls/CallRoom";
+import IncomingCall from "@/components/calls/IncomingCall";
 import { createBrowserSupabaseClient } from "@/services/supabase/client"; // usado en ChatConversation
 import {
   listChats,
@@ -34,6 +37,7 @@ import AudioPlayer from "@/components/common/AudioPlayer";
 
 export default function MessagesPage() {
   const { user, loading } = useAuth();
+  const { callState, startCall, acceptCall, endCall } = useCall();
   const [chats, setChats] = useState<ChatListItem[]>([]);
   const [chatsLoading, setChatsLoading] = useState(true);
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
@@ -157,8 +161,35 @@ export default function MessagesPage() {
       })
     : chats;
 
+  const livekitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL ?? "wss://frimee-zxm2er85.livekit.cloud";
+
   return (
     <div className="min-h-dvh bg-app text-app">
+      {/* Call overlays */}
+      {callState.status === "incoming" && (
+        <IncomingCall
+          callerName={callState.callerName}
+          callerFoto={callState.callerFoto}
+          tipo={callState.tipo}
+          onAccept={() => void acceptCall()}
+          onReject={() => void endCall()}
+        />
+      )}
+      {(callState.status === "outgoing" || callState.status === "active") && (
+        <CallRoom
+          token={callState.token}
+          livekitUrl={livekitUrl}
+          tipo={callState.tipo}
+          participantes={
+            chats.find((c) => String(c.chat_id) === String(callState.chatId))?.miembros
+              .filter((m) => m.id !== user?.id)
+              .map((m) => ({ id: m.id, nombre: m.nombre, foto: m.profile_image ?? undefined }))
+            ?? []
+          }
+          onEnd={() => void endCall()}
+        />
+      )}
+
       <div className="relative mx-auto min-h-dvh max-w-[1440px]">
         <AppSidebar />
         <main className="px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-4)] md:py-[var(--space-8)] md:pr-[var(--space-14)]">
@@ -168,6 +199,7 @@ export default function MessagesPage() {
                 chat={selectedChat}
                 currentUserId={user.id}
                 onBack={() => { setSelectedChatId(null); void loadChats(); }}
+                onStartCall={(tipo) => void startCall(String(selectedChat.chat_id), tipo)}
                 onNewMessage={(msg) => {
                   const preview = msg.audio_url ? "🎤 Nota de voz" : msg.document_url ? `📄 ${msg.document_name ?? "Documento"}` : msg.image_url ? (msg.image_type?.startsWith("video/") ? "🎥 Vídeo" : "📷 Foto") : (() => { try { return JSON.parse(msg.texto)?.type === "poll" ? "📊 Encuesta" : msg.texto; } catch { return msg.texto; } })();
                   setChats((prev) => prev.map((c) =>
@@ -380,11 +412,13 @@ function ChatConversation({
   currentUserId,
   onBack,
   onNewMessage,
+  onStartCall,
 }: {
   chat: ChatListItem;
   currentUserId: string;
   onBack: () => void;
   onNewMessage: (msg: MensajeRow) => void;
+  onStartCall?: (tipo: "audio" | "video") => void;
 }) {
   type LocalMsg = MensajeRow & { _key?: number };
   const [messages, setMessages] = useState<LocalMsg[]>([]);
@@ -906,6 +940,12 @@ function ChatConversation({
             <p className="truncate text-body-sm font-[var(--fw-semibold)] text-app">{name}</p>
             {chat.tipo === "GRUPO" && <p className="text-[11px] text-muted">{chat.miembros.length} miembros</p>}
           </div>
+        </button>
+        <button type="button" onClick={() => onStartCall?.("audio")} className="flex size-[32px] items-center justify-center rounded-full transition-colors hover:bg-surface text-muted hover:text-app" aria-label="Llamada de voz">
+          <PhoneCallIcon className="size-[18px]" />
+        </button>
+        <button type="button" onClick={() => onStartCall?.("video")} className="flex size-[32px] items-center justify-center rounded-full transition-colors hover:bg-surface text-muted hover:text-app" aria-label="Llamada de vídeo">
+          <VideoCallIcon className="size-[18px]" />
         </button>
       </div>
 
@@ -2151,6 +2191,23 @@ function PollIcon({ className = "size-icon" }: { className?: string }) {
       <rect x="3" y="14" width="4" height="7" rx="1" stroke="currentColor" strokeWidth="1.5" />
       <rect x="10" y="9" width="4" height="12" rx="1" stroke="currentColor" strokeWidth="1.5" />
       <rect x="17" y="4" width="4" height="17" rx="1" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
+  );
+}
+
+function PhoneCallIcon({ className = "size-icon" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
+      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.27h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.91a16 16 0 0 0 6.08 6.08l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function VideoCallIcon({ className = "size-icon" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
+      <polygon points="23 7 16 12 23 17 23 7" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+      <rect x="1" y="5" width="15" height="14" rx="2" stroke="currentColor" strokeWidth="1.8" />
     </svg>
   );
 }
