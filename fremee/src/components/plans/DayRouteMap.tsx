@@ -197,36 +197,36 @@ export default function DayRouteMap({ subplanes, selectedDate, onViajeComputed }
             // ── Polyline stored in DB — zero API calls ──
             drawPolyline(destSubplan.ruta_polyline);
           } else {
-            // ── First time: call DirectionsService client-side (works in Capacitor) ──
+            // ── First time: call server-side directions API ──
             try {
-              const TRAVEL_MODE_MAP: Record<string, string> = {
-                APIE: "WALKING", COCHE: "DRIVING", TAXI: "DRIVING",
-                BUS: "TRANSIT", METRO: "TRANSIT", TREN: "TRANSIT",
-              };
-              const travelMode = destSubplan?.transporte_llegada
-                ? (TRAVEL_MODE_MAP[destSubplan.transporte_llegada] ?? "DRIVING")
-                : "DRIVING";
+              const fromCoord = coords[i];
+              const toCoord   = coords[i + 1];
+              const waypoints = [
+                fromCoord ? `${fromCoord.lat},${fromCoord.lng}` : points[i].name,
+                toCoord   ? `${toCoord.lat},${toCoord.lng}`     : points[i + 1].name,
+              ];
 
-              const origin = coords[i] ?? points[i].name;
-              const destination = coords[i + 1] ?? points[i + 1].name;
-
-              const result = await new Promise<any>((res, rej) => {
-                new google.maps.DirectionsService().route(
-                  { origin, destination, travelMode: google.maps.TravelMode[travelMode as keyof typeof google.maps.TravelMode] },
-                  (r: any, status: string) => status === "OK" ? res(r) : rej(status)
-                );
+              const res = await fetch("/api/directions", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  waypoints,
+                  originCoords: fromCoord ?? undefined,
+                  destCoords:   toCoord   ?? undefined,
+                  travelMode:   destSubplan?.transporte_llegada ?? "COCHE",
+                }),
               });
+              const data = await res.json() as { polyline?: string; legs?: { distance?: string; duration?: string }[]; error?: string };
 
-              const leg = result.routes?.[0]?.legs?.[0];
-              const polyline = result.routes?.[0]?.overview_polyline;
-              if (polyline) {
-                drawPolyline(polyline);
+              if (data.polyline) {
+                drawPolyline(data.polyline);
+                const leg = data.legs?.[0];
                 if (leg?.duration && destSubplan?.id && onViajeComputed) {
                   onViajeComputed(
                     destSubplan.id,
-                    leg.duration.text,
-                    leg.distance?.text ?? "",
-                    polyline,
+                    leg.duration,
+                    leg.distance ?? "",
+                    data.polyline,
                   );
                 }
               }
