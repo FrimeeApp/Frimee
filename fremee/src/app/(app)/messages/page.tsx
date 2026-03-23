@@ -4,9 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import AppSidebar from "@/components/common/AppSidebar";
 import LoadingScreen from "@/components/common/LoadingScreen";
 import { useAuth } from "@/providers/AuthProvider";
-import { useCall } from "@/hooks/useCall";
-import CallRoom from "@/components/calls/CallRoom";
-import IncomingCall from "@/components/calls/IncomingCall";
+import { useCallContext } from "@/providers/CallProvider";
 import { createBrowserSupabaseClient } from "@/services/supabase/client"; // usado en ChatConversation
 import {
   listChats,
@@ -37,7 +35,7 @@ import AudioPlayer from "@/components/common/AudioPlayer";
 
 export default function MessagesPage() {
   const { user, loading } = useAuth();
-  const { callState, startCall, acceptCall, endCall } = useCall();
+  const { startCall } = useCallContext();
   const [chats, setChats] = useState<ChatListItem[]>([]);
   const [chatsLoading, setChatsLoading] = useState(true);
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
@@ -161,34 +159,8 @@ export default function MessagesPage() {
       })
     : chats;
 
-  const livekitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL ?? "wss://frimee-zxm2er85.livekit.cloud";
-
   return (
     <div className="min-h-dvh bg-app text-app">
-      {/* Call overlays */}
-      {callState.status === "incoming" && (
-        <IncomingCall
-          callerName={callState.callerName}
-          callerFoto={callState.callerFoto}
-          tipo={callState.tipo}
-          onAccept={() => void acceptCall()}
-          onReject={() => void endCall()}
-        />
-      )}
-      {(callState.status === "outgoing" || callState.status === "active") && (
-        <CallRoom
-          token={callState.token}
-          livekitUrl={livekitUrl}
-          tipo={callState.tipo}
-          participantes={
-            chats.find((c) => String(c.chat_id) === String(callState.chatId))?.miembros
-              .filter((m) => m.id !== user?.id)
-              .map((m) => ({ id: m.id, nombre: m.nombre, foto: m.profile_image ?? undefined }))
-            ?? []
-          }
-          onEnd={() => void endCall()}
-        />
-      )}
 
       <div className="relative mx-auto min-h-dvh max-w-[1440px]">
         <AppSidebar />
@@ -1014,7 +986,9 @@ function ChatConversation({
                           </p>
                         </button>
                       )}
-                      {msg.audio_url ? (
+                      {msg.tipo?.startsWith("call_") ? (
+                        <CallBubble tipo={msg.tipo} duracion={parseInt(msg.texto) || 0} />
+                      ) : msg.audio_url ? (
                         <AudioPlayer src={msg.audio_url} isMe={isMe} sending={msg.id < 0} />
                       ) : msg.document_url ? (
                         <DocumentBubble url={msg.document_url} name={msg.document_name ?? "Documento"} sending={msg.id < 0} isMe={isMe} />
@@ -1914,6 +1888,33 @@ function CameraModal({ onCapture, onClose }: { onCapture: (file: File) => void; 
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+function CallBubble({ tipo, duracion }: { tipo: string; duracion: number }) {
+  const missed = tipo.includes("missed");
+  const isVideo = tipo.includes("video");
+  const label = missed
+    ? isVideo ? "Videollamada perdida" : "Llamada perdida"
+    : isVideo ? "Videollamada" : "Llamada de audio";
+  const formatDur = (s: number) => {
+    if (!s) return "";
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return m > 0 ? `${m} min ${sec} s` : `${sec} s`;
+  };
+  return (
+    <div className="flex items-center gap-[var(--space-2)]">
+      <span className={`text-[20px] ${missed ? "opacity-60" : ""}`}>
+        {isVideo ? "📹" : "📞"}
+      </span>
+      <div className="flex flex-col">
+        <span className={`text-body-sm font-[var(--fw-medium)] ${missed ? "opacity-70" : ""}`}>{label}</span>
+        {!missed && duracion > 0 && (
+          <span className="text-[11px] opacity-60">{formatDur(duracion)}</span>
+        )}
+      </div>
     </div>
   );
 }
