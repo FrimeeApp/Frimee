@@ -1025,7 +1025,20 @@ export default function PlanDetailPage() {
   const [editingTransporteId, setEditingTransporteId] = useState<number | null>(null);
 
   const handleSubplanCreated = (s: SubplanRow) => {
-    setSubplanes((prev) => [...prev, s].sort((a, b) => a.inicio_at.localeCompare(b.inicio_at)));
+    setSubplanes((prev) => {
+      const sorted = [...prev, s].sort((a, b) => a.inicio_at.localeCompare(b.inicio_at));
+      const newIdx = sorted.findIndex(x => x.id === s.id);
+      const next = sorted[newIdx + 1];
+      // The subplan immediately after (same day) has a stale polyline — its origin changed.
+      if (next && isoDateOnly(next.inicio_at) === isoDateOnly(s.inicio_at) && next.ruta_polyline) {
+        // Clear in DB (fire-and-forget, outside render cycle)
+        void updateSubplanViaje(next.id, "", "", "");
+        return sorted.map(x =>
+          x.id === next.id ? { ...x, ruta_polyline: null, duracion_viaje: null, distancia_viaje: null } : x
+        );
+      }
+      return sorted;
+    });
   };
 
   const handleViajeComputed = (subplanId: number, duracion: string, distancia: string, polyline: string) => {
