@@ -21,14 +21,13 @@ export function useCall() {
     if (!user?.id) return;
 
     const channel = supabase
-      .channel("incoming-calls")
+      .channel(`incoming-calls-${user.id}`)
       .on(
         "postgres_changes",
         {
           event: "INSERT",
           schema: "public",
           table: "llamadas",
-          filter: `estado=eq.ringing`,
         },
         async (payload: { new: Record<string, unknown> }) => {
           const llamada = payload.new as {
@@ -38,15 +37,6 @@ export function useCall() {
 
           // Don't notify if we started the call
           if (llamada.iniciado_por_user_id === user.id) return;
-
-          // Check if we're in this chat
-          const { data: member } = await supabase
-            .from("chat_miembro")
-            .select("user_id")
-            .eq("chat_id", llamada.chat_id)
-            .eq("user_id", user.id)
-            .single();
-          if (!member) return;
 
           // Get caller info
           const { data: caller } = await supabase
@@ -66,7 +56,7 @@ export function useCall() {
           });
         }
       )
-      .subscribe();
+      .subscribe((status) => console.log("[call] channel status", status));
 
     return () => { supabase.removeChannel(channel); };
   }, [user?.id]);
