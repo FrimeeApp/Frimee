@@ -912,10 +912,15 @@ export default function PlanDetailPage() {
   };
 
   const handleTransporteChange = async (subplanId: number, transporte: string | null) => {
-    setSubplanes((prev) => prev.map((s) => s.id === subplanId ? { ...s, transporte_llegada: transporte } : s));
+    // Clear cached route so DayRouteMap recalculates with the new travel mode
+    setSubplanes((prev) => prev.map((s) =>
+      s.id === subplanId
+        ? { ...s, transporte_llegada: transporte, ruta_polyline: null, duracion_viaje: null, distancia_viaje: null }
+        : s
+    ));
     setEditingTransporteId(null);
     try { await updateSubplanTransporte(subplanId, transporte); }
-    catch { /* revert on error */ setSubplanes((prev) => prev.map((s) => s.id === subplanId ? { ...s, transporte_llegada: null } : s)); }
+    catch { setSubplanes((prev) => prev.map((s) => s.id === subplanId ? { ...s, transporte_llegada: null } : s)); }
   };
 
   useEffect(() => {
