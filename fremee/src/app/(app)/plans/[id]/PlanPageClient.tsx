@@ -1329,7 +1329,36 @@ export default function PlanDetailPage() {
 
                   {/* Route map card */}
                   <div className="mb-[var(--space-8)]">
-                    <h3 className="mb-[var(--space-3)] text-body font-[var(--fw-semibold)]">Ruta del Día</h3>
+                    <div className="mb-[var(--space-3)] flex items-center justify-between">
+                      <h3 className="text-body font-[var(--fw-semibold)]">Ruta del Día</h3>
+                      {(() => {
+                        const selectedDate = groupByDay(subplanes)[0]?.[0] ?? isoDateOnly(plan?.inicio_at ?? "");
+                        const dayItems = subplanes
+                          .filter(s => isoDateOnly(s.inicio_at) === selectedDate && s.ubicacion_nombre)
+                          .sort((a, b) => a.inicio_at.localeCompare(b.inicio_at));
+                        // Collect all stops: origin + destinations for transport subplans + regular locations
+                        const stops: string[] = [];
+                        dayItems.forEach(s => {
+                          if (s.ubicacion_nombre) stops.push(s.ubicacion_nombre);
+                          if (TIPOS_TRANSPORTE.includes(s.tipo) && s.ubicacion_fin_nombre)
+                            stops.push(s.ubicacion_fin_nombre);
+                        });
+                        if (stops.length < 2) return null;
+                        const origin      = encodeURIComponent(stops[0]);
+                        const destination = encodeURIComponent(stops[stops.length - 1]);
+                        const waypoints   = stops.slice(1, -1).map(encodeURIComponent).join("|");
+                        // Use most common travelmode among segments
+                        const modes = dayItems.slice(1).map(s => TRANSPORT_MAP[s.transporte_llegada ?? ""]?.googleMode ?? "driving");
+                        const travelmode = modes.sort((a,b) => modes.filter(m=>m===b).length - modes.filter(m=>m===a).length)[0] ?? "driving";
+                        const url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}${waypoints ? `&waypoints=${waypoints}` : ""}&travelmode=${travelmode}`;
+                        return (
+                          <a href={url} target="_blank" rel="noopener noreferrer"
+                            className="flex items-center gap-[4px] text-caption text-muted hover:text-primary-token transition-colors">
+                            <span>🗺️</span> Abrir en Maps
+                          </a>
+                        );
+                      })()}
+                    </div>
                     <DayRouteMap
                       subplanes={subplanes}
                       selectedDate={groupByDay(subplanes)[0]?.[0] ?? isoDateOnly(plan?.inicio_at ?? "")}
