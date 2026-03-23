@@ -306,12 +306,6 @@ function groupByDay(subplanes: SubplanRow[]) {
 
 /* ───────────── occupied-time helpers ───────────── */
 
-function parseDurMinutes(text: string | null | undefined): number {
-  if (!text) return 0;
-  const h = text.match(/(\d+)\s*h/)?.[1];
-  const m = text.match(/(\d+)\s*min/)?.[1];
-  return Number(h ?? 0) * 60 + Number(m ?? 0);
-}
 
 function timeToMin(hhmm: string): number {
   const [h, m] = hhmm.split(":").map(Number);
@@ -352,17 +346,10 @@ function getOccupiedIntervals(subplanes: SubplanRow[], fecha: string): Interval[
     .filter(s => toLocalDate(s.inicio_at) === fecha)
     .sort((a, b) => new Date(a.inicio_at).getTime() - new Date(b.inicio_at).getTime());
 
-  const intervals: Interval[] = [];
-  daySubplanes.forEach((s, i) => {
-    const from = timeToMin(toLocalHHMM(s.inicio_at));
-    let to = timeToMin(toLocalHHMM(s.fin_at));
-    // Add travel time of the next subplan (you need to leave before it starts)
-    if (i + 1 < daySubplanes.length) {
-      const travelMin = parseDurMinutes(daySubplanes[i + 1].duracion_viaje);
-      if (travelMin > 0) to = Math.min(to + travelMin, 24 * 60 - 1);
-    }
-    intervals.push({ from, to });
-  });
+  const intervals: Interval[] = daySubplanes.map(s => ({
+    from: timeToMin(toLocalHHMM(s.inicio_at)),
+    to:   timeToMin(toLocalHHMM(s.fin_at)),
+  }));
 
   return mergeIntervals(intervals);
 }
