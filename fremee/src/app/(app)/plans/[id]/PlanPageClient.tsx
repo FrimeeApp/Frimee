@@ -531,10 +531,19 @@ type AddSheetProps = {
 };
 
 function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClose, onCreated }: AddSheetProps) {
-  const minDate = isoDateOnly(planStartDate);
-  const maxDate = isoDateOnly(planEndDate);
-  const planStartTime = planStartDate.slice(11, 16); // "HH:MM"
-  const planEndTime   = planEndDate.slice(11, 16);
+  // Use local date to avoid UTC-offset shifting the allowed range by one day
+  const toLocalDate = (iso: string) => {
+    const d = new Date(iso);
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  };
+  const toLocalTime = (iso: string) => {
+    const d = new Date(iso);
+    return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+  };
+  const minDate = toLocalDate(planStartDate);
+  const maxDate = toLocalDate(planEndDate);
+  const planStartTime = toLocalTime(planStartDate);
+  const planEndTime   = toLocalTime(planEndDate);
   const planIsAllDay  = planStartTime === "00:00" && planEndTime === "23:59";
 
   const defaultDate = minDate;
