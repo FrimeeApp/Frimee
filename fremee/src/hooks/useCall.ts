@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useAuth } from "@/providers/AuthProvider";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 
@@ -8,13 +8,15 @@ const supabase = createBrowserSupabaseClient();
 
 export type CallState =
   | { status: "idle" }
-  | { status: "outgoing"; roomName: string; chatId: string; tipo: "audio" | "video"; token: string }
+  | { status: "outgoing"; roomName: string; chatId: string; tipo: "audio" | "video"; token: string; isInitiator: true }
   | { status: "incoming"; roomName: string; chatId: string; tipo: "audio" | "video"; llamadaId: number; callerName: string; callerFoto?: string }
-  | { status: "active"; roomName: string; chatId: string; tipo: "audio" | "video"; token: string };
+  | { status: "active"; roomName: string; chatId: string; tipo: "audio" | "video"; token: string; isInitiator: boolean };
 
 export function useCall() {
   const { user } = useAuth();
   const [callState, setCallState] = useState<CallState>({ status: "idle" });
+  // Track when the call became active to calculate duration
+  const activeSinceRef = useRef<number | null>(null);
 
   // Listen for incoming calls via Supabase Realtime
   useEffect(() => {
@@ -43,7 +45,7 @@ export function useCall() {
             .from("usuarios")
             .select("nombre, profile_image")
             .eq("id", llamada.iniciado_por_user_id)
-            .single();
+            .maybeSingle();
 
           setCallState({
             status: "incoming",
@@ -86,7 +88,8 @@ export function useCall() {
     });
     const { token } = await res.json();
 
-    setCallState({ status: "outgoing", roomName, chatId, tipo, token });
+    activeSinceRef.current = null;
+    setCallState({ status: "outgoing", roomName, chatId, tipo, token, isInitiator: true });
   }, [user?.id]);
 
   const acceptCall = useCallback(async () => {
@@ -108,7 +111,8 @@ export function useCall() {
     });
     const { token } = await res.json();
 
-    setCallState({ status: "active", roomName, chatId, tipo, token });
+    activeSinceRef.current = Date.now();
+    setCallState({ status: "active", roomName, chatId, tipo, token, isInitiator: false });
   }, [callState]);
 
   const endCall = useCallback(async () => {
@@ -124,9 +128,42 @@ export function useCall() {
         .from("llamadas")
         .update({ estado: "ended", finalizada_at: new Date().toISOString() })
         .eq("room_name", callState.roomName);
+
+      // Insert call record in chat — only the initiator writes it to avoid duplicates
+      if (callState.status === "outgoing" || (callState.status === "active" && callState.isInitiator)) {
+        const duracion = activeSinceRef.current
+          ? Math.floor((Date.now() - activeSinceRef.current) / 1000)
+          : null;
+        const wasAnswered = activeSinceRef.current !== null;
+        const tipoMensaje = wasAnswered
+          ? `call_${callState.tipo}` // 'call_audio' | 'call_video'
+          : `call_missed_${callState.tipo}`; // 'call_missed_audio' | 'call_missed_video'
+
+        await supabase.rpc("fn_llamada_record", {
+          p_chat_id: callState.chatId,
+          p_tipo: tipoMensaje,
+          p_duracion: duracion,
+        });
+      }
     }
 
+    activeSinceRef.current = null;
     setCallState({ status: "idle" });
+  }, [callState]);
+
+  // Mark call as active when outgoing call is answered (caller side)
+  const markActive = useCallback(() => {
+    if (callState.status === "outgoing") {
+      activeSinceRef.current = Date.now();
+      setCallState({
+        status: "active",
+        roomName: callState.roomName,
+        chatId: callState.chatId,
+        tipo: callState.tipo,
+        token: callState.token,
+        isInitiator: true,
+      });
+    }
   }, [callState]);
 
   const activeToken =
@@ -134,5 +171,5 @@ export function useCall() {
       ? callState.token
       : null;
 
-  return { callState, startCall, acceptCall, endCall, activeToken };
+  return { callState, startCall, acceptCall, endCall, markActive, activeToken };
 }

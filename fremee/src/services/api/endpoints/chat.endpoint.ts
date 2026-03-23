@@ -26,6 +26,7 @@ export type MensajeRow = {
   document_name?: string | null;
   image_url?: string | null;
   image_type?: string | null;
+  tipo?: string | null;
 };
 
 export type ChatMiembro = {
