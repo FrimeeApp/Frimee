@@ -48,8 +48,12 @@ BEGIN
     RAISE EXCEPTION 'No tienes acceso a este plan';
   END IF;
 
+  -- Borrar caché de ruta para forzar recálculo con el nuevo modo de transporte
   UPDATE subplan
-  SET transporte_llegada = p_transporte
+  SET transporte_llegada = p_transporte,
+      ruta_polyline      = NULL,
+      duracion_viaje     = NULL,
+      distancia_viaje    = NULL
   WHERE id = p_subplan_id;
 END;
 $$;
