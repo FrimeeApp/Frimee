@@ -304,6 +304,80 @@ function groupByDay(subplanes: SubplanRow[]) {
 
 /* ───────────── location autocomplete ───────────── */
 
+/* ───────────── occupied-time helpers ───────────── */
+
+function parseDurMinutes(text: string | null | undefined): number {
+  if (!text) return 0;
+  const h = text.match(/(\d+)\s*h/)?.[1];
+  const m = text.match(/(\d+)\s*min/)?.[1];
+  return Number(h ?? 0) * 60 + Number(m ?? 0);
+}
+
+function timeToMin(hhmm: string): number {
+  const [h, m] = hhmm.split(":").map(Number);
+  return h * 60 + m;
+}
+
+function minToTime(total: number): string {
+  const h = Math.floor(total / 60) % 24;
+  const m = total % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+type Interval = { from: number; to: number };
+
+function mergeIntervals(intervals: Interval[]): Interval[] {
+  if (!intervals.length) return [];
+  const sorted = [...intervals].sort((a, b) => a.from - b.from);
+  const merged: Interval[] = [{ ...sorted[0] }];
+  for (let i = 1; i < sorted.length; i++) {
+    const last = merged[merged.length - 1];
+    if (sorted[i].from < last.to) last.to = Math.max(last.to, sorted[i].to);
+    else merged.push({ ...sorted[i] });
+  }
+  return merged;
+}
+
+function getOccupiedIntervals(subplanes: SubplanRow[], fecha: string): Interval[] {
+  const toLocalHHMM = (iso: string) => {
+    const d = new Date(iso);
+    return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+  };
+  const toLocalDate = (iso: string) => {
+    const d = new Date(iso);
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  };
+
+  const daySubplanes = subplanes
+    .filter(s => toLocalDate(s.inicio_at) === fecha)
+    .sort((a, b) => new Date(a.inicio_at).getTime() - new Date(b.inicio_at).getTime());
+
+  const intervals: Interval[] = [];
+  daySubplanes.forEach((s, i) => {
+    const from = timeToMin(toLocalHHMM(s.inicio_at));
+    let to = timeToMin(toLocalHHMM(s.fin_at));
+    // Add travel time of the next subplan (you need to leave before it starts)
+    if (i + 1 < daySubplanes.length) {
+      const travelMin = parseDurMinutes(daySubplanes[i + 1].duracion_viaje);
+      if (travelMin > 0) to = Math.min(to + travelMin, 24 * 60 - 1);
+    }
+    intervals.push({ from, to });
+  });
+
+  return mergeIntervals(intervals);
+}
+
+function getFreeSlots(occupied: Interval[], dayStart: number, dayEnd: number): Interval[] {
+  const free: Interval[] = [];
+  let cursor = dayStart;
+  for (const iv of occupied) {
+    if (cursor < iv.from) free.push({ from: cursor, to: iv.from });
+    cursor = Math.max(cursor, iv.to);
+  }
+  if (cursor < dayEnd) free.push({ from: cursor, to: dayEnd });
+  return free;
+}
+
 /* ───────────── time wheel picker ───────────── */
 
 const HOURS   = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
@@ -381,11 +455,12 @@ function TimeWheel({ values, selected, onSelect }: { values: string[]; selected:
   );
 }
 
-function TimeWheelPicker({ value, onChange, minTime, maxTime }: {
+function TimeWheelPicker({ value, onChange, minTime, maxTime, blockedIntervals }: {
   value: string;
   onChange: (v: string) => void;
   minTime?: string;
   maxTime?: string;
+  blockedIntervals?: Interval[]; // minutes from midnight
 }) {
   const [hh, mm] = value.split(":");
   const minH = minTime ? Number(minTime.split(":")[0]) : 0;
@@ -393,7 +468,14 @@ function TimeWheelPicker({ value, onChange, minTime, maxTime }: {
   const minM = minTime ? Number(minTime.split(":")[1]) : 0;
   const maxM = maxTime ? Number(maxTime.split(":")[1]) : 59;
 
-  const hours   = HOURS.filter(h => Number(h) >= minH && Number(h) <= maxH);
+  // An hour is fully blocked if every minute [h*60, h*60+59] is inside a blocked interval
+  const isHourFullyBlocked = (h: number) =>
+    !!blockedIntervals?.some(b => b.from <= h * 60 && b.to >= h * 60 + 59);
+
+  const hours = HOURS.filter(h => {
+    const hN = Number(h);
+    return hN >= minH && hN <= maxH && !isHourFullyBlocked(hN);
+  });
   const minutes = MINUTES.filter(m => {
     const mN = Number(m), hN = Number(hh);
     if (hN === minH && mN < minM) return false;
@@ -401,8 +483,8 @@ function TimeWheelPicker({ value, onChange, minTime, maxTime }: {
     return true;
   });
 
-  const safeHh = hours.includes(hh)   ? hh   : (hours[0]   ?? "00");
-  const safeMm = minutes.includes(mm) ? mm   : (minutes[0] ?? "00");
+  const safeHh = hours.includes(hh)  ? hh  : (hours[0]   ?? "00");
+  const safeMm = minutes.includes(mm) ? mm  : (minutes[0] ?? "00");
 
   const handleHourChange = (h: string) => {
     const hN = Number(h);
@@ -601,11 +683,29 @@ function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClos
     return horaFin;
   })();
 
+  // Occupied intervals for the selected day (existing subplans + travel time)
+  const occupiedIntervals = fecha ? getOccupiedIntervals(subplanes, fecha) : [];
+  const dayStart = fecha === minDate && !planIsAllDay ? timeToMin(planStartTime) : 0;
+  const dayEnd   = fecha === maxDate && !planIsAllDay ? timeToMin(planEndTime)   : 24 * 60 - 1;
+  const freeSlots = getFreeSlots(occupiedIntervals, dayStart, dayEnd);
+
   const canSubmit = titulo.trim().length > 0 && fecha.length > 0 && !saving;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSubmit) return;
+
+    // Validate no overlap with existing subplans + travel time
+    if (!allDay && occupiedIntervals.length > 0) {
+      const newFrom = timeToMin(clampedHoraInicio);
+      const newTo   = timeToMin(clampedHoraFin);
+      const overlaps = occupiedIntervals.some(b => newFrom < b.to && newTo > b.from);
+      if (overlaps) {
+        setError("Este horario se solapa con una actividad existente o su tiempo de viaje.");
+        return;
+      }
+    }
+
     setSaving(true);
     setError(null);
     try {
@@ -836,24 +936,51 @@ function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClos
 
             {/* Horas */}
             {!allDay && (
-              <div className="grid grid-cols-2 gap-[var(--space-3)]">
-                <div>
-                  <p className="mb-[var(--space-2)] text-caption font-[var(--fw-semibold)] uppercase tracking-wider text-muted">Hora inicio</p>
-                  <TimeWheelPicker
-                    value={horaInicio}
-                    onChange={setHoraInicio}
-                    minTime={fecha === minDate && !planIsAllDay ? planStartTime : undefined}
-                    maxTime={fecha === maxDate && !planIsAllDay ? planEndTime   : undefined}
-                  />
-                </div>
-                <div>
-                  <p className="mb-[var(--space-2)] text-caption font-[var(--fw-semibold)] uppercase tracking-wider text-muted">Hora fin</p>
-                  <TimeWheelPicker
-                    value={horaFin}
-                    onChange={setHoraFin}
-                    minTime={horaInicio}
-                    maxTime={fecha === maxDate && !planIsAllDay ? planEndTime : undefined}
-                  />
+              <div className="flex flex-col gap-[var(--space-3)]">
+                {/* Free slots hint */}
+                {occupiedIntervals.length > 0 && (
+                  <div className="rounded-[10px] bg-surface-inset px-[var(--space-3)] py-[var(--space-2)]">
+                    <p className="mb-[4px] text-caption font-[var(--fw-semibold)] uppercase tracking-wider text-muted">Huecos libres</p>
+                    <div className="flex flex-wrap gap-[6px]">
+                      {freeSlots.length > 0 ? freeSlots.map((s, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          className="rounded-full border border-primary-token/40 bg-primary-token/10 px-[10px] py-[2px] text-[12px] font-[var(--fw-medium)] text-primary-token"
+                          onClick={() => {
+                            setHoraInicio(minToTime(s.from));
+                            setHoraFin(minToTime(Math.min(s.from + 60, s.to)));
+                          }}
+                        >
+                          {minToTime(s.from)} – {minToTime(s.to)}
+                        </button>
+                      )) : (
+                        <span className="text-[12px] text-muted">No hay huecos disponibles este día</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-[var(--space-3)]">
+                  <div>
+                    <p className="mb-[var(--space-2)] text-caption font-[var(--fw-semibold)] uppercase tracking-wider text-muted">Hora inicio</p>
+                    <TimeWheelPicker
+                      value={horaInicio}
+                      onChange={setHoraInicio}
+                      minTime={fecha === minDate && !planIsAllDay ? planStartTime : undefined}
+                      maxTime={fecha === maxDate && !planIsAllDay ? planEndTime   : undefined}
+                      blockedIntervals={occupiedIntervals}
+                    />
+                  </div>
+                  <div>
+                    <p className="mb-[var(--space-2)] text-caption font-[var(--fw-semibold)] uppercase tracking-wider text-muted">Hora fin</p>
+                    <TimeWheelPicker
+                      value={horaFin}
+                      onChange={setHoraFin}
+                      minTime={horaInicio}
+                      maxTime={fecha === maxDate && !planIsAllDay ? planEndTime : undefined}
+                      blockedIntervals={occupiedIntervals}
+                    />
+                  </div>
                 </div>
               </div>
             )}
