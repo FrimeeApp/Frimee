@@ -88,10 +88,10 @@ export async function createSubplan(params: CreateSubplanParams): Promise<number
 
 export async function updateSubplanTransporte(subplanId: number, transporte: string | null): Promise<void> {
   const supabase = createBrowserSupabaseClient();
-  const { error } = await supabase
-    .from("subplan")
-    .update({ transporte_llegada: transporte })
-    .eq("id", subplanId);
+  const { error } = await supabase.rpc("fn_subplan_save_transporte", {
+    p_subplan_id: subplanId,
+    p_transporte: transporte,
+  });
   if (error) throw error;
 }
 
