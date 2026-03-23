@@ -1336,7 +1336,6 @@ export default function PlanDetailPage() {
                         const dayItems = subplanes
                           .filter(s => isoDateOnly(s.inicio_at) === selectedDate && s.ubicacion_nombre)
                           .sort((a, b) => a.inicio_at.localeCompare(b.inicio_at));
-                        // Collect all stops: origin + destinations for transport subplans + regular locations
                         const stops: string[] = [];
                         dayItems.forEach(s => {
                           if (s.ubicacion_nombre) stops.push(s.ubicacion_nombre);
@@ -1347,15 +1346,23 @@ export default function PlanDetailPage() {
                         const origin      = encodeURIComponent(stops[0]);
                         const destination = encodeURIComponent(stops[stops.length - 1]);
                         const waypoints   = stops.slice(1, -1).map(encodeURIComponent).join("|");
-                        // Use most common travelmode among segments
                         const modes = dayItems.slice(1).map(s => TRANSPORT_MAP[s.transporte_llegada ?? ""]?.googleMode ?? "driving");
                         const travelmode = modes.sort((a,b) => modes.filter(m=>m===b).length - modes.filter(m=>m===a).length)[0] ?? "driving";
-                        const url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}${waypoints ? `&waypoints=${waypoints}` : ""}&travelmode=${travelmode}`;
+                        const mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}${waypoints ? `&waypoints=${waypoints}` : ""}&travelmode=${travelmode}`;
+                        const wazeUrl = `https://waze.com/ul?q=${destination}&navigate=yes`;
                         return (
-                          <a href={url} target="_blank" rel="noopener noreferrer"
-                            className="flex items-center gap-[4px] text-caption text-muted hover:text-primary-token transition-colors">
-                            <span>🗺️</span> Abrir en Maps
-                          </a>
+                          <div className="flex items-center gap-[var(--space-3)]">
+                            <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
+                              className="flex items-center gap-[4px] text-caption text-muted hover:text-primary-token transition-colors"
+                              title="Ruta completa (modo más común entre tus tramos)">
+                              <span>🗺️</span> Maps
+                            </a>
+                            <a href={wazeUrl} target="_blank" rel="noopener noreferrer"
+                              className="flex items-center gap-[4px] text-caption text-muted hover:text-primary-token transition-colors"
+                              title="Navegar al destino final con Waze">
+                              <span>🔵</span> Waze
+                            </a>
+                          </div>
                         );
                       })()}
                     </div>
