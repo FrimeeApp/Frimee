@@ -636,9 +636,11 @@ function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClos
   const [titulo, setTitulo] = useState("");
   const [descripcion, setDescripcion] = useState("");
   const [fecha, setFecha] = useState(defaultDate);
+  const [fechaFin, setFechaFin] = useState<string | null>(null); // null = mismo día que fecha
   const [horaInicio, setHoraInicio] = useState(defaultHoraInicio);
   const [horaFin, setHoraFin] = useState(defaultHoraFin);
   const allDay = false;
+  const isMultiDay = minDate !== maxDate; // plan tiene más de un día
   const [tipo, setTipo] = useState<TipoSubplan>("ACTIVIDAD");
   const [ubicacion, setUbicacion] = useState("");
   const [ubicacionCoords, setUbicacionCoords] = useState<Coords | null>(null);
@@ -652,6 +654,7 @@ function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClos
   const esTransporte = TIPOS_TRANSPORTE.includes(tipo);
   const [error, setError] = useState<string | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [calendarFinOpen, setCalendarFinOpen] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
 
   // Lock body scroll while modal is open
@@ -669,11 +672,12 @@ function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClos
     return horaInicio;
   })();
 
+  const efectivaFechaFin = fechaFin ?? fecha;
   const clampedHoraFin = (() => {
     if (planIsAllDay) return horaFin;
-    if (fecha === maxDate && horaFin > planEndTime) return planEndTime;
-    if (horaFin <= clampedHoraInicio) {
-      // ensure fin > inicio
+    if (efectivaFechaFin === maxDate && horaFin > planEndTime) return planEndTime;
+    // Only enforce fin > inicio when on the same day
+    if (efectivaFechaFin === fecha && horaFin <= clampedHoraInicio) {
       const [h, m] = clampedHoraInicio.split(":").map(Number);
       const totalMin = h * 60 + m + 60;
       const maxTotal = planIsAllDay ? 23 * 60 + 59 : (Number(planEndTime.split(":")[0]) * 60 + Number(planEndTime.split(":")[1]));
@@ -709,8 +713,8 @@ function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClos
     setSaving(true);
     setError(null);
     try {
-      const inicioAt = allDay ? `${fecha}T00:00:00` : `${fecha}T${clampedHoraInicio}:00`;
-      const finAt    = allDay ? `${fecha}T23:59:59` : `${fecha}T${clampedHoraFin}:00`;
+      const inicioAt = `${fecha}T${clampedHoraInicio}:00`;
+      const finAt    = `${efectivaFechaFin}T${clampedHoraFin}:00`;
       const newId = await createSubplan({
         planId,
         titulo: titulo.trim(),
@@ -880,7 +884,7 @@ function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClos
             {/* Fechas */}
             <div className="grid grid-cols-2 gap-[var(--space-3)]">
               <div>
-                <p className="mb-[var(--space-2)] text-caption font-[var(--fw-semibold)] uppercase tracking-wider text-muted">Fecha</p>
+                <p className="mb-[var(--space-2)] text-caption font-[var(--fw-semibold)] uppercase tracking-wider text-muted">Fecha inicio</p>
                 <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
                   <PopoverTrigger asChild>
                     <button
@@ -914,6 +918,48 @@ function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClos
                 </Popover>
               </div>
 
+              {/* Fecha fin opcional — solo si el plan abarca más de un día */}
+              {isMultiDay && (
+                <div>
+                  <p className="mb-[var(--space-2)] text-caption font-[var(--fw-semibold)] uppercase tracking-wider text-muted">
+                    Fecha fin <span className="normal-case font-normal">(opcional)</span>
+                  </p>
+                  <Popover open={calendarFinOpen} onOpenChange={setCalendarFinOpen}>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        className="flex h-input w-full items-center rounded-input border border-app bg-surface-inset px-[var(--space-3)] text-body"
+                      >
+                        {fechaFin
+                          ? new Date(fechaFin + "T12:00:00").toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" })
+                          : <span className="text-muted text-body-sm">Mismo día</span>}
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={fechaFin ? new Date(fechaFin + "T00:00:00") : undefined}
+                        onSelect={(d) => {
+                          if (d) {
+                            const y = d.getFullYear();
+                            const mo = String(d.getMonth() + 1).padStart(2, "0");
+                            const day = String(d.getDate()).padStart(2, "0");
+                            const selected = `${y}-${mo}-${day}`;
+                            setFechaFin(selected === fecha ? null : selected);
+                          } else {
+                            setFechaFin(null);
+                          }
+                          setCalendarFinOpen(false);
+                        }}
+                        disabled={(d) => {
+                          const iso = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+                          return iso < fecha || iso > maxDate;
+                        }}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              )}
             </div>
 
             {/* Horas */}
@@ -933,9 +979,9 @@ function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClos
                 <TimeWheelPicker
                   value={horaFin}
                   onChange={setHoraFin}
-                  minTime={horaInicio}
-                  maxTime={fecha === maxDate && !planIsAllDay ? planEndTime : undefined}
-                  blockedIntervals={occupiedIntervals}
+                  minTime={efectivaFechaFin === fecha ? horaInicio : undefined}
+                  maxTime={efectivaFechaFin === maxDate && !planIsAllDay ? planEndTime : undefined}
+                  blockedIntervals={efectivaFechaFin === fecha ? occupiedIntervals : undefined}
                 />
               </div>
             </div>
