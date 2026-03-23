@@ -101,7 +101,9 @@ export default function AppSidebar({ onCreatePlan }: AppSidebarProps) {
     });
 
     setCreateModalOpen(false);
-    router.push(`/plans/${created.id}`);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const isCapacitor = typeof window !== "undefined" && !!(window as any).Capacitor?.isNativePlatform?.();
+    router.push(isCapacitor ? `/plans/static?id=${created.id}` : `/plans/${created.id}`);
   };
 
   const isActive = (href: string) => {

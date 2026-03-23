@@ -197,27 +197,36 @@ export default function DayRouteMap({ subplanes, selectedDate, onViajeComputed }
             // ── Polyline stored in DB — zero API calls ──
             drawPolyline(destSubplan.ruta_polyline);
           } else {
-            // ── First time: call Directions API, then save for future loads ──
+            // ── First time: call DirectionsService client-side (works in Capacitor) ──
             try {
-              const res = await fetch("/api/directions", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  waypoints: [points[i].name, points[i + 1].name],
-                  originCoords: coords[i]     ?? undefined,
-                  destCoords:   coords[i + 1] ?? undefined,
-                  travelMode:   destSubplan?.transporte_llegada ?? undefined,
-                }),
+              const TRAVEL_MODE_MAP: Record<string, string> = {
+                APIE: "WALKING", COCHE: "DRIVING", TAXI: "DRIVING",
+                BUS: "TRANSIT", METRO: "TRANSIT", TREN: "TRANSIT",
+              };
+              const travelMode = destSubplan?.transporte_llegada
+                ? (TRAVEL_MODE_MAP[destSubplan.transporte_llegada] ?? "DRIVING")
+                : "DRIVING";
+
+              const origin = coords[i] ?? points[i].name;
+              const destination = coords[i + 1] ?? points[i + 1].name;
+
+              const result = await new Promise<any>((res, rej) => {
+                new google.maps.DirectionsService().route(
+                  { origin, destination, travelMode: google.maps.TravelMode[travelMode as keyof typeof google.maps.TravelMode] },
+                  (r: any, status: string) => status === "OK" ? res(r) : rej(status)
+                );
               });
-              if (res.ok) {
-                const data = await res.json();
-                drawPolyline(data.polyline);
-                if (data.legs?.[0]?.duration && destSubplan?.id && onViajeComputed) {
+
+              const leg = result.routes?.[0]?.legs?.[0];
+              const polyline = result.routes?.[0]?.overview_polyline;
+              if (polyline) {
+                drawPolyline(polyline);
+                if (leg?.duration && destSubplan?.id && onViajeComputed) {
                   onViajeComputed(
                     destSubplan.id,
-                    data.legs[0].duration,
-                    data.legs[0].distance ?? "",
-                    data.polyline,
+                    leg.duration.text,
+                    leg.distance?.text ?? "",
+                    polyline,
                   );
                 }
               }
