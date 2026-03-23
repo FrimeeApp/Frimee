@@ -106,6 +106,8 @@ export default function FeedPage() {
       if (cached && cached.length > 0) {
         setUiPosts(cached);
         setLoadingFeed(false);
+        // Si el caché ya tiene posts, no esperar a que cargue la imagen para mostrar
+        setFirstImageReady(true);
       } else {
         setLoadingFeed(true);
       }
@@ -653,6 +655,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
   const [commentsExpanded, setCommentsExpanded] = useState(false);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [authorAvatars, setAuthorAvatars] = useState<Record<string, string | null>>({});
+  const [imgLoaded, setImgLoaded] = useState(false);
   const commentInputRef = useRef<HTMLInputElement | null>(null);
   const emojiPickerRef = useRef<HTMLDivElement | null>(null);
 
@@ -876,11 +879,21 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
     <article className="pb-[var(--space-2)]">
       {/* Image with overlays */}
       {post.hasImage && (
-        <div className="feed-image-container relative overflow-hidden">
+        <div
+          className="feed-image-container relative overflow-hidden"
+          style={!imgLoaded ? { aspectRatio: "4/3" } : undefined}
+        >
+          {/* Shimmer mientras la imagen carga */}
+          {!imgLoaded && (
+            <div className="feed-skeleton-shimmer absolute inset-0" aria-hidden="true" />
+          )}
           <img
             src={post.coverImage ?? undefined}
             alt="Imagen del plan"
-            className="feed-image-responsive"
+            className="feed-image-responsive transition-opacity duration-300"
+            style={{ opacity: imgLoaded ? 1 : 0 }}
+            onLoad={() => setImgLoaded(true)}
+            onError={() => setImgLoaded(true)}
           />
 
           {/* Top overlay — avatar + username */}
