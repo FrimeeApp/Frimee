@@ -55,6 +55,11 @@ function CalendarPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const createFromQuery = searchParams.get("create");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const navigateToPlan = (id: number) => {
+    const isCapacitor = typeof window !== "undefined" && !!(window as any).Capacitor?.isNativePlatform?.();
+    router.push(isCapacitor ? `/plans/static?id=${id}` : `/plans/${id}`);
+  };
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   const [loading, setLoading] = useState(true);
   const [backgroundRefreshing, setBackgroundRefreshing] = useState(false);
@@ -200,7 +205,7 @@ function CalendarPageInner() {
       }
 
       setSavingPlan(false);
-      router.push(`/plans/${created.id}`);
+      navigateToPlan(created.id);
     } catch (err) {
       console.error("[calendar] create plan error:", err);
       setSavingPlan(false);
@@ -498,7 +503,7 @@ function CalendarPageInner() {
                                                 gridColumn: `${segment.startCol + 1} / ${segment.endCol + 2}`,
                                               }}
                                               title={segment.title}
-                                              onClick={() => router.push(`/plans/${segment.planId}`)}
+                                              onClick={() => navigateToPlan(segment.planId)}
                                             >
                                               <span className="block truncate">{segment.title}</span>
                                             </div>
@@ -620,7 +625,7 @@ function CalendarPageInner() {
                                       height: `${Math.max((duration / 60) * 64, 24)}px`,
                                     }}
                                     title={plan.title}
-                                    onClick={() => router.push(`/plans/${plan.id}`)}
+                                    onClick={() => navigateToPlan(plan.id)}
                                   >
                                     <p className="truncate text-body-sm font-[var(--fw-semibold)]">{plan.title}</p>
                                     <p className="mt-0.5 truncate text-[11px] text-white/90">
@@ -653,7 +658,7 @@ function CalendarPageInner() {
                                 <div
                                   key={`pinboard-${p.id}`}
                                   className="group relative flex cursor-pointer overflow-hidden rounded-[10px] border border-app bg-app transition-shadow hover:shadow-elev-1"
-                                  onClick={() => router.push(`/plans/${p.id}`)}
+                                  onClick={() => navigateToPlan(p.id)}
                                 >
                                   <div
                                     className="h-12 w-12 shrink-0 bg-cover bg-center"
@@ -722,7 +727,7 @@ function CalendarPageInner() {
                           <article
                             key={`plan-${plan.id}`}
                             className="group flex cursor-pointer flex-row overflow-hidden rounded-[14px] border border-app bg-surface shadow-elev-1 transition-shadow hover:shadow-elev-2 lg:flex-col"
-                            onClick={() => router.push(`/plans/${plan.id}`)}
+                            onClick={() => navigateToPlan(plan.id)}
                           >
                             <div
                               className="relative h-auto min-h-[90px] w-[90px] shrink-0 bg-cover bg-center bg-no-repeat sm:w-[110px] lg:h-[138px] lg:w-full"
