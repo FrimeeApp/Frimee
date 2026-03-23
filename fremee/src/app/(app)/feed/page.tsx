@@ -6,6 +6,8 @@ import AppSidebar from "@/components/common/AppSidebar";
 import LoadingScreen from "@/components/common/LoadingScreen";
 import { useAuth } from "@/providers/AuthProvider";
 import { getFeedPostsOnly, getFeedLikes } from "@/services/api/repositories/feed.repository";
+import { countNotificacionesNoLeidas, insertNotificacion } from "@/services/api/repositories/notifications.repository";
+import NotificationsPanel from "@/components/notifications/NotificationsPanel";
 import type { FeedItemDto } from "@/services/api/dtos/feed.dto";
 import { publishPlanAsPost } from "@/services/api/repositories/post.repository";
 import { togglePlanLike } from "@/services/api/repositories/likes.repository";
@@ -86,6 +88,8 @@ export default function FeedPage() {
   const followingTabRef = useRef<HTMLButtonElement | null>(null);
   const exploreTabRef = useRef<HTMLButtonElement | null>(null);
   const [tabIndicator, setTabIndicator] = useState({ left: 0, width: 0, ready: false });
+  const [unreadNotifs, setUnreadNotifs] = useState(0);
+  const [notifPanelOpen, setNotifPanelOpen] = useState(false);
 
   useEffect(() => {
     if (!currentUserId) {
@@ -199,6 +203,30 @@ export default function FeedPage() {
     return () => window.removeEventListener("resize", updateIndicator);
   }, [activeFeedTab]);
 
+  // Unread notifications badge
+  useEffect(() => {
+    if (!currentUserId) return;
+    const refresh = () => void countNotificacionesNoLeidas().then(setUnreadNotifs);
+    refresh();
+
+    const onVisible = () => { if (document.visibilityState === "visible") refresh(); };
+    document.addEventListener("visibilitychange", onVisible);
+
+    const supabase = createBrowserSupabaseClient();
+    const channel = supabase
+      .channel(`notif-badge-${currentUserId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "notificaciones", filter: `user_id=eq.${currentUserId}` },
+        () => setUnreadNotifs((prev) => prev + 1)
+      )
+      .subscribe();
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      void supabase.removeChannel(channel);
+    };
+  }, [currentUserId]);
+
   if (loading) return <LoadingScreen />;
 
   return (
@@ -245,6 +273,28 @@ export default function FeedPage() {
                     <path d="M16 16L20.5 20.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
                   </svg>
                 </Link>
+                <button
+                  type="button"
+                  onClick={() => setNotifPanelOpen(true)}
+                  aria-label="Notificaciones"
+                  className="relative pb-[var(--space-2)] text-app transition-opacity duration-[var(--duration-base)] hover:opacity-70"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[20px]">
+                    <path
+                      d="M6 10.5C6 7.46 8.24 5 12 5s6 2.46 6 5.5v3l1.5 2.5H4.5L6 13.5v-3Z"
+                      stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"
+                    />
+                    <path
+                      d="M10 17.5a2 2 0 0 0 4 0"
+                      stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"
+                    />
+                  </svg>
+                  {unreadNotifs > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 flex size-[14px] items-center justify-center rounded-full bg-blue-500 text-white text-[9px] font-[var(--fw-semibold)] leading-none">
+                      {unreadNotifs > 9 ? "9+" : unreadNotifs}
+                    </span>
+                  )}
+                </button>
                 <span
                   className={`pointer-events-none absolute bottom-0 h-[2px] bg-black transition-[left,width,opacity] duration-[220ms] [transition-timing-function:var(--ease-standard)] dark:bg-white ${
                     tabIndicator.ready ? "opacity-100" : "opacity-0"
@@ -288,6 +338,12 @@ export default function FeedPage() {
           </div>
         </main>
       </div>
+
+      <NotificationsPanel
+        open={notifPanelOpen}
+        onClose={() => setNotifPanelOpen(false)}
+        onRead={() => setUnreadNotifs(0)}
+      />
     </div>
   );
 }
@@ -726,6 +782,17 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
       setLiked(result.liked);
       setLikeCount(result.likeCount);
       setLikeAnimating(true);
+
+      // Notificar al dueño del plan (solo al dar like, no al quitar, y no a uno mismo)
+      if (result.liked && post.plan.ownerUserId && post.plan.ownerUserId !== currentUserId) {
+        void insertNotificacion({
+          userId: post.plan.ownerUserId,
+          tipo: "like",
+          actorId: currentUserId,
+          entityId: String(post.plan.id),
+          entityType: "plan",
+        });
+      }
     } catch (e) {
       console.error("[feed] Error toggling like:", e);
     } finally {
@@ -764,6 +831,17 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
       });
       setCommentText("");
       await reloadComments();
+
+      // Notificar al dueño del plan (no a uno mismo)
+      if (post.plan.ownerUserId && post.plan.ownerUserId !== currentUserId) {
+        void insertNotificacion({
+          userId: post.plan.ownerUserId,
+          tipo: "comment",
+          actorId: currentUserId,
+          entityId: String(post.plan.id),
+          entityType: "plan",
+        });
+      }
     } catch (e) {
       console.error("[feed] Error creating comment:", e);
     } finally {
