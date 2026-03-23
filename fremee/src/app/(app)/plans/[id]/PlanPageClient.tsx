@@ -638,7 +638,7 @@ function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClos
   const [fecha, setFecha] = useState(defaultDate);
   const [horaInicio, setHoraInicio] = useState(defaultHoraInicio);
   const [horaFin, setHoraFin] = useState(defaultHoraFin);
-  const [allDay, setAllDay] = useState(false);
+  const allDay = false;
   const [tipo, setTipo] = useState<TipoSubplan>("ACTIVIDAD");
   const [ubicacion, setUbicacion] = useState("");
   const [ubicacionCoords, setUbicacionCoords] = useState<Coords | null>(null);
@@ -914,76 +914,31 @@ function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClos
                 </Popover>
               </div>
 
-              {/* Todo el día toggle */}
-              <div>
-                <p className="mb-[var(--space-2)] text-caption font-[var(--fw-semibold)] uppercase tracking-wider text-muted">Duración</p>
-                <div className="relative flex h-input items-center rounded-input border border-app bg-surface-inset p-[3px]">
-                  <div
-                    className="absolute top-[3px] bottom-[3px] w-[calc(50%-3px)] rounded-[calc(var(--radius-input)-3px)] bg-primary-token shadow-sm transition-transform duration-200"
-                    style={{ transform: allDay ? "translateX(100%)" : "translateX(0)" }}
-                  />
-                  <button type="button" onClick={() => setAllDay(false)}
-                    className={`relative z-10 flex h-full flex-1 items-center justify-center text-body-sm font-[var(--fw-medium)] transition-colors ${!allDay ? "text-contrast-token" : "text-muted"}`}>
-                    Con hora
-                  </button>
-                  <button type="button" onClick={() => setAllDay(true)}
-                    className={`relative z-10 flex h-full flex-1 items-center justify-center text-body-sm font-[var(--fw-medium)] transition-colors ${allDay ? "text-contrast-token" : "text-muted"}`}>
-                    Todo el día
-                  </button>
-                </div>
-              </div>
             </div>
 
             {/* Horas */}
-            {!allDay && (
-              <div className="flex flex-col gap-[var(--space-3)]">
-                {/* Free slots hint */}
-                {occupiedIntervals.length > 0 && (
-                  <div className="rounded-[10px] bg-surface-inset px-[var(--space-3)] py-[var(--space-2)]">
-                    <p className="mb-[4px] text-caption font-[var(--fw-semibold)] uppercase tracking-wider text-muted">Huecos libres</p>
-                    <div className="flex flex-wrap gap-[6px]">
-                      {freeSlots.length > 0 ? freeSlots.map((s, i) => (
-                        <button
-                          key={i}
-                          type="button"
-                          className="rounded-full border border-primary-token/40 bg-primary-token/10 px-[10px] py-[2px] text-[12px] font-[var(--fw-medium)] text-primary-token"
-                          onClick={() => {
-                            setHoraInicio(minToTime(s.from));
-                            setHoraFin(minToTime(Math.min(s.from + 60, s.to)));
-                          }}
-                        >
-                          {minToTime(s.from)} – {minToTime(s.to)}
-                        </button>
-                      )) : (
-                        <span className="text-[12px] text-muted">No hay huecos disponibles este día</span>
-                      )}
-                    </div>
-                  </div>
-                )}
-                <div className="grid grid-cols-2 gap-[var(--space-3)]">
-                  <div>
-                    <p className="mb-[var(--space-2)] text-caption font-[var(--fw-semibold)] uppercase tracking-wider text-muted">Hora inicio</p>
-                    <TimeWheelPicker
-                      value={horaInicio}
-                      onChange={setHoraInicio}
-                      minTime={fecha === minDate && !planIsAllDay ? planStartTime : undefined}
-                      maxTime={fecha === maxDate && !planIsAllDay ? planEndTime   : undefined}
-                      blockedIntervals={occupiedIntervals}
-                    />
-                  </div>
-                  <div>
-                    <p className="mb-[var(--space-2)] text-caption font-[var(--fw-semibold)] uppercase tracking-wider text-muted">Hora fin</p>
-                    <TimeWheelPicker
-                      value={horaFin}
-                      onChange={setHoraFin}
-                      minTime={horaInicio}
-                      maxTime={fecha === maxDate && !planIsAllDay ? planEndTime : undefined}
-                      blockedIntervals={occupiedIntervals}
-                    />
-                  </div>
-                </div>
+            <div className="grid grid-cols-2 gap-[var(--space-3)]">
+              <div>
+                <p className="mb-[var(--space-2)] text-caption font-[var(--fw-semibold)] uppercase tracking-wider text-muted">Hora inicio</p>
+                <TimeWheelPicker
+                  value={horaInicio}
+                  onChange={setHoraInicio}
+                  minTime={fecha === minDate && !planIsAllDay ? planStartTime : undefined}
+                  maxTime={fecha === maxDate && !planIsAllDay ? planEndTime   : undefined}
+                  blockedIntervals={occupiedIntervals}
+                />
               </div>
-            )}
+              <div>
+                <p className="mb-[var(--space-2)] text-caption font-[var(--fw-semibold)] uppercase tracking-wider text-muted">Hora fin</p>
+                <TimeWheelPicker
+                  value={horaFin}
+                  onChange={setHoraFin}
+                  minTime={horaInicio}
+                  maxTime={fecha === maxDate && !planIsAllDay ? planEndTime : undefined}
+                  blockedIntervals={occupiedIntervals}
+                />
+              </div>
+            </div>
 
             {error && <p className="text-body-sm text-[var(--error)]">{error}</p>}
           </div>
