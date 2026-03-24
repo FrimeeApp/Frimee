@@ -6,17 +6,19 @@ import AppSidebar from "@/components/common/AppSidebar";
 import LoadingScreen from "@/components/common/LoadingScreen";
 import { useAuth } from "@/providers/AuthProvider";
 import { getFeedPostsOnly, getFeedLikes } from "@/services/api/repositories/feed.repository";
-import { countNotificacionesNoLeidas, insertNotificacion } from "@/services/api/repositories/notifications.repository";
+import { countNotificacionesNoLeidas, insertNotificacion, deleteNotificacionLike } from "@/services/api/repositories/notifications.repository";
 import NotificationsPanel from "@/components/notifications/NotificationsPanel";
 import type { FeedItemDto } from "@/services/api/dtos/feed.dto";
 import { publishPlanAsPost } from "@/services/api/repositories/post.repository";
 import { togglePlanLike } from "@/services/api/repositories/likes.repository";
 import {
   createComment,
+  deleteComment,
   listCommentsForPlan,
   type CommentDto,
 } from "@/services/api/repositories/comments.repository";
 import { getPublicUserProfile } from "@/services/api/repositories/users.repository";
+import { fetchActiveFriends } from "@/services/api/endpoints/users.endpoint";
 import {
   listChats,
   listMensajes,
@@ -50,6 +52,8 @@ const commentAuthorCache = new Map<string, { name: string; profileImage: string 
 
 const FEED_CACHE_KEY = "fremee:feed:v2";
 const FEED_CACHE_TTL_MS = 5 * 60 * 1000;
+const FRIENDS_CACHE_KEY = "fremee:friends:v1";
+const FRIENDS_CACHE_TTL_MS = 2 * 60 * 1000;
 
 function readFeedCache(userId: string): FeedItemDto[] | null {
   try {
@@ -67,6 +71,22 @@ function writeFeedCache(userId: string, items: FeedItemDto[]) {
   } catch { /* ignorar errores de storage */ }
 }
 
+function readFriendsCache(userId: string): Set<string> | null {
+  try {
+    const raw = localStorage.getItem(`${FRIENDS_CACHE_KEY}:${userId}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { ids: string[]; savedAt: number };
+    if (Date.now() - parsed.savedAt > FRIENDS_CACHE_TTL_MS) return null;
+    return new Set(parsed.ids);
+  } catch { return null; }
+}
+
+function writeFriendsCache(userId: string, ids: string[]) {
+  try {
+    localStorage.setItem(`${FRIENDS_CACHE_KEY}:${userId}`, JSON.stringify({ ids, savedAt: Date.now() }));
+  } catch { /* ignorar errores de storage */ }
+}
+
 function preloadImagesBackground(urls: string[]) {
   const uniqueUrls = [...new Set(urls.filter(Boolean))];
   uniqueUrls.forEach((url) => {
@@ -78,7 +98,7 @@ function preloadImagesBackground(urls: string[]) {
 export default function FeedPage() {
   const { user, loading, profile } = useAuth();
   const currentUserId = user?.id ?? null;
-  const [activeFeedTab, setActiveFeedTab] = useState<"following" | "explore">("following");
+  const [activeFeedTab, setActiveFeedTab] = useState<"following" | "explore">("explore");
   const [loadingFeed, setLoadingFeed] = useState(true);
   const [firstImageReady, setFirstImageReady] = useState(false);
   const [uiPosts, setUiPosts] = useState<FeedItemDto[]>([]);
@@ -90,6 +110,10 @@ export default function FeedPage() {
   const [tabIndicator, setTabIndicator] = useState({ left: 0, width: 0, ready: false });
   const [unreadNotifs, setUnreadNotifs] = useState(0);
   const [notifPanelOpen, setNotifPanelOpen] = useState(false);
+  const [friendIds, setFriendIds] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    return new Set();
+  });
 
   useEffect(() => {
     if (!currentUserId) {
@@ -97,6 +121,10 @@ export default function FeedPage() {
       setLoadingFeed(false);
       return;
     }
+
+    // Cargar caché de amigos inmediatamente
+    const cachedFriends = readFriendsCache(currentUserId);
+    if (cachedFriends) setFriendIds(cachedFriends);
 
     let cancelled = false;
 
@@ -106,16 +134,22 @@ export default function FeedPage() {
       if (cached && cached.length > 0) {
         setUiPosts(cached);
         setLoadingFeed(false);
-        // Si el caché ya tiene posts, no esperar a que cargue la imagen para mostrar
         setFirstImageReady(true);
       } else {
         setLoadingFeed(true);
       }
 
       try {
-        // 2. Fetch posts (sin likes) — se muestran en cuanto llegan
-        const posts = await getFeedPostsOnly({ limit: 20 });
+        // 2. Posts + amigos en paralelo — ninguno bloquea al otro
+        const [posts, friends] = await Promise.all([
+          getFeedPostsOnly({ limit: 20 }),
+          fetchActiveFriends(),
+        ]);
         if (cancelled) return;
+
+        const newFriendIds = new Set(friends.map((f) => f.id));
+        setFriendIds(newFriendIds);
+        writeFriendsCache(currentUserId, [...newFriendIds]);
 
         const firstWithImage = posts.find((p) => p.coverImage);
         if (!firstWithImage) setFirstImageReady(true);
@@ -318,17 +352,24 @@ export default function FeedPage() {
                       </div>
                     )}
                   </>
-                ) : uiPosts.length === 0 ? (
-                  <div className="rounded-modal border border-app bg-surface p-[var(--space-5)] text-body text-muted shadow-elev-1">
-                    Aun no hay publicaciones para mostrar.
-                  </div>
-                ) : (
-                  <div className="space-y-[var(--space-3)]">
-                    {uiPosts.map((post, idx) => (
-                      <FeedCard key={post.id} post={post} currentUserId={currentUserId} currentUserName={profile?.nombre ?? null} currentUserProfileImage={profile?.profile_image ?? null} nextPostHasImage={uiPosts[idx + 1]?.hasImage ?? true} />
-                    ))}
-                  </div>
-                )}
+                ) : (() => {
+                  const visiblePosts = activeFeedTab === "following"
+                    ? uiPosts.filter((p) => p.plan.ownerUserId && friendIds.has(p.plan.ownerUserId))
+                    : uiPosts;
+                  return visiblePosts.length === 0 ? (
+                    <div className="rounded-modal border border-app bg-surface p-[var(--space-5)] text-body text-muted shadow-elev-1">
+                      {activeFeedTab === "following"
+                        ? "Aún no hay publicaciones de tus amigos."
+                        : "Aun no hay publicaciones para mostrar."}
+                    </div>
+                  ) : (
+                    <div className="space-y-[var(--space-3)]">
+                      {visiblePosts.map((post, idx) => (
+                        <FeedCard key={post.id} post={post} currentUserId={currentUserId} currentUserName={profile?.nombre ?? null} currentUserProfileImage={profile?.profile_image ?? null} nextPostHasImage={visiblePosts[idx + 1]?.hasImage ?? true} />
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
             </section>
 
@@ -394,15 +435,25 @@ function FeedChatPanel({ currentUserId }: { currentUserId: string | null }) {
         .on("broadcast", { event: "new_message" }, ({ payload }) => {
           const msg = payload as import("@/services/api/repositories/chat.repository").MensajeRow;
           const isOpen = openChatIdRef.current === c.chat_id;
-          const preview = msg.audio_url ? "🎤 Nota de voz" : msg.document_url ? `📄 ${msg.document_name ?? "Documento"}` : msg.image_url ? (msg.image_type?.startsWith("video/") ? "🎥 Vídeo" : "📷 Foto") : msg.texto;
-          setChats((prev) => prev.map((chat) =>
-            chat.chat_id !== c.chat_id ? chat : {
-              ...chat,
-              last_message: preview,
-              last_message_at: msg.created_at,
-              unread_count: (isOpen || msg.sender_id === currentUserId) ? chat.unread_count : chat.unread_count + 1,
-            }
-          ));
+          const preview = msg.tipo?.startsWith("call_")
+            ? (msg.tipo.includes("missed") ? (msg.tipo.includes("video") ? "📵 Videollamada perdida" : "📵 Llamada perdida") : (msg.tipo.includes("video") ? "📹 Videollamada" : "📞 Llamada de audio"))
+            : msg.audio_url ? "🎤 Nota de voz"
+            : msg.document_url ? `📄 ${msg.document_name ?? "Documento"}`
+            : msg.image_url ? (msg.image_type?.startsWith("video/") ? "🎥 Vídeo" : "📷 Foto")
+            : msg.texto;
+          setChats((prev) => {
+            const updated = prev.map((chat) =>
+              chat.chat_id !== c.chat_id ? chat : {
+                ...chat,
+                last_message: preview,
+                last_message_at: msg.created_at,
+                unread_count: (isOpen || msg.sender_id === currentUserId) ? chat.unread_count : chat.unread_count + 1,
+              }
+            );
+            return [...updated].sort((a, b) =>
+              new Date(b.last_message_at ?? 0).getTime() - new Date(a.last_message_at ?? 0).getTime()
+            );
+          });
           if (isOpen) {
             setMessages((prev) => prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]);
             void markChatRead(c.chat_id);
@@ -529,7 +580,24 @@ function FeedChatPanel({ currentUserId }: { currentUserId: string | null }) {
                             <img src={msg.image_url} alt="Imagen" className="max-w-[200px] rounded-[8px] object-cover" style={{ maxHeight: 200 }} referrerPolicy="no-referrer" />
                           </a>
                         )
-                      ) : (() => { try { const p = JSON.parse(msg.texto); if (p?.type === "poll") return <div className="flex items-center gap-[6px] py-[2px] opacity-80"><span className="text-[16px]">📊</span><span className="text-[13px]">{p.question as string}</span></div>; } catch { /* noop */ } return <p className="break-all text-body-sm">{msg.texto}</p>; })()}
+                      ) : msg.tipo?.startsWith("call_") ? (() => {
+                          const missed = msg.tipo.includes("missed");
+                          const isVideo = msg.tipo.includes("video");
+                          const label = missed ? (isVideo ? "Videollamada perdida" : "Llamada perdida") : (isVideo ? "Videollamada" : "Llamada de audio");
+                          const duracion = parseInt(msg.texto) || 0;
+                          const mins = Math.floor(duracion / 60);
+                          const secs = duracion % 60;
+                          return (
+                            <div className={`flex items-center gap-[8px] py-[2px] ${missed ? "opacity-60" : ""}`}>
+                              <span className="text-[18px]">{missed ? "📵" : (isVideo ? "📹" : "📞")}</span>
+                              <div>
+                                <p className="text-[13px] font-[var(--fw-medium)]">{label}</p>
+                                {!missed && duracion > 0 && <p className="text-[11px] opacity-70">{mins}:{String(secs).padStart(2, "0")}</p>}
+                              </div>
+                            </div>
+                          );
+                        })()
+                      : (() => { try { const p = JSON.parse(msg.texto); if (p?.type === "poll") return <div className="flex items-center gap-[6px] py-[2px] opacity-80"><span className="text-[16px]">📊</span><span className="text-[13px]">{p.question as string}</span></div>; } catch { /* noop */ } return <p className="break-all text-body-sm">{msg.texto}</p>; })()}
                       <p className={`mt-[2px] text-right text-[10px] ${isMe ? "text-contrast-token/60" : "text-muted"}`}>{formatChatTime(msg.created_at)}</p>
                     </div>
                   </div>
@@ -656,6 +724,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [authorAvatars, setAuthorAvatars] = useState<Record<string, string | null>>({});
   const [imgLoaded, setImgLoaded] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const commentInputRef = useRef<HTMLInputElement | null>(null);
   const emojiPickerRef = useRef<HTMLDivElement | null>(null);
 
@@ -786,15 +855,22 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
       setLikeCount(result.likeCount);
       setLikeAnimating(true);
 
-      // Notificar al dueño del plan (solo al dar like, no al quitar, y no a uno mismo)
-      if (result.liked && post.plan.ownerUserId && post.plan.ownerUserId !== currentUserId) {
-        void insertNotificacion({
-          userId: post.plan.ownerUserId,
-          tipo: "like",
-          actorId: currentUserId,
-          entityId: String(post.plan.id),
-          entityType: "plan",
-        });
+      if (post.plan.ownerUserId && post.plan.ownerUserId !== currentUserId) {
+        if (result.liked) {
+          void insertNotificacion({
+            userId: post.plan.ownerUserId,
+            tipo: "like",
+            actorId: currentUserId,
+            entityId: String(post.plan.id),
+            entityType: "plan",
+          });
+        } else {
+          void deleteNotificacionLike({
+            actorId: currentUserId,
+            userId: post.plan.ownerUserId,
+            entityId: String(post.plan.id),
+          });
+        }
       }
     } catch (e) {
       console.error("[feed] Error toggling like:", e);
@@ -825,7 +901,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
     try {
       const nameToStore = currentUserName?.trim() || "Usuario";
 
-      await createComment({
+      const result = await createComment({
         planId: post.plan.id,
         userId: currentUserId,
         userName: nameToStore,
@@ -834,6 +910,22 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
       });
       setCommentText("");
       await reloadComments();
+
+      // Moderation: async — delete silently if toxic
+      const commentId = result.comment_id;
+      void fetch("/api/moderate-comment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: content }),
+      })
+        .then((r) => r.json())
+        .then((data: { toxic: boolean }) => {
+          if (data.toxic) {
+            void deleteComment({ planId: post.plan.id, commentId });
+            setCommentsSection((prev) => prev.filter((c) => c.commentId !== commentId));
+          }
+        })
+        .catch(() => { /* never block on moderation error */ });
 
       // Notificar al dueño del plan (no a uno mismo)
       if (post.plan.ownerUserId && post.plan.ownerUserId !== currentUserId) {
@@ -856,6 +948,17 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
     if (e.key !== "Enter") return;
     e.preventDefault();
     await onSubmitComment();
+  };
+
+  const onDeleteComment = async (commentId: string) => {
+    setConfirmDeleteId(null);
+    setCommentsSection((prev) => prev.filter((c) => c.commentId !== commentId));
+    try {
+      await deleteComment({ planId: post.plan.id, commentId });
+    } catch {
+      const refreshed = await listCommentsForPlan({ planId: post.plan.id, userId: currentUserId ?? undefined });
+      setCommentsSection(refreshed);
+    }
   };
 
   const getCommentAuthorName = (comment: CommentDto) => {
@@ -982,7 +1085,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                         {comment.content}
                       </p>
                       {comment.userId === currentUserId && (
-                        <button type="button" className="mt-0.5 shrink-0 p-0.5 text-muted opacity-50" aria-label="Eliminar comentario">
+                        <button type="button" className="mt-0.5 shrink-0 p-0.5 text-muted opacity-50" aria-label="Eliminar comentario" onClick={() => setConfirmDeleteId(comment.commentId)}>
                           <TrashIcon />
                         </button>
                       )}
@@ -1083,7 +1186,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                       {comment.content}
                     </p>
                     {comment.userId === currentUserId && (
-                      <button type="button" className="mt-0.5 shrink-0 p-0.5 text-muted opacity-50" aria-label="Eliminar comentario">
+                      <button type="button" className="mt-0.5 shrink-0 p-0.5 text-muted opacity-50" aria-label="Eliminar comentario" onClick={() => setConfirmDeleteId(comment.commentId)}>
                         <TrashIcon />
                       </button>
                     )}
@@ -1131,6 +1234,24 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
       {/* Divider — only between image post followed by no-image post */}
       {post.hasImage && !nextPostHasImage && (
         <div className="feed-divider mt-[var(--space-2)] border-t border-app" />
+      )}
+
+      {/* Delete comment confirmation modal */}
+      {confirmDeleteId && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center pb-[max(var(--space-6),env(safe-area-inset-bottom))] sm:items-center" onClick={() => setConfirmDeleteId(null)}>
+          <div className="w-full max-w-[340px] rounded-modal border border-app bg-surface p-[var(--space-5)] shadow-elev-2 mx-[var(--space-4)]" onClick={(e) => e.stopPropagation()}>
+            <p className="text-body font-[var(--fw-semibold)] text-app">¿Eliminar comentario?</p>
+            <p className="mt-[var(--space-1)] text-body-sm text-muted">Esta acción no se puede deshacer.</p>
+            <div className="mt-[var(--space-4)] flex gap-[var(--space-2)]">
+              <button type="button" onClick={() => setConfirmDeleteId(null)} className="flex-1 rounded-button border border-app py-[10px] text-body-sm font-[var(--fw-medium)] text-app transition-colors hover:bg-[var(--interactive-hover-surface)]">
+                Cancelar
+              </button>
+              <button type="button" onClick={() => onDeleteComment(confirmDeleteId)} className="flex-1 rounded-button bg-[var(--error-token,#ef4444)] py-[10px] text-body-sm font-[var(--fw-medium)] text-white transition-opacity hover:opacity-80">
+                Eliminar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </article>
   );

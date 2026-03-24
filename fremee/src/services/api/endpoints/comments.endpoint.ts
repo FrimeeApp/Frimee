@@ -2,6 +2,7 @@ import {
   listCommentsForPlanRoute,
   listPreviewCommentsForPlansRoute,
   createCommentRoute,
+  deleteCommentRoute,
   getTopCommentForPlanRoute,
   listTopCommentsForPlansRoute,
   toggleCommentLikeRoute,
@@ -25,6 +26,10 @@ export type ToggleCommentLikeParams = {
 
 export async function createCommentEndpoint(params: CreateCommentParams) {
   return createCommentRoute(params);
+}
+
+export async function deleteCommentEndpoint(params: { planId: number; commentId: string }) {
+  return deleteCommentRoute(params);
 }
 
 export async function toggleCommentLikeEndpoint(params: ToggleCommentLikeParams) {
