@@ -26,7 +26,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   const { callState, startCall, joinCall, acceptCall, endCall, markActive } = useCall();
 
   const isGroup = callState.status !== "idle" && "miembros" in callState && callState.miembros.length > 2;
-  const isInitiator = callState.status !== "idle" && "isInitiator" in callState ? callState.isInitiator : false;
+  const isInitiator = (callState.status !== "idle" && "isInitiator" in callState && callState.isInitiator) ?? false;
 
   return (
     <CallContext.Provider value={{ callState, startCall, joinCall, endCall }}>
