@@ -132,8 +132,14 @@ export function useCall() {
         .from("llamadas")
         .update({ estado: "missed", finalizada_at: new Date().toISOString() })
         .eq("room_name", callState.roomName);
-    } else if (isGroup && !endForAll) {
-      // Any group call member leaving without ending for all: just disconnect locally
+    } else if (isGroup && !endForAll && callState.status === "active") {
+      // Group call member leaving without ending for all: just disconnect locally
+    } else if (isGroup && !endForAll && callState.status === "outgoing") {
+      // Initiator hanging up before anyone answered: mark as missed
+      void supabase
+        .from("llamadas")
+        .update({ estado: "missed", finalizada_at: new Date().toISOString() })
+        .eq("room_name", callState.roomName);
     } else {
       await supabase
         .from("llamadas")
