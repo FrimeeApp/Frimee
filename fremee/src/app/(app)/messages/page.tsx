@@ -477,17 +477,23 @@ function ChatConversation({
   type OngoingCall = { id: number; room_name: string; tipo: "audio" | "video" };
   const [ongoingCall, setOngoingCall] = useState<OngoingCall | null>(null);
   useEffect(() => {
+    setOngoingCall(null); // reset when chat changes
     if (chat.tipo !== "GRUPO") return;
     const sb = supabaseRef.current;
     // Initial query — show banner for both ringing (nobody joined yet) and active
     void sb.from("llamadas")
-      .select("id, room_name, tipo, estado")
+      .select("id, room_name, tipo")
       .eq("chat_id", chat.chat_id)
       .in("estado", ["ringing", "active"])
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle()
-      .then(({ data }) => setOngoingCall(data ? { id: (data as OngoingCall & { estado: string }).id, room_name: (data as OngoingCall & { estado: string }).room_name, tipo: (data as OngoingCall & { estado: string }).tipo } : null));
+      .then(({ data, error }) => {
+        if (!error && data) {
+          const row = data as { id: number; room_name: string; tipo: "audio" | "video" };
+          setOngoingCall({ id: row.id, room_name: row.room_name, tipo: row.tipo });
+        }
+      });
     // Realtime updates
     const ch = sb.channel(`llamadas-grupo-${chat.chat_id}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "llamadas", filter: `chat_id=eq.${chat.chat_id}` }, (payload) => {
