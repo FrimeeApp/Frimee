@@ -192,6 +192,7 @@ export default function MessagesPage() {
                   const miembros = selectedChat.miembros.map((m) => ({ id: m.id, nombre: m.nombre, foto: m.profile_image ?? undefined }));
                   void joinCall(llamadaId, roomName, String(selectedChat.chat_id), tipo, nombre, foto, miembros);
                 }}
+                inCall={callState.status !== "idle"}
                 onNewMessage={(msg) => {
                   const preview = msg.audio_url ? "🎤 Nota de voz" : msg.document_url ? `📄 ${msg.document_name ?? "Documento"}` : msg.image_url ? (msg.image_type?.startsWith("video/") ? "🎥 Vídeo" : "📷 Foto") : (() => { try { return JSON.parse(msg.texto)?.type === "poll" ? "📊 Encuesta" : msg.texto; } catch { return msg.texto; } })();
                   setChats((prev) => prev.map((c) =>
@@ -412,6 +413,7 @@ function ChatConversation({
   onNewMessage,
   onStartCall,
   onJoinCall,
+  inCall,
   onFotoUpdated,
   registerCallReload,
 }: {
@@ -421,6 +423,7 @@ function ChatConversation({
   onNewMessage: (msg: MensajeRow) => void;
   onStartCall?: (tipo: "audio" | "video") => void;
   onJoinCall?: (llamadaId: number, roomName: string, tipo: "audio" | "video") => void;
+  inCall?: boolean;
   onFotoUpdated?: (foto: string) => void;
   registerCallReload?: (fn: () => void) => void;
 }) {
@@ -476,20 +479,22 @@ function ChatConversation({
   useEffect(() => {
     if (chat.tipo !== "GRUPO") return;
     const sb = supabaseRef.current;
-    // Initial query
+    // Initial query — show banner for both ringing (nobody joined yet) and active
     void sb.from("llamadas")
-      .select("id, room_name, tipo")
+      .select("id, room_name, tipo, estado")
       .eq("chat_id", chat.chat_id)
-      .eq("estado", "active")
+      .in("estado", ["ringing", "active"])
+      .order("created_at", { ascending: false })
+      .limit(1)
       .maybeSingle()
-      .then(({ data }) => setOngoingCall(data as OngoingCall | null));
+      .then(({ data }) => setOngoingCall(data ? { id: (data as OngoingCall & { estado: string }).id, room_name: (data as OngoingCall & { estado: string }).room_name, tipo: (data as OngoingCall & { estado: string }).tipo } : null));
     // Realtime updates
-    const ch = sb.channel(`llamadas-${chat.chat_id}`)
+    const ch = sb.channel(`llamadas-grupo-${chat.chat_id}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "llamadas", filter: `chat_id=eq.${chat.chat_id}` }, (payload) => {
         const row = payload.new as { id: number; room_name: string; tipo: "audio" | "video"; estado: string } | undefined;
-        if (row?.estado === "active") {
+        if (row?.estado === "ringing" || row?.estado === "active") {
           setOngoingCall({ id: row.id, room_name: row.room_name, tipo: row.tipo });
-        } else if (payload.eventType === "UPDATE" && (row?.estado === "ended" || row?.estado === "missed")) {
+        } else if (row?.estado === "ended" || row?.estado === "missed") {
           setOngoingCall(null);
         }
       })
@@ -1064,8 +1069,8 @@ function ChatConversation({
         </button>
       </div>
 
-      {/* Ongoing group call banner */}
-      {ongoingCall && (
+      {/* Ongoing group call banner — hide when already in the call */}
+      {ongoingCall && !inCall && (
         <div className="flex items-center gap-[var(--space-3)] border-b border-app bg-surface px-[var(--space-3)] py-[10px]">
           <div className="flex size-8 items-center justify-center rounded-full bg-green-500/15 text-green-500">
             <svg viewBox="0 0 24 24" fill="none" className="size-4" stroke="currentColor" strokeWidth="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.38 2 2 0 0 1 3.6 1.18h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.73a16 16 0 0 0 6 6l.95-.95a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 21.59 16z"/></svg>
