@@ -45,7 +45,7 @@ export default function RegisterPage() {
     try {
       const supabase = createBrowserSupabaseClient();
 
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email: normalizedEmail,
         password,
         options: {
@@ -54,6 +54,13 @@ export default function RegisterPage() {
       });
 
       if (error) throw error;
+
+      // Supabase devuelve éxito silencioso si el email ya existe (previene enumeración).
+      // Se detecta porque identities estará vacío.
+      if (data.user?.identities?.length === 0) {
+        setErrorMsg("Ya existe una cuenta con este email. Inicia sesión.");
+        return;
+      }
 
       setRegistrationComplete(true);
     } catch (err: unknown) {

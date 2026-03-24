@@ -51,6 +51,21 @@ export async function insertNotificacion(params: {
   if (error) throw error;
 }
 
+export async function deleteNotificacionLike(params: {
+  actorId: string;
+  userId: string;
+  entityId: string;
+}): Promise<void> {
+  const supabase = createBrowserSupabaseClient();
+  await supabase
+    .from("notificaciones")
+    .delete()
+    .eq("tipo", "like")
+    .eq("actor_id", params.actorId)
+    .eq("user_id", params.userId)
+    .eq("entity_id", params.entityId);
+}
+
 export async function acceptFriendRequest(requesterId: string): Promise<void> {
   const supabase = createBrowserSupabaseClient();
   const { error } = await supabase.rpc("fn_friend_request_accept", { p_requester_user_id: requesterId });

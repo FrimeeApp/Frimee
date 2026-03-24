@@ -179,7 +179,7 @@ export default function NotificationsPanel({ open, onClose, onRead }: Props) {
     return () => clearTimeout(t);
   }, [open, onRead]);
 
-  // Realtime: prepend new notifications while panel is open
+  // Realtime: reload on INSERT or DELETE
   useEffect(() => {
     if (!user?.id) return;
     const supabase = createBrowserSupabaseClient();
@@ -188,13 +188,16 @@ export default function NotificationsPanel({ open, onClose, onRead }: Props) {
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "notificaciones", filter: `user_id=eq.${user.id}` },
-        (payload: { new: Record<string, unknown> }) => {
-          setNotifs((prev) => [payload.new as NotificacionDto, ...prev]);
-        }
+        () => { void load(); }
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "notificaciones", filter: `user_id=eq.${user.id}` },
+        () => { void load(); }
       )
       .subscribe();
     return () => { void supabase.removeChannel(channel); };
-  }, [user?.id]);
+  }, [user?.id, load]);
 
   // Close on outside click
   useEffect(() => {

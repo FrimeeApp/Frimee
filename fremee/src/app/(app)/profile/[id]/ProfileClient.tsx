@@ -6,7 +6,7 @@ import AppSidebar from "@/components/common/AppSidebar";
 import LoadingScreen from "@/components/common/LoadingScreen";
 import { useAuth } from "@/providers/AuthProvider";
 import { getPublicUserProfile } from "@/services/api/repositories/users.repository";
-import { sendFriendRequest } from "@/services/api/endpoints/users.endpoint";
+import { sendFriendRequest, getFriendshipStatuses } from "@/services/api/endpoints/users.endpoint";
 import { listUserRelatedPlans } from "@/services/api/repositories/plans.repository";
 import {
   uploadProfileImage,
@@ -76,6 +76,12 @@ export default function ProfilePage() {
         }
 
         setProfileData(profileResult);
+
+        if (!isOwnProfile) {
+          const statuses = await getFriendshipStatuses([id]);
+          const status = statuses[id] ?? "none";
+          if (status === "pending") setFriendRequestSent(true);
+        }
 
         const userPlans = await listUserRelatedPlans({ userId: id, limit: 50 });
         const publicPlans = userPlans.filter(
@@ -318,7 +324,7 @@ export default function ProfilePage() {
                     disabled={friendRequestSent || sendingFriendRequest}
                     className="rounded-full border border-app px-6 py-[6px] text-body-sm font-[var(--fw-semibold)] transition-colors hover:bg-surface disabled:opacity-50"
                   >
-                    {friendRequestSent ? "Solicitud enviada" : sendingFriendRequest ? "..." : "Añadir amigo"}
+                    {friendRequestSent ? "Pendiente" : sendingFriendRequest ? "..." : "Añadir amigo"}
                   </button>
                 </div>
               )}
