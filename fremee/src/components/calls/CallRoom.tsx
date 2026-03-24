@@ -38,6 +38,8 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
   const [tiles, setTiles] = useState<ParticipantTile[]>([]);
   const [focusedIdentity, setFocusedIdentity] = useState<string | null>(null);
   const [screenSharing, setScreenSharing] = useState(false);
+  const [cameraOn, setCameraOn] = useState(false); // camera for audio calls
+  const [hasAnyVideo, setHasAnyVideo] = useState(tipo === "video"); // show video grid
   const [remoteScreenActive, setRemoteScreenActive] = useState(false);
   const [duration, setDuration] = useState(0);
 
@@ -45,6 +47,8 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
   useEffect(() => { onParticipantConnectedRef.current = onParticipantConnected; });
   const onEndRef = useRef(onEnd);
   useEffect(() => { onEndRef.current = onEnd; });
+  const onEndForAllRef = useRef(onEndForAll);
+  useEffect(() => { onEndForAllRef.current = onEndForAll; });
 
   // Stored tracks so we can re-attach when elements remount (grid ↔ focus toggle)
   const trackMap = useRef<Map<string, Track>>(new Map());
@@ -85,7 +89,8 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
           setRemoteScreenActive(true);
         } else {
           trackMap.current.set(participant.identity, track);
-          // Attach to current video element if mounted
+          setHasAnyVideo(true);
+          setTiles((prev) => prev.map((t) => t.identity === participant.identity ? { ...t, videoMuted: false } : t));
           const existingEl = document.querySelector<HTMLVideoElement>(`video[data-identity="${participant.identity}"]`);
           if (existingEl) track.attach(existingEl);
         }
@@ -125,7 +130,14 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
     room.on(RoomEvent.ParticipantDisconnected, (participant: RemoteParticipant) => {
       if (!cancelled) {
         removeTile(participant.identity);
-        if (!isGroup && room.remoteParticipants.size === 0) onEndRef.current();
+        if (room.remoteParticipants.size === 0) {
+          if (isGroup) {
+            // Last person left — end for all so the banner clears
+            onEndForAllRef.current?.();
+          } else {
+            onEndRef.current();
+          }
+        }
       }
     });
 
@@ -134,16 +146,20 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
       if (cancelled) { room.disconnect(); return; }
       room.remoteParticipants.forEach((p) => addTile(p.identity, false));
 
-      const audioTrack = await createLocalAudioTrack();
-      if (cancelled) { room.disconnect(); return; }
-      await room.localParticipant.publishTrack(audioTrack);
-
-      if (tipo === "video") {
-        const videoTrack = await createLocalVideoTrack();
+      try {
+        const audioTrack = await createLocalAudioTrack();
         if (cancelled) { room.disconnect(); return; }
-        await room.localParticipant.publishTrack(videoTrack);
-        trackMap.current.set("__local__", videoTrack);
-        if (localVideoRef.current) videoTrack.attach(localVideoRef.current);
+        await room.localParticipant.publishTrack(audioTrack);
+
+        if (tipo === "video") {
+          const videoTrack = await createLocalVideoTrack();
+          if (cancelled) { room.disconnect(); return; }
+          await room.localParticipant.publishTrack(videoTrack);
+          trackMap.current.set("__local__", videoTrack);
+          if (localVideoRef.current) videoTrack.attach(localVideoRef.current);
+        }
+      } catch (err) {
+        if (!cancelled) console.error("[CallRoom] publish error", err);
       }
     };
 
@@ -169,7 +185,19 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
     const local = roomRef.current?.localParticipant;
     if (!local) return;
     const enabled = local.isCameraEnabled;
-    await local.setCameraEnabled(!enabled);
+    try {
+      await local.setCameraEnabled(!enabled);
+      if (!enabled) {
+        // Camera just turned on — attach local video track
+        const pub = local.getTrackPublication(Track.Source.Camera);
+        if (pub?.track && localVideoRef.current) pub.track.attach(localVideoRef.current);
+        trackMap.current.set("__local__", pub?.track as Track);
+        setHasAnyVideo(true);
+        setCameraOn(true);
+      } else {
+        setCameraOn(false);
+      }
+    } catch (err) { console.error("[CallRoom] camera toggle error", err); }
     setTiles((prev) => prev.map((t) => t.isLocal ? { ...t, videoMuted: enabled } : t));
   }, []);
 
@@ -190,7 +218,8 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
 
   const getMiembro = (identity: string) => miembros.find((m) => m.id === identity);
   const localMuted = tiles.find((t) => t.isLocal)?.audioMuted ?? false;
-  const localVideoOff = tiles.find((t) => t.isLocal)?.videoMuted ?? false;
+  const localVideoOff = tiles.find((t) => t.isLocal)?.videoMuted ?? true;
+  const showVideo = hasAnyVideo; // show video grid whenever any participant has video
 
   const renderTile = (tile: ParticipantTile, fullscreen = false) => {
     const miembro = getMiembro(tile.identity);
@@ -203,7 +232,7 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
         onClick={() => setFocusedIdentity(fullscreen ? null : tile.identity)}
         className={`relative overflow-hidden rounded-2xl bg-[#2a2a2a] flex items-center justify-center cursor-pointer ${fullscreen ? "w-full h-full" : "aspect-square"}`}
       >
-        {tipo === "video" && (
+        {showVideo && (
           <video
             data-identity={tile.isLocal ? "__local__" : tile.identity}
             autoPlay
@@ -225,7 +254,7 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
           />
         )}
 
-        {(tipo === "audio" || tile.videoMuted) && (
+        {(!showVideo || tile.videoMuted) && (
           <div className="flex flex-col items-center gap-2 z-10">
             <div className="h-14 w-14 overflow-hidden rounded-full bg-white/10 border border-white/10">
               {foto ? (
@@ -310,11 +339,9 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
         <button onClick={() => void toggleMute()} className={`flex h-13 w-13 items-center justify-center rounded-full transition-all ${localMuted ? "bg-white text-black" : "bg-white/15 text-white"}`}>
           {localMuted ? <MicOffIcon /> : <MicIcon />}
         </button>
-        {tipo === "video" && (
-          <button onClick={() => void toggleVideo()} className={`flex h-13 w-13 items-center justify-center rounded-full transition-all ${localVideoOff ? "bg-white text-black" : "bg-white/15 text-white"}`}>
-            {localVideoOff ? <VideoOffIcon /> : <VideoIcon />}
-          </button>
-        )}
+        <button onClick={() => void toggleVideo()} className={`flex h-13 w-13 items-center justify-center rounded-full transition-all ${localVideoOff ? "bg-white/15 text-white" : "bg-white text-black"}`}>
+          {localVideoOff ? <VideoOffIcon /> : <VideoIcon />}
+        </button>
         <button onClick={() => void toggleScreenShare()} className={`flex h-13 w-13 items-center justify-center rounded-full transition-all ${screenSharing ? "bg-white text-black" : "bg-white/15 text-white"}`}>
           {screenSharing ? <ScreenShareOffIcon /> : <ScreenShareIcon />}
         </button>
