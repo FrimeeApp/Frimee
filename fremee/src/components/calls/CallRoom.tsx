@@ -345,11 +345,6 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
         <button onClick={() => void toggleScreenShare()} className={`flex h-13 w-13 items-center justify-center rounded-full transition-all ${screenSharing ? "bg-white text-black" : "bg-white/15 text-white"}`}>
           {screenSharing ? <ScreenShareOffIcon /> : <ScreenShareIcon />}
         </button>
-        {isGroup && isInitiator && (
-          <button onClick={() => onEndForAll?.()} className="flex h-12 items-center justify-center rounded-full bg-red-500/20 text-red-400 px-4 text-xs font-medium transition-all hover:bg-red-500/30">
-            Terminar
-          </button>
-        )}
         <button onClick={handleEnd} className="flex h-16 w-16 items-center justify-center rounded-full bg-red-500 text-white shadow-lg shadow-red-500/40 transition-all hover:bg-red-600 hover:scale-105 active:scale-95">
           <PhoneOffIcon />
         </button>
