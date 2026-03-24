@@ -88,19 +88,21 @@ export async function createSubplan(params: CreateSubplanParams): Promise<number
 
 export async function updateSubplanTransporte(subplanId: number, transporte: string | null): Promise<void> {
   const supabase = createBrowserSupabaseClient();
-  const { error } = await supabase
-    .from("subplan")
-    .update({ transporte_llegada: transporte })
-    .eq("id", subplanId);
+  const { error } = await supabase.rpc("fn_subplan_save_transporte", {
+    p_subplan_id: subplanId,
+    p_transporte: transporte,
+  });
   if (error) throw error;
 }
 
 export async function updateSubplanViaje(subplanId: number, duracion: string, distancia: string, polyline: string): Promise<void> {
   const supabase = createBrowserSupabaseClient();
-  const { error } = await supabase
-    .from("subplan")
-    .update({ duracion_viaje: duracion, distancia_viaje: distancia, ruta_polyline: polyline })
-    .eq("id", subplanId);
+  const { error } = await supabase.rpc("fn_subplan_save_viaje", {
+    p_subplan_id: subplanId,
+    p_duracion:   duracion,
+    p_distancia:  distancia,
+    p_polyline:   polyline,
+  });
   if (error) throw error;
 }
 

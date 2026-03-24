@@ -197,26 +197,35 @@ export default function DayRouteMap({ subplanes, selectedDate, onViajeComputed }
             // ── Polyline stored in DB — zero API calls ──
             drawPolyline(destSubplan.ruta_polyline);
           } else {
-            // ── First time: call Directions API, then save for future loads ──
+            // ── First time: call server-side directions API ──
             try {
+              const fromCoord = coords[i];
+              const toCoord   = coords[i + 1];
+              const waypoints = [
+                fromCoord ? `${fromCoord.lat},${fromCoord.lng}` : points[i].name,
+                toCoord   ? `${toCoord.lat},${toCoord.lng}`     : points[i + 1].name,
+              ];
+
               const res = await fetch("/api/directions", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                  waypoints: [points[i].name, points[i + 1].name],
-                  originCoords: coords[i]     ?? undefined,
-                  destCoords:   coords[i + 1] ?? undefined,
-                  travelMode:   destSubplan?.transporte_llegada ?? undefined,
+                  waypoints,
+                  originCoords: fromCoord ?? undefined,
+                  destCoords:   toCoord   ?? undefined,
+                  travelMode:   destSubplan?.transporte_llegada ?? "COCHE",
                 }),
               });
-              if (res.ok) {
-                const data = await res.json();
+              const data = await res.json() as { polyline?: string; legs?: { distance?: string; duration?: string }[]; error?: string };
+
+              if (data.polyline) {
                 drawPolyline(data.polyline);
-                if (data.legs?.[0]?.duration && destSubplan?.id && onViajeComputed) {
+                const leg = data.legs?.[0];
+                if (leg?.duration && destSubplan?.id && onViajeComputed) {
                   onViajeComputed(
                     destSubplan.id,
-                    data.legs[0].duration,
-                    data.legs[0].distance ?? "",
+                    leg.duration,
+                    leg.distance ?? "",
                     data.polyline,
                   );
                 }

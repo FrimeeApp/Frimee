@@ -1,6 +1,7 @@
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -234,6 +235,14 @@ export async function listCommentsForPlanRoute(params: {
     maxItems: safeLimit,
   });
   return { comments };
+}
+
+export async function deleteCommentRoute(params: {
+  planId: number;
+  commentId: string;
+}): Promise<void> {
+  const commentRef = doc(db, "posts", getPostId(params.planId), "comments", params.commentId);
+  await deleteDoc(commentRef);
 }
 
 export async function listPreviewCommentsForPlansRoute(params: {
