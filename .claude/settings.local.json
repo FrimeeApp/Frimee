@@ -36,7 +36,10 @@
       "Bash(TURBOPACK=0 BUILD_TARGET=capacitor npx next build)",
       "Bash(xargs grep:*)",
       "Bash(tail -20 \"c:/Users/cayet/Desktop/Proyectos/Frimee/fremee/src/app/\\(app\\)/plans/[id]/page.tsx\")",
-      "Bash(npm uninstall:*)"
+      "Bash(npm uninstall:*)",
+      "Bash(gh pr:*)",
+      "Bash(BUILD_TARGET=capacitor npm run build)",
+      "Bash(grep [)"
     ]
   }
 }

@@ -101,7 +101,9 @@ export default function AppSidebar({ onCreatePlan }: AppSidebarProps) {
     });
 
     setCreateModalOpen(false);
-    router.push(`/plans/${created.id}`);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const isCapacitor = typeof window !== "undefined" && !!(window as any).Capacitor?.isNativePlatform?.();
+    router.push(isCapacitor ? `/plans/static?id=${created.id}` : `/plans/${created.id}`);
   };
 
   const isActive = (href: string) => {
@@ -186,13 +188,13 @@ export default function AppSidebar({ onCreatePlan }: AppSidebarProps) {
           <nav className="mt-[calc(var(--space-24)+var(--space-14))] flex w-full flex-col gap-[var(--space-8)]">
             {items.map((item) => {
               const active = isActive(item.href);
-              const cls = `flex h-[24px] items-center text-app transition-opacity duration-150 hover:opacity-70 ${active && expanded ? "opacity-100" : ""}`;
+              const cls = `flex h-[24px] items-center transition-opacity duration-150 hover:opacity-70 ${active ? "text-[var(--primary)]" : "text-app opacity-60"}`;
               return (
                 <Link key={item.key} href={item.href} aria-label={item.label} className={cls}>
                   <div className="flex w-[102px] shrink-0 items-center justify-center">
                     <item.icon className="size-[24px]" />
                   </div>
-                  {expanded && <span className="-ml-[14px] whitespace-nowrap pr-[var(--space-4)] text-body font-[var(--fw-medium)]">{item.label}</span>}
+                  {expanded && <span className={`-ml-[14px] whitespace-nowrap pr-[var(--space-4)] text-body ${active ? "font-[var(--fw-semibold)]" : "font-[var(--fw-medium)]"}`}>{item.label}</span>}
                 </Link>
               );
             })}
