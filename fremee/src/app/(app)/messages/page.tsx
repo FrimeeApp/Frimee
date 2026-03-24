@@ -35,7 +35,16 @@ import AudioPlayer from "@/components/common/AudioPlayer";
 
 export default function MessagesPage() {
   const { user, loading } = useAuth();
-  const { startCall } = useCallContext();
+  const { startCall, joinCall, callState } = useCallContext();
+  const prevCallStatusRef = useRef(callState.status);
+  const reloadCallMessagesRef = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    const wasInCall = prevCallStatusRef.current !== "idle";
+    prevCallStatusRef.current = callState.status;
+    if (wasInCall && callState.status === "idle") {
+      setTimeout(() => { reloadCallMessagesRef.current?.(); }, 1000);
+    }
+  }, [callState.status]);
   const [chats, setChats] = useState<ChatListItem[]>([]);
   const [chatsLoading, setChatsLoading] = useState(true);
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
@@ -171,13 +180,30 @@ export default function MessagesPage() {
                 chat={selectedChat}
                 currentUserId={user.id}
                 onBack={() => { setSelectedChatId(null); void loadChats(); }}
-                onStartCall={(tipo) => void startCall(String(selectedChat.chat_id), tipo)}
+                onStartCall={(tipo) => {
+                  const nombre = resolveChatName(selectedChat, user.id);
+                  const foto = resolveChatAvatar(selectedChat, user.id) ?? undefined;
+                  const miembros = selectedChat.miembros.map((m) => ({ id: m.id, nombre: m.nombre, foto: m.profile_image ?? undefined }));
+                  void startCall(String(selectedChat.chat_id), tipo, nombre, foto, miembros);
+                }}
+                onJoinCall={(llamadaId, roomName, tipo) => {
+                  const nombre = resolveChatName(selectedChat, user.id);
+                  const foto = resolveChatAvatar(selectedChat, user.id) ?? undefined;
+                  const miembros = selectedChat.miembros.map((m) => ({ id: m.id, nombre: m.nombre, foto: m.profile_image ?? undefined }));
+                  void joinCall(llamadaId, roomName, String(selectedChat.chat_id), tipo, nombre, foto, miembros);
+                }}
                 onNewMessage={(msg) => {
                   const preview = msg.audio_url ? "🎤 Nota de voz" : msg.document_url ? `📄 ${msg.document_name ?? "Documento"}` : msg.image_url ? (msg.image_type?.startsWith("video/") ? "🎥 Vídeo" : "📷 Foto") : (() => { try { return JSON.parse(msg.texto)?.type === "poll" ? "📊 Encuesta" : msg.texto; } catch { return msg.texto; } })();
                   setChats((prev) => prev.map((c) =>
                     c.chat_id !== selectedChatId ? c : { ...c, last_message: preview, last_message_at: msg.created_at }
                   ));
                 }}
+                onFotoUpdated={(foto) => {
+                  setChats((prev) => prev.map((c) =>
+                    c.chat_id !== selectedChatId ? c : { ...c, foto }
+                  ));
+                }}
+                registerCallReload={(fn) => { reloadCallMessagesRef.current = fn; }}
               />
             ) : showFriendPicker ? (
               <>
@@ -385,16 +411,27 @@ function ChatConversation({
   onBack,
   onNewMessage,
   onStartCall,
+  onJoinCall,
+  onFotoUpdated,
+  registerCallReload,
 }: {
   chat: ChatListItem;
   currentUserId: string;
   onBack: () => void;
   onNewMessage: (msg: MensajeRow) => void;
   onStartCall?: (tipo: "audio" | "video") => void;
+  onJoinCall?: (llamadaId: number, roomName: string, tipo: "audio" | "video") => void;
+  onFotoUpdated?: (foto: string) => void;
+  registerCallReload?: (fn: () => void) => void;
 }) {
   type LocalMsg = MensajeRow & { _key?: number };
   const [messages, setMessages] = useState<LocalMsg[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const oldestIdRef = useRef<number | null>(null);
+  const topSentinelRef = useRef<HTMLDivElement | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const [sending, setSending] = useState(false);
   const [text, setText] = useState("");
   const [showInfo, setShowInfo] = useState(false);
@@ -407,6 +444,7 @@ function ChatConversation({
   const [starredIds, setStarredIds] = useState<Set<number>>(new Set());
   const [pinnedId, setPinnedId] = useState<number | null>(null);
   const [highlightedId, setHighlightedId] = useState<number | null>(null);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [forwardMsg, setForwardMsg] = useState<MensajeRow | null>(null);
   const [forwardChats, setForwardChats] = useState<ChatListItem[]>([]);
   const [forwardSending, setForwardSending] = useState<string | null>(null);
@@ -432,14 +470,54 @@ function ChatConversation({
   const name = resolveChatName(chat, currentUserId);
   const avatar = resolveChatAvatar(chat, currentUserId);
 
+  // Ongoing group call banner
+  type OngoingCall = { id: number; room_name: string; tipo: "audio" | "video" };
+  const [ongoingCall, setOngoingCall] = useState<OngoingCall | null>(null);
+  useEffect(() => {
+    if (chat.tipo !== "GRUPO") return;
+    const sb = supabaseRef.current;
+    // Initial query
+    void sb.from("llamadas")
+      .select("id, room_name, tipo")
+      .eq("chat_id", chat.chat_id)
+      .eq("estado", "active")
+      .maybeSingle()
+      .then(({ data }) => setOngoingCall(data as OngoingCall | null));
+    // Realtime updates
+    const ch = sb.channel(`llamadas-${chat.chat_id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "llamadas", filter: `chat_id=eq.${chat.chat_id}` }, (payload) => {
+        const row = payload.new as { id: number; room_name: string; tipo: "audio" | "video"; estado: string } | undefined;
+        if (row?.estado === "active") {
+          setOngoingCall({ id: row.id, room_name: row.room_name, tipo: row.tipo });
+        } else if (payload.eventType === "UPDATE" && (row?.estado === "ended" || row?.estado === "missed")) {
+          setOngoingCall(null);
+        }
+      })
+      .subscribe();
+    return () => { void sb.removeChannel(ch); };
+  }, [chat.chat_id, chat.tipo]);
+
+  // Register reload function for call records
+  useEffect(() => {
+    registerCallReload?.(() => {
+      void listMensajes({ chatId: chat.chat_id, limit: 50 }).then((fresh) => {
+        setMessages(fresh);
+        if (fresh.length > 0) oldestIdRef.current = fresh[0].id;
+        isNearBottomRef.current = true;
+      });
+    });
+  }, [chat.chat_id, registerCallReload]);
+
   useEffect(() => {
     void (async () => {
       try {
         const [data, reacciones] = await Promise.all([
-          listMensajes({ chatId: chat.chat_id }),
+          listMensajes({ chatId: chat.chat_id, limit: 50 }),
           getMyReacciones(chat.chat_id),
         ]);
         setMessages(data);
+        if (data.length > 0) oldestIdRef.current = data[0].id;
+        setHasMore(data.length === 50);
         const reaccionesMap: Record<number, string> = {};
         for (const r of reacciones) {
           reaccionesMap[r.mensaje_id] = r.emoji;
@@ -475,6 +553,20 @@ function ChatConversation({
         const { id } = payload as { id: number };
         setMessages((prev) => prev.filter((m) => m.id !== id));
       })
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "mensajes", filter: `chat_id=eq.${chat.chat_id}` },
+        (payload) => {
+          const msg = payload.new as MensajeRow;
+          if (!msg.tipo?.startsWith("call_")) return; // solo registros de llamada
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === msg.id)) return prev;
+            isNearBottomRef.current = true;
+            return [...prev, msg];
+          });
+          onNewMessageRef.current(msg);
+        }
+      )
       .subscribe();
     channelRef.current = channel;
     return () => {
@@ -483,9 +575,53 @@ function ChatConversation({
     };
   }, [chat.chat_id]);
 
+  const isNearBottomRef = useRef(true);
+  const observerReadyRef = useRef(false);
+
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    if (loading) return;
+    if (!observerReadyRef.current) {
+      // Primera carga: saltar al fondo instantáneamente
+      const container = scrollContainerRef.current;
+      if (container) container.scrollTop = container.scrollHeight;
+      // Activar observer después de un tick para que el scroll esté asentado
+      setTimeout(() => { observerReadyRef.current = true; }, 100);
+    } else if (isNearBottomRef.current) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages, loading]);
+
+  // Load more (older) messages when sentinel enters viewport
+  useEffect(() => {
+    const sentinel = topSentinelRef.current;
+    if (!sentinel) return;
+    const observer = new IntersectionObserver(async ([entry]) => {
+      if (!entry.isIntersecting || loadingMore || !hasMore || !observerReadyRef.current) return;
+      const oldestId = oldestIdRef.current;
+      if (!oldestId) return;
+      setLoadingMore(true);
+      isNearBottomRef.current = false;
+      try {
+        const older = await listMensajes({ chatId: chat.chat_id, limit: 50, cursorId: oldestId });
+        if (older.length === 0) { setHasMore(false); return; }
+        const container = scrollContainerRef.current;
+        const prevScrollHeight = container?.scrollHeight ?? 0;
+        setMessages((prev) => [...older, ...prev]);
+        oldestIdRef.current = older[0].id;
+        if (older.length < 50) setHasMore(false);
+        requestAnimationFrame(() => {
+          if (container) container.scrollTop = container.scrollHeight - prevScrollHeight;
+        });
+      } catch (e) {
+        console.error("[chat] Error cargando más mensajes:", e);
+      } finally {
+        setLoadingMore(false);
+      }
+    }, { root: scrollContainerRef.current, threshold: 0 });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chat.chat_id, loadingMore, hasMore, loading]);
 
   useEffect(() => {
     if (!forwardMsg) { setForwardChats([]); return; }
@@ -788,7 +924,7 @@ function ChatConversation({
   };
 
   if (showInfo) {
-    return <ChatInfoPanel chat={chat} currentUserId={currentUserId} onBack={() => setShowInfo(false)} onLeave={onBack} channelRef={channelRef} />;
+    return <ChatInfoPanel chat={chat} currentUserId={currentUserId} onBack={() => setShowInfo(false)} onLeave={onBack} channelRef={channelRef} onFotoUpdated={onFotoUpdated} />;
   }
 
   const pinnedMsg = pinnedId ? messages.find((m) => m.id === pinnedId) ?? null : null;
@@ -863,6 +999,13 @@ function ChatConversation({
         </div>
       )}
 
+      {/* Lightbox */}
+      {lightboxUrl && <Lightbox
+        url={lightboxUrl}
+        imageUrls={messages.filter((m) => m.image_url && !m.image_type?.startsWith("video/")).map((m) => m.image_url!)}
+        onClose={() => setLightboxUrl(null)}
+      />}
+
       {/* Forward modal */}
       {forwardMsg && (
         <div className="absolute inset-0 z-50 flex items-end justify-center bg-black/40 md:items-center" onClick={() => setForwardMsg(null)}>
@@ -921,6 +1064,26 @@ function ChatConversation({
         </button>
       </div>
 
+      {/* Ongoing group call banner */}
+      {ongoingCall && (
+        <div className="flex items-center gap-[var(--space-3)] border-b border-app bg-surface px-[var(--space-3)] py-[10px]">
+          <div className="flex size-8 items-center justify-center rounded-full bg-green-500/15 text-green-500">
+            <svg viewBox="0 0 24 24" fill="none" className="size-4" stroke="currentColor" strokeWidth="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.38 2 2 0 0 1 3.6 1.18h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.73a16 16 0 0 0 6 6l.95-.95a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 21.59 16z"/></svg>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-body-sm font-[var(--fw-semibold)] text-app">Llamada en curso</p>
+            <p className="text-[11px] text-muted">{ongoingCall.tipo === "video" ? "Videollamada" : "Llamada de voz"}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onJoinCall?.(ongoingCall.id, ongoingCall.room_name, ongoingCall.tipo)}
+            className="shrink-0 rounded-full bg-green-500 px-4 py-1.5 text-xs font-[var(--fw-semibold)] text-white transition-colors hover:bg-green-600"
+          >
+            Unirse
+          </button>
+        </div>
+      )}
+
       {/* Pinned message banner */}
       {pinnedMsg && (
         <button
@@ -935,13 +1098,20 @@ function ChatConversation({
       )}
 
       {/* Messages */}
-      <div className="scrollbar-thin min-h-0 flex-1 overflow-x-hidden overflow-y-auto py-[var(--space-4)] pr-[var(--space-2)]" onClick={closeOverlays}>
+      <div ref={scrollContainerRef} className="scrollbar-thin min-h-0 flex-1 overflow-x-hidden overflow-y-auto py-[var(--space-4)] pr-[var(--space-2)]" onClick={closeOverlays}>
         {loading ? (
           <div className="flex h-full items-center justify-center text-body-sm text-muted">Cargando...</div>
         ) : messages.length === 0 ? (
           <div className="flex h-full items-center justify-center text-body-sm text-muted">Sé el primero en escribir</div>
         ) : (
           <div className="space-y-[1px]">
+            {/* Sentinel para infinite scroll hacia arriba */}
+            <div ref={topSentinelRef} className="h-px" />
+            {loadingMore && (
+              <div className="flex justify-center py-2">
+                <div className="size-5 animate-spin rounded-full border-2 border-app border-t-transparent" />
+              </div>
+            )}
             {messages.map((msg, idx) => {
               const isMe = msg.sender_id === currentUserId;
               const prevMsg = messages[idx - 1];
@@ -993,7 +1163,7 @@ function ChatConversation({
                       ) : msg.document_url ? (
                         <DocumentBubble url={msg.document_url} name={msg.document_name ?? "Documento"} sending={msg.id < 0} isMe={isMe} />
                       ) : msg.image_url ? (
-                        <MediaBubble url={msg.image_url} type={msg.image_type ?? "image/jpeg"} sending={msg.id < 0} />
+                        <MediaBubble url={msg.image_url} type={msg.image_type ?? "image/jpeg"} sending={msg.id < 0} onOpenLightbox={!msg.image_type?.startsWith("video/") ? () => setLightboxUrl(msg.image_url!) : undefined} />
                       ) : isPollMessage(msg.texto) ? (
                         <PollBubble msg={msg} isMe={isMe} />
                       ) : (
@@ -1223,12 +1393,14 @@ function ChatInfoPanel({
   onBack,
   onLeave,
   channelRef,
+  onFotoUpdated,
 }: {
   chat: ChatListItem;
   currentUserId: string;
   onBack: () => void;
   onLeave: () => void;
   channelRef: React.RefObject<ReturnType<ReturnType<typeof createBrowserSupabaseClient>["channel"]> | null>;
+  onFotoUpdated?: (foto: string) => void;
 }) {
   const [confirmLeave, setConfirmLeave] = useState(false);
   const [leaving, setLeaving] = useState(false);
@@ -1291,6 +1463,7 @@ function ChatInfoPanel({
       const { downloadUrl } = await uploadPlanCoverFile({ file, userId: currentUserId });
       await updateChatFoto(chat.chat_id, downloadUrl);
       setLocalFoto(downloadUrl);
+      onFotoUpdated?.(downloadUrl);
     } catch (err) {
       console.error("[chat] Error actualizando foto:", err);
     } finally {
@@ -1919,17 +2092,27 @@ function CallBubble({ tipo, duracion }: { tipo: string; duracion: number }) {
   );
 }
 
-function MediaBubble({ url, type, sending }: { url: string; type: string; sending?: boolean }) {
+function MediaBubble({ url, type, sending, onOpenLightbox }: { url: string; type: string; sending?: boolean; onOpenLightbox?: () => void }) {
   const isVideo = type.startsWith("video/");
+  const [loaded, setLoaded] = useState(false);
   return (
     <div className="relative overflow-hidden rounded-[10px]" style={{ maxWidth: 220 }}>
       {isVideo ? (
         <video src={url} controls={!sending} playsInline className="w-full rounded-[10px]" style={{ maxHeight: 300 }} />
       ) : (
-        <a href={sending ? undefined : url} target="_blank" rel="noopener noreferrer">
+        <button type="button" onClick={!sending && onOpenLightbox ? onOpenLightbox : undefined} className="block w-full text-left cursor-pointer" tabIndex={sending ? -1 : 0}>
+          {!loaded && <div className="feed-skeleton-shimmer rounded-[10px]" style={{ width: 220, height: 165 }} />}
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={url} alt="Imagen" className="w-full rounded-[10px] object-cover" style={{ maxHeight: 300 }} referrerPolicy="no-referrer" />
-        </a>
+          <img
+            src={url}
+            alt="Imagen"
+            className="w-full rounded-[10px] object-cover"
+            style={{ maxHeight: 300, opacity: loaded ? 1 : 0, transition: "opacity 0.2s", ...(loaded ? {} : { position: "absolute", pointerEvents: "none" }) }}
+            referrerPolicy="no-referrer"
+            onLoad={() => setLoaded(true)}
+            onError={() => setLoaded(true)}
+          />
+        </button>
       )}
       {sending && (
         <div className="absolute inset-0 rounded-[10px] overflow-hidden pointer-events-none">
@@ -2210,5 +2393,68 @@ function VideoCallIcon({ className = "size-icon" }: { className?: string }) {
       <polygon points="23 7 16 12 23 17 23 7" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
       <rect x="1" y="5" width="15" height="14" rx="2" stroke="currentColor" strokeWidth="1.8" />
     </svg>
+  );
+}
+
+function Lightbox({ url, imageUrls, onClose }: { url: string; imageUrls: string[]; onClose: () => void }) {
+  const [current, setCurrent] = useState(url);
+  const thumbsRef = useRef<HTMLDivElement>(null);
+
+  const idx = imageUrls.indexOf(current);
+  const hasPrev = idx > 0;
+  const hasNext = idx < imageUrls.length - 1;
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      if (e.key === "ArrowLeft" && hasPrev) setCurrent(imageUrls[idx - 1]);
+      if (e.key === "ArrowRight" && hasNext) setCurrent(imageUrls[idx + 1]);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [idx, hasPrev, hasNext, imageUrls, onClose]);
+
+  useEffect(() => {
+    const el = thumbsRef.current?.children[idx] as HTMLElement | undefined;
+    el?.scrollIntoView({ inline: "center", behavior: "smooth" });
+  }, [idx]);
+
+  return (
+    <div className="fixed inset-0 z-[200] flex flex-col bg-black" onClick={onClose}>
+      {/* Header */}
+      <div className="flex shrink-0 items-center justify-end p-3" onClick={(e) => e.stopPropagation()}>
+        <button type="button" onClick={onClose} className="rounded-full p-2 text-white hover:bg-white/10">
+          <svg viewBox="0 0 24 24" fill="none" className="size-6"><path d="M18 6 6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+        </button>
+      </div>
+
+      {/* Main image */}
+      <div className="relative flex flex-1 items-center justify-center overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        {hasPrev && (
+          <button type="button" onClick={() => setCurrent(imageUrls[idx - 1])} className="absolute left-3 z-10 rounded-full bg-white/10 p-2 text-white hover:bg-white/20">
+            <svg viewBox="0 0 24 24" fill="none" className="size-6"><path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
+        )}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={current} alt="Imagen" className="max-h-full max-w-full object-contain" referrerPolicy="no-referrer" />
+        {hasNext && (
+          <button type="button" onClick={() => setCurrent(imageUrls[idx + 1])} className="absolute right-3 z-10 rounded-full bg-white/10 p-2 text-white hover:bg-white/20">
+            <svg viewBox="0 0 24 24" fill="none" className="size-6"><path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
+        )}
+      </div>
+
+      {/* Thumbnails */}
+      {imageUrls.length > 1 && (
+        <div ref={thumbsRef} className="flex shrink-0 gap-2 overflow-x-auto scrollbar-hide" style={{ padding: "12px calc(50% - 28px)" }} onClick={(e) => e.stopPropagation()}>
+          {imageUrls.map((u, i) => (
+            <button key={u} type="button" onClick={() => setCurrent(u)} className={`shrink-0 overflow-hidden rounded-[6px] border-2 transition-all ${u === current ? "border-white" : "border-transparent opacity-50 hover:opacity-80"}`} style={{ width: 56, height: 56 }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={u} alt={`Imagen ${i + 1}`} className="size-full object-cover" referrerPolicy="no-referrer" />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
