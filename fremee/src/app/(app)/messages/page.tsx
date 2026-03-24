@@ -480,13 +480,13 @@ function ChatConversation({
     setOngoingCall(null); // reset when chat changes
     if (chat.tipo !== "GRUPO") return;
     const sb = supabaseRef.current;
-    // Initial query — only recent calls (last 2h) to avoid stale records
-    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    // Initial query — only calls started in the last 15 min (realtime handles live updates)
+    const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
     void sb.from("llamadas")
       .select("id, room_name, tipo")
       .eq("chat_id", chat.chat_id)
       .in("estado", ["ringing", "active"])
-      .gte("iniciada_at", twoHoursAgo)
+      .gte("iniciada_at", fifteenMinutesAgo)
       .order("iniciada_at", { ascending: false })
       .limit(1)
       .maybeSingle()
