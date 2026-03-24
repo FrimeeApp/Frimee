@@ -1,5 +1,6 @@
 import {
   createCommentEndpoint,
+  deleteCommentEndpoint,
   getTopCommentForPlanEndpoint,
   listCommentsForPlanEndpoint,
   listPreviewCommentsForPlansEndpoint,
@@ -13,6 +14,10 @@ export { type CommentDto, type TopCommentDto } from "@/services/api/posts/commen
 
 export async function createComment(params: CreateCommentParams) {
   return createCommentEndpoint(params);
+}
+
+export async function deleteComment(params: { planId: number; commentId: string }) {
+  return deleteCommentEndpoint(params);
 }
 
 export async function toggleCommentLike(params: ToggleCommentLikeParams) {
