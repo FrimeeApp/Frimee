@@ -277,7 +277,7 @@ export default function ProfilePage() {
                     onChange={(e) => setEditName(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter") handleSaveName(); if (e.key === "Escape") setEditing(false); }}
                     autoFocus
-                    className="border-b border-app bg-transparent text-center text-[var(--font-h4)] font-[var(--fw-semibold)] leading-[var(--lh-h4)] outline-none"
+                    className="border-b border-app bg-transparent text-center [font-family:var(--font-display-face)] text-[24px] leading-[1.1] font-normal outline-none md:text-[28px]"
                   />
                   <button
                     type="button"
@@ -292,7 +292,7 @@ export default function ProfilePage() {
                 <button
                   type="button"
                   onClick={isOwnProfile ? handleEditClick : undefined}
-                  className={`mt-[var(--space-3)] text-[var(--font-h4)] font-[var(--fw-semibold)] leading-[var(--lh-h4)] ${isOwnProfile ? "cursor-pointer transition-opacity hover:opacity-70" : ""}`}
+                  className={`mt-[var(--space-3)] [font-family:var(--font-display-face)] text-[24px] leading-[1.1] font-normal md:text-[28px] ${isOwnProfile ? "cursor-pointer transition-opacity hover:opacity-70" : ""}`}
                   disabled={!isOwnProfile}
                 >
                   {profileData.nombre}
@@ -365,7 +365,7 @@ export default function ProfilePage() {
                 <div className="columns-2 gap-[var(--space-3)] sm:columns-3">
                   {plansWithCover.map((plan) => (
                     <div key={plan.id} className="mb-[var(--space-3)] break-inside-avoid">
-                      <div className="group relative overflow-hidden rounded-[12px]">
+                      <div className="group relative overflow-hidden rounded-card">
                         <img
                           src={plan.coverImage!}
                           alt={plan.title}
