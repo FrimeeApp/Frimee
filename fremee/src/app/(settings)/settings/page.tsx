@@ -467,7 +467,7 @@ export default function SettingsPage() {
                     value={form.nombre}
                     disabled={disableEditing}
                     onChange={(e) => setForm((prev) => ({ ...prev, nombre: e.target.value }))}
-                    className="min-w-[220px] border-b border-transparent bg-transparent text-[var(--font-h3)] font-[var(--fw-semibold)] leading-[var(--lh-h3)] outline-none transition-colors focus:border-app disabled:opacity-[var(--disabled-opacity)]"
+                    className="min-w-[220px] border-b border-transparent bg-transparent [font-family:var(--font-display-face)] text-[var(--font-h3)] font-normal leading-[var(--lh-h3)] outline-none transition-colors focus:border-app disabled:opacity-[var(--disabled-opacity)]"
                   />
                   <PencilIcon className="text-tertiary" />
                 </div>
@@ -723,7 +723,7 @@ function SettingsCard({
 }) {
   return (
     <section className="rounded-modal border border-strong bg-surface p-[var(--space-4)] shadow-elev-1 lg:p-[var(--space-5)]">
-      <h2 className="text-[var(--font-h5)] font-[var(--fw-semibold)] leading-[var(--lh-h5)]">{title}</h2>
+      <h2 className="[font-family:var(--font-display-face)] text-[var(--font-h5)] font-normal leading-[var(--lh-h5)]">{title}</h2>
       <p className="mt-[var(--space-1)] text-body-sm text-muted">{subtitle}</p>
       <div className="mt-[var(--space-4)] space-y-[var(--space-2)]">{children}</div>
     </section>

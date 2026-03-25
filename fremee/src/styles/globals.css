@@ -3,11 +3,15 @@
 @theme inline {
   --color-background: var(--bg);
   --color-foreground: var(--text-primary);
-  --font-sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-sans: var(--font-inter), "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-display: var(--font-display-face), "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
   --font-mono: "Courier New", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 :root {
+  --font-sans: var(--font-inter), "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-display: var(--font-display-face), "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+
   --bg: #ffffff;
   --surface: #ffffff;
   --surface-2: #ededef;
@@ -51,7 +55,7 @@
   --radius-card: 8px;
   --radius-input: 8px;
   --radius-chip: 9999px;
-  --radius-modal: 16px;
+  --radius-modal: 8px;
   --radius-avatar: 9999px;
 
   --space-0: 0px;
@@ -367,52 +371,65 @@
 
   h1,
   .h1 {
+    font-family: var(--font-display-face), "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
     font-size: var(--font-h1);
     line-height: var(--lh-h1);
-    font-weight: var(--fw-bold);
+    font-weight: 400;
     color: var(--text-primary);
-    letter-spacing: -0.02em;
+    letter-spacing: -0.01em;
   }
 
   h2,
   .h2 {
+    font-family: var(--font-display-face), "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
     font-size: var(--font-h2);
     line-height: var(--lh-h2);
-    font-weight: var(--fw-bold);
+    font-weight: 400;
     color: var(--text-primary);
-    letter-spacing: -0.015em;
+    letter-spacing: -0.008em;
   }
 
   h3,
   .h3 {
+    font-family: var(--font-display-face), "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
     font-size: var(--font-h3);
     line-height: var(--lh-h3);
-    font-weight: var(--fw-semibold);
+    font-weight: 400;
     color: var(--text-primary);
+    letter-spacing: -0.004em;
   }
 
   h4,
   .h4 {
+    font-family: var(--font-display-face), "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
     font-size: var(--font-h4);
     line-height: var(--lh-h4);
-    font-weight: var(--fw-semibold);
+    font-weight: 400;
     color: var(--text-primary);
+    letter-spacing: -0.002em;
   }
 
   h5,
   .h5 {
+    font-family: var(--font-display-face), "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
     font-size: var(--font-h5);
     line-height: var(--lh-h5);
-    font-weight: var(--fw-semibold);
+    font-weight: 400;
     color: var(--text-primary);
   }
 
   h6,
   .h6 {
+    font-family: var(--font-display-face), "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
     font-size: var(--font-h6);
     line-height: var(--lh-h6);
-    font-weight: var(--fw-semibold);
+    font-weight: 400;
     color: var(--text-primary);
+  }
+
+  [class*="text-[var(--font-h"],
+  [class*="text-[clamp("] {
+    font-family: var(--font-display-face), "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif !important;
   }
 
   p {
@@ -723,11 +740,11 @@
     }
 
     .feed-image-container {
-      border-radius: 14px;
+      border-radius: var(--radius-card);
     }
 
     .feed-image-responsive {
-      border-radius: 14px;
+      border-radius: var(--radius-card);
       border: 1px solid var(--border);
     }
   }
@@ -752,11 +769,41 @@
   from { opacity: 1; transform: scale(1) translateY(0); }
   to   { opacity: 0; transform: scale(0.96) translateY(-4px); }
 }
+
+@keyframes comments-overlay-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes comments-panel-in-mobile {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes comments-panel-in-desktop {
+  from { opacity: 0; transform: translateY(10px) scale(0.992); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
 .popover-content[data-state="open"] {
   animation: popover-in 150ms ease-out;
 }
 .popover-content[data-state="closed"] {
   animation: popover-out 100ms ease-in;
+}
+
+.comments-modal-overlay {
+  animation: comments-overlay-in 180ms var(--ease-standard);
+}
+
+.comments-modal-panel {
+  animation: comments-panel-in-mobile 220ms var(--ease-standard);
+}
+
+@media (min-width: 768px) {
+  .comments-modal-panel {
+    animation: comments-panel-in-desktop 220ms var(--ease-standard);
+  }
 }
 
 /* ── Calendar (react-day-picker) ── */
@@ -817,7 +864,7 @@
   justify-content: center;
   width: 28px;
   height: 28px;
-  border-radius: var(--radius-chip);
+  border-radius: var(--radius-card);
   color: var(--text-secondary);
   transition: background 150ms, color 150ms;
 }
@@ -857,7 +904,7 @@
 .rdp-day-btn {
   width: 32px;
   height: 32px;
-  border-radius: var(--radius-chip);
+  border-radius: var(--radius-card);
   display: flex;
   align-items: center;
   justify-content: center;
