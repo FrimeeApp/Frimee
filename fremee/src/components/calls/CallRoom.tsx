@@ -23,24 +23,26 @@ type Props = {
   onEnd: () => void;
   onEndForAll?: () => void;
   onParticipantConnected?: () => void;
+  onMinimize?: () => void;
 };
 
 type ParticipantTile = {
+  id: string;            // unique: identity or `${identity}:screen`
   identity: string;
   isLocal: boolean;
+  isScreenShare: boolean;
   audioMuted: boolean;
   videoMuted: boolean;
 };
 
-export default function CallRoom({ token, livekitUrl, tipo, miembros, participanteNombre, isActive, isInitiator, isGroup, onEnd, onEndForAll, onParticipantConnected }: Props) {
+export default function CallRoom({ token, livekitUrl, tipo, miembros, participanteNombre, isActive, isInitiator, isGroup, onEnd, onEndForAll, onParticipantConnected, onMinimize }: Props) {
   const roomRef = useRef<Room | null>(null);
   const [connected, setConnected] = useState(false);
   const [tiles, setTiles] = useState<ParticipantTile[]>([]);
-  const [focusedIdentity, setFocusedIdentity] = useState<string | null>(null);
+  const [focusedId, setFocusedId] = useState<string | null>(null);
   const [screenSharing, setScreenSharing] = useState(false);
-  const [cameraOn, setCameraOn] = useState(false); // camera for audio calls
-  const [hasAnyVideo, setHasAnyVideo] = useState(tipo === "video"); // show video grid
-  const [remoteScreenActive, setRemoteScreenActive] = useState(false);
+  const [, setCameraOn] = useState(false);
+  const [hasAnyVideo, setHasAnyVideo] = useState(tipo === "video");
   const [duration, setDuration] = useState(0);
 
   const onParticipantConnectedRef = useRef(onParticipantConnected);
@@ -50,72 +52,75 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
   const onEndForAllRef = useRef(onEndForAll);
   useEffect(() => { onEndForAllRef.current = onEndForAll; });
 
-  // Stored tracks so we can re-attach when elements remount (grid ↔ focus toggle)
+  // trackMap keys:
+  //   "__local__"        → local camera track
+  //   "__local__:screen" → local screen share track
+  //   "{identity}"       → remote camera track
+  //   "{identity}:screen"→ remote screen share track
   const trackMap = useRef<Map<string, Track>>(new Map());
-  const remoteScreenRef = useRef<HTMLVideoElement>(null);
-  const localVideoRef = useRef<HTMLVideoElement>(null);
 
-  const attachVideo = useCallback((identity: string, el: HTMLVideoElement | null, isLocal: boolean) => {
+  const addTile = useCallback((id: string, identity: string, isLocal: boolean, isScreenShare: boolean) => {
+    setTiles((prev) => prev.some((t) => t.id === id) ? prev : [
+      ...prev,
+      { id, identity, isLocal, isScreenShare, audioMuted: false, videoMuted: isScreenShare ? false : tipo !== "video" },
+    ]);
+  }, [tipo]);
+
+  const removeTile = useCallback((id: string) => {
+    setTiles((prev) => prev.filter((t) => t.id !== id));
+    setFocusedId((prev) => prev === id ? null : prev);
+  }, []);
+
+  const attachTrack = useCallback((trackKey: string, el: HTMLVideoElement | null) => {
     if (!el) return;
-    if (isLocal) {
-      localVideoRef.current = el;
-      const t = trackMap.current.get("__local__");
-      if (t) t.attach(el);
-    } else {
-      const t = trackMap.current.get(identity);
-      if (t) t.attach(el);
-    }
+    const t = trackMap.current.get(trackKey);
+    if (t) t.attach(el);
   }, []);
 
   useEffect(() => {
     if (!token || !livekitUrl) return;
-
     let cancelled = false;
     const room = new Room();
     roomRef.current = room;
 
-    const addTile = (identity: string, isLocal: boolean) => {
-      setTiles((prev) => prev.some((t) => t.identity === identity) ? prev : [...prev, { identity, isLocal, audioMuted: false, videoMuted: tipo !== "video" }]);
-    };
-    const removeTile = (identity: string) => {
-      setTiles((prev) => prev.filter((t) => t.identity !== identity));
-      setFocusedIdentity((prev) => prev === identity ? null : prev);
-    };
-
     room.on(RoomEvent.TrackSubscribed, (track, _pub, participant) => {
       if (track.kind === Track.Kind.Video) {
         if (track.source === Track.Source.ScreenShare) {
-          if (remoteScreenRef.current) track.attach(remoteScreenRef.current);
-          setRemoteScreenActive(true);
+          const tileId = `${participant.identity}:screen`;
+          trackMap.current.set(tileId, track);
+          addTile(tileId, participant.identity, false, true);
+          // attach if element already mounted
+          const el = document.querySelector<HTMLVideoElement>(`video[data-tile="${tileId}"]`);
+          if (el) track.attach(el);
         } else {
           trackMap.current.set(participant.identity, track);
           setHasAnyVideo(true);
-          setTiles((prev) => prev.map((t) => t.identity === participant.identity ? { ...t, videoMuted: false } : t));
-          const existingEl = document.querySelector<HTMLVideoElement>(`video[data-identity="${participant.identity}"]`);
-          if (existingEl) track.attach(existingEl);
+          setTiles((prev) => prev.map((t) => t.id === participant.identity ? { ...t, videoMuted: false } : t));
+          const el = document.querySelector<HTMLVideoElement>(`video[data-tile="${participant.identity}"]`);
+          if (el) track.attach(el);
         }
       } else if (track.kind === Track.Kind.Audio) {
         track.attach();
       }
     });
 
-    room.on(RoomEvent.TrackUnsubscribed, (track) => {
+    room.on(RoomEvent.TrackUnsubscribed, (track, _pub, participant) => {
       if (track.kind === Track.Kind.Video && track.source === Track.Source.ScreenShare) {
-        setRemoteScreenActive(false);
+        removeTile(`${participant.identity}:screen`);
       }
     });
 
     room.on(RoomEvent.TrackMuted, (_pub, participant) => {
-      setTiles((prev) => prev.map((t) => t.identity === participant.identity ? { ...t, audioMuted: true } : t));
+      setTiles((prev) => prev.map((t) => t.identity === participant.identity && !t.isScreenShare ? { ...t, audioMuted: true } : t));
     });
     room.on(RoomEvent.TrackUnmuted, (_pub, participant) => {
-      setTiles((prev) => prev.map((t) => t.identity === participant.identity ? { ...t, audioMuted: false } : t));
+      setTiles((prev) => prev.map((t) => t.identity === participant.identity && !t.isScreenShare ? { ...t, audioMuted: false } : t));
     });
 
     room.on(RoomEvent.Connected, () => {
       if (!cancelled) {
         setConnected(true);
-        addTile(room.localParticipant.identity, true);
+        addTile(room.localParticipant.identity, room.localParticipant.identity, true, false);
       }
     });
     room.on(RoomEvent.Disconnected, () => {
@@ -123,20 +128,17 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
     });
     room.on(RoomEvent.ParticipantConnected, (participant: RemoteParticipant) => {
       if (!cancelled) {
-        addTile(participant.identity, false);
+        addTile(participant.identity, participant.identity, false, false);
         onParticipantConnectedRef.current?.();
       }
     });
     room.on(RoomEvent.ParticipantDisconnected, (participant: RemoteParticipant) => {
       if (!cancelled) {
         removeTile(participant.identity);
+        removeTile(`${participant.identity}:screen`);
         if (room.remoteParticipants.size === 0) {
-          if (isGroup) {
-            // Last person left — end for all so the banner clears
-            onEndForAllRef.current?.();
-          } else {
-            onEndRef.current();
-          }
+          if (isGroup) onEndForAllRef.current?.();
+          else onEndRef.current();
         }
       }
     });
@@ -144,7 +146,17 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
     const connect = async () => {
       await room.connect(livekitUrl, token);
       if (cancelled) { room.disconnect(); return; }
-      room.remoteParticipants.forEach((p) => addTile(p.identity, false));
+      room.remoteParticipants.forEach((p) => {
+        addTile(p.identity, p.identity, false, false);
+        // attach any already-published screen share
+        p.getTrackPublications().forEach((pub) => {
+          if (pub.track && pub.source === Track.Source.ScreenShare) {
+            const tileId = `${p.identity}:screen`;
+            trackMap.current.set(tileId, pub.track);
+            addTile(tileId, p.identity, false, true);
+          }
+        });
+      });
 
       try {
         const audioTrack = await createLocalAudioTrack();
@@ -156,7 +168,8 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
           if (cancelled) { room.disconnect(); return; }
           await room.localParticipant.publishTrack(videoTrack);
           trackMap.current.set("__local__", videoTrack);
-          if (localVideoRef.current) videoTrack.attach(localVideoRef.current);
+          const el = document.querySelector<HTMLVideoElement>(`video[data-tile="${room.localParticipant.identity}"]`);
+          if (el) videoTrack.attach(el);
         }
       } catch (err) {
         if (!cancelled) console.error("[CallRoom] publish error", err);
@@ -165,6 +178,7 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
 
     connect().catch(console.error);
     return () => { cancelled = true; room.disconnect(); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, livekitUrl, tipo]);
 
   useEffect(() => {
@@ -178,7 +192,7 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
     if (!local) return;
     const muted = local.isMicrophoneEnabled;
     await local.setMicrophoneEnabled(!muted);
-    setTiles((prev) => prev.map((t) => t.isLocal ? { ...t, audioMuted: muted } : t));
+    setTiles((prev) => prev.map((t) => t.isLocal && !t.isScreenShare ? { ...t, audioMuted: muted } : t));
   }, []);
 
   const toggleVideo = useCallback(async () => {
@@ -188,25 +202,44 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
     try {
       await local.setCameraEnabled(!enabled);
       if (!enabled) {
-        // Camera just turned on — attach local video track
         const pub = local.getTrackPublication(Track.Source.Camera);
-        if (pub?.track && localVideoRef.current) pub.track.attach(localVideoRef.current);
-        trackMap.current.set("__local__", pub?.track as Track);
+        if (pub?.track) {
+          trackMap.current.set("__local__", pub.track);
+          const el = document.querySelector<HTMLVideoElement>(`video[data-tile="${local.identity}"]`);
+          if (el) pub.track.attach(el);
+        }
         setHasAnyVideo(true);
         setCameraOn(true);
+        setTiles((prev) => prev.map((t) => t.isLocal && !t.isScreenShare ? { ...t, videoMuted: false } : t));
       } else {
         setCameraOn(false);
+        setTiles((prev) => prev.map((t) => t.isLocal && !t.isScreenShare ? { ...t, videoMuted: true } : t));
       }
     } catch (err) { console.error("[CallRoom] camera toggle error", err); }
-    setTiles((prev) => prev.map((t) => t.isLocal ? { ...t, videoMuted: enabled } : t));
   }, []);
 
   const toggleScreenShare = useCallback(async () => {
     const local = roomRef.current?.localParticipant;
     if (!local) return;
-    await local.setScreenShareEnabled(!screenSharing);
-    setScreenSharing(!screenSharing);
-  }, [screenSharing]);
+    try {
+      if (!screenSharing) {
+        await local.setScreenShareEnabled(true);
+        const pub = local.getTrackPublication(Track.Source.ScreenShare);
+        if (pub?.track) {
+          const tileId = `${local.identity}:screen`;
+          trackMap.current.set(tileId, pub.track);
+          addTile(tileId, local.identity, true, true);
+          const el = document.querySelector<HTMLVideoElement>(`video[data-tile="${tileId}"]`);
+          if (el) pub.track.attach(el);
+        }
+        setScreenSharing(true);
+      } else {
+        await local.setScreenShareEnabled(false);
+        removeTile(`${local.identity}:screen`);
+        setScreenSharing(false);
+      }
+    } catch (err) { console.error("[CallRoom] screen share error", err); }
+  }, [screenSharing, addTile, removeTile]);
 
   const handleEnd = useCallback(() => { roomRef.current?.disconnect(); }, []);
 
@@ -217,60 +250,64 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
   };
 
   const getMiembro = (identity: string) => miembros.find((m) => m.id === identity);
-  const localMuted = tiles.find((t) => t.isLocal)?.audioMuted ?? false;
-  const localVideoOff = tiles.find((t) => t.isLocal)?.videoMuted ?? true;
-  const showVideo = hasAnyVideo; // show video grid whenever any participant has video
+  const localTile = tiles.find((t) => t.isLocal && !t.isScreenShare);
+  const localMuted = localTile?.audioMuted ?? false;
+  const localVideoOff = localTile?.videoMuted ?? true;
+  const showVideo = hasAnyVideo;
 
   const renderTile = (tile: ParticipantTile, fullscreen = false) => {
     const miembro = getMiembro(tile.identity);
-    const nombre = tile.isLocal ? "Tú" : (miembro?.nombre ?? tile.identity);
+    const baseName = tile.isLocal ? "Tú" : (miembro?.nombre ?? tile.identity);
+    const nombre = tile.isScreenShare ? `Pantalla de ${baseName}` : baseName;
     const foto = tile.isLocal ? undefined : miembro?.foto;
+    const trackKey = tile.isScreenShare
+      ? (tile.isLocal ? `${tile.identity}:screen` : `${tile.identity}:screen`)
+      : (tile.isLocal ? "__local__" : tile.identity);
 
     return (
       <div
-        key={tile.identity}
-        onClick={() => setFocusedIdentity(fullscreen ? null : tile.identity)}
-        className={`relative overflow-hidden rounded-2xl bg-[#2a2a2a] flex items-center justify-center cursor-pointer ${fullscreen ? "w-full h-full" : "aspect-square"}`}
+        key={tile.id}
+        onClick={() => setFocusedId(fullscreen ? null : tile.id)}
+        className={`relative overflow-hidden rounded-2xl bg-black flex items-center justify-center cursor-pointer ${fullscreen ? "w-full h-full" : tile.isScreenShare ? "col-span-2 aspect-video" : "aspect-square"}`}
       >
-        {showVideo && (
+        {/* Video element — always rendered for screen share, conditional for camera */}
+        {(tile.isScreenShare || showVideo) && (
           <video
-            data-identity={tile.isLocal ? "__local__" : tile.identity}
+            data-tile={tile.id}
             autoPlay
             playsInline
             muted={tile.isLocal}
-            ref={(el) => {
-              if (el) {
-                if (tile.isLocal) {
-                  localVideoRef.current = el;
-                  const t = trackMap.current.get("__local__");
-                  if (t) t.attach(el);
-                } else {
-                  const t = trackMap.current.get(tile.identity);
-                  if (t) t.attach(el);
-                }
-              }
-            }}
-            className={`absolute inset-0 h-full w-full object-cover ${tile.videoMuted ? "hidden" : ""}`}
+            ref={(el) => { if (el) attachTrack(trackKey, el); }}
+            className={`absolute inset-0 h-full w-full ${tile.isScreenShare ? "object-contain bg-black" : "object-cover"} ${!tile.isScreenShare && tile.videoMuted ? "hidden" : ""}`}
           />
         )}
 
-        {(!showVideo || tile.videoMuted) && (
+        {/* Avatar — only for non-screen-share tiles when video is off */}
+        {!tile.isScreenShare && (!showVideo || tile.videoMuted) && (
           <div className="flex flex-col items-center gap-2 z-10">
             <div className="h-14 w-14 overflow-hidden rounded-full bg-white/10 border border-white/10">
               {foto ? (
                 <img src={foto} className="h-full w-full object-cover" />
               ) : (
                 <div className="flex h-full w-full items-center justify-center text-xl font-bold">
-                  {nombre[0]?.toUpperCase()}
+                  {baseName[0]?.toUpperCase()}
                 </div>
               )}
             </div>
           </div>
         )}
 
+        {/* Screen share icon overlay (top-left badge) */}
+        {tile.isScreenShare && (
+          <div className="absolute top-2 left-2 z-10 flex items-center gap-1 rounded-full bg-black/60 px-2 py-1">
+            <ScreenShareIcon small />
+          </div>
+        )}
+
+        {/* Bottom bar: name + mic status */}
         <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-2 py-1.5 bg-gradient-to-t from-black/70 to-transparent">
           <span className="text-xs font-medium truncate drop-shadow">{nombre}</span>
-          {tile.audioMuted && (
+          {!tile.isScreenShare && tile.audioMuted && (
             <div className="flex h-5 w-5 items-center justify-center rounded-full bg-black/60">
               <MicOffSmallIcon />
             </div>
@@ -280,17 +317,10 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
     );
   };
 
-  const focusedTile = focusedIdentity ? tiles.find((t) => t.identity === focusedIdentity) : null;
+  const focusedTile = focusedId ? tiles.find((t) => t.id === focusedId) : null;
 
   return (
     <div className="fixed inset-0 z-[100] flex flex-col bg-[#1a1a1a] text-white">
-      {/* Remote screen share overlay */}
-      {remoteScreenActive && (
-        <div className="absolute inset-0 z-10 bg-black">
-          <video ref={remoteScreenRef} autoPlay playsInline className="h-full w-full object-contain" />
-        </div>
-      )}
-
       {/* Header */}
       <div className="shrink-0 flex items-center justify-between px-4 pt-4 pb-2">
         <div className="flex flex-col">
@@ -299,23 +329,34 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
             {isActive ? formatDuration(duration) : connected ? "Llamando..." : "Conectando..."}
           </span>
         </div>
-        {focusedIdentity && (
-          <button onClick={() => setFocusedIdentity(null)} className="text-xs text-white/60 flex items-center gap-1">
-            <svg viewBox="0 0 24 24" fill="none" className="size-4" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6"/></svg>
-            Todos
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {focusedId && (
+            <button onClick={() => setFocusedId(null)} className="text-xs text-white/60 flex items-center gap-1">
+              <svg viewBox="0 0 24 24" fill="none" className="size-4" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6"/></svg>
+              Todos
+            </button>
+          )}
+          {onMinimize && (
+            <button
+              onClick={onMinimize}
+              className="flex size-7 items-center justify-center rounded-full bg-white/10 text-white/70 hover:bg-white/20 transition-colors"
+              aria-label="Minimizar"
+            >
+              <svg viewBox="0 0 24 24" fill="none" className="size-4" stroke="currentColor" strokeWidth="2">
+                <path d="M5 12h14" />
+              </svg>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Main area */}
       <div className="flex-1 overflow-hidden px-2 pb-2">
         {focusedTile ? (
-          // Focused / zoomed tile
           <div className="h-full w-full">
             {renderTile(focusedTile, true)}
           </div>
         ) : (
-          // 2-col square grid
           <div className="h-full overflow-y-auto">
             <div className="grid grid-cols-2 gap-2">
               {tiles.map((tile) => renderTile(tile, false))}
@@ -339,7 +380,7 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
         <button onClick={() => void toggleMute()} className={`flex h-13 w-13 items-center justify-center rounded-full transition-all ${localMuted ? "bg-white text-black" : "bg-white/15 text-white"}`}>
           {localMuted ? <MicOffIcon /> : <MicIcon />}
         </button>
-        <button onClick={() => void toggleVideo()} className={`flex h-13 w-13 items-center justify-center rounded-full transition-all ${localVideoOff ? "bg-white/15 text-white" : "bg-white text-black"}`}>
+        <button onClick={() => void toggleVideo()} className={`flex h-13 w-13 items-center justify-center rounded-full transition-all ${!localVideoOff ? "bg-white text-black" : "bg-white/15 text-white"}`}>
           {localVideoOff ? <VideoOffIcon /> : <VideoIcon />}
         </button>
         <button onClick={() => void toggleScreenShare()} className={`flex h-13 w-13 items-center justify-center rounded-full transition-all ${screenSharing ? "bg-white text-black" : "bg-white/15 text-white"}`}>
@@ -371,8 +412,8 @@ function VideoOffIcon() {
 function PhoneOffIcon() {
   return <svg viewBox="0 0 24 24" fill="none" className="size-6" stroke="currentColor" strokeWidth="1.8"><path d="M10.68 13.31a16 16 0 0 0 3.01 2.99l1.96-1.96a1 1 0 0 1 1.09-.22 11.3 11.3 0 0 0 3.57.73 1 1 0 0 1 .93 1v3.57a1 1 0 0 1-.9 1A17 17 0 0 1 3 5.9a1 1 0 0 1 1-.9h3.57a1 1 0 0 1 1 .92 11.3 11.3 0 0 0 .73 3.57 1 1 0 0 1-.22 1.09l-1.96 1.96" /><line x1="2" y1="2" x2="22" y2="22" /></svg>;
 }
-function ScreenShareIcon() {
-  return <svg viewBox="0 0 24 24" fill="none" className="size-6" stroke="currentColor" strokeWidth="1.8"><rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8M12 17v4" /><path d="M10 9l2-2 2 2M12 7v6" /></svg>;
+function ScreenShareIcon({ small }: { small?: boolean }) {
+  return <svg viewBox="0 0 24 24" fill="none" className={small ? "size-3" : "size-6"} stroke="currentColor" strokeWidth="1.8"><rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8M12 17v4" /><path d="M10 9l2-2 2 2M12 7v6" /></svg>;
 }
 function ScreenShareOffIcon() {
   return <svg viewBox="0 0 24 24" fill="none" className="size-6" stroke="currentColor" strokeWidth="1.8"><path d="M2 3l20 18M13.5 17H8m4-4.5V17m6-3V5a2 2 0 0 0-2-2H4.5" /><path d="M22 17a2 2 0 0 1-2 2H6" /><path d="M8 21h8" /></svg>;

@@ -7,6 +7,7 @@ import { TIPOS_TRANSPORTE } from "@/services/api/endpoints/subplanes.endpoint";
 type Props = {
   subplanes: SubplanRow[];
   selectedDate: string; // "YYYY-MM-DD"
+  ubicacionNombre?: string; // plan destination used as fallback map center
   onViajeComputed?: (subplanId: number, duracion: string, distancia: string, polyline: string) => void;
 };
 
@@ -57,24 +58,21 @@ function decodePath(encoded: string): { lat: number; lng: number }[] {
 }
 
 const darkMapStyles = [
-  { elementType: "geometry", stylers: [{ color: "#1a1a2e" }] },
-  { elementType: "labels.text.stroke", stylers: [{ color: "#1a1a2e" }] },
-  { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
-  { featureType: "road", elementType: "geometry", stylers: [{ color: "#2c2c3e" }] },
-  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#212121" }] },
-  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#3c3c5e" }] },
-  { featureType: "water", elementType: "geometry", stylers: [{ color: "#0e1626" }] },
-  { featureType: "poi", elementType: "geometry", stylers: [{ color: "#1e1e30" }] },
-  { featureType: "transit", elementType: "geometry", stylers: [{ color: "#2f3948" }] },
-  { featureType: "administrative", elementType: "geometry.stroke", stylers: [{ color: "#3c3c5e" }] },
+  { featureType: "all", elementType: "labels.text", stylers: [{ color: "#878787" }] },
+  { featureType: "all", elementType: "labels.text.stroke", stylers: [{ visibility: "off" }] },
+  { featureType: "landscape", elementType: "all", stylers: [{ color: "#f9f5ed" }] },
+  { featureType: "road.highway", elementType: "all", stylers: [{ color: "#f5f5f5" }] },
+  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#c9c9c9" }] },
+  { featureType: "water", elementType: "all", stylers: [{ color: "#aee0f4" }] },
 ];
 
 const TIPO_ICON: Record<string, string> = {
   VUELO: "✈️", BARCO: "🚢", TREN: "🚆", BUS: "🚌", COCHE: "🚗",
 };
 
-export default function DayRouteMap({ subplanes, selectedDate, onViajeComputed }: Props) {
+export default function DayRouteMap({ subplanes, selectedDate, ubicacionNombre, onViajeComputed }: Props) {
   const mapRef = useRef<HTMLDivElement>(null);
+  const fallbackMapRef = useRef<HTMLDivElement>(null);
   const renderGenRef = useRef(0); // increments on each render attempt; stale renders abort
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -102,6 +100,44 @@ export default function DayRouteMap({ subplanes, selectedDate, onViajeComputed }
       });
     }
   });
+
+  // Fallback map: show plan destination when < 2 points
+  const renderFallbackMap = useCallback(async () => {
+    if (!ubicacionNombre || !fallbackMapRef.current) return;
+    const gen = ++renderGenRef.current;
+    setLoading(true);
+    setError(null);
+    try {
+      await loadGoogleMaps();
+      if (gen !== renderGenRef.current || !fallbackMapRef.current) return;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const google = (window as any).google;
+      fallbackMapRef.current.innerHTML = "";
+      const map = new google.maps.Map(fallbackMapRef.current, {
+        mapTypeId: "roadmap", disableDefaultUI: true, zoomControl: true, styles: darkMapStyles,
+        center: { lat: 0, lng: 0 }, zoom: 2,
+      });
+      const coord = await geocode(ubicacionNombre);
+      if (gen !== renderGenRef.current || !fallbackMapRef.current) return;
+      if (coord) {
+        map.setCenter(coord);
+        map.setZoom(points.length > 0 ? 11 : 5);
+        // Show subplane markers if any (< 2 but could be 1)
+        points.forEach((p, i) => {
+          const c = p.coords;
+          if (!c) return;
+          new google.maps.Marker({
+            position: c, map,
+            label: { text: String(i + 1), color: "#000", fontWeight: "bold", fontSize: "11px" },
+            icon: { path: google.maps.SymbolPath.CIRCLE, fillColor: "#00C9A7", fillOpacity: 1, strokeColor: "#fff", strokeWeight: 2, scale: 12 },
+            title: p.label,
+          });
+        });
+      }
+    } catch { /* ignore */ }
+    finally { if (gen === renderGenRef.current) setLoading(false); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDate, subplanes, ubicacionNombre]);
 
   const renderMap = useCallback(async () => {
     if (points.length < 2 || !mapRef.current) return;
@@ -244,12 +280,27 @@ export default function DayRouteMap({ subplanes, selectedDate, onViajeComputed }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate, subplanes]);
 
-  useEffect(() => { renderMap(); }, [renderMap]);
+  useEffect(() => {
+    if (points.length < 2) renderFallbackMap();
+    else renderMap();
+  }, [renderMap, renderFallbackMap, points.length]);
 
   if (points.length < 2) {
     return (
-      <div className="flex h-[220px] items-center justify-center rounded-card border border-app bg-surface-inset text-body-sm text-muted">
-        Añade al menos 2 actividades con ubicación para ver la ruta
+      <div className="overflow-hidden rounded-card border border-app">
+        <div className="relative h-[240px] w-full bg-surface-inset">
+          <div ref={fallbackMapRef} className="absolute inset-0" />
+          {loading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-surface-inset text-body-sm text-muted">
+              Cargando mapa...
+            </div>
+          )}
+          {!loading && !ubicacionNombre && (
+            <div className="absolute inset-0 flex items-center justify-center px-6 text-center text-body-sm text-muted">
+              Añade al menos 2 actividades con ubicación para ver la ruta
+            </div>
+          )}
+        </div>
       </div>
     );
   }
