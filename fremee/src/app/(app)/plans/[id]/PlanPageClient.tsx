@@ -8,6 +8,8 @@ import { fetchPlansByIds, type PlanByIdRow } from "@/services/api/endpoints/plan
 import { fetchSubplanes, createSubplan, updateSubplanTransporte, updateSubplanViaje, type SubplanRow, type TipoSubplan, TIPOS_TRANSPORTE } from "@/services/api/endpoints/subplanes.endpoint";
 import { Calendar } from "@/components/ui/calendar";
 import DayRouteMap from "@/components/plans/DayRouteMap";
+import TripOverviewMap from "@/components/plans/TripOverviewMap";
+import LocationAutocomplete, { type Coords } from "@/components/plans/LocationAutocomplete";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 
 const MOCK_DAYS = [
@@ -255,6 +257,8 @@ function formatDateRange(startsAt: string, endsAt: string) {
   const start = new Date(startsAt);
   const end = new Date(endsAt);
   const months = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+  const sameDay = start.getFullYear() === end.getFullYear() && start.getMonth() === end.getMonth() && start.getDate() === end.getDate();
+  if (sameDay) return `${start.getDate()} ${months[start.getMonth()]}`;
   if (start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear()) {
     return `${start.getDate()} – ${end.getDate()} ${months[start.getMonth()]}`;
   }
@@ -490,92 +494,6 @@ function TimeWheelPicker({ value, onChange, minTime, maxTime, blockedIntervals }
   );
 }
 
-type PlaceSuggestion = {
-  placePrediction: {
-    text: { toString(): string };
-    mainText: { toString(): string };
-    secondaryText?: { toString(): string };
-    toPlace(): { fetchFields(opts: { fields: string[] }): Promise<void>; location?: { lat(): number; lng(): number } };
-  };
-};
-
-type Coords = { lat: number; lng: number };
-
-function LocationAutocomplete({ value, onChange, placeholder = "¿Dónde será?" }: { value: string; onChange: (v: string, coords?: Coords) => void; placeholder?: string }) {
-  const [mapsReady, setMapsReady] = useState(false);
-  const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
-  const [open, setOpen] = useState(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if ((window as any).google?.maps?.places?.AutocompleteSuggestion) { setMapsReady(true); return; }
-    if (document.getElementById("google-maps-script")) return;
-    const script = document.createElement("script");
-    script.id = "google-maps-script";
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&v=weekly&libraries=places`;
-    script.async = true;
-    script.onload = () => setMapsReady(true);
-    document.head.appendChild(script);
-  }, []);
-
-  const fetchSuggestions = async (input: string) => {
-    if (!input || input.length < 2) { setSuggestions([]); setOpen(false); return; }
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { suggestions: results } = await (window as any).google.maps.places.AutocompleteSuggestion.fetchAutocompleteSuggestions({ input });
-      setSuggestions(results ?? []);
-      setOpen((results ?? []).length > 0);
-    } catch { setSuggestions([]); }
-  };
-
-  const handleSelect = async (s: PlaceSuggestion) => {
-    const text = s.placePrediction.text.toString();
-    onChange(text); // optimistic: show text immediately
-    setSuggestions([]);
-    setOpen(false);
-    try {
-      const place = s.placePrediction.toPlace();
-      await place.fetchFields({ fields: ["location"] });
-      if (place.location) {
-        onChange(text, { lat: place.location.lat(), lng: place.location.lng() });
-      }
-    } catch { /* coords unavailable, geocoding will be used as fallback */ }
-  };
-
-  const handleChange = (v: string) => {
-    onChange(v);
-    if (!mapsReady) return;
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => fetchSuggestions(v), 300);
-  };
-
-  return (
-    <div className="relative flex-1">
-      <input
-        value={value}
-        onChange={(e) => handleChange(e.target.value)}
-        onBlur={() => setTimeout(() => setOpen(false), 150)}
-        placeholder={placeholder}
-        className="w-full bg-transparent text-body outline-none placeholder:text-muted"
-      />
-      {open && suggestions.length > 0 && (
-        <ul className="absolute top-[calc(100%+8px)] left-0 z-[90] w-[280px] max-h-[220px] overflow-y-auto scrollbar-thin rounded-[12px] border border-app bg-surface shadow-elev-4">
-          {suggestions.slice(0, 5).map((s, i) => (
-            <li
-              key={i}
-              onMouseDown={(e) => { e.preventDefault(); handleSelect(s); }}
-              className="cursor-pointer px-[var(--space-3)] py-[var(--space-3)] hover:bg-surface-inset"
-            >
-              <p className="text-body-sm font-[var(--fw-medium)] text-primary">{s.placePrediction.mainText.toString()}</p>
-              <p className="text-caption text-muted">{s.placePrediction.secondaryText?.toString() ?? ""}</p>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
 
 /* ───────────── add sheet ───────────── */
 
@@ -1019,8 +937,14 @@ export default function PlanDetailPage() {
   }, [paramId]);
   const [activeTab, setActiveTab] = useState<Tab>("itinerario");
   const [plan, setPlan] = useState<PlanByIdRow | null>(null);
+  const isPast = plan ? new Date(plan.fin_at) < new Date() : false;
+  const isMultiDay = plan ? (() => {
+    const s = new Date(plan.inicio_at); const e = new Date(plan.fin_at);
+    return !(s.getFullYear() === e.getFullYear() && s.getMonth() === e.getMonth() && s.getDate() === e.getDate());
+  })() : false;
   const [planLoading, setPlanLoading] = useState(true);
   const [subplanes, setSubplanes] = useState<SubplanRow[]>([]);
+  const [selectedMapDay, setSelectedMapDay] = useState<string | null>(null);
   const [showAddSheet, setShowAddSheet] = useState(false);
   const [editingTransporteId, setEditingTransporteId] = useState<number | null>(null);
 
@@ -1040,6 +964,19 @@ export default function PlanDetailPage() {
       return sorted;
     });
   };
+
+  // Auto-select today if within plan range, else first day with subplanes
+  useEffect(() => {
+    const days = groupByDay(subplanes);
+    if (days.length === 0) return;
+    const todayKey = isoDateOnly(new Date().toISOString());
+    const todayExists = days.some(([k]) => k === todayKey);
+    setSelectedMapDay((prev) => {
+      // Keep manual selection if already set and still valid
+      if (prev && days.some(([k]) => k === prev)) return prev;
+      return todayExists ? todayKey : days[0][0];
+    });
+  }, [subplanes]);
 
   const handleViajeComputed = (subplanId: number, duracion: string, distancia: string, polyline: string) => {
     setSubplanes((prev) => prev.map((s) =>
@@ -1128,6 +1065,11 @@ export default function PlanDetailPage() {
                   <CalendarSmallIcon className="size-[14px]" />
                   {formatDateRange(plan.inicio_at, plan.fin_at)}
                 </span>
+                {isPast && (
+                  <span className="rounded-chip border border-white/30 bg-white/10 px-[var(--space-2)] py-[2px] text-[11px] font-[var(--fw-medium)] text-white/70">
+                    Finalizado
+                  </span>
+                )}
                 <span className="flex items-center gap-[5px] text-body-sm">
                   <MapPinIcon className="size-[14px]" />
                   {plan.ubicacion_nombre}
@@ -1149,7 +1091,7 @@ export default function PlanDetailPage() {
           {/* ─── Tabs ─── */}
           <div className="border-b border-app px-[var(--page-margin-x)]">
             <div className="flex gap-[var(--space-8)]">
-              {(["itinerario", "mapa", "gastos"] as Tab[]).map((tab) => (
+              {(["itinerario", ...(isMultiDay ? ["mapa"] : []), "gastos"] as Tab[]).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -1180,13 +1122,15 @@ export default function PlanDetailPage() {
                     <div className="flex flex-col items-center justify-center py-[var(--space-16)] text-muted">
                       <CalendarSmallIcon className="size-[40px] mb-[var(--space-3)] opacity-30" />
                       <p className="text-body font-[var(--fw-medium)]">Sin actividades</p>
-                      <p className="text-body-sm mt-[var(--space-1)]">Añade la primera actividad del plan</p>
+                      <p className="text-body-sm mt-[var(--space-1)]">{isPast ? "Este plan ya ha finalizado" : "Añade la primera actividad del plan"}</p>
+                      {!isPast && (
                       <button
                         onClick={() => setShowAddSheet(true)}
                         className="mt-[var(--space-5)] flex items-center gap-[var(--space-2)] rounded-chip border border-primary-token px-[var(--space-4)] py-[var(--space-2)] text-body-sm font-[var(--fw-medium)] text-primary-token transition-colors hover:bg-primary-token/10"
                       >
                         <span className="text-lg leading-none">+</span> Añadir actividad
                       </button>
+                      )}
                     </div>
                   ) : (
                     <>
@@ -1314,12 +1258,14 @@ export default function PlanDetailPage() {
                       ))}
 
                       {/* Add button */}
-                      <button
-                        onClick={() => setShowAddSheet(true)}
-                        className="mt-[var(--space-2)] flex w-full items-center gap-[var(--space-3)] rounded-card border border-dashed border-app px-[var(--space-4)] py-[var(--space-3)] text-body-sm text-muted transition-colors hover:border-primary-token hover:text-primary-token"
-                      >
-                        <span className="text-lg leading-none">+</span> Añadir actividad
-                      </button>
+                      {!isPast && (
+                        <button
+                          onClick={() => setShowAddSheet(true)}
+                          className="mt-[var(--space-2)] flex w-full items-center gap-[var(--space-3)] rounded-card border border-dashed border-app px-[var(--space-4)] py-[var(--space-3)] text-body-sm text-muted transition-colors hover:border-primary-token hover:text-primary-token"
+                        >
+                          <span className="text-lg leading-none">+</span> Añadir actividad
+                        </button>
+                      )}
                     </>
                   )}
                 </div>
@@ -1328,50 +1274,74 @@ export default function PlanDetailPage() {
                 <div className="lg:w-[340px] lg:shrink-0">
 
                   {/* Route map card */}
-                  <div className="mb-[var(--space-8)]">
-                    <div className="mb-[var(--space-3)] flex items-center justify-between">
-                      <h3 className="text-body font-[var(--fw-semibold)]">Ruta del Día</h3>
-                      {(() => {
-                        const selectedDate = groupByDay(subplanes)[0]?.[0] ?? isoDateOnly(plan?.inicio_at ?? "");
-                        const dayItems = subplanes
-                          .filter(s => isoDateOnly(s.inicio_at) === selectedDate && s.ubicacion_nombre)
-                          .sort((a, b) => a.inicio_at.localeCompare(b.inicio_at));
-                        const stops: string[] = [];
-                        dayItems.forEach(s => {
-                          if (s.ubicacion_nombre) stops.push(s.ubicacion_nombre);
-                          if (TIPOS_TRANSPORTE.includes(s.tipo) && s.ubicacion_fin_nombre)
-                            stops.push(s.ubicacion_fin_nombre);
-                        });
-                        if (stops.length < 2) return null;
-                        const origin      = encodeURIComponent(stops[0]);
-                        const destination = encodeURIComponent(stops[stops.length - 1]);
-                        const waypoints   = stops.slice(1, -1).map(encodeURIComponent).join("|");
-                        const modes = dayItems.slice(1).map(s => TRANSPORT_MAP[s.transporte_llegada ?? ""]?.googleMode ?? "driving");
-                        const travelmode = modes.sort((a,b) => modes.filter(m=>m===b).length - modes.filter(m=>m===a).length)[0] ?? "driving";
-                        const mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}${waypoints ? `&waypoints=${waypoints}` : ""}&travelmode=${travelmode}`;
-                        const wazeUrl = `https://waze.com/ul?q=${destination}&navigate=yes`;
-                        return (
-                          <div className="flex items-center gap-[var(--space-3)]">
-                            <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
-                              className="flex items-center gap-[4px] text-caption text-muted hover:text-primary-token transition-colors"
-                              title="Ruta completa (modo más común entre tus tramos)">
-                              <span>🗺️</span> Maps
-                            </a>
-                            <a href={wazeUrl} target="_blank" rel="noopener noreferrer"
-                              className="flex items-center gap-[4px] text-caption text-muted hover:text-primary-token transition-colors"
-                              title="Navegar al destino final con Waze">
-                              <span>🔵</span> Waze
-                            </a>
+                  {(() => {
+                    const days = groupByDay(subplanes);
+                    const activeDay = selectedMapDay ?? days[0]?.[0] ?? isoDateOnly(plan?.inicio_at ?? "");
+                    const dayItems = subplanes
+                      .filter(s => isoDateOnly(s.inicio_at) === activeDay && s.ubicacion_nombre)
+                      .sort((a, b) => a.inicio_at.localeCompare(b.inicio_at));
+                    const stops: string[] = [];
+                    dayItems.forEach(s => {
+                      if (s.ubicacion_nombre) stops.push(s.ubicacion_nombre);
+                      if (TIPOS_TRANSPORTE.includes(s.tipo) && s.ubicacion_fin_nombre)
+                        stops.push(s.ubicacion_fin_nombre);
+                    });
+                    const hasRoute = stops.length >= 2;
+                    if (isPast && !hasRoute && !plan.ubicacion_nombre) return null;
+                    const origin      = hasRoute ? encodeURIComponent(stops[0]) : "";
+                    const destination = hasRoute ? encodeURIComponent(stops[stops.length - 1]) : "";
+                    const waypoints   = hasRoute ? stops.slice(1, -1).map(encodeURIComponent).join("|") : "";
+                    const modes = dayItems.slice(1).map(s => TRANSPORT_MAP[s.transporte_llegada ?? ""]?.googleMode ?? "driving");
+                    const travelmode = modes.sort((a,b) => modes.filter(m=>m===b).length - modes.filter(m=>m===a).length)[0] ?? "driving";
+                    const mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}${waypoints ? `&waypoints=${waypoints}` : ""}&travelmode=${travelmode}`;
+                    const wazeUrl = `https://waze.com/ul?q=${destination}&navigate=yes`;
+                    return (
+                      <div className="mb-[var(--space-8)]">
+                        <div className="mb-[var(--space-3)] flex items-center justify-between">
+                          <h3 className="text-body font-[var(--fw-semibold)]">Ruta del Día</h3>
+                          {hasRoute && (
+                            <div className="flex items-center gap-[var(--space-3)]">
+                              <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
+                                className="flex items-center gap-[4px] text-caption text-muted hover:text-primary-token transition-colors"
+                                title="Ruta completa">
+                                <span>🗺️</span> Maps
+                              </a>
+                              <a href={wazeUrl} target="_blank" rel="noopener noreferrer"
+                                className="flex items-center gap-[4px] text-caption text-muted hover:text-primary-token transition-colors"
+                                title="Navegar al destino final con Waze">
+                                <span>🔵</span> Waze
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                        {days.length > 1 && (
+                          <div className="mb-[var(--space-3)] flex flex-wrap gap-[var(--space-2)]">
+                            {days.map(([dateKey]) => {
+                              const d = new Date(dateKey);
+                              const label = `${d.getDate()} ${["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"][d.getMonth()]}`;
+                              const isActive = activeDay === dateKey;
+                              return (
+                                <button
+                                  key={dateKey}
+                                  type="button"
+                                  onClick={() => setSelectedMapDay(dateKey)}
+                                  className={`rounded-chip border px-[var(--space-3)] py-[4px] text-caption transition-colors ${isActive ? "border-primary-token bg-primary-token/10 text-primary-token" : "border-app text-muted hover:text-app"}`}
+                                >
+                                  {label}
+                                </button>
+                              );
+                            })}
                           </div>
-                        );
-                      })()}
-                    </div>
-                    <DayRouteMap
-                      subplanes={subplanes}
-                      selectedDate={groupByDay(subplanes)[0]?.[0] ?? isoDateOnly(plan?.inicio_at ?? "")}
-                      onViajeComputed={handleViajeComputed}
-                    />
-                  </div>
+                        )}
+                        <DayRouteMap
+                          subplanes={subplanes}
+                          selectedDate={activeDay}
+                          ubicacionNombre={plan.ubicacion_nombre ?? undefined}
+                          onViajeComputed={handleViajeComputed}
+                        />
+                      </div>
+                    );
+                  })()}
 
                   {/* Expenses summary */}
                   <div>
@@ -1419,11 +1389,7 @@ export default function PlanDetailPage() {
             )}
 
             {activeTab === "mapa" && (
-              <div className="flex flex-col items-center justify-center py-[var(--space-24)] text-muted">
-                <MapPinIcon className="size-[48px] mb-[var(--space-4)] opacity-30" />
-                <p className="text-body font-[var(--fw-medium)]">Mapa del viaje</p>
-                <p className="text-body-sm mt-[var(--space-1)]">Próximamente</p>
-              </div>
+              <TripOverviewMap subplanes={subplanes} />
             )}
 
             {activeTab === "gastos" && (

@@ -5,6 +5,7 @@ import { format, parse } from "date-fns";
 import { es } from "date-fns/locale";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import LocationAutocomplete from "@/components/plans/LocationAutocomplete";
 
 export type CreatePlanPayload = {
   title: string;
@@ -257,16 +258,15 @@ export default function CreatePlanModal({ open, onClose, onCreate }: CreatePlanM
             {/* Destino */}
             <div>
               <p className="mb-[var(--space-2)] text-[11px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Destino</p>
-              <div className="relative">
-                <svg viewBox="0 0 24 24" fill="none" className="pointer-events-none absolute left-3 top-1/2 size-[16px] -translate-y-1/2 text-primary-token" aria-hidden="true">
+              <div className="flex h-input items-center gap-[var(--space-2)] rounded-[12px] border border-app bg-app px-[var(--space-3)] focus-within:border-[var(--border-strong)] transition-colors">
+                <svg viewBox="0 0 24 24" fill="none" className="size-[16px] shrink-0 text-primary-token" aria-hidden="true">
                   <path d="M12 2C8.13 2 5 5.13 5 9C5 14.25 12 22 12 22C12 22 19 14.25 19 9C19 5.13 15.87 2 12 2Z" stroke="currentColor" strokeWidth="1.5" />
                   <circle cx="12" cy="9" r="2.5" fill="currentColor" />
                 </svg>
-                <input
+                <LocationAutocomplete
                   value={location}
-                  onChange={(e) => setLocation(e.target.value)}
+                  onChange={(v) => setLocation(v)}
                   placeholder="¿A dónde quieres ir?"
-                  className="h-input w-full rounded-[12px] border border-app bg-app pl-10 pr-[var(--space-3)] text-body-sm outline-none transition-colors focus:border-[var(--border-strong)]"
                 />
               </div>
             </div>
