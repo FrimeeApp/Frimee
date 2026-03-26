@@ -6,8 +6,9 @@ import AppSidebar from "@/components/common/AppSidebar";
 import LoadingScreen from "@/components/common/LoadingScreen";
 import { useAuth } from "@/providers/AuthProvider";
 import { getPublicUserProfile } from "@/services/api/repositories/users.repository";
-import { sendFriendRequest, getFriendshipStatuses } from "@/services/api/endpoints/users.endpoint";
-import { listUserRelatedPlans } from "@/services/api/repositories/plans.repository";
+import { sendFriendRequest, getFriendshipStatuses, getFollowStatuses, removeFriend, getFollowerCount } from "@/services/api/endpoints/users.endpoint";
+import { useFollow } from "@/hooks/useFollow";
+import { listUserRelatedPlans, listSavedPlans } from "@/services/api/repositories/plans.repository";
 import {
   uploadProfileImage,
   saveUserProfileAndSettings,
@@ -28,25 +29,54 @@ export default function ProfilePage() {
 
   const [profileData, setProfileData] = useState<ProfileData | null>(null);
   const [plans, setPlans] = useState<FeedPlanItemDto[]>([]);
+  const [savedPlans, setSavedPlans] = useState<FeedPlanItemDto[]>([]);
+  const [activeTab, setActiveTab] = useState<"planes" | "guardados">("planes");
+  const [loadingSaved, setLoadingSaved] = useState(false);
+  const [savedLoaded, setSavedLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [followerCount, setFollowerCount] = useState(0);
 
-  // Follow state (local only — will connect to DB later)
-  const [following, setFollowing] = useState(false);
+  const [initialFollowing, setInitialFollowing] = useState(false);
+  const { following, loading: followLoading, showUnfollowDialog, setShowUnfollowDialog, onPress: onFollowPress, handleUnfollow } = useFollow(
+    isOwnProfile ? null : id,
+    user?.id,
+    initialFollowing
+  );
 
   // Friend request state
-  const [friendRequestSent, setFriendRequestSent] = useState(false);
+  const [friendshipStatus, setFriendshipStatus] = useState<"none" | "pending" | "friends">("none");
   const [sendingFriendRequest, setSendingFriendRequest] = useState(false);
+  const [showUnfriendDialog, setShowUnfriendDialog] = useState(false);
 
   const handleAddFriend = async () => {
-    if (friendRequestSent || sendingFriendRequest) return;
+    if (friendshipStatus !== "none" || sendingFriendRequest) return;
     setSendingFriendRequest(true);
     try {
       await sendFriendRequest(id);
-      setFriendRequestSent(true);
+      setFriendshipStatus("pending");
     } catch (err) {
       console.error("[profile] Error sending friend request:", err);
     } finally {
       setSendingFriendRequest(false);
+    }
+  };
+
+  const handleRemoveFriend = async () => {
+    setShowUnfriendDialog(false);
+    try {
+      await removeFriend(id);
+      setFriendshipStatus("none");
+    } catch (err) {
+      console.error("[profile] Error removing friend:", err);
+      setFriendshipStatus("friends");
+    }
+  };
+
+  const onFriendButtonPress = () => {
+    if (friendshipStatus === "friends") {
+      setShowUnfriendDialog(true);
+    } else {
+      void handleAddFriend();
     }
   };
 
@@ -78,16 +108,24 @@ export default function ProfilePage() {
         setProfileData(profileResult);
 
         if (!isOwnProfile) {
-          const statuses = await getFriendshipStatuses([id]);
-          const status = statuses[id] ?? "none";
-          if (status === "pending") setFriendRequestSent(true);
+          const [friendStatuses, followStatuses] = await Promise.all([
+            getFriendshipStatuses([id]),
+            getFollowStatuses([id]),
+          ]);
+          const status = friendStatuses[id] ?? "none";
+          setFriendshipStatus(status);
+          if (followStatuses[id]) setInitialFollowing(true);
         }
 
-        const userPlans = await listUserRelatedPlans({ userId: id, limit: 50 });
+        const [userPlans, count] = await Promise.all([
+          listUserRelatedPlans({ userId: id, limit: 50 }),
+          getFollowerCount(id),
+        ]);
         const publicPlans = userPlans.filter(
           (p) => p.visibility === "PÚBLICO" || isOwnProfile
         );
         setPlans(publicPlans);
+        setFollowerCount(count);
       } catch (err) {
         console.error("[profile] Error loading profile:", err);
       } finally {
@@ -96,7 +134,23 @@ export default function ProfilePage() {
     };
 
     load();
-  }, [id, isOwnProfile, myProfile]);
+  }, [id, isOwnProfile, myProfile?.id]);
+
+  const handleTabChange = async (tab: "planes" | "guardados") => {
+    setActiveTab(tab);
+    if (tab === "guardados" && !savedLoaded && user?.id) {
+      setLoadingSaved(true);
+      try {
+        const saved = await listSavedPlans(user.id);
+        setSavedPlans(saved);
+        setSavedLoaded(true);
+      } catch (err) {
+        console.error("[profile] Error loading saved plans:", err);
+      } finally {
+        setLoadingSaved(false);
+      }
+    }
+  };
 
   const handleEditClick = () => {
     if (!profileData) return;
@@ -309,8 +363,9 @@ export default function ProfilePage() {
                 <div className="mt-[var(--space-3)] flex gap-[var(--space-2)]">
                   <button
                     type="button"
-                    onClick={() => setFollowing((prev) => !prev)}
-                    className={`rounded-full px-6 py-[6px] text-body-sm font-[var(--fw-semibold)] transition-all ${
+                    onClick={onFollowPress}
+                    disabled={followLoading}
+                    className={`rounded-full px-6 py-[6px] text-body-sm font-[var(--fw-semibold)] transition-all disabled:opacity-50 ${
                       following
                         ? "border border-app bg-transparent text-app hover:border-red-400 hover:text-red-400"
                         : "bg-[var(--text-primary)] text-contrast-token hover:opacity-80"
@@ -320,11 +375,15 @@ export default function ProfilePage() {
                   </button>
                   <button
                     type="button"
-                    onClick={handleAddFriend}
-                    disabled={friendRequestSent || sendingFriendRequest}
-                    className="rounded-full border border-app px-6 py-[6px] text-body-sm font-[var(--fw-semibold)] transition-colors hover:bg-surface disabled:opacity-50"
+                    onClick={onFriendButtonPress}
+                    disabled={friendshipStatus === "pending" || sendingFriendRequest}
+                    className={`rounded-full border px-6 py-[6px] text-body-sm font-[var(--fw-semibold)] transition-all disabled:opacity-50 ${
+                      friendshipStatus === "friends"
+                        ? "border-app bg-transparent text-app hover:border-red-400 hover:text-red-400"
+                        : "border-app bg-transparent text-app hover:bg-surface"
+                    }`}
                   >
-                    {friendRequestSent ? "Pendiente" : sendingFriendRequest ? "..." : "Añadir amigo"}
+                    {sendingFriendRequest ? "..." : friendshipStatus === "friends" ? "Amigos" : friendshipStatus === "pending" ? "Pendiente" : "Añadir amigo"}
                   </button>
                 </div>
               )}
@@ -339,7 +398,7 @@ export default function ProfilePage() {
                 </div>
                 <div className="flex flex-col items-center">
                   <span className="text-[var(--font-h5)] font-[var(--fw-semibold)] leading-[var(--lh-h5)]">
-                    0
+                    {followerCount}
                   </span>
                   <span className="text-body-sm text-muted">Seguidores</span>
                 </div>
@@ -352,39 +411,52 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {/* Divider */}
-            <div className="mt-[var(--space-6)] border-t border-app" />
+            {/* Tabs */}
+            <div className="mt-[var(--space-6)] border-t border-app">
+              <div className="flex">
+                <button
+                  type="button"
+                  onClick={() => handleTabChange("planes")}
+                  className={`flex-1 py-[var(--space-3)] text-body-sm font-[var(--fw-semibold)] transition-colors border-b-2 ${
+                    activeTab === "planes" ? "border-app text-app" : "border-transparent text-muted hover:text-app"
+                  }`}
+                >
+                  Planes
+                </button>
+                {isOwnProfile && (
+                  <button
+                    type="button"
+                    onClick={() => handleTabChange("guardados")}
+                    className={`flex-1 py-[var(--space-3)] text-body-sm font-[var(--fw-semibold)] transition-colors border-b-2 ${
+                      activeTab === "guardados" ? "border-app text-app" : "border-transparent text-muted hover:text-app"
+                    }`}
+                  >
+                    Guardados
+                  </button>
+                )}
+              </div>
+            </div>
 
-            {/* Masonry grid of plans */}
+            {/* Grid */}
             <div className="mt-[var(--space-5)]">
-              {plansWithCover.length === 0 ? (
+              {activeTab === "planes" ? (
+                plansWithCover.length === 0 ? (
+                  <p className="py-[var(--space-6)] text-center text-body-sm text-muted">
+                    {isOwnProfile ? "Aun no tienes planes publicados." : "No hay planes publicos."}
+                  </p>
+                ) : (
+                  <PlanGrid plans={plansWithCover} />
+                )
+              ) : loadingSaved ? (
+                <div className="py-[var(--space-6)] flex justify-center">
+                  <div className="size-[20px] animate-spin rounded-full border-2 border-[var(--text-primary)] border-t-transparent" />
+                </div>
+              ) : savedPlans.filter((p) => p.coverImage).length === 0 ? (
                 <p className="py-[var(--space-6)] text-center text-body-sm text-muted">
-                  {isOwnProfile ? "Aun no tienes planes publicados." : "No hay planes publicos."}
+                  Aun no has guardado ningun plan.
                 </p>
               ) : (
-                <div className="columns-2 gap-[var(--space-3)] sm:columns-3">
-                  {plansWithCover.map((plan) => (
-                    <div key={plan.id} className="mb-[var(--space-3)] break-inside-avoid">
-                      <div className="group relative overflow-hidden rounded-card">
-                        <img
-                          src={plan.coverImage!}
-                          alt={plan.title}
-                          className="w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                        />
-                        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-3 pb-3 pt-6">
-                          <p className="text-body-sm font-[var(--fw-medium)] leading-tight text-white">
-                            {plan.title}
-                          </p>
-                          {plan.locationName && (
-                            <p className="mt-[2px] text-[11px] leading-tight text-white/70">
-                              {plan.locationName}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <PlanGrid plans={savedPlans.filter((p) => p.coverImage)} />
               )}
             </div>
           </div>
@@ -399,7 +471,95 @@ export default function ProfilePage() {
           className="hidden"
           aria-hidden="true"
         />
+
+        {/* Unfriend dialog */}
+        {showUnfriendDialog && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 px-4" onClick={() => setShowUnfriendDialog(false)}>
+            <div className="w-full max-w-[320px] rounded-card bg-[var(--bg)] p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+              <p className="text-center text-body font-[var(--fw-semibold)]">
+                ¿Eliminar a {profileData.nombre} como amigo?
+              </p>
+              <p className="mt-2 text-center text-body-sm text-muted">
+                Dejareis de ser amigos.
+              </p>
+              <div className="mt-5 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowUnfriendDialog(false)}
+                  className="flex-1 rounded-full border border-app py-2 text-body-sm font-[var(--fw-semibold)] transition-colors hover:bg-surface"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRemoveFriend}
+                  className="flex-1 rounded-full bg-red-500 py-2 text-body-sm font-[var(--fw-semibold)] text-white transition-opacity hover:opacity-80"
+                >
+                  Eliminar amigo
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Unfollow dialog */}
+        {showUnfollowDialog && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 px-4" onClick={() => setShowUnfollowDialog(false)}>
+            <div className="w-full max-w-[320px] rounded-card bg-[var(--bg)] p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+              <p className="text-center text-body font-[var(--fw-semibold)]">
+                ¿Dejar de seguir a {profileData.nombre}?
+              </p>
+              <p className="mt-2 text-center text-body-sm text-muted">
+                Dejarás de ver sus publicaciones en tu feed.
+              </p>
+              <div className="mt-5 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowUnfollowDialog(false)}
+                  className="flex-1 rounded-full border border-app py-2 text-body-sm font-[var(--fw-semibold)] transition-colors hover:bg-surface"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleUnfollow}
+                  className="flex-1 rounded-full bg-red-500 py-2 text-body-sm font-[var(--fw-semibold)] text-white transition-opacity hover:opacity-80"
+                >
+                  Dejar de seguir
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
+    </div>
+  );
+}
+
+function PlanGrid({ plans }: { plans: FeedPlanItemDto[] }) {
+  return (
+    <div className="columns-2 gap-[var(--space-3)] sm:columns-3">
+      {plans.map((plan) => (
+        <div key={plan.id} className="mb-[var(--space-3)] break-inside-avoid">
+          <div className="group relative overflow-hidden rounded-card">
+            <img
+              src={plan.coverImage!}
+              alt={plan.title}
+              className="w-full object-cover transition-transform duration-300 group-hover:scale-105"
+            />
+            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-3 pb-3 pt-6">
+              <p className="text-body-sm font-[var(--fw-medium)] leading-tight text-white">
+                {plan.title}
+              </p>
+              {plan.locationName && (
+                <p className="mt-[2px] text-[11px] leading-tight text-white/70">
+                  {plan.locationName}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
