@@ -139,9 +139,10 @@ interface Props {
   open: boolean;
   onClose: () => void;
   onRead: () => void; // called when all are marked read → reset badge
+  desktopPosition?: "left" | "right";
 }
 
-export default function NotificationsPanel({ open, onClose, onRead }: Props) {
+export default function NotificationsPanel({ open, onClose, onRead, desktopPosition = "right" }: Props) {
   const { user } = useAuth();
   const [notifs, setNotifs] = useState<NotificacionDto[]>([]);
   const [loading, setLoading] = useState(false);
@@ -236,8 +237,10 @@ export default function NotificationsPanel({ open, onClose, onRead }: Props) {
         ref={panelRef}
         role="dialog"
         aria-label="Notificaciones"
-        className={`fixed top-0 right-0 z-50 flex h-dvh w-full max-w-[360px] flex-col bg-[var(--bg)] shadow-elev-3 border-l border-[var(--border)] transition-transform duration-300 [transition-timing-function:var(--ease-standard)] ${
-          open ? "translate-x-0" : "translate-x-full"
+        className={`fixed top-0 z-50 flex h-dvh w-full max-w-[360px] flex-col bg-[var(--bg)] shadow-elev-3 transition-transform duration-300 [transition-timing-function:var(--ease-standard)] ${
+          desktopPosition === "left"
+            ? `left-0 border-r border-[var(--border)] ${open ? "translate-x-0" : "-translate-x-full"}`
+            : `right-0 border-l border-[var(--border)] ${open ? "translate-x-0" : "translate-x-full"}`
         }`}
       >
         {/* Header */}

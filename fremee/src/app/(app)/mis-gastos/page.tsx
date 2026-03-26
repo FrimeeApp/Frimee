@@ -219,13 +219,13 @@ function MisGastosContent() {
             {/* Tabs */}
             <div
               ref={tabRowRef}
-              className="relative mb-[var(--space-5)] flex gap-[var(--space-8)] border-b border-app text-body text-muted"
+              className="relative mb-[var(--space-5)] flex gap-[var(--space-4)] border-b border-[#262626] pb-[var(--space-2)] text-body text-muted"
             >
               <button
                 ref={paidTabRef}
                 type="button"
                 onClick={() => setActiveTab("paid")}
-                className={`pb-[var(--space-2)] font-[var(--fw-medium)] transition-colors duration-[var(--duration-base)] ${
+                className={`-mb-[2px] pb-0 font-[700] transition-colors duration-[var(--duration-base)] ${
                   activeTab === "paid" ? "text-app" : "hover:text-app"
                 }`}
               >
@@ -235,7 +235,7 @@ function MisGastosContent() {
                 ref={pendingTabRef}
                 type="button"
                 onClick={() => setActiveTab("pending")}
-                className={`flex items-center gap-2 pb-[var(--space-2)] font-[var(--fw-medium)] transition-colors duration-[var(--duration-base)] ${
+                className={`-mb-[2px] flex items-center gap-2 pb-0 font-[700] transition-colors duration-[var(--duration-base)] ${
                   activeTab === "pending" ? "text-app" : "hover:text-app"
                 }`}
               >
@@ -253,6 +253,24 @@ function MisGastosContent() {
                 style={{ left: indicator.left, width: indicator.width }}
                 aria-hidden="true"
               />
+              <span className="ml-auto pb-[var(--space-2)] opacity-0" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" className="size-[20px]">
+                  <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.8" />
+                  <path d="M16 16L20.5 20.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+              </span>
+              <span className="pb-[var(--space-2)] opacity-0" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" className="size-[20px]">
+                  <path
+                    d="M6 10.5C6 7.46 8.24 5 12 5s6 2.46 6 5.5v3l1.5 2.5H4.5L6 13.5v-3Z"
+                    stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"
+                  />
+                  <path
+                    d="M10 17.5a2 2 0 0 0 4 0"
+                    stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"
+                  />
+                </svg>
+              </span>
             </div>
 
             {activeTab === "pending" && overduePendingDebts.length > 0 && (

@@ -1,7 +1,22 @@
 import type { Metadata, Viewport } from "next";
+import { Inter, Instrument_Serif } from "next/font/google";
 import "../styles/globals.css";
 import { AuthProvider } from "@/providers/AuthProvider";
 import NativeSystemUi from "@/components/common/NativeSystemUi";
+
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+});
+
+const instrumentSerif = Instrument_Serif({
+  subsets: ["latin"],
+  variable: "--font-display-face",
+  weight: "400",
+  style: "normal",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Fremee",
@@ -38,7 +53,7 @@ export default function RootLayout({
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
-      <body className="antialiased">
+      <body className={`${inter.variable} ${instrumentSerif.variable} antialiased`}>
         <NativeSystemUi />
         <AuthProvider>{children}</AuthProvider>
       </body>
