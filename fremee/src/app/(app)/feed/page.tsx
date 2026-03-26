@@ -1,6 +1,8 @@
 ﻿"use client";
 
 import Link from "next/link";
+import PlaneIcon from "@/components/ui/PlaneIcon";
+import { useFollow } from "@/hooks/useFollow";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import AppSidebar from "@/components/common/AppSidebar";
 import LoadingScreen from "@/components/common/LoadingScreen";
@@ -15,10 +17,12 @@ import {
   createComment,
   deleteComment,
   listCommentsForPlan,
+  toggleCommentLike,
   type CommentDto,
 } from "@/services/api/repositories/comments.repository";
 import { getPublicUserProfile, searchUsers, type PublicUserProfileDto } from "@/services/api/repositories/users.repository";
-import { fetchActiveFriends } from "@/services/api/endpoints/users.endpoint";
+import { fetchActiveFriends, getFollowStatuses } from "@/services/api/endpoints/users.endpoint";
+import { savePlan, unsavePlan, getSavedStatuses } from "@/services/api/endpoints/saved.endpoint";
 import {
   listChats,
   listMensajes,
@@ -141,6 +145,8 @@ export default function FeedPage() {
     if (typeof window === "undefined") return new Set();
     return new Set();
   });
+  const [followedIds, setFollowedIds] = useState<Set<string>>(new Set());
+  const [savedPlanIds, setSavedPlanIds] = useState<Set<number>>(new Set());
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [mobileSearchValue, setMobileSearchValue] = useState("");
   const [mobileSearchResults, setMobileSearchResults] = useState<PublicUserProfileDto[]>([]);
@@ -200,9 +206,17 @@ export default function FeedPage() {
 
         // 4. Fetch likes en background — actualiza sin re-renderizar todo
         const planIds = posts.map((p) => p.plan.id);
-        if (planIds.length > 0) {
-          const { likedSet, counts } = await getFeedLikes({ userId: currentUserId, planIds });
-          if (cancelled) return;
+        const ownerIds = [...new Set(posts.map((p) => p.plan.ownerUserId).filter((id): id is string => Boolean(id) && id !== currentUserId))];
+
+        const [likesResult, followStatuses, savedStatuses] = await Promise.all([
+          planIds.length > 0 ? getFeedLikes({ userId: currentUserId, planIds }) : Promise.resolve(null),
+          ownerIds.length > 0 ? getFollowStatuses(ownerIds) : Promise.resolve({} as Record<string, boolean>),
+          planIds.length > 0 ? getSavedStatuses(planIds) : Promise.resolve({} as Record<number, boolean>),
+        ]);
+        if (cancelled) return;
+
+        if (likesResult) {
+          const { likedSet, counts } = likesResult;
           setUiPosts((prev) =>
             prev.map((p) => ({
               ...p,
@@ -211,6 +225,9 @@ export default function FeedPage() {
             }))
           );
         }
+
+        setFollowedIds(new Set(Object.entries(followStatuses).filter(([, v]) => v).map(([k]) => k)));
+        setSavedPlanIds(new Set(Object.entries(savedStatuses).filter(([, v]) => v).map(([k]) => Number(k))));
       } catch (e) {
         console.error("[feed] load error", e);
         if (!cached || cached.length === 0) setUiPosts([]);
@@ -675,7 +692,7 @@ export default function FeedPage() {
                   ) : (
                     <div className="space-y-[var(--space-3)] md:space-y-[var(--space-6)]">
                       {visiblePosts.map((post, idx) => (
-                        <FeedCard key={post.id} post={post} currentUserId={currentUserId} currentUserName={profile?.nombre ?? null} currentUserProfileImage={profile?.profile_image ?? null} prevPostHasImage={visiblePosts[idx - 1]?.hasImage ?? false} nextPostHasImage={visiblePosts[idx + 1]?.hasImage ?? true} />
+                        <FeedCard key={post.id} post={post} currentUserId={currentUserId} currentUserName={profile?.nombre ?? null} currentUserProfileImage={profile?.profile_image ?? null} prevPostHasImage={visiblePosts[idx - 1]?.hasImage ?? false} nextPostHasImage={visiblePosts[idx + 1]?.hasImage ?? true} initialFollowing={followedIds.has(post.plan.ownerUserId ?? "")} initialSaved={savedPlanIds.has(post.plan.id)} />
                       ))}
                     </div>
                   );
@@ -1021,7 +1038,7 @@ function FeedSkeleton() {
   );
 }
 
-function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImage, prevPostHasImage, nextPostHasImage }: { post: FeedItemDto; currentUserId: string | null; currentUserName: string | null; currentUserProfileImage: string | null; prevPostHasImage: boolean; nextPostHasImage: boolean }) {
+function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImage, prevPostHasImage, nextPostHasImage, initialFollowing, initialSaved }: { post: FeedItemDto; currentUserId: string | null; currentUserName: string | null; currentUserProfileImage: string | null; prevPostHasImage: boolean; nextPostHasImage: boolean; initialFollowing: boolean; initialSaved: boolean }) {
   const [publishing, setPublishing] = useState(false);
   const [liked, setLiked] = useState(post.initiallyLiked);
   const [likeCount, setLikeCount] = useState(post.initialLikeCount);
@@ -1036,6 +1053,30 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
   const [authorAvatars, setAuthorAvatars] = useState<Record<string, string | null>>({});
   const [imgLoaded, setImgLoaded] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [replyingTo, setReplyingTo] = useState<{ commentId: string; userName: string } | null>(null);
+  const [saved, setSaved] = useState(initialSaved);
+  const isOwnPost = post.plan.ownerUserId === currentUserId;
+
+  useEffect(() => { setSaved(initialSaved); }, [initialSaved]);
+
+  const handleToggleSave = async () => {
+    if (!currentUserId) return;
+    const next = !saved;
+    setSaved(next); // optimistic
+    try {
+      if (next) await savePlan(post.plan.id);
+      else await unsavePlan(post.plan.id);
+    } catch {
+      setSaved(!next); // revert
+    }
+  };
+
+  const { following, showUnfollowDialog, setShowUnfollowDialog, onPress: onFollowPress, handleUnfollow } = useFollow(
+    post.plan.ownerUserId,
+    currentUserId,
+    initialFollowing
+  );
+  const [expandedReplies, setExpandedReplies] = useState<Record<string, number>>({});
   const commentInputRef = useRef<HTMLInputElement | null>(null);
   const emojiPickerRef = useRef<HTMLDivElement | null>(null);
 
@@ -1183,15 +1224,21 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
   const onLikeToggle = async () => {
     if (!currentUserId || likeLoading) return;
 
+    // Optimistic update
+    const newLiked = !liked;
+    setLiked(newLiked);
+    setLikeCount((c) => newLiked ? c + 1 : Math.max(0, c - 1));
+    setLikeAnimating(true);
+
     setLikeLoading(true);
     try {
       const result = await togglePlanLike({
         userId: currentUserId,
         planId: post.plan.id,
       });
+      // Sync with server result
       setLiked(result.liked);
       setLikeCount(result.likeCount);
-      setLikeAnimating(true);
 
       if (post.plan.ownerUserId && post.plan.ownerUserId !== currentUserId) {
         if (result.liked) {
@@ -1211,9 +1258,32 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
         }
       }
     } catch (e) {
+      // Revert on error
+      setLiked(liked);
+      setLikeCount((c) => newLiked ? Math.max(0, c - 1) : c + 1);
       console.error("[feed] Error toggling like:", e);
     } finally {
       setLikeLoading(false);
+    }
+  };
+
+  const onToggleCommentLike = async (commentId: string) => {
+    if (!currentUserId) return;
+    // Optimistic update
+    setCommentsSection((prev) => prev.map((c) => {
+      if (c.commentId !== commentId) return c;
+      const liked = !c.likedByMe;
+      return { ...c, likedByMe: liked, likeCount: liked ? c.likeCount + 1 : Math.max(0, c.likeCount - 1) };
+    }));
+    try {
+      await toggleCommentLike({ planId: post.plan.id, commentId, userId: currentUserId });
+    } catch {
+      // Revert on error
+      setCommentsSection((prev) => prev.map((c) => {
+        if (c.commentId !== commentId) return c;
+        const liked = !c.likedByMe;
+        return { ...c, likedByMe: liked, likeCount: liked ? c.likeCount + 1 : Math.max(0, c.likeCount - 1) };
+      }));
     }
   };
 
@@ -1245,8 +1315,14 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
         userName: nameToStore,
         userProfileImage: currentUserProfileImage,
         content,
+        parentId: replyingTo?.commentId ?? null,
       });
       setCommentText("");
+      setReplyingTo(null);
+      // Auto-expand replies for the parent so the new reply is visible
+      if (replyingTo) {
+        setExpandedReplies((prev) => ({ ...prev, [replyingTo.commentId]: (prev[replyingTo.commentId] ?? 0) + 2 }));
+      }
       await reloadComments();
 
       // Moderation: async — delete silently if toxic
@@ -1334,6 +1410,67 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
     return `${years} a`;
   };
 
+  const renderComment = (comment: CommentDto, isReply = false) => {
+    const avatarImg = authorAvatars[comment.userId] ?? null;
+    const initial = (getCommentAuthorName(comment)[0] || "U").toUpperCase();
+    return (
+      <div key={comment.commentId} className="flex items-start gap-3">
+        <div className={`-mt-[4px] flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset ${isReply ? "size-[28px]" : "size-[36px]"}`}>
+          {avatarImg ? (
+            <img src={avatarImg} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+          ) : (
+            <span className={`font-[var(--fw-semibold)] text-app ${isReply ? "text-[11px]" : "text-[13px]"}`}>{initial}</span>
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start gap-3">
+            <p className="min-w-0 flex-1 text-[15px] leading-[1.35] text-app">
+              <Link href={`/profile/${comment.userId}`} className="font-[800] tracking-[0.01em]">{getCommentAuthorName(comment)}</Link>{" "}
+              {comment.content}
+            </p>
+            <button
+              type="button"
+              className="mt-0.5 shrink-0 transition-opacity hover:opacity-70"
+              aria-label="Me gusta"
+              onClick={() => onToggleCommentLike(comment.commentId)}
+            >
+              <PlaneIcon liked={comment.likedByMe} size={18} />
+            </button>
+          </div>
+          <div className="mt-2 flex items-center gap-4 text-[13px] font-[var(--fw-semibold)] text-muted">
+            <span>{formatRelativeTime(comment.createdAt)}</span>
+            {comment.likeCount > 0 ? <span>{comment.likeCount} Me gusta</span> : null}
+            {!isReply && (
+              <button
+                type="button"
+                className="transition-opacity hover:opacity-70"
+                onClick={() => {
+                  const name = getCommentAuthorName(comment);
+                  setReplyingTo({ commentId: comment.commentId, userName: name });
+                  const val = `@${name} `;
+                  setCommentText(val);
+                  setTimeout(() => {
+                    const input = commentInputRef.current;
+                    if (!input) return;
+                    input.focus();
+                    input.setSelectionRange(val.length, val.length);
+                  }, 50);
+                }}
+              >
+                Responder
+              </button>
+            )}
+            {(comment.userId === currentUserId || post.plan.ownerUserId === currentUserId) && (
+              <button type="button" className="text-muted opacity-50 transition-opacity hover:opacity-100" aria-label="Eliminar comentario" onClick={() => setConfirmDeleteId(comment.commentId)}>
+                <TrashIcon />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderCommentsList = () => {
     if (commentsLoading) {
       return <p className="py-6 text-center text-body-sm text-muted">Cargando comentarios...</p>;
@@ -1343,42 +1480,39 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
       return <p className="py-6 text-center text-body-sm text-muted">Todavía no hay comentarios.</p>;
     }
 
+    const topLevel = commentsSection.filter((c) => !c.parentId);
+    const repliesByParent = commentsSection.reduce<Record<string, CommentDto[]>>((acc, c) => {
+      if (!c.parentId) return acc;
+      (acc[c.parentId] ??= []).push(c);
+      return acc;
+    }, {});
+
     return (
-      <div className="space-y-[var(--space-2)]">
-        {commentsSection.map((comment) => {
-          const avatarImg = authorAvatars[comment.userId] ?? null;
-          const initial = (getCommentAuthorName(comment)[0] || "U").toUpperCase();
+      <div className="space-y-[var(--space-4)]">
+        {topLevel.map((comment) => {
+          const replies = repliesByParent[comment.commentId] ?? [];
+          const visibleCount = expandedReplies[comment.commentId] ?? 0;
+          const visibleReplies = replies.slice(0, visibleCount);
+          const hiddenCount = replies.length - visibleCount;
+
           return (
-            <div key={comment.commentId} className="flex items-start gap-3">
-              <div className="-mt-[4px] flex size-[36px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset">
-                {avatarImg ? (
-                  <img src={avatarImg} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
-                ) : (
-                  <span className="text-[13px] font-[var(--fw-semibold)] text-app">{initial}</span>
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-start gap-3">
-                  <p className="min-w-0 flex-1 text-[15px] leading-[1.35] text-app">
-                    <Link href={`/profile/${comment.userId}`} className="font-[800] tracking-[0.01em]">{getCommentAuthorName(comment)}</Link>{" "}
-                    {comment.content}
-                  </p>
-                  {comment.userId === currentUserId ? (
-                    <button type="button" className="mt-0.5 shrink-0 p-0.5 text-muted opacity-50" aria-label="Eliminar comentario" onClick={() => setConfirmDeleteId(comment.commentId)}>
-                      <TrashIcon />
-                    </button>
-                  ) : (
-                    <button type="button" className="mt-0.5 shrink-0 text-muted transition-opacity hover:opacity-70" aria-label="Me gusta">
-                      <CommentHeartIcon />
+            <div key={comment.commentId}>
+              {renderComment(comment)}
+              {replies.length > 0 && (
+                <div className="ml-[48px] mt-[var(--space-2)] space-y-[var(--space-3)]">
+                  {visibleReplies.map((reply) => renderComment(reply, true))}
+                  {hiddenCount > 0 && (
+                    <button
+                      type="button"
+                      className="flex items-center gap-2 text-[13px] font-[var(--fw-semibold)] text-muted"
+                      onClick={() => setExpandedReplies((prev) => ({ ...prev, [comment.commentId]: (prev[comment.commentId] ?? 0) + 2 }))}
+                    >
+                      <span className="h-px w-6 bg-muted/40" />
+                      Ver respuestas ({hiddenCount})
                     </button>
                   )}
                 </div>
-                <div className="mt-2 flex items-center gap-4 text-[13px] font-[var(--fw-semibold)] text-muted">
-                  <span>{formatRelativeTime(comment.createdAt)}</span>
-                  {comment.likeCount > 0 ? <span>{comment.likeCount} Me gusta</span> : null}
-                  <button type="button" className="transition-opacity hover:opacity-70">Responder</button>
-                </div>
-              </div>
+              )}
             </div>
           );
         })}
@@ -1457,7 +1591,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
             )}
             {/* Actions */}
             <div className="mt-[var(--space-3)] flex items-center gap-[var(--space-4)]">
-              <button type="button" className="flex items-center gap-[4px] disabled:opacity-50" aria-label={liked ? "Quitar like" : "Dar like"} onClick={onLikeToggle} disabled={!currentUserId || likeLoading}>
+              <button type="button" className="flex items-center gap-[4px] disabled:opacity-50" aria-label={liked ? "Quitar like" : "Dar like"} onClick={onLikeToggle} disabled={!currentUserId}>
                 <PlaneIcon liked={liked} animating={likeAnimating} />
                 {likeCount > 0 && <span className="text-[15px] font-[700]">{likeCount}</span>}
               </button>
@@ -1481,7 +1615,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
         <>
           {/* Actions row */}
           <div className="mt-[var(--space-3)] flex items-center gap-[10px] px-[2px] text-app md:px-[var(--space-4)]">
-            <button type="button" className="flex items-center gap-[4px] disabled:opacity-50" aria-label={liked ? "Quitar like" : "Dar like"} onClick={onLikeToggle} disabled={!currentUserId || likeLoading}>
+            <button type="button" className="flex items-center gap-[4px] disabled:opacity-50" aria-label={liked ? "Quitar like" : "Dar like"} onClick={onLikeToggle} disabled={!currentUserId}>
               <PlaneIcon liked={liked} animating={likeAnimating} />
               {likeCount > 0 && <span className="text-[15px] font-[700] text-app">{likeCount}</span>}
             </button>
@@ -1538,7 +1672,11 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                   <div className="min-w-0 text-[15px]">
                     <Link href={`/profile/${post.plan.ownerUserId}`} className="truncate font-[800] text-white">{post.userName}</Link>
                     <span className="px-2 text-white/50">•</span>
-                    <button type="button" className="font-[700] text-primary-token transition-opacity hover:opacity-80">Seguir</button>
+                    {!isOwnPost && (
+                      <button type="button" onClick={onFollowPress} className={`font-[700] transition-opacity hover:opacity-80 ${following ? "text-muted" : "text-primary-token"}`}>
+                        {following ? "Siguiendo" : "Seguir"}
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1557,6 +1695,14 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                   <div className="min-w-0 flex-1 self-center">
                     <p className="text-[15px] leading-[1.35] text-app">
                       <Link href={`/profile/${post.plan.ownerUserId}`} className="font-[800]">{post.userName}</Link>
+                      {!isOwnPost && (
+                        <>
+                          <span className="px-2 text-muted">•</span>
+                          <button type="button" onClick={onFollowPress} className={`text-[13px] font-[700] transition-opacity hover:opacity-80 ${following ? "text-muted" : "text-primary-token"}`}>
+                            {following ? "Siguiendo" : "Seguir"}
+                          </button>
+                        </>
+                      )}
                       {post.text ? <> {post.text}</> : null}
                     </p>
                     <p className="mt-1 text-[13px] text-muted">
@@ -1575,8 +1721,8 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
 
               <div className="border-t border-[#262626] px-[22px] py-[14px]">
                 <div className="flex items-center gap-4 text-app">
-                  <button type="button" className="flex items-center gap-[6px] transition-opacity hover:opacity-70" aria-label="Me gusta">
-                    <ModalHeartIcon />
+                  <button type="button" className="flex items-center gap-[6px] transition-opacity hover:opacity-70" aria-label="Me gusta" onClick={onLikeToggle} disabled={!currentUserId}>
+                    <PlaneIcon liked={liked} animating={likeAnimating} size={28} />
                     {likeCount > 0 ? <span className="text-[14px] font-[700] text-app">{likeCount}</span> : null}
                   </button>
                   <button type="button" className="flex items-center gap-[6px] transition-opacity hover:opacity-70" aria-label="Comentarios">
@@ -1586,9 +1732,11 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                   <button type="button" className="transition-opacity hover:opacity-70" aria-label="Compartir">
                     <ShareIcon />
                   </button>
-                  <button type="button" className="ml-auto transition-opacity hover:opacity-70" aria-label="Guardar">
-                    <BookmarkIcon />
-                  </button>
+                  {!isOwnPost && (
+                    <button type="button" onClick={handleToggleSave} className="ml-auto transition-opacity hover:opacity-70" aria-label="Guardar">
+                      <BookmarkIcon saved={saved} />
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -1605,6 +1753,12 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                   </div>
                 )}
 
+                {replyingTo && (
+                  <div className="flex items-center justify-between px-[2px] pb-[4px] text-[13px] text-muted">
+                    <span>Respondiendo a <span className="font-[700] text-app">@{replyingTo.userName}</span></span>
+                    <button type="button" onClick={() => { setReplyingTo(null); setCommentText(""); }} className="text-muted hover:opacity-70">✕</button>
+                  </div>
+                )}
                 <div className="flex items-center gap-[var(--space-2)]">
                   <button type="button" className="flex items-center justify-center text-muted" aria-label="Emoticonos" onClick={() => setEmojiPickerOpen((prev) => !prev)}>
                     <SmileyIcon />
@@ -1615,7 +1769,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                     value={commentText}
                     onChange={(e) => setCommentText(e.target.value)}
                     onKeyDown={onCommentKeyDown}
-                    placeholder="Añade un comentario..."
+                    placeholder={replyingTo ? `Responder a @${replyingTo.userName}...` : "Añade un comentario..."}
                     className="min-w-0 flex-1 bg-transparent py-[4px] text-[15px] text-app outline-none ring-0 focus:outline-none focus:ring-0 focus:border-transparent placeholder:text-muted"
                     disabled={!currentUserId || commentSubmitting}
                   />
@@ -1633,7 +1787,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
 
       {/* Delete comment confirmation modal */}
       {confirmDeleteId && (
-        <div className="fixed inset-0 z-[70] flex items-end justify-center pb-[max(var(--space-6),env(safe-area-inset-bottom))] sm:items-center" onClick={() => setConfirmDeleteId(null)}>
+        <div className="fixed inset-0 z-[1200] flex items-end justify-center pb-[max(var(--space-6),env(safe-area-inset-bottom))] sm:items-center" onClick={() => setConfirmDeleteId(null)}>
           <div className="w-full max-w-[340px] rounded-modal border border-app bg-surface p-[var(--space-5)] shadow-elev-2 mx-[var(--space-4)]" onClick={(e) => e.stopPropagation()}>
             <p className="text-body font-[var(--fw-semibold)] text-app">¿Eliminar comentario?</p>
             <p className="mt-[var(--space-1)] text-body-sm text-muted">Esta acción no se puede deshacer.</p>
@@ -1648,30 +1802,26 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
           </div>
         </div>
       )}
+      {showUnfollowDialog && (
+        <div className="fixed inset-0 z-[1200] flex items-end justify-center pb-[max(var(--space-6),env(safe-area-inset-bottom))] sm:items-center" onClick={() => setShowUnfollowDialog(false)}>
+          <div className="w-full max-w-[340px] rounded-modal border border-app bg-surface p-[var(--space-5)] shadow-elev-2 mx-[var(--space-4)]" onClick={(e) => e.stopPropagation()}>
+            <p className="text-body font-[var(--fw-semibold)] text-app">¿Dejar de seguir a {post.userName}?</p>
+            <p className="mt-[var(--space-1)] text-body-sm text-muted">Dejará de aparecer en tu feed.</p>
+            <div className="mt-[var(--space-4)] flex gap-[var(--space-2)]">
+              <button type="button" onClick={() => setShowUnfollowDialog(false)} className="flex-1 rounded-button border border-app py-[10px] text-body-sm font-[var(--fw-medium)] text-app transition-colors hover:bg-[var(--interactive-hover-surface)]">
+                Cancelar
+              </button>
+              <button type="button" onClick={handleUnfollow} className="flex-1 rounded-button bg-[var(--error-token,#ef4444)] py-[10px] text-body-sm font-[var(--fw-medium)] text-white transition-opacity hover:opacity-80">
+                Dejar de seguir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </article>
   );
 }
 
-function PlaneIcon({ liked, animating }: { liked: boolean; animating: boolean }) {
-  return (
-    <svg
-      width="28"
-      height="28"
-      viewBox="0 0 24 24"
-      fill={liked ? "currentColor" : "none"}
-      aria-hidden="true"
-      className={`transition-all duration-150 ${liked ? "text-primary-token" : "text-app"} ${animating ? "scale-[1.2]" : "scale-100"}`}
-    >
-      <path
-        d="M21 16V14L13 9V3.5C13 2.67 12.33 2 11.5 2C10.67 2 10 2.67 10 3.5V9L2 14V16L10 13.5V19L8 20.5V22L11.5 21L15 22V20.5L13 19V13.5L21 16Z"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
 
 function CommentIcon() {
   return (
@@ -1687,19 +1837,6 @@ function CommentIcon() {
   );
 }
 
-function CommentHeartIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d="M21 16V14L13 9V3.5C13 2.67 12.33 2 11.5 2C10.67 2 10 2.67 10 3.5V9L2 14V16L10 13.5V19L8 20.5V22L11.5 21L15 22V20.5L13 19V13.5L21 16Z"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
 
 function ShareIcon() {
   return (
@@ -1724,9 +1861,9 @@ function ModalHeartIcon() {
   );
 }
 
-function BookmarkIcon() {
+function BookmarkIcon({ saved = false }: { saved?: boolean }) {
   return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill={saved ? "currentColor" : "none"} aria-hidden="true">
       <path d="M7 4.5H17C17.55 4.5 18 4.95 18 5.5V20L12 16.2L6 20V5.5C6 4.95 6.45 4.5 7 4.5Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
     </svg>
   );
