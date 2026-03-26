@@ -394,7 +394,7 @@ function CalendarPageInner() {
           <div className="mx-auto w-full max-w-[1120px]">
             <div
               ref={tabRowRef}
-              className="relative flex gap-[var(--space-4)] border-b border-[#262626] pb-[var(--space-2)] text-body text-muted"
+              className="relative flex gap-[var(--space-4)] border-b border-app pb-[var(--space-2)] text-body text-muted"
             >
               <button
                 ref={activeTabRef}
@@ -435,7 +435,7 @@ function CalendarPageInner() {
                 </svg>
               </span>
               <span
-                className={`pointer-events-none absolute bottom-0 h-[2px] bg-black transition-[left,width,opacity] duration-[220ms] [transition-timing-function:var(--ease-standard)] dark:bg-white ${
+                className={`pointer-events-none absolute bottom-0 h-[2px] bg-[var(--text-primary)] transition-[left,width,opacity] duration-[220ms] [transition-timing-function:var(--ease-standard)] ${
                   tabIndicator.ready ? "opacity-100" : "opacity-0"
                 }`}
                 style={{ left: tabIndicator.left, width: tabIndicator.width }}
