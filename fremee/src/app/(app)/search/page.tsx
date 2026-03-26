@@ -85,6 +85,7 @@ export default function SearchPage() {
           className={`px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-4)] transition-[padding] duration-[var(--duration-slow)] [transition-timing-function:var(--ease-standard)] md:py-[var(--space-8)] md:pr-[var(--space-14)]`}
         >
           <div className="mx-auto w-full max-w-[760px]">
+
             <div className="relative">
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="pointer-events-none absolute left-4 top-1/2 z-10 size-[18px] -translate-y-1/2 text-muted">
                 <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.8" />

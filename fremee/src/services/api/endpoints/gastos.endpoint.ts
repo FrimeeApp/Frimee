@@ -75,7 +75,21 @@ export type GastoInput = {
   items?: GastoItemInput[];   // solo para POR_ITEMS
 };
 
+export type PlanMiembro = {
+  user_id: string;
+  nombre: string | null;
+  foto: string | null;
+};
+
 // ── Endpoints ────────────────────────────────────────────────────────────────
+
+/** Devuelve los miembros activos de un plan */
+export async function fetchPlanMiembrosEndpoint(planId: number): Promise<PlanMiembro[]> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_plan_get_miembros", { p_plan_id: planId });
+  if (error) throw error;
+  return (data ?? []) as PlanMiembro[];
+}
 
 /** Lista todos los gastos activos de un plan con sus partes y datos del pagador */
 export async function listGastosForPlanEndpoint(planId: number): Promise<GastoRow[]> {

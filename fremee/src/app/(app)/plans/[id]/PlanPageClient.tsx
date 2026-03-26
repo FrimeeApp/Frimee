@@ -6,11 +6,13 @@ import AppSidebar from "@/components/common/AppSidebar";
 import { useAuth } from "@/providers/AuthProvider";
 import { fetchPlansByIds, type PlanByIdRow } from "@/services/api/endpoints/plans.endpoint";
 import { fetchSubplanes, createSubplan, updateSubplanTransporte, updateSubplanViaje, type SubplanRow, type TipoSubplan, TIPOS_TRANSPORTE } from "@/services/api/endpoints/subplanes.endpoint";
+import { listGastosForPlanEndpoint, type GastoRow } from "@/services/api/endpoints/gastos.endpoint";
 import { Calendar } from "@/components/ui/calendar";
 import DayRouteMap from "@/components/plans/DayRouteMap";
 import TripOverviewMap from "@/components/plans/TripOverviewMap";
 import LocationAutocomplete, { type Coords } from "@/components/plans/LocationAutocomplete";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import AddGastoSheet from "@/components/plans/AddGastoSheet";
 
 const MOCK_DAYS = [
   {
@@ -921,7 +923,7 @@ function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClos
 /* ───────────── page ───────────── */
 
 export default function PlanDetailPage() {
-  const { loading } = useAuth();
+  const { loading, user } = useAuth();
   const router = useRouter();
   const { id: paramId } = useParams<{ id: string }>();
   // In Capacitor static export we navigate to /plans/static?id=18.
@@ -946,6 +948,8 @@ export default function PlanDetailPage() {
   const [subplanes, setSubplanes] = useState<SubplanRow[]>([]);
   const [selectedMapDay, setSelectedMapDay] = useState<string | null>(null);
   const [showAddSheet, setShowAddSheet] = useState(false);
+  const [showAddGastoSheet, setShowAddGastoSheet] = useState(false);
+  const [gastos, setGastos] = useState<GastoRow[]>([]);
   const [editingTransporteId, setEditingTransporteId] = useState<number | null>(null);
 
   const handleSubplanCreated = (s: SubplanRow) => {
@@ -1013,6 +1017,14 @@ export default function PlanDetailPage() {
     if (!planId) return;
     fetchSubplanes(planId).then(setSubplanes).catch(console.error);
   }, [id]);
+
+  const loadGastos = () => {
+    const planId = Number(id);
+    if (!planId) return;
+    listGastosForPlanEndpoint(planId).then(setGastos).catch(console.error);
+  };
+
+  useEffect(() => { loadGastos(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading || planLoading) return <PlanDetailSkeleton />;
   if (!plan) return (
@@ -1394,40 +1406,49 @@ export default function PlanDetailPage() {
 
             {activeTab === "gastos" && (
               <div className="mx-auto max-w-[500px]">
-                <div className="flex items-baseline justify-between mb-[2px]">
-                  <h3 className="text-[var(--font-h3)] font-[var(--fw-bold)]">Resumen Gastos</h3>
-                  <span className="text-[var(--font-h2)] font-[var(--fw-bold)] leading-[var(--lh-h2)]">
-                    €{MOCK_EXPENSES.total.toFixed(2)}
-                  </span>
+                <div className="flex items-center justify-between mb-[var(--space-6)]">
+                  <h3 className="text-[var(--font-h3)] font-[var(--fw-bold)]">Gastos</h3>
+                  <button
+                    onClick={() => setShowAddGastoSheet(true)}
+                    className="flex items-center gap-[var(--space-2)] rounded-chip bg-primary-token px-[var(--space-4)] py-[var(--space-2)] text-body-sm font-[var(--fw-semibold)] text-contrast-token"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" className="size-4" stroke="currentColor" strokeWidth="2.5">
+                      <path d="M12 5v14M5 12h14" strokeLinecap="round" />
+                    </svg>
+                    Añadir gasto
+                  </button>
                 </div>
-                <p className="text-caption uppercase tracking-wider text-muted mb-[var(--space-6)]">
-                  Estimación Total
-                </p>
 
-                <div className="flex flex-col gap-[var(--space-5)]">
-                  {MOCK_EXPENSES.categories.map((cat) => {
-                    const Icon = ACTIVITY_ICONS[cat.icon] || MapPinIcon;
-                    return (
-                      <div key={cat.name} className="flex items-center gap-[var(--space-3)]">
-                        <div className="flex h-[40px] w-[40px] shrink-0 items-center justify-center rounded-card bg-[var(--surface-2)]">
-                          <Icon className="size-[20px] text-muted" />
-                        </div>
+                {gastos.length === 0 ? (
+                  <p className="text-center text-body-sm text-muted py-[var(--space-8)]">
+                    Aún no hay gastos en este plan
+                  </p>
+                ) : (
+                  <div className="flex flex-col gap-[var(--space-3)]">
+                    {gastos.map((g) => (
+                      <div key={g.id} className="flex items-center gap-[var(--space-3)] rounded-card border border-app bg-surface-inset px-[var(--space-4)] py-[var(--space-3)]">
                         <div className="flex-1 min-w-0">
-                          <p className="text-body font-[var(--fw-medium)]">{cat.name}</p>
-                          <p className="text-body-sm text-muted">{cat.detail}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-body font-[var(--fw-semibold)]">€{cat.amount.toFixed(2)}</p>
-                          <p className={`text-caption font-[var(--fw-semibold)] uppercase tracking-wider ${
-                            cat.status === "PAID" ? "text-success-token" : "text-warning-token"
-                          }`}>
-                            {cat.status === "PAID" ? "Paid" : "Pending"}
+                          <p className="text-body font-[var(--fw-medium)] truncate">{g.titulo}</p>
+                          <p className="text-caption text-muted">
+                            {g.fecha_gasto} · Pagado por {g.pagado_por_nombre ?? "—"}
                           </p>
                         </div>
+                        <div className="text-right shrink-0">
+                          <p className="text-body font-[var(--fw-semibold)]">{g.total.toFixed(2)} {g.moneda}</p>
+                          {g.partes && g.partes.length > 0 && (
+                            <p className="text-caption text-muted">{g.partes.length} personas</p>
+                          )}
+                        </div>
                       </div>
-                    );
-                  })}
-                </div>
+                    ))}
+                    <div className="mt-[var(--space-2)] flex items-center justify-between rounded-card border border-app bg-surface px-[var(--space-4)] py-[var(--space-3)]">
+                      <p className="text-body-sm font-[var(--fw-semibold)]">Total</p>
+                      <p className="text-body font-[var(--fw-bold)]">
+                        {gastos.reduce((s, g) => s + g.total, 0).toFixed(2)} {gastos[0]?.moneda ?? "EUR"}
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1443,6 +1464,16 @@ export default function PlanDetailPage() {
           subplanes={subplanes}
           onClose={() => setShowAddSheet(false)}
           onCreated={handleSubplanCreated}
+        />
+      )}
+
+      {showAddGastoSheet && plan && user && (
+        <AddGastoSheet
+          planId={plan.id}
+          userId={user.id}
+          subplanes={subplanes}
+          onClose={() => setShowAddGastoSheet(false)}
+          onCreated={loadGastos}
         />
       )}
     </div>
