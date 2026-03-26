@@ -41,6 +41,7 @@ type WeekPlanSegment = {
 
 const MONTHS_SHORT = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 const WEEK_DAYS = ["Do", "Lu", "Ma", "Mi", "Ju", "Vi", "Sa"];
+const MOBILE_CALENDAR_OPEN_KEY = "frimee:calendar-mobile-open";
 
 export default function CalendarPage() {
   return (
@@ -113,9 +114,34 @@ function CalendarPageInner() {
   }, [createFromQuery]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const isMobile = window.innerWidth < 768;
+    if (!isMobile) {
+      setCalendarOpen(true);
+      return;
+    }
+
+    try {
+      const stored = localStorage.getItem(MOBILE_CALENDAR_OPEN_KEY);
+      setCalendarOpen(stored === "true");
+    } catch {
+      setCalendarOpen(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || window.innerWidth >= 768) return;
+    try {
+      localStorage.setItem(MOBILE_CALENDAR_OPEN_KEY, String(calendarOpen));
+    } catch {
+      /* noop */
+    }
+  }, [calendarOpen]);
+
+  useEffect(() => {
     const handleScroll = () => {
       const isMobile = window.innerWidth < 1024;
-      if (isMobile && viewMode === "day") return;
+      if (isMobile) return;
       if (window.scrollY > 60) {
         setCalendarOpen(false);
       } else if (window.scrollY < 10) {
@@ -351,9 +377,21 @@ function CalendarPageInner() {
 
   const filteredPlans = useMemo(() => {
     const query = planSearch.trim().toLowerCase();
-    if (!query) return visiblePlans;
-    return visiblePlans.filter((plan) => plan.title.toLowerCase().includes(query));
-  }, [visiblePlans, planSearch]);
+    const basePlans = !query
+      ? visiblePlans
+      : visiblePlans.filter((plan) => plan.title.toLowerCase().includes(query));
+
+    return [...basePlans].sort((a, b) => {
+      const aPinned = pinnedPlanIds.includes(a.id);
+      const bPinned = pinnedPlanIds.includes(b.id);
+      if (aPinned && !bPinned) return -1;
+      if (!aPinned && bPinned) return 1;
+      if (aPinned && bPinned) {
+        return pinnedPlanIds.indexOf(a.id) - pinnedPlanIds.indexOf(b.id);
+      }
+      return 0;
+    });
+  }, [visiblePlans, planSearch, pinnedPlanIds]);
 
   const calendarCells = useMemo(() => buildCalendarCells(monthDate), [monthDate]);
   const calendarWeeks = useMemo(() => groupCalendarWeeks(calendarCells), [calendarCells]);
@@ -416,24 +454,6 @@ function CalendarPageInner() {
               >
                 Finalizados
               </button>
-              <span className="ml-auto pb-[var(--space-2)] opacity-0" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" className="size-[20px]">
-                  <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.8" />
-                  <path d="M16 16L20.5 20.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                </svg>
-              </span>
-              <span className="pb-[var(--space-2)] opacity-0" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" className="size-[20px]">
-                  <path
-                    d="M6 10.5C6 7.46 8.24 5 12 5s6 2.46 6 5.5v3l1.5 2.5H4.5L6 13.5v-3Z"
-                    stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"
-                  />
-                  <path
-                    d="M10 17.5a2 2 0 0 0 4 0"
-                    stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"
-                  />
-                </svg>
-              </span>
               <span
                 className={`pointer-events-none absolute bottom-0 h-[2px] bg-[var(--text-primary)] transition-[left,width,opacity] duration-[220ms] [transition-timing-function:var(--ease-standard)] ${
                   tabIndicator.ready ? "opacity-100" : "opacity-0"
@@ -443,49 +463,106 @@ function CalendarPageInner() {
               />
             </div>
 
-            <div className="mt-[var(--space-5)] grid grid-cols-1 gap-[var(--space-6)] md:grid-cols-[minmax(0,1fr)_320px] md:gap-[var(--space-8)]">
+            <div className="mt-[var(--space-4)]">
+              <div className="flex h-[44px] w-full items-center gap-[10px] rounded-[12px] border border-app bg-surface-inset px-[14px] text-muted md:max-w-[240px]">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[22px] shrink-0">
+                  <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.8" />
+                  <path d="M16 16L20.5 20.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+                <input
+                  type="text"
+                  value={planSearch}
+                  onChange={(e) => setPlanSearch(e.target.value)}
+                  placeholder="Buscar"
+                  className="min-w-0 flex-1 border-none bg-transparent text-[15px] text-app shadow-none outline-none ring-0 focus:border-none focus:shadow-none focus:outline-none focus:ring-0 placeholder:text-muted [&::-webkit-search-cancel-button]:hidden"
+                />
+                {planSearch && (
+                  <button type="button" onClick={() => setPlanSearch("")} className="text-muted transition-opacity hover:opacity-70">
+                    <svg viewBox="0 0 24 24" fill="none" className="size-[14px]" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-[var(--space-4)] grid grid-cols-1 gap-[var(--space-5)] md:grid-cols-[minmax(0,1fr)_320px] md:gap-[var(--space-8)]">
               {loading ? (
                 <CalendarPageSkeleton />
               ) : (
                 <>
-                  <aside className={`md:col-start-2 md:row-start-1 flex flex-col rounded-modal border border-app bg-surface shadow-elev-1 md:sticky md:top-[var(--space-6)] md:self-start transition-all duration-300 ${calendarOpen ? (viewMode === "day" ? "h-[380px] md:h-[420px]" : "md:h-[420px]") : "md:h-auto"}`}>
-                    <div className={`min-h-0 flex-1 overflow-hidden p-[var(--space-4)] ${calendarOpen ? "block" : "hidden"}`}>
+                  <aside className={`md:col-start-2 md:row-start-1 flex flex-col overflow-hidden rounded-[10px] border border-app bg-surface shadow-[0_14px_32px_rgb(28_28_34_/_0.08)] md:rounded-[10px] md:border-app md:bg-surface md:shadow-elev-1 md:sticky md:top-[var(--space-6)] md:self-start transition-all duration-300 ${calendarOpen ? (viewMode === "day" ? "h-[430px] md:h-[420px]" : "md:h-auto") : "h-auto md:h-auto"}`}>
+                    <button
+                      type="button"
+                      onClick={() => setCalendarOpen((prev) => !prev)}
+                      className={`flex items-center px-[var(--space-4)] py-[var(--space-3)] text-left md:hidden ${calendarOpen ? "justify-end" : "justify-between"}`}
+                      aria-expanded={calendarOpen}
+                      aria-controls="calendar-mobile-panel"
+                    >
+                      {!calendarOpen ? (
+                        <span className="flex items-center gap-2 text-body-sm font-[var(--fw-semibold)] text-app">
+                          <svg viewBox="0 0 24 24" fill="none" className="size-4" aria-hidden="true">
+                            <rect x="3.5" y="5.5" width="17" height="15" rx="2.5" stroke="currentColor" strokeWidth="1.8" />
+                            <path d="M7.5 3.5v4M16.5 3.5v4M3.5 9.5h17" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                          </svg>
+                          {monthLabel}
+                        </span>
+                      ) : null}
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        className={`size-4 text-muted transition-transform ${calendarOpen ? "rotate-180" : ""}`}
+                        aria-hidden="true"
+                      >
+                        <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </button>
+                    <div
+                      id="calendar-mobile-panel"
+                      className={`min-h-0 flex-1 overflow-hidden px-[var(--space-4)] transition-[max-height,opacity,padding] duration-300 ease-out md:block md:p-[var(--space-4)] ${
+                        calendarOpen
+                          ? "max-h-[860px] opacity-100 pb-[var(--space-4)]"
+                          : "max-h-0 opacity-0 pb-0 md:max-h-none md:opacity-100 md:pb-[var(--space-4)]"
+                      }`}
+                    >
                     {viewMode === "month" ? (
                       <>
-                        <div className="mb-[var(--space-2)] flex items-center justify-between">
+                        <div className="mb-[var(--space-3)] flex items-center justify-between">
                           <button
                             type="button"
                             aria-label="Mes anterior"
                             onClick={() => setMonthDate((prev) => addMonths(prev, -1))}
-                            className="flex h-7 w-7 items-center justify-center rounded-full border border-app transition-colors hover:border-primary-token hover:text-primary-token"
+                            className="flex h-9 w-9 items-center justify-center text-app transition-colors hover:text-[var(--primary)]"
                           >
                             <span className="inline-block rotate-180 text-[13px] leading-none">✈</span>
                           </button>
-                          <div className="text-body-sm font-[var(--fw-medium)]">{monthLabel}</div>
+                          <div className="px-1 text-body-sm font-[var(--fw-semibold)] text-app">{monthLabel}</div>
                           <button
                             type="button"
                             aria-label="Mes siguiente"
                             onClick={() => setMonthDate((prev) => addMonths(prev, 1))}
-                            className="flex h-7 w-7 items-center justify-center rounded-full border border-app transition-colors hover:border-primary-token hover:text-primary-token"
+                            className="flex h-9 w-9 items-center justify-center text-app transition-colors hover:text-[var(--primary)]"
                           >
                             <span className="inline-block text-[13px] leading-none">✈</span>
                           </button>
                         </div>
 
-                        <div className="grid grid-cols-7 gap-x-1 gap-y-2 border-b border-app/70 pb-2 text-center">
+                        <div className="grid grid-cols-7 gap-x-1 gap-y-2 border-b border-app pb-3 text-center">
                           {WEEK_DAYS.map((weekDay) => (
-                            <div key={weekDay} className="text-[11px] text-muted">
+                            <div key={weekDay} className="text-[10px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
                               {weekDay}
                             </div>
                           ))}
                         </div>
 
-                        <div className="mt-2 space-y-1">
+                        <div className="mt-3 space-y-0">
                           {calendarWeeks.map((week, weekIndex) => (
-                            <div key={week.key} className="relative h-[48px] p-1.5">
+                            <div
+                              key={week.key}
+                              className={`relative px-1.5 py-2 ${weekIndex === 0 ? "" : "border-t border-app"}`}
+                            >
                               <div className="grid grid-cols-7 gap-x-1">
                                 {week.days.map((cell) => {
                                   const isToday = toDayKey(cell.date) === toDayKey(new Date());
+                                  const isSelected = toDayKey(cell.date) === toDayKey(selectedDayValue);
                                   return (
                                     <button
                                       type="button"
@@ -495,9 +572,15 @@ function CalendarPageInner() {
                                         setMonthDate(startOfMonth(cell.date));
                                         setViewMode("day");
                                       }}
-                                      className={`flex h-7 items-center justify-center text-body-sm transition-colors ${
+                                      className={`flex h-8 w-8 items-center justify-center justify-self-center rounded-full text-body-sm transition-colors ${
                                         cell.isCurrentMonth ? "text-app" : "text-tertiary"
-                                      } ${isToday ? "rounded-full bg-[#E8841A] font-[var(--fw-semibold)] text-white" : "hover:bg-app/50"}`}
+                                      } ${
+                                        isSelected
+                                          ? "bg-[color-mix(in_srgb,var(--primary)_72%,black_28%)] font-[var(--fw-semibold)] text-white shadow-sm"
+                                          : isToday
+                                            ? "border border-[color-mix(in_srgb,var(--primary)_42%,var(--border)_58%)] bg-[color-mix(in_srgb,var(--primary)_24%,var(--surface)_76%)] font-[var(--fw-semibold)] text-app"
+                                            : "hover:bg-[color-mix(in_srgb,var(--primary)_18%,var(--surface)_82%)]"
+                                      }`}
                                     >
                                       {cell.day}
                                     </button>
@@ -505,7 +588,7 @@ function CalendarPageInner() {
                                 })}
                               </div>
 
-                              <div className="mt-1 space-y-0.5">
+                              <div className="mt-1.5 space-y-1">
                                 {[0, 1].map((laneIndex) => {
                                   const lane = weekSegments[weekIndex]?.lanes[laneIndex] ?? [];
                                   return (
@@ -514,7 +597,7 @@ function CalendarPageInner() {
                                         ? lane.map((segment) => (
                                             <div
                                               key={segment.key}
-                                              className="h-3 cursor-pointer rounded-full bg-[linear-gradient(90deg,#cc37b0_0%,#f06ebc_100%)] px-1.5 text-[8px] font-[var(--fw-semibold)] leading-[12px] text-white transition-opacity hover:opacity-90"
+                                              className="h-4 cursor-pointer rounded-full border border-[color-mix(in_srgb,var(--primary)_24%,var(--border)_76%)] bg-[color-mix(in_srgb,var(--primary)_22%,var(--surface)_78%)] px-1.5 text-[8px] font-[var(--fw-semibold)] leading-[14px] text-app transition-opacity hover:opacity-90"
                                               style={{
                                                 gridColumn: `${segment.startCol + 1} / ${segment.endCol + 2}`,
                                               }}
@@ -531,7 +614,7 @@ function CalendarPageInner() {
                               </div>
 
                               {weekSegments[weekIndex]?.hiddenCount ? (
-                                <p className="pointer-events-none absolute bottom-0 right-1.5 text-[9px] leading-none text-muted">
+                                <p className="pointer-events-none absolute bottom-1 right-2 text-[9px] leading-none text-muted">
                                   +{weekSegments[weekIndex].hiddenCount}
                                 </p>
                               ) : null}
@@ -548,7 +631,7 @@ function CalendarPageInner() {
                               setMonthDate(startOfMonth(selectedDayValue));
                               setViewMode("month");
                             }}
-                            className="flex items-center gap-1 rounded-full border border-app py-1 pl-2 pr-3 text-body-sm font-[var(--fw-medium)] text-muted transition-colors hover:text-app"
+                            className="flex items-center gap-1 rounded-full border border-[color-mix(in_srgb,var(--primary)_20%,var(--border)_80%)] bg-surface py-1.5 pl-2.5 pr-3.5 text-body-sm font-[var(--fw-medium)] text-muted transition-colors hover:text-app"
                           >
                             <svg viewBox="0 0 24 24" fill="none" className="size-[14px]" aria-hidden="true">
                               <path d="M15 19L8 12L15 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -565,7 +648,7 @@ function CalendarPageInner() {
                                 setSelectedDay(nextDay);
                                 setMonthDate(startOfMonth(nextDay));
                               }}
-                              className="flex h-8 w-8 items-center justify-center rounded-full border border-app text-muted transition-colors hover:text-app"
+                              className="flex h-8 w-8 items-center justify-center rounded-full border border-[color-mix(in_srgb,var(--primary)_20%,var(--border)_80%)] bg-surface text-muted transition-colors hover:text-app"
                             >
                               <svg viewBox="0 0 24 24" fill="none" className="size-[14px]" aria-hidden="true">
                                 <path d="M15 19L8 12L15 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -577,7 +660,7 @@ function CalendarPageInner() {
                                 setSelectedDay(startOfDay(new Date()));
                                 setMonthDate(startOfMonth(new Date()));
                               }}
-                              className="rounded-full border border-app px-3 py-1 text-body-sm font-[var(--fw-medium)]"
+                              className="rounded-full border border-[color-mix(in_srgb,var(--primary)_20%,var(--border)_80%)] bg-[color-mix(in_srgb,var(--primary)_10%,white_90%)] px-3 py-1 text-body-sm font-[var(--fw-semibold)] text-[var(--primary)]"
                             >
                               Hoy
                             </button>
@@ -589,7 +672,7 @@ function CalendarPageInner() {
                                 setSelectedDay(nextDay);
                                 setMonthDate(startOfMonth(nextDay));
                               }}
-                              className="flex h-8 w-8 items-center justify-center rounded-full border border-app text-muted transition-colors hover:text-app"
+                              className="flex h-8 w-8 items-center justify-center rounded-full border border-[color-mix(in_srgb,var(--primary)_20%,var(--border)_80%)] bg-surface text-muted transition-colors hover:text-app"
                             >
                               <svg viewBox="0 0 24 24" fill="none" className="size-[14px]" aria-hidden="true">
                                 <path d="M9 5L16 12L9 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -607,7 +690,7 @@ function CalendarPageInner() {
                             {allDayPlans.map((plan) => (
                               <div
                                 key={`all-day-${plan.id}`}
-                                className="rounded-full bg-[linear-gradient(90deg,#cc37b0_0%,#f06ebc_100%)] px-3 py-1.5 text-body-sm font-[var(--fw-medium)] text-white"
+                                className="rounded-[12px] border border-[color-mix(in_srgb,var(--primary)_18%,transparent)] bg-[color-mix(in_srgb,var(--primary)_12%,white_88%)] px-3 py-2 text-body-sm font-[var(--fw-medium)] text-app"
                               >
                                 <span className="block truncate">{plan.title}</span>
                               </div>
@@ -635,7 +718,7 @@ function CalendarPageInner() {
                                 return (
                                   <div
                                     key={`day-plan-${plan.id}`}
-                                    className="absolute left-2 right-2 cursor-pointer overflow-hidden rounded-[12px] bg-[linear-gradient(90deg,#cc37b0_0%,#f06ebc_100%)] px-3 py-2 text-white shadow-sm transition-opacity hover:opacity-90"
+                                    className="absolute left-2 right-2 cursor-pointer overflow-hidden rounded-[14px] border border-[color-mix(in_srgb,var(--primary)_22%,transparent)] bg-[color-mix(in_srgb,var(--primary)_12%,var(--surface)_88%)] px-3 py-2 text-app shadow-sm transition-opacity hover:opacity-90"
                                     style={{
                                       top: `${(startMinutes / 60) * 64}px`,
                                       height: `${Math.max((duration / 60) * 64, 24)}px`,
@@ -644,7 +727,7 @@ function CalendarPageInner() {
                                     onClick={() => navigateToPlan(plan.id)}
                                   >
                                     <p className="truncate text-body-sm font-[var(--fw-semibold)]">{plan.title}</p>
-                                    <p className="mt-0.5 truncate text-[11px] text-white/90">
+                                    <p className="mt-0.5 truncate text-[11px] text-muted">
                                       {formatTimeRange(
                                         clampDateTimeToDay(plan.startsAt, selectedDayValue).toISOString(),
                                         clampDateTimeToDay(plan.endsAt, selectedDayValue, true).toISOString(),
@@ -660,67 +743,9 @@ function CalendarPageInner() {
                     )}
                     </div>
 
-                    {!calendarOpen && (
-                      <div className="hidden border-t border-app/50 px-[var(--space-3)] pb-[var(--space-3)] md:block">
-                        {pinnedPlanIds.length === 0 ? (
-                          <p className="pt-[var(--space-3)] text-center text-[11px] text-muted">
-                            Ancla hasta 3 planes con 📌
-                          </p>
-                        ) : (
-                          <div className="space-y-2 pt-[var(--space-2)]">
-                            {mergedPlans
-                              .filter((p) => pinnedPlanIds.includes(p.id))
-                              .map((p) => (
-                                <div
-                                  key={`pinboard-${p.id}`}
-                                  className="group relative flex cursor-pointer overflow-hidden rounded-card border border-app bg-app transition-shadow hover:shadow-elev-1"
-                                  onClick={() => navigateToPlan(p.id)}
-                                >
-                                  <div
-                                    className="h-12 w-12 shrink-0 bg-cover bg-center"
-                                    style={{ backgroundImage: `url(${p.coverImage ?? "https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=400&q=60"})` }}
-                                  />
-                                  <div className="min-w-0 flex-1 px-3 py-2">
-                                    <p className="truncate text-[12px] font-[var(--fw-medium)] text-app">{p.title}</p>
-                                    <p className="mt-0.5 truncate text-[10px] text-muted">{formatDateRange(p.startsAt, p.endsAt)}</p>
-                                  </div>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => { e.stopPropagation(); togglePin(p.id); }}
-                                    aria-label="Desanclar"
-                                    className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/20 text-[10px] opacity-0 transition-opacity group-hover:opacity-100"
-                                  >
-                                    ✕
-                                  </button>
-                                </div>
-                              ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
                   </aside>
 
                   <section className="space-y-[var(--space-4)] md:col-start-1 md:row-start-1">
-                    <div className="relative">
-                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-[16px] -translate-y-1/2 text-muted">
-                        <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.8" />
-                        <path d="M16 16L20.5 20.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                      </svg>
-                      <input
-                        type="text"
-                        value={planSearch}
-                        onChange={(e) => setPlanSearch(e.target.value)}
-                        placeholder="Buscar plan"
-                        className="w-full rounded-full border border-app bg-surface py-[7px] pl-9 pr-8 text-body-sm text-app outline-none transition-colors focus:border-[var(--border-strong)] [&::-webkit-search-cancel-button]:hidden"
-                      />
-                      {planSearch && (
-                        <button type="button" onClick={() => setPlanSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted">
-                          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[14px]">
-                            <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                          </svg>
-                        </button>
-                      )}
-                    </div>
                     {filteredPlans.length === 0 ? (
                       <p className="text-body-sm text-muted">
                         {planSearch.trim()
@@ -742,7 +767,7 @@ function CalendarPageInner() {
                         return (
                           <article
                             key={`plan-${plan.id}`}
-                            className="group flex cursor-pointer flex-row overflow-hidden rounded-card border border-app bg-surface shadow-elev-1 transition-shadow hover:shadow-elev-2 lg:flex-col"
+                            className="group flex cursor-pointer flex-row overflow-hidden rounded-[10px] border border-app bg-surface shadow-elev-1 transition-shadow hover:shadow-elev-2 lg:rounded-[10px] lg:flex-col"
                             onClick={() => navigateToPlan(plan.id)}
                           >
                             <div
@@ -762,19 +787,21 @@ function CalendarPageInner() {
                                 type="button"
                                 onClick={(e) => { e.stopPropagation(); togglePin(plan.id); }}
                                 aria-label={pinnedPlanIds.includes(plan.id) ? "Desanclar" : "Anclar"}
-                                className={`absolute left-3 top-3 hidden h-7 w-7 items-center justify-center rounded-full text-[13px] shadow-sm transition-opacity lg:flex ${
+                                className={`absolute left-3 top-3 flex h-7 w-7 items-center justify-center rounded-full text-[13px] shadow-sm transition-opacity ${
                                   pinnedPlanIds.includes(plan.id)
-                                    ? "bg-warning-token/90 opacity-100"
-                                    : "bg-white/80 opacity-0 group-hover:opacity-100"
+                                    ? "bg-[color-mix(in_srgb,var(--primary)_18%,var(--surface)_82%)] text-app opacity-100"
+                                    : "bg-surface/80 text-app opacity-100"
                                 }`}
                               >
-                                📌
+                                <svg viewBox="0 0 24 24" fill="none" className="size-4" aria-hidden="true">
+                                  <path d="M8 4.5h8M10 4.5v4l-3 3v1h10v-1l-3-3v-4M12 12.5v7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
                               </button>
                             </div>
 
                             <div className="flex min-w-0 flex-1 items-center justify-between gap-2 p-[var(--space-3)] lg:items-end lg:p-[var(--space-4)]">
                               <div className="min-w-0">
-                                <h2 className="truncate text-body-sm font-[var(--fw-semibold)] leading-[1.2] text-app lg:text-[22px] lg:font-[var(--fw-medium)] lg:leading-[1.15]">
+                                <h2 className="truncate text-[18px] font-[var(--fw-medium)] leading-[1.2] tracking-[0.03em] text-app lg:text-[24px] lg:font-[var(--fw-medium)] lg:leading-[1.15]">
                                   {plan.title}
                                 </h2>
                                 <p className="mt-0.5 text-caption text-muted lg:mt-1 lg:text-body-sm">{formatDateRange(plan.startsAt, plan.endsAt)}</p>
