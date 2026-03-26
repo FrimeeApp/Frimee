@@ -692,7 +692,7 @@ export default function FeedPage() {
                   ) : (
                     <div className="space-y-[var(--space-3)] md:space-y-[var(--space-6)]">
                       {visiblePosts.map((post, idx) => (
-                        <FeedCard key={post.id} post={post} currentUserId={currentUserId} currentUserName={profile?.nombre ?? null} currentUserProfileImage={profile?.profile_image ?? null} prevPostHasImage={visiblePosts[idx - 1]?.hasImage ?? false} nextPostHasImage={visiblePosts[idx + 1]?.hasImage ?? true} initialFollowing={followedIds.has(post.plan.ownerUserId ?? "")} initialSaved={savedPlanIds.has(post.plan.id)} />
+                        <FeedCard key={post.id} post={post} currentUserId={currentUserId} currentUserName={profile?.nombre ?? null} currentUserProfileImage={profile?.profile_image ?? null} nextPostHasImage={visiblePosts[idx + 1]?.hasImage ?? true} initialFollowing={followedIds.has(post.plan.ownerUserId ?? "")} initialSaved={savedPlanIds.has(post.plan.id)} />
                       ))}
                     </div>
                   );
@@ -1038,7 +1038,7 @@ function FeedSkeleton() {
   );
 }
 
-function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImage, prevPostHasImage, nextPostHasImage, initialFollowing, initialSaved }: { post: FeedItemDto; currentUserId: string | null; currentUserName: string | null; currentUserProfileImage: string | null; prevPostHasImage: boolean; nextPostHasImage: boolean; initialFollowing: boolean; initialSaved: boolean }) {
+function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImage, nextPostHasImage, initialFollowing, initialSaved }: { post: FeedItemDto; currentUserId: string | null; currentUserName: string | null; currentUserProfileImage: string | null; nextPostHasImage: boolean; initialFollowing: boolean; initialSaved: boolean }) {
   const [publishing, setPublishing] = useState(false);
   const [liked, setLiked] = useState(post.initiallyLiked);
   const [likeCount, setLikeCount] = useState(post.initialLikeCount);
@@ -1522,11 +1522,6 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
 
   return (
     <article className={post.hasImage && !nextPostHasImage ? "" : "pb-[var(--space-5)]"}>
-      {/* Divider — image post after a no-image post */}
-      {post.hasImage && !prevPostHasImage && (
-        <div className="feed-divider border-t border-app" />
-      )}
-
       {/* Image with overlays */}
       {post.hasImage && (
         <div
