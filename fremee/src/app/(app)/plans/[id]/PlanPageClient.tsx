@@ -1029,7 +1029,7 @@ export default function PlanDetailPage() {
         <main className="pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] transition-[padding] duration-[var(--duration-slow)] [transition-timing-function:var(--ease-standard)] md:py-0 md:pr-[var(--space-14)] md:pl-[102px]">
 
           {/* ─── Hero ─── */}
-          <div className="relative w-full overflow-hidden md:ml-0 md:rounded-b-[20px]" style={{ height: "clamp(260px, 40vh, 380px)" }}>
+          <div className="relative w-full overflow-hidden md:ml-0 md:[border-bottom-left-radius:var(--radius-card)] md:[border-bottom-right-radius:var(--radius-card)]" style={{ height: "clamp(260px, 40vh, 380px)" }}>
             {plan.foto_portada ? (
               <img
                 src={plan.foto_portada}

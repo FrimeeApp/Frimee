@@ -1130,6 +1130,7 @@ function ChatConversation({
               const prevMsg = messages[idx - 1];
               const isFirstInGroup = !prevMsg || prevMsg.sender_id !== msg.sender_id;
               const time = formatChatTime(msg.created_at);
+              const isMediaMessage = Boolean(msg.image_url);
               const reaction = localReactions[msg.id];
               const isStarred = starredIds.has(msg.id);
               const openMsgMenu = (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -1140,7 +1141,7 @@ function ChatConversation({
                 setReactingPos(null);
               };
               return (
-                <div id={`msg-${msg.id}`} key={(msg as LocalMsg)._key ?? msg.id} className={`group/msg flex ${isMe ? "justify-end" : "justify-start"} ${isFirstInGroup ? "mt-[var(--space-3)]" : "mt-[2px]"} ${reaction ? "mb-[20px]" : ""} ${highlightedId === msg.id ? "rounded-[12px] bg-[var(--text-primary)]/10 transition-colors" : ""}`}>
+                <div id={`msg-${msg.id}`} key={(msg as LocalMsg)._key ?? msg.id} className={`group/msg flex ${isMe ? "justify-end" : "justify-start"} ${isFirstInGroup ? "mt-[var(--space-3)]" : "mt-[2px]"} ${reaction ? "mb-[20px]" : ""} ${highlightedId === msg.id ? "rounded-card bg-[var(--text-primary)]/10 transition-colors" : ""}`}>
                   {!isMe && chat.tipo === "GRUPO" && (
                     <div className="mr-[var(--space-2)] w-[24px] shrink-0">
                       {isFirstInGroup && (
@@ -1151,7 +1152,7 @@ function ChatConversation({
                     </div>
                   )}
                   <div className="relative max-w-[75%]">
-                    <div className={`break-all rounded-[16px] px-3 py-2 ${isMe ? "bg-[var(--text-primary)] text-contrast-token" : "bg-surface-inset"} ${contextMenu?.msg.id === msg.id ? "opacity-75" : ""}`}>
+                    <div className={`break-all ${isMediaMessage ? "bg-transparent p-0" : "rounded-card px-3 py-2"} ${!isMediaMessage ? (isMe ? "bg-[var(--text-primary)] text-contrast-token" : "bg-surface-inset") : ""} ${contextMenu?.msg.id === msg.id ? "opacity-75" : ""}`}>
                       {!isMe && chat.tipo === "GRUPO" && isFirstInGroup && (
                         <p className="mb-[2px] text-[11px] font-[var(--fw-semibold)] text-muted">{msg.sender_nombre}</p>
                       )}
@@ -1159,7 +1160,7 @@ function ChatConversation({
                         <button
                           type="button"
                           onClick={(e) => { e.stopPropagation(); scrollToMessage(msg.reply_to_id!); }}
-                          className={`mb-[6px] w-full rounded-[8px] border-l-[3px] px-2 py-[4px] text-left transition-opacity hover:opacity-80 ${isMe ? "border-contrast-token/50 bg-black/20" : "border-[var(--text-primary)] bg-black/8"}`}
+                          className={`mb-[6px] w-full rounded-card border-l-[3px] px-2 py-[4px] text-left transition-opacity hover:opacity-80 ${isMe ? "border-contrast-token/50 bg-black/20" : "border-[var(--text-primary)] bg-black/8"}`}
                         >
                           <p className={`truncate text-[11px] font-[var(--fw-semibold)] ${isMe ? "text-contrast-token/80" : "text-[var(--text-primary)]"}`}>
                             {msg.reply_sender_nombre ?? "Usuario"}
@@ -1176,13 +1177,13 @@ function ChatConversation({
                       ) : msg.document_url ? (
                         <DocumentBubble url={msg.document_url} name={msg.document_name ?? "Documento"} sending={msg.id < 0} isMe={isMe} />
                       ) : msg.image_url ? (
-                        <MediaBubble url={msg.image_url} type={msg.image_type ?? "image/jpeg"} sending={msg.id < 0} onOpenLightbox={!msg.image_type?.startsWith("video/") ? () => setLightboxUrl(msg.image_url!) : undefined} />
+                        <MediaBubble url={msg.image_url} type={msg.image_type ?? "image/jpeg"} sending={msg.id < 0} time={time} isMe={isMe} onOpenLightbox={!msg.image_type?.startsWith("video/") ? () => setLightboxUrl(msg.image_url!) : undefined} />
                       ) : isPollMessage(msg.texto) ? (
                         <PollBubble msg={msg} isMe={isMe} />
                       ) : (
                         <p className="text-body-sm">{msg.texto}</p>
                       )}
-                      <div className={`mt-[2px] flex items-center justify-end gap-[4px] text-[10px] ${isMe ? "text-contrast-token/60" : "text-muted"}`}>
+                      {!isMediaMessage && <div className={`mt-[2px] flex items-center justify-end gap-[4px] text-[10px] ${isMe ? "text-contrast-token/60" : "text-muted"}`}>
                         {isStarred && <span>★</span>}
                         <span>{time}</span>
                         <button
@@ -1193,7 +1194,7 @@ function ChatConversation({
                         >
                           <ChevronDownIcon className="size-[11px]" />
                         </button>
-                      </div>
+                      </div>}
                     </div>
                     {reaction && (
                       <div className={`absolute -bottom-[18px] ${isMe ? "right-[8px]" : "left-[8px]"} rounded-full border border-app bg-app px-[6px] py-[2px] text-[14px] shadow-sm`}>
@@ -2105,21 +2106,21 @@ function CallBubble({ tipo, duracion }: { tipo: string; duracion: number }) {
   );
 }
 
-function MediaBubble({ url, type, sending, onOpenLightbox }: { url: string; type: string; sending?: boolean; onOpenLightbox?: () => void }) {
+function MediaBubble({ url, type, sending, time, isMe, onOpenLightbox }: { url: string; type: string; sending?: boolean; time: string; isMe: boolean; onOpenLightbox?: () => void }) {
   const isVideo = type.startsWith("video/");
   const [loaded, setLoaded] = useState(false);
   return (
-    <div className="relative overflow-hidden rounded-[10px]" style={{ maxWidth: 220 }}>
+    <div className="relative overflow-hidden rounded-card border border-app/50 bg-transparent" style={{ maxWidth: 220 }}>
       {isVideo ? (
-        <video src={url} controls={!sending} playsInline className="w-full rounded-[10px]" style={{ maxHeight: 300 }} />
+        <video src={url} controls={!sending} playsInline className="block w-full rounded-card" style={{ maxHeight: 300 }} />
       ) : (
         <button type="button" onClick={!sending && onOpenLightbox ? onOpenLightbox : undefined} className="block w-full text-left cursor-pointer" tabIndex={sending ? -1 : 0}>
-          {!loaded && <div className="feed-skeleton-shimmer rounded-[10px]" style={{ width: 220, height: 165 }} />}
+          {!loaded && <div className="feed-skeleton-shimmer rounded-card" style={{ width: 220, height: 165 }} />}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={url}
             alt="Imagen"
-            className="w-full rounded-[10px] object-cover"
+            className="block w-full rounded-card object-cover"
             style={{ maxHeight: 300, opacity: loaded ? 1 : 0, transition: "opacity 0.2s", ...(loaded ? {} : { position: "absolute", pointerEvents: "none" }) }}
             referrerPolicy="no-referrer"
             onLoad={() => setLoaded(true)}
@@ -2127,10 +2128,13 @@ function MediaBubble({ url, type, sending, onOpenLightbox }: { url: string; type
           />
         </button>
       )}
+      <div className={`pointer-events-none absolute bottom-2 right-2 rounded-chip bg-black/58 px-2 py-1 text-[10px] leading-none text-white backdrop-blur-sm ${isMe ? "border border-white/10" : "border border-black/10"}`}>
+        {time}
+      </div>
       {sending && (
-        <div className="absolute inset-0 rounded-[10px] overflow-hidden pointer-events-none">
+        <div className="absolute inset-0 rounded-card overflow-hidden pointer-events-none">
           <div
-            className="absolute inset-0 rounded-[10px]"
+            className="absolute inset-0 rounded-card"
             style={{
               backgroundColor: "rgba(0,0,0,0.45)",
               transformOrigin: "right center",

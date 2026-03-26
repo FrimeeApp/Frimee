@@ -392,39 +392,55 @@ function CalendarPageInner() {
           className={`px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-4)] transition-[padding] duration-[var(--duration-slow)] [transition-timing-function:var(--ease-standard)] md:py-[var(--space-8)] md:pr-[var(--space-14)]`}
         >
           <div className="mx-auto w-full max-w-[1120px]">
-            <div className="border-b border-app text-body text-muted">
-              <div className="flex flex-wrap items-end justify-between gap-[var(--space-3)]">
-                <div ref={tabRowRef} className="relative flex items-center gap-[var(--space-10)]">
-                  <button
-                    ref={activeTabRef}
-                    type="button"
-                    onClick={() => setTab("active")}
-                    className={`pb-[var(--space-2)] font-[var(--fw-medium)] transition-colors duration-[var(--duration-base)] ${
-                      tab === "active" ? "text-app" : "hover:text-app"
-                    }`}
-                  >
-                    Activos
-                  </button>
-                  <button
-                    ref={doneTabRef}
-                    type="button"
-                    onClick={() => setTab("done")}
-                    className={`pb-[var(--space-2)] font-[var(--fw-medium)] transition-colors duration-[var(--duration-base)] ${
-                      tab === "done" ? "text-app" : "hover:text-app"
-                    }`}
-                  >
-                    Finalizados
-                  </button>
-                  <span
-                    className={`pointer-events-none absolute bottom-0 h-[2px] bg-black transition-[left,width,opacity] duration-[220ms] [transition-timing-function:var(--ease-standard)] dark:bg-white ${
-                      tabIndicator.ready ? "opacity-100" : "opacity-0"
-                    }`}
-                    style={{ left: tabIndicator.left, width: tabIndicator.width }}
-                    aria-hidden="true"
+            <div
+              ref={tabRowRef}
+              className="relative flex gap-[var(--space-4)] border-b border-[#262626] pb-[var(--space-2)] text-body text-muted"
+            >
+              <button
+                ref={activeTabRef}
+                type="button"
+                onClick={() => setTab("active")}
+                className={`-mb-[2px] pb-0 font-[700] transition-colors duration-[var(--duration-base)] ${
+                  tab === "active" ? "text-app" : "hover:text-app"
+                }`}
+              >
+                Activos
+              </button>
+              <button
+                ref={doneTabRef}
+                type="button"
+                onClick={() => setTab("done")}
+                className={`-mb-[2px] pb-0 font-[700] transition-colors duration-[var(--duration-base)] ${
+                  tab === "done" ? "text-app" : "hover:text-app"
+                }`}
+              >
+                Finalizados
+              </button>
+              <span className="ml-auto pb-[var(--space-2)] opacity-0" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" className="size-[20px]">
+                  <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.8" />
+                  <path d="M16 16L20.5 20.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+              </span>
+              <span className="pb-[var(--space-2)] opacity-0" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" className="size-[20px]">
+                  <path
+                    d="M6 10.5C6 7.46 8.24 5 12 5s6 2.46 6 5.5v3l1.5 2.5H4.5L6 13.5v-3Z"
+                    stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"
                   />
-                </div>
-
-              </div>
+                  <path
+                    d="M10 17.5a2 2 0 0 0 4 0"
+                    stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"
+                  />
+                </svg>
+              </span>
+              <span
+                className={`pointer-events-none absolute bottom-0 h-[2px] bg-black transition-[left,width,opacity] duration-[220ms] [transition-timing-function:var(--ease-standard)] dark:bg-white ${
+                  tabIndicator.ready ? "opacity-100" : "opacity-0"
+                }`}
+                style={{ left: tabIndicator.left, width: tabIndicator.width }}
+                aria-hidden="true"
+              />
             </div>
 
             <div className="mt-[var(--space-5)] grid grid-cols-1 gap-[var(--space-6)] md:grid-cols-[minmax(0,1fr)_320px] md:gap-[var(--space-8)]">
@@ -657,7 +673,7 @@ function CalendarPageInner() {
                               .map((p) => (
                                 <div
                                   key={`pinboard-${p.id}`}
-                                  className="group relative flex cursor-pointer overflow-hidden rounded-[10px] border border-app bg-app transition-shadow hover:shadow-elev-1"
+                                  className="group relative flex cursor-pointer overflow-hidden rounded-card border border-app bg-app transition-shadow hover:shadow-elev-1"
                                   onClick={() => navigateToPlan(p.id)}
                                 >
                                   <div
@@ -726,7 +742,7 @@ function CalendarPageInner() {
                         return (
                           <article
                             key={`plan-${plan.id}`}
-                            className="group flex cursor-pointer flex-row overflow-hidden rounded-[14px] border border-app bg-surface shadow-elev-1 transition-shadow hover:shadow-elev-2 lg:flex-col"
+                            className="group flex cursor-pointer flex-row overflow-hidden rounded-card border border-app bg-surface shadow-elev-1 transition-shadow hover:shadow-elev-2 lg:flex-col"
                             onClick={() => navigateToPlan(plan.id)}
                           >
                             <div
@@ -791,7 +807,7 @@ function CalendarPageSkeleton() {
     <>
       <section className="grid grid-cols-1 gap-[var(--space-4)] md:grid-cols-2" aria-hidden="true">
         {Array.from({ length: 4 }).map((_, index) => (
-          <article key={index} className="overflow-hidden rounded-[14px] border border-app bg-surface shadow-elev-1">
+          <article key={index} className="overflow-hidden rounded-card border border-app bg-surface shadow-elev-1">
             <div className="feed-skeleton-shimmer h-[138px] w-full" />
             <div className="flex items-end justify-between gap-3 p-[var(--space-4)]">
               <div className="min-w-0 flex-1 space-y-2">

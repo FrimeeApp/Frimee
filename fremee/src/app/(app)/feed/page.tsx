@@ -17,7 +17,7 @@ import {
   listCommentsForPlan,
   type CommentDto,
 } from "@/services/api/repositories/comments.repository";
-import { getPublicUserProfile } from "@/services/api/repositories/users.repository";
+import { getPublicUserProfile, searchUsers, type PublicUserProfileDto } from "@/services/api/repositories/users.repository";
 import { fetchActiveFriends } from "@/services/api/endpoints/users.endpoint";
 import {
   listChats,
@@ -49,6 +49,33 @@ const EMOJI_LIST = [
 ];
 const COMMENT_AUTHOR_CACHE_TTL_MS = 60_000;
 const commentAuthorCache = new Map<string, { name: string; profileImage: string | null; cachedAt: number }>();
+
+const RECENTS_KEY = "fremee:search-recents";
+const RECENTS_MAX = 10;
+
+type RecentProfile = { id: string; nombre: string; profile_image: string | null };
+
+function readRecents(): RecentProfile[] {
+  try {
+    const raw = localStorage.getItem(RECENTS_KEY);
+    return raw ? (JSON.parse(raw) as RecentProfile[]) : [];
+  } catch { return []; }
+}
+
+function addRecent(profile: RecentProfile) {
+  try {
+    const list = readRecents().filter((r) => r.id !== profile.id);
+    list.unshift(profile);
+    localStorage.setItem(RECENTS_KEY, JSON.stringify(list.slice(0, RECENTS_MAX)));
+  } catch { /* ignore */ }
+}
+
+function removeRecent(id: string) {
+  try {
+    const list = readRecents().filter((r) => r.id !== id);
+    localStorage.setItem(RECENTS_KEY, JSON.stringify(list));
+  } catch { /* ignore */ }
+}
 
 const FEED_CACHE_KEY = "fremee:feed:v2";
 const FEED_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -114,6 +141,13 @@ export default function FeedPage() {
     if (typeof window === "undefined") return new Set();
     return new Set();
   });
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const [mobileSearchValue, setMobileSearchValue] = useState("");
+  const [mobileSearchResults, setMobileSearchResults] = useState<PublicUserProfileDto[]>([]);
+  const [mobileSearchLoading, setMobileSearchLoading] = useState(false);
+  const [suggestedProfiles, setSuggestedProfiles] = useState<PublicUserProfileDto[]>([]);
+  const [recentProfiles, setRecentProfiles] = useState<RecentProfile[]>([]);
+  const mobileSearchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!currentUserId) {
@@ -149,6 +183,7 @@ export default function FeedPage() {
 
         const newFriendIds = new Set(friends.map((f) => f.id));
         setFriendIds(newFriendIds);
+        setSuggestedProfiles(friends.slice(0, 12));
         writeFriendsCache(currentUserId, [...newFriendIds]);
 
         const firstWithImage = posts.find((p) => p.coverImage);
@@ -263,6 +298,65 @@ export default function FeedPage() {
     };
   }, [currentUserId]);
 
+  // Mobile search: load recents + auto-focus input when opened
+  useEffect(() => {
+    if (!mobileSearchOpen) return;
+    setRecentProfiles(readRecents());
+    const frame = window.requestAnimationFrame(() => mobileSearchInputRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [mobileSearchOpen]);
+
+  // Mobile search: close on Escape
+  useEffect(() => {
+    if (!mobileSearchOpen) return;
+    const handler = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setMobileSearchOpen(false);
+        setMobileSearchValue("");
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [mobileSearchOpen]);
+
+  // Mobile search: debounced search
+  useEffect(() => {
+    const trimmed = mobileSearchValue.trim();
+
+    if (!mobileSearchOpen || trimmed.length < 2) {
+      setMobileSearchResults([]);
+      setMobileSearchLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setMobileSearchLoading(true);
+
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        const results = await searchUsers({ query: trimmed, limit: 10, excludeUserId: currentUserId ?? undefined });
+        if (!cancelled) setMobileSearchResults(results);
+      } catch {
+        if (!cancelled) setMobileSearchResults([]);
+      } finally {
+        if (!cancelled) setMobileSearchLoading(false);
+      }
+    }, 250);
+
+    return () => { cancelled = true; window.clearTimeout(timeoutId); };
+  }, [mobileSearchOpen, mobileSearchValue, currentUserId]);
+
+  const closeMobileSearch = () => {
+    setMobileSearchOpen(false);
+    setMobileSearchValue("");
+    setMobileSearchResults([]);
+  };
+
+  const handleSearchProfileClick = (u: { id: string; nombre: string; profile_image: string | null }) => {
+    addRecent({ id: u.id, nombre: u.nombre, profile_image: u.profile_image });
+    closeMobileSearch();
+  };
+
   if (loading) return <LoadingScreen />;
 
   return (
@@ -273,36 +367,248 @@ export default function FeedPage() {
         <main
           className={`px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-4)] transition-[padding] duration-[var(--duration-slow)] [transition-timing-function:var(--ease-standard)] md:py-[var(--space-8)] md:pr-[var(--space-14)]`}
         >
-          <div className="mx-auto grid max-w-[1160px] grid-cols-1 gap-[var(--space-8)] xl:grid-cols-[minmax(0,1fr)_300px] xl:gap-[var(--space-10)]">
-            <section className="mx-auto w-full max-w-[760px]">
+          <div className="mx-auto max-w-[1160px]">
+            <div className="md:border-b md:border-[#262626]">
+              <div className="mx-auto w-full max-w-[760px] xl:mx-0">
+              <div className="relative flex items-center gap-[var(--space-3)] md:hidden">
+                <button
+                  type="button"
+                  onClick={() => setActiveFeedTab((prev) => (prev === "explore" ? "following" : "explore"))}
+                  className="flex h-[44px] items-center gap-[8px] px-[4px] text-body-sm font-[700] text-app"
+                >
+                  <span>{activeFeedTab === "explore" ? "Explorar" : "Siguiendo"}</span>
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[18px]">
+                    <path d="M7 10L12 15L17 10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setMobileSearchOpen(true)}
+                  aria-label="Buscar"
+                  className="flex h-[44px] min-w-0 flex-1 items-center gap-[10px] rounded-[8px] bg-surface-inset px-[14px] text-muted transition-opacity hover:opacity-80"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[22px] shrink-0">
+                    <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.8" />
+                    <path d="M16 16L20.5 20.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                  </svg>
+                  <span className="truncate text-[15px]">Buscar</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setNotifPanelOpen(true)}
+                  aria-label="Notificaciones"
+                  className="relative flex h-[44px] w-[44px] shrink-0 items-center justify-center text-app transition-opacity hover:opacity-70"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[28px]">
+                    <path
+                      d="M6 10.5C6 7.46 8.24 5 12 5s6 2.46 6 5.5v3l1.5 2.5H4.5L6 13.5v-3Z"
+                      stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"
+                    />
+                    <path
+                      d="M10 17.5a2 2 0 0 0 4 0"
+                      stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"
+                    />
+                  </svg>
+                  {unreadNotifs > 0 && (
+                    <span className="absolute right-0 top-0 flex size-[14px] items-center justify-center rounded-full bg-blue-500 text-white text-[9px] font-[var(--fw-semibold)] leading-none">
+                      {unreadNotifs > 9 ? "9+" : unreadNotifs}
+                    </span>
+                  )}
+                </button>
+
+                <Link
+                  href={currentUserId ? `/profile/${currentUserId}` : "/settings"}
+                  aria-label="Perfil"
+                  className="flex h-[44px] w-[44px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset transition-opacity hover:opacity-80"
+                >
+                  {profile?.profile_image ? (
+                    <img src={profile.profile_image} alt="Foto de perfil" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                  ) : (
+                    <span className="text-[14px] font-[var(--fw-semibold)] text-app">
+                      {(profile?.nombre?.trim()[0] ?? "P").toUpperCase()}
+                    </span>
+                  )}
+                </Link>
+
+              </div>
+
+              {/* Fullscreen mobile search panel — fade in/out, above bottom nav */}
+              <div
+                className={`fixed inset-0 z-[1030] flex flex-col bg-app transition-opacity duration-200 ease-out md:hidden ${
+                  mobileSearchOpen ? "opacity-100" : "opacity-0 pointer-events-none"
+                }`}
+              >
+                {/* Search bar at the top */}
+                <div className="flex items-center gap-[8px] px-[var(--space-4)] pt-[var(--space-4)]">
+                  <button
+                    type="button"
+                    onClick={closeMobileSearch}
+                    aria-label="Cerrar búsqueda"
+                    className="flex h-[44px] w-[36px] shrink-0 items-center justify-center text-app transition-opacity hover:opacity-70"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[20px]">
+                      <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                  <div className="flex h-[44px] min-w-0 flex-1 items-center gap-[10px] rounded-[8px] bg-surface-inset px-[14px]">
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[20px] shrink-0 text-muted">
+                      <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.8" />
+                      <path d="M16 16L20.5 20.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                    </svg>
+                    <input
+                      ref={mobileSearchInputRef}
+                      type="search"
+                      value={mobileSearchValue}
+                      onChange={(e) => setMobileSearchValue(e.target.value)}
+                      placeholder="Buscar"
+                      className="min-w-0 flex-1 border-none bg-transparent text-[15px] text-app shadow-none outline-none ring-0 focus:border-none focus:shadow-none focus:outline-none focus:ring-0 placeholder:text-muted [&::-webkit-search-cancel-button]:hidden"
+                    />
+                    {mobileSearchValue && (
+                      <button
+                        type="button"
+                        onClick={() => setMobileSearchValue("")}
+                        aria-label="Limpiar"
+                        className="shrink-0 text-muted transition-opacity hover:opacity-70"
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[18px]">
+                          <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto overscroll-contain px-[var(--space-4)]">
+                  {mobileSearchValue.trim().length >= 2 ? (
+                    // Search results
+                    mobileSearchLoading ? (
+                      <div className="flex justify-center py-16">
+                        <div className="size-5 animate-spin rounded-full border-2 border-current border-t-transparent opacity-40" />
+                      </div>
+                    ) : mobileSearchResults.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center gap-3 py-20 text-center">
+                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-12 opacity-20">
+                          <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.8" />
+                          <path d="M16 16L20.5 20.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                        </svg>
+                        <p className="text-body-sm text-muted">No se han encontrado resultados.</p>
+                      </div>
+                    ) : (
+                      <div className="py-2">
+                        {mobileSearchResults.map((u) => (
+                          <Link
+                            key={u.id}
+                            href={`/profile/${u.id}`}
+                            onClick={() => handleSearchProfileClick(u)}
+                            className="flex items-center gap-3 rounded-xl px-2 py-3 transition-colors active:bg-surface"
+                          >
+                            {u.profile_image ? (
+                              <img src={u.profile_image} alt={u.nombre} className="size-10 shrink-0 rounded-full object-cover" referrerPolicy="no-referrer" />
+                            ) : (
+                              <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-surface text-body-sm font-[var(--fw-semibold)] text-app">
+                                {(u.nombre.trim()[0] || "U").toUpperCase()}
+                              </div>
+                            )}
+                            <span className="min-w-0 truncate text-body font-[var(--fw-semibold)] text-app">{u.nombre}</span>
+                          </Link>
+                        ))}
+                      </div>
+                    )
+                  ) : (
+                    <>
+                      {/* Sugerencias (max 3) */}
+                      {suggestedProfiles.length > 0 && (
+                        <div className="py-2">
+                          <p className="px-2 pb-3 pt-4 text-body font-[var(--fw-semibold)] text-app">Sugerencias</p>
+                          {suggestedProfiles.slice(0, 3).map((u) => (
+                            <Link
+                              key={u.id}
+                              href={`/profile/${u.id}`}
+                              onClick={() => handleSearchProfileClick(u)}
+                              className="flex items-center gap-3 rounded-xl px-2 py-3 transition-colors active:bg-surface"
+                            >
+                              {u.profile_image ? (
+                                <img src={u.profile_image} alt={u.nombre} className="size-10 shrink-0 rounded-full object-cover" referrerPolicy="no-referrer" />
+                              ) : (
+                                <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-surface text-body-sm font-[var(--fw-semibold)] text-app">
+                                  {(u.nombre.trim()[0] || "U").toUpperCase()}
+                                </div>
+                              )}
+                              <span className="min-w-0 truncate text-body font-[var(--fw-semibold)] text-app">{u.nombre}</span>
+                            </Link>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Recientes */}
+                      {recentProfiles.length > 0 && (
+                        <div className="py-2">
+                          <p className="px-2 pb-3 pt-4 text-body font-[var(--fw-semibold)] text-app">Recientes</p>
+                          {recentProfiles.map((u) => (
+                            <div key={u.id} className="flex items-center gap-3 rounded-xl px-2 py-3 transition-colors active:bg-surface">
+                              <Link
+                                href={`/profile/${u.id}`}
+                                onClick={() => handleSearchProfileClick(u)}
+                                className="flex min-w-0 flex-1 items-center gap-3"
+                              >
+                                {u.profile_image ? (
+                                  <img src={u.profile_image} alt={u.nombre} className="size-10 shrink-0 rounded-full object-cover" referrerPolicy="no-referrer" />
+                                ) : (
+                                  <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-surface text-body-sm font-[var(--fw-semibold)] text-app">
+                                    {(u.nombre.trim()[0] || "U").toUpperCase()}
+                                  </div>
+                                )}
+                                <span className="min-w-0 truncate text-body font-[var(--fw-semibold)] text-app">{u.nombre}</span>
+                              </Link>
+                              <button
+                                type="button"
+                                aria-label="Eliminar reciente"
+                                onClick={() => { removeRecent(u.id); setRecentProfiles((prev) => prev.filter((r) => r.id !== u.id)); }}
+                                className="shrink-0 p-1 text-muted transition-opacity hover:opacity-70"
+                              >
+                                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[16px]">
+                                  <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                                </svg>
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+
               <div
                 ref={tabRowRef}
-                className="relative flex gap-[var(--space-10)] border-b border-app pb-[var(--space-2)] text-body text-muted"
+                className="relative hidden w-full gap-[var(--space-4)] pb-[var(--space-2)] text-body text-muted md:flex"
               >
-                <button
-                  ref={followingTabRef}
-                  type="button"
-                  onClick={() => setActiveFeedTab("following")}
-                  className={`pb-[var(--space-2)] font-[var(--fw-medium)] transition-colors duration-[var(--duration-base)] ${
-                    activeFeedTab === "following" ? "text-app" : "hover:text-app"
-                  }`}
-                >
-                  Siguiendo
-                </button>
                 <button
                   ref={exploreTabRef}
                   type="button"
                   onClick={() => setActiveFeedTab("explore")}
-                  className={`pb-[var(--space-2)] font-[var(--fw-medium)] transition-colors duration-[var(--duration-base)] ${
+                  className={`-mb-[2px] pb-0 font-[700] transition-colors duration-[var(--duration-base)] ${
                     activeFeedTab === "explore" ? "text-app" : "hover:text-app"
                   }`}
                 >
                   Explorar
                 </button>
+                <button
+                  ref={followingTabRef}
+                  type="button"
+                  onClick={() => setActiveFeedTab("following")}
+                  className={`-mb-[2px] pb-0 font-[700] transition-colors duration-[var(--duration-base)] ${
+                    activeFeedTab === "following" ? "text-app" : "hover:text-app"
+                  }`}
+                >
+                  Siguiendo
+                </button>
                 <Link
                   href="/search"
                   aria-label="Buscar"
-                  className="ml-auto pb-[var(--space-2)] text-app transition-opacity duration-[var(--duration-base)] hover:opacity-70"
+                  className="ml-auto pb-[var(--space-2)] text-app transition-opacity duration-[var(--duration-base)] hover:opacity-70 md:hidden"
                 >
                   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[20px]">
                     <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.8" />
@@ -313,7 +619,7 @@ export default function FeedPage() {
                   type="button"
                   onClick={() => setNotifPanelOpen(true)}
                   aria-label="Notificaciones"
-                  className="relative pb-[var(--space-2)] text-app transition-opacity duration-[var(--duration-base)] hover:opacity-70"
+                  className="relative pb-[var(--space-2)] text-app transition-opacity duration-[var(--duration-base)] hover:opacity-70 md:hidden"
                 >
                   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[20px]">
                     <path
@@ -339,8 +645,12 @@ export default function FeedPage() {
                   aria-hidden="true"
                 />
               </div>
+              </div>
+            </div>
 
-              <div className="mt-[var(--space-5)]">
+            <div className="mt-[var(--space-5)] grid grid-cols-1 gap-[var(--space-8)] xl:grid-cols-[minmax(0,1fr)_300px] xl:gap-[var(--space-10)]">
+            <section className="mx-auto w-full max-w-[760px] xl:mx-0">
+              <div className="md:ml-[72px] md:max-w-[536px] xl:ml-[72px] xl:max-w-[536px]">
                 {loadingFeed || !firstImageReady ? (
                   <>
                     <FeedSkeleton />
@@ -363,9 +673,9 @@ export default function FeedPage() {
                         : "Aun no hay publicaciones para mostrar."}
                     </div>
                   ) : (
-                    <div className="space-y-[var(--space-3)]">
+                    <div className="space-y-[var(--space-3)] md:space-y-[var(--space-6)]">
                       {visiblePosts.map((post, idx) => (
-                        <FeedCard key={post.id} post={post} currentUserId={currentUserId} currentUserName={profile?.nombre ?? null} currentUserProfileImage={profile?.profile_image ?? null} nextPostHasImage={visiblePosts[idx + 1]?.hasImage ?? true} />
+                        <FeedCard key={post.id} post={post} currentUserId={currentUserId} currentUserName={profile?.nombre ?? null} currentUserProfileImage={profile?.profile_image ?? null} prevPostHasImage={visiblePosts[idx - 1]?.hasImage ?? false} nextPostHasImage={visiblePosts[idx + 1]?.hasImage ?? true} />
                       ))}
                     </div>
                   );
@@ -373,11 +683,12 @@ export default function FeedPage() {
               </div>
             </section>
 
-            <aside className="hidden xl:block">
-              <div className="sticky top-[var(--space-8)]">
+            <aside className="hidden xl:block xl:-ml-[120px]">
+              <div className="sticky top-[var(--space-8)] xl:w-[320px]">
                 <FeedChatPanel currentUserId={currentUserId} />
               </div>
             </aside>
+            </div>
           </div>
         </main>
       </div>
@@ -532,7 +843,7 @@ function FeedChatPanel({ currentUserId }: { currentUserId: string | null }) {
               <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
-          <div className="avatar-sm flex items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-[11px] font-[var(--fw-semibold)] text-app">
+          <div className="flex size-[32px] items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-[11px] font-[var(--fw-semibold)] text-app">
             {chatAvatar ? <img src={chatAvatar} alt={chatName} className="h-full w-full object-cover" referrerPolicy="no-referrer" /> : (chatName[0] ?? "?").toUpperCase()}
           </div>
           <span className="min-w-0 truncate text-body-sm font-[var(--fw-semibold)]">{chatName}</span>
@@ -573,11 +884,11 @@ function FeedChatPanel({ currentUserId }: { currentUserId: string | null }) {
                         </div>
                       ) : msg.image_url ? (
                         msg.image_type?.startsWith("video/") ? (
-                          <video src={msg.image_url} controls playsInline className="max-w-[200px] rounded-[8px]" style={{ maxHeight: 200 }} />
+                          <video src={msg.image_url} controls playsInline className="max-w-[200px] rounded-card" style={{ maxHeight: 200 }} />
                         ) : (
                           <a href={msg.image_url} target="_blank" rel="noopener noreferrer">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={msg.image_url} alt="Imagen" className="max-w-[200px] rounded-[8px] object-cover" style={{ maxHeight: 200 }} referrerPolicy="no-referrer" />
+                            <img src={msg.image_url} alt="Imagen" className="max-w-[200px] rounded-card object-cover" style={{ maxHeight: 200 }} referrerPolicy="no-referrer" />
                           </a>
                         )
                       ) : msg.tipo?.startsWith("call_") ? (() => {
@@ -628,8 +939,8 @@ function FeedChatPanel({ currentUserId }: { currentUserId: string | null }) {
   return (
     <div className="pt-[var(--space-10)]">
       <div className="flex items-center justify-between">
-        <h3 className="text-[var(--font-h5)] font-[var(--fw-semibold)] leading-[var(--lh-h5)]">Mensajes</h3>
-        <Link href="/messages" className="text-body-sm text-muted transition-opacity hover:opacity-70">Ver todos</Link>
+        <h3 className="text-[20px] font-[var(--fw-medium)] tracking-[0.03em] leading-[1.3]">Chats recientes</h3>
+        <Link href="/messages" className="text-[13px] text-muted transition-opacity hover:opacity-70">Ver todos</Link>
       </div>
       <div className="mt-[var(--space-4)] space-y-[2px]">
         {chats.length === 0 ? (
@@ -643,7 +954,7 @@ function FeedChatPanel({ currentUserId }: { currentUserId: string | null }) {
               <button key={chat.chat_id} type="button" onClick={() => setOpenChatId(chat.chat_id)}
                 className="flex w-full items-center gap-[var(--space-3)] rounded-[10px] px-2 py-[10px] text-left transition-colors hover:bg-surface">
                 <div className="relative shrink-0">
-                  <div className="avatar-md flex items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">
+                  <div className="flex size-[42px] items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">
                     {avatar ? <img src={avatar} alt={name} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
                       : chat.tipo === "GRUPO" ? <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[16px] text-muted"><circle cx="9" cy="7" r="3" stroke="currentColor" strokeWidth="1.6" /><path d="M2 19c1-3 3.5-4.5 7-4.5s6 1.5 7 4.5" stroke="currentColor" strokeWidth="1.6" /></svg>
                       : (name[0] ?? "?").toUpperCase()}
@@ -698,7 +1009,7 @@ function FeedSkeleton() {
             <div className="feed-skeleton-shimmer h-3 w-[90px] rounded-full" />
             <div className="feed-skeleton-shimmer mt-[6px] h-3 w-[85%] rounded-full" />
             <div className="feed-skeleton-shimmer mt-[4px] h-3 w-[60%] rounded-full" />
-            <div className="mt-[var(--space-2)] flex items-center gap-[var(--space-4)]">
+            <div className="mt-[var(--space-3)] flex items-center gap-[10px]">
               <div className="feed-skeleton-shimmer h-[24px] w-[24px] rounded-full" />
               <div className="feed-skeleton-shimmer h-[24px] w-[24px] rounded-full" />
               <div className="feed-skeleton-shimmer h-[24px] w-[24px] rounded-full" />
@@ -710,17 +1021,17 @@ function FeedSkeleton() {
   );
 }
 
-function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImage, nextPostHasImage }: { post: FeedItemDto; currentUserId: string | null; currentUserName: string | null; currentUserProfileImage: string | null; nextPostHasImage: boolean }) {
+function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImage, prevPostHasImage, nextPostHasImage }: { post: FeedItemDto; currentUserId: string | null; currentUserName: string | null; currentUserProfileImage: string | null; prevPostHasImage: boolean; nextPostHasImage: boolean }) {
   const [publishing, setPublishing] = useState(false);
   const [liked, setLiked] = useState(post.initiallyLiked);
   const [likeCount, setLikeCount] = useState(post.initialLikeCount);
   const [likeLoading, setLikeLoading] = useState(false);
   const [likeAnimating, setLikeAnimating] = useState(false);
+  const [commentsModalOpen, setCommentsModalOpen] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [commentSubmitting, setCommentSubmitting] = useState(false);
   const [commentsSection, setCommentsSection] = useState<CommentDto[]>([]);
   const [commentsLoading, setCommentsLoading] = useState(false);
-  const [commentsExpanded, setCommentsExpanded] = useState(false);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [authorAvatars, setAuthorAvatars] = useState<Record<string, string | null>>({});
   const [imgLoaded, setImgLoaded] = useState(false);
@@ -823,10 +1134,37 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
     return () => document.removeEventListener("mousedown", handler);
   }, [emojiPickerOpen]);
 
+  useEffect(() => {
+    if (!commentsModalOpen) return;
+    const handler = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setCommentsModalOpen(false);
+        setEmojiPickerOpen(false);
+      }
+    };
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousDocumentOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+    document.addEventListener("keydown", handler);
+    const frame = window.requestAnimationFrame(() => commentInputRef.current?.focus());
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousDocumentOverflow;
+      document.removeEventListener("keydown", handler);
+      window.cancelAnimationFrame(frame);
+    };
+  }, [commentsModalOpen]);
+
   const insertEmoji = (emoji: string) => {
     setCommentText((prev) => prev + emoji);
     setEmojiPickerOpen(false);
     commentInputRef.current?.focus();
+  };
+
+  const openCommentsModal = () => {
+    setCommentsModalOpen(true);
+    setEmojiPickerOpen(false);
   };
 
   const onPublish = async () => {
@@ -978,8 +1316,83 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
     return `${day} ${months[d.getMonth()]}`;
   };
 
+  const formatRelativeTime = (iso: string | null) => {
+    if (!iso) return "";
+    const diff = Date.now() - new Date(iso).getTime();
+    const mins = Math.floor(diff / 60_000);
+    if (mins < 1) return "ahora";
+    if (mins < 60) return `${mins} min`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours} h`;
+    const days = Math.floor(hours / 24);
+    if (days < 7) return `${days} d`;
+    const weeks = Math.floor(days / 7);
+    if (weeks < 5) return `${weeks} sem`;
+    const months = Math.floor(days / 30);
+    if (months < 12) return `${months} mes`;
+    const years = Math.floor(days / 365);
+    return `${years} a`;
+  };
+
+  const renderCommentsList = () => {
+    if (commentsLoading) {
+      return <p className="py-6 text-center text-body-sm text-muted">Cargando comentarios...</p>;
+    }
+
+    if (commentsSection.length === 0) {
+      return <p className="py-6 text-center text-body-sm text-muted">Todavía no hay comentarios.</p>;
+    }
+
+    return (
+      <div className="space-y-[var(--space-2)]">
+        {commentsSection.map((comment) => {
+          const avatarImg = authorAvatars[comment.userId] ?? null;
+          const initial = (getCommentAuthorName(comment)[0] || "U").toUpperCase();
+          return (
+            <div key={comment.commentId} className="flex items-start gap-3">
+              <div className="-mt-[4px] flex size-[36px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset">
+                {avatarImg ? (
+                  <img src={avatarImg} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                ) : (
+                  <span className="text-[13px] font-[var(--fw-semibold)] text-app">{initial}</span>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start gap-3">
+                  <p className="min-w-0 flex-1 text-[15px] leading-[1.35] text-app">
+                    <Link href={`/profile/${comment.userId}`} className="font-[800] tracking-[0.01em]">{getCommentAuthorName(comment)}</Link>{" "}
+                    {comment.content}
+                  </p>
+                  {comment.userId === currentUserId ? (
+                    <button type="button" className="mt-0.5 shrink-0 p-0.5 text-muted opacity-50" aria-label="Eliminar comentario" onClick={() => setConfirmDeleteId(comment.commentId)}>
+                      <TrashIcon />
+                    </button>
+                  ) : (
+                    <button type="button" className="mt-0.5 shrink-0 text-muted transition-opacity hover:opacity-70" aria-label="Me gusta">
+                      <CommentHeartIcon />
+                    </button>
+                  )}
+                </div>
+                <div className="mt-2 flex items-center gap-4 text-[13px] font-[var(--fw-semibold)] text-muted">
+                  <span>{formatRelativeTime(comment.createdAt)}</span>
+                  {comment.likeCount > 0 ? <span>{comment.likeCount} Me gusta</span> : null}
+                  <button type="button" className="transition-opacity hover:opacity-70">Responder</button>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   return (
-    <article className="pb-[var(--space-2)]">
+    <article className={post.hasImage && !nextPostHasImage ? "" : "pb-[var(--space-5)]"}>
+      {/* Divider — image post after a no-image post */}
+      {post.hasImage && !prevPostHasImage && (
+        <div className="feed-divider border-t border-app" />
+      )}
+
       {/* Image with overlays */}
       {post.hasImage && (
         <div
@@ -1005,20 +1418,20 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
               {post.avatarImage ? (
                 <img src={post.avatarImage} alt={post.avatarLabel} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
               ) : (
-                <span className="text-[13px] font-[var(--fw-semibold)] text-white">{post.avatarLabel}</span>
+                <span className="text-[13px] font-[var(--fw-semibold)] text-[#F5F5F5]">{post.avatarLabel}</span>
               )}
             </div>
-            <Link href={`/profile/${post.plan.ownerUserId}`} className="text-body-sm font-[var(--fw-semibold)] text-white drop-shadow-sm">{post.userName}</Link>
+            <Link href={`/profile/${post.plan.ownerUserId}`} className="text-body-sm font-[800] tracking-[0.01em] text-[#F5F5F5] drop-shadow-sm">{post.userName}</Link>
           </div>
 
           {/* Bottom overlay — location + dates */}
           <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-[var(--space-4)] pb-[var(--space-3)] pt-[var(--space-10)]">
             {post.plan.locationName && (
-              <p className="text-body font-[var(--fw-semibold)] leading-tight text-white drop-shadow-sm">
+              <p className="text-body font-[var(--fw-semibold)] leading-tight text-[#F5F5F5] drop-shadow-sm">
                 {post.plan.locationName}
               </p>
             )}
-            <p className="mt-[2px] text-body-sm text-white/70">
+            <p className="mt-[2px] text-body-sm text-[#F5F5F5]/75">
               {formatDate(post.plan.startsAt) === formatDate(post.plan.endsAt)
                 ? formatDate(post.plan.startsAt)
                 : `${formatDate(post.plan.startsAt)} - ${formatDate(post.plan.endsAt)}`}
@@ -1038,93 +1451,26 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
             )}
           </div>
           <div className="min-w-0 flex-1">
-            <Link href={`/profile/${post.plan.ownerUserId}`} className="text-body-sm font-[var(--fw-semibold)]">{post.userName}</Link>
+            <Link href={`/profile/${post.plan.ownerUserId}`} className="text-body-sm font-[800] tracking-[0.01em]">{post.userName}</Link>
             {post.text && (
-              <p className="mt-[2px] text-body-sm leading-[1.45]">{post.text}</p>
+              <p className="mt-[2px] text-[15px] leading-[1.45]">{post.text}</p>
             )}
             {/* Actions */}
-            <div className="mt-[var(--space-2)] flex items-center gap-[var(--space-4)]">
-              <button type="button" className="flex items-center gap-[6px] disabled:opacity-50" aria-label={liked ? "Quitar like" : "Dar like"} onClick={onLikeToggle} disabled={!currentUserId || likeLoading}>
+            <div className="mt-[var(--space-3)] flex items-center gap-[var(--space-4)]">
+              <button type="button" className="flex items-center gap-[4px] disabled:opacity-50" aria-label={liked ? "Quitar like" : "Dar like"} onClick={onLikeToggle} disabled={!currentUserId || likeLoading}>
                 <PlaneIcon liked={liked} animating={likeAnimating} />
-                {likeCount > 0 && <span className="text-body-sm font-[var(--fw-semibold)]">{likeCount}</span>}
+                {likeCount > 0 && <span className="text-[15px] font-[700]">{likeCount}</span>}
               </button>
-              <button type="button" className="flex items-center gap-[6px]" onClick={() => setCommentsExpanded((prev) => !prev)}>
+              <button type="button" className="flex items-center gap-[4px]" onClick={openCommentsModal}>
                 <CommentIcon />
-                {commentsSection.length > 0 && <span className="text-body-sm font-[var(--fw-semibold)]">{commentsSection.length}</span>}
+                {commentsSection.length > 0 && <span className="text-[15px] font-[700]">{commentsSection.length}</span>}
               </button>
               <button type="button" className="disabled:opacity-50" aria-label="Compartir" onClick={onPublish} disabled={publishing}>
                 <ShareIcon />
               </button>
-              <button type="button" className="ml-auto text-body-sm font-[var(--fw-semibold)] text-[var(--primary)] transition-opacity hover:opacity-70">
+              <button type="button" className="ml-auto mr-[calc(var(--space-4)-2px)] pr-[var(--space-1)] text-body-sm font-[var(--fw-semibold)] text-[var(--primary)] transition-opacity hover:opacity-70">
                 Ver plan
               </button>
-            </div>
-            {/* View comments link */}
-            {commentsSection.length > 0 && !commentsExpanded && (
-              <button type="button" onClick={() => setCommentsExpanded(true)} className="mt-[var(--space-1)] text-body-sm text-muted">
-                Ver los {commentsSection.length} comentarios
-              </button>
-            )}
-            {/* Expanded comments */}
-            {commentsExpanded && commentsSection.length > 0 && (
-              <div className="scrollbar-thin mt-[var(--space-2)] max-h-[120px] space-y-[var(--space-2)] overflow-y-auto overscroll-contain">
-                {commentsSection.map((comment) => {
-                  const avatarImg = authorAvatars[comment.userId] ?? null;
-                  const initial = (getCommentAuthorName(comment)[0] || "U").toUpperCase();
-                  return (
-                    <div key={comment.commentId} className="flex items-start gap-[var(--space-2)]">
-                      <div className="flex size-[24px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset">
-                        {avatarImg ? (
-                          <img src={avatarImg} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
-                        ) : (
-                          <span className="text-[10px] font-[var(--fw-semibold)] text-app">{initial}</span>
-                        )}
-                      </div>
-                      <p className="min-w-0 flex-1 text-body-sm leading-[1.4]">
-                        <Link href={`/profile/${comment.userId}`} className="font-[var(--fw-semibold)]">{getCommentAuthorName(comment)}</Link>{" "}
-                        {comment.content}
-                      </p>
-                      {comment.userId === currentUserId && (
-                        <button type="button" className="mt-0.5 shrink-0 p-0.5 text-muted opacity-50" aria-label="Eliminar comentario" onClick={() => setConfirmDeleteId(comment.commentId)}>
-                          <TrashIcon />
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-            {/* Comment input */}
-            <div ref={emojiPickerRef} className="relative mt-[var(--space-2)] flex items-center gap-[var(--space-2)]">
-              <button type="button" className="flex items-center justify-center text-muted" aria-label="Emoticonos" onClick={() => setEmojiPickerOpen((prev) => !prev)}>
-                <SmileyIcon />
-              </button>
-              {emojiPickerOpen && (
-                <div className="absolute bottom-[calc(100%+8px)] left-0 z-50 w-[256px] rounded-[10px] bg-[#1a1a1a]/95 p-2 shadow-lg backdrop-blur-md">
-                  <div className="scrollbar-thin grid max-h-[180px] grid-cols-8 gap-0.5 overflow-x-hidden overflow-y-auto overscroll-contain">
-                    {EMOJI_LIST.map((emoji) => (
-                      <button key={emoji} type="button" className="flex size-[30px] items-center justify-center rounded-[6px] text-[18px] transition-colors hover:bg-white/15" onClick={() => insertEmoji(emoji)}>
-                        {emoji}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              <input
-                ref={commentInputRef}
-                type="text"
-                value={commentText}
-                onChange={(e) => setCommentText(e.target.value)}
-                onKeyDown={onCommentKeyDown}
-                placeholder="Añade un comentario..."
-                className="min-w-0 flex-1 bg-transparent py-[4px] text-body-sm text-app outline-none placeholder:text-muted"
-                disabled={!currentUserId || commentSubmitting}
-              />
-              {commentText.trim() && (
-                <button type="button" onClick={onSubmitComment} disabled={!currentUserId || commentSubmitting} className="text-body-sm font-[var(--fw-semibold)] text-[var(--primary)] disabled:opacity-40">
-                  Publicar
-                </button>
-              )}
             </div>
           </div>
         </div>
@@ -1134,111 +1480,160 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
       {post.hasImage && (
         <>
           {/* Actions row */}
-          <div className="mt-[var(--space-2)] flex items-center gap-[var(--space-4)] px-[var(--space-1)]">
-            <button type="button" className="flex items-center gap-[6px] disabled:opacity-50" aria-label={liked ? "Quitar like" : "Dar like"} onClick={onLikeToggle} disabled={!currentUserId || likeLoading}>
+          <div className="mt-[var(--space-3)] flex items-center gap-[10px] px-[2px] text-app md:px-[var(--space-4)]">
+            <button type="button" className="flex items-center gap-[4px] disabled:opacity-50" aria-label={liked ? "Quitar like" : "Dar like"} onClick={onLikeToggle} disabled={!currentUserId || likeLoading}>
               <PlaneIcon liked={liked} animating={likeAnimating} />
-              {likeCount > 0 && <span className="text-body-sm font-[var(--fw-semibold)]">{likeCount}</span>}
+              {likeCount > 0 && <span className="text-[15px] font-[700] text-app">{likeCount}</span>}
             </button>
-            <button type="button" className="flex items-center gap-[6px]" onClick={() => setCommentsExpanded((prev) => !prev)}>
+            <button type="button" className="flex items-center gap-[4px]" onClick={openCommentsModal}>
               <CommentIcon />
-              {commentsSection.length > 0 && <span className="text-body-sm font-[var(--fw-semibold)]">{commentsSection.length}</span>}
+              {commentsSection.length > 0 && <span className="text-[15px] font-[700] text-app">{commentsSection.length}</span>}
             </button>
             <button type="button" className="disabled:opacity-50" aria-label="Compartir" onClick={onPublish} disabled={publishing}>
               <ShareIcon />
             </button>
-            <button type="button" className="ml-auto text-body-sm font-[var(--fw-semibold)] text-[var(--primary)] transition-opacity hover:opacity-70">
+            <button type="button" className="ml-auto pr-0 text-body-sm font-[var(--fw-semibold)] text-[var(--primary)] transition-opacity hover:opacity-70 md:pr-[var(--space-1)]">
               Ver plan
             </button>
           </div>
 
           {/* Username + description */}
           {post.text && (
-            <p className="mt-[var(--space-3)] px-[var(--space-1)] text-body-sm leading-[1.45]">
-              <Link href={`/profile/${post.plan.ownerUserId}`} className="font-[var(--fw-semibold)]">{post.userName}</Link>{" "}
+            <p className="mt-[var(--space-3)] px-[2px] text-[15px] leading-[1.45] text-app md:px-[var(--space-4)]">
+              <Link href={`/profile/${post.plan.ownerUserId}`} className="font-[800] tracking-[0.01em] text-app">{post.userName}</Link>{" "}
               {post.text}
             </p>
           )}
 
-          {/* View comments link */}
-          {commentsSection.length > 0 && !commentsExpanded && (
-            <button type="button" onClick={() => setCommentsExpanded(true)} className="mt-[var(--space-1)] px-[var(--space-1)] text-body-sm text-muted">
-              Ver los {commentsSection.length} comentarios
-            </button>
-          )}
-
-          {/* Expanded comments */}
-          {commentsExpanded && commentsSection.length > 0 && (
-            <div className="scrollbar-thin mt-[var(--space-2)] max-h-[120px] space-y-[var(--space-2)] overflow-y-auto overscroll-contain px-[var(--space-1)]">
-              {commentsSection.map((comment) => {
-                const avatarImg = authorAvatars[comment.userId] ?? null;
-                const initial = (getCommentAuthorName(comment)[0] || "U").toUpperCase();
-                return (
-                  <div key={comment.commentId} className="flex items-start gap-[var(--space-2)]">
-                    <div className="flex size-[24px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset">
-                      {avatarImg ? (
-                        <img src={avatarImg} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
-                      ) : (
-                        <span className="text-[10px] font-[var(--fw-semibold)] text-app">{initial}</span>
-                      )}
-                    </div>
-                    <p className="min-w-0 flex-1 text-body-sm leading-[1.4]">
-                      <Link href={`/profile/${comment.userId}`} className="font-[var(--fw-semibold)]">{getCommentAuthorName(comment)}</Link>{" "}
-                      {comment.content}
-                    </p>
-                    {comment.userId === currentUserId && (
-                      <button type="button" className="mt-0.5 shrink-0 p-0.5 text-muted opacity-50" aria-label="Eliminar comentario" onClick={() => setConfirmDeleteId(comment.commentId)}>
-                        <TrashIcon />
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Comment input */}
-          <div ref={emojiPickerRef} className="relative mt-[var(--space-2)] flex items-center gap-[var(--space-2)] px-[var(--space-1)]">
-            <button type="button" className="flex items-center justify-center text-muted" aria-label="Emoticonos" onClick={() => setEmojiPickerOpen((prev) => !prev)}>
-              <SmileyIcon />
-            </button>
-            {emojiPickerOpen && (
-              <div className="absolute bottom-[calc(100%+8px)] left-0 z-50 w-[256px] rounded-[10px] bg-[#1a1a1a]/95 p-2 shadow-lg backdrop-blur-md">
-                <div className="scrollbar-thin grid max-h-[180px] grid-cols-8 gap-0.5 overflow-x-hidden overflow-y-auto overscroll-contain">
-                  {EMOJI_LIST.map((emoji) => (
-                    <button key={emoji} type="button" className="flex size-[30px] items-center justify-center rounded-[6px] text-[18px] transition-colors hover:bg-white/15" onClick={() => insertEmoji(emoji)}>
-                      {emoji}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-            <input
-              ref={commentInputRef}
-              type="text"
-              value={commentText}
-              onChange={(e) => setCommentText(e.target.value)}
-              onKeyDown={onCommentKeyDown}
-              placeholder="Añade un comentario..."
-              className="min-w-0 flex-1 bg-transparent py-[4px] text-body-sm text-app outline-none placeholder:text-muted"
-              disabled={!currentUserId || commentSubmitting}
-            />
-            {commentText.trim() && (
-              <button type="button" onClick={onSubmitComment} disabled={!currentUserId || commentSubmitting} className="text-body-sm font-[var(--fw-semibold)] text-[var(--primary)] disabled:opacity-40">
-                Publicar
-              </button>
-            )}
-          </div>
         </>
       )}
 
       {/* Divider — only between image post followed by no-image post */}
       {post.hasImage && !nextPostHasImage && (
-        <div className="feed-divider mt-[var(--space-2)] border-t border-app" />
+        <div className="feed-divider mt-[var(--space-5)] border-t border-app" />
+      )}
+
+      {commentsModalOpen && (
+        <div className="comments-modal-overlay fixed inset-0 z-[1100] flex items-end justify-center bg-black/65 md:items-center md:p-[var(--space-6)]" onClick={() => { setCommentsModalOpen(false); setEmojiPickerOpen(false); }}>
+          <div className="comments-modal-panel grid h-dvh w-full overflow-hidden border border-[#262626] bg-app shadow-elev-4 md:h-[min(88dvh,760px)] md:max-w-[1120px] md:rounded-[6px] md:grid-cols-[minmax(0,1fr)_420px]" onClick={(e) => e.stopPropagation()}>
+            <div className="relative hidden min-h-0 bg-[#111] md:block">
+              {post.hasImage && post.coverImage ? (
+                <img src={post.coverImage} alt="Imagen del plan" className="h-full w-full object-contain" referrerPolicy="no-referrer" />
+              ) : (
+                <div className="flex h-full flex-col justify-end bg-[radial-gradient(circle_at_top,#2a2a2a,transparent_55%),linear-gradient(180deg,#171717,#0d0d0d)] p-[var(--space-6)]">
+                  <p className="text-[28px] font-[800] leading-tight text-white">{post.userName}</p>
+                  {post.text ? <p className="mt-[var(--space-3)] max-w-[460px] text-body text-white/75">{post.text}</p> : null}
+                  {post.plan.locationName ? <p className="mt-[var(--space-5)] text-body-sm font-[var(--fw-semibold)] text-white/80">{post.plan.locationName}</p> : null}
+                </div>
+              )}
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-[var(--space-6)] pb-[var(--space-6)] pt-[var(--space-12)]">
+                <div className="pointer-events-auto flex items-center gap-3">
+                  <div className="flex size-[42px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/25 bg-white/10">
+                    {post.avatarImage ? (
+                      <img src={post.avatarImage} alt={post.userName} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                    ) : (
+                      <span className="text-[15px] font-[var(--fw-semibold)] text-white">{post.avatarLabel}</span>
+                    )}
+                  </div>
+                  <div className="min-w-0 text-[15px]">
+                    <Link href={`/profile/${post.plan.ownerUserId}`} className="truncate font-[800] text-white">{post.userName}</Link>
+                    <span className="px-2 text-white/50">•</span>
+                    <button type="button" className="font-[700] text-primary-token transition-opacity hover:opacity-80">Seguir</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex min-h-0 flex-col bg-[#1f2228]">
+              <div className="flex items-center justify-between border-b border-[#262626] px-[22px] py-[18px]">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex size-[42px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset">
+                    {post.avatarImage ? (
+                      <img src={post.avatarImage} alt={post.userName} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                    ) : (
+                      <span className="text-[15px] font-[var(--fw-semibold)] text-app">{post.avatarLabel}</span>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1 self-center">
+                    <p className="text-[15px] leading-[1.35] text-app">
+                      <Link href={`/profile/${post.plan.ownerUserId}`} className="font-[800]">{post.userName}</Link>
+                      {post.text ? <> {post.text}</> : null}
+                    </p>
+                    <p className="mt-1 text-[13px] text-muted">
+                      {post.plan.createdAt ? formatRelativeTime(post.plan.createdAt) : formatDate(post.plan.startsAt)}
+                    </p>
+                  </div>
+                </div>
+                <button type="button" onClick={() => { setCommentsModalOpen(false); setEmojiPickerOpen(false); }} aria-label="Cerrar comentarios" className="text-muted transition-opacity hover:opacity-70">
+                  <CloseIcon />
+                </button>
+              </div>
+
+              <div className="scrollbar-thin flex-1 overflow-y-auto overscroll-contain px-[22px] py-[22px]">
+                {renderCommentsList()}
+              </div>
+
+              <div className="border-t border-[#262626] px-[22px] py-[14px]">
+                <div className="flex items-center gap-4 text-app">
+                  <button type="button" className="flex items-center gap-[6px] transition-opacity hover:opacity-70" aria-label="Me gusta">
+                    <ModalHeartIcon />
+                    {likeCount > 0 ? <span className="text-[14px] font-[700] text-app">{likeCount}</span> : null}
+                  </button>
+                  <button type="button" className="flex items-center gap-[6px] transition-opacity hover:opacity-70" aria-label="Comentarios">
+                    <CommentIcon />
+                    {commentsSection.length > 0 ? <span className="text-[14px] font-[700] text-app">{commentsSection.length}</span> : null}
+                  </button>
+                  <button type="button" className="transition-opacity hover:opacity-70" aria-label="Compartir">
+                    <ShareIcon />
+                  </button>
+                  <button type="button" className="ml-auto transition-opacity hover:opacity-70" aria-label="Guardar">
+                    <BookmarkIcon />
+                  </button>
+                </div>
+              </div>
+
+              <div ref={emojiPickerRef} className="relative border-t border-[#262626] px-[22px] py-[14px]">
+                {emojiPickerOpen && (
+                  <div className="absolute bottom-[calc(100%+8px)] left-[22px] z-[70] w-[256px] rounded-[10px] bg-[#1a1a1a]/95 p-2 shadow-lg backdrop-blur-md">
+                    <div className="scrollbar-thin grid max-h-[180px] grid-cols-8 gap-0.5 overflow-x-hidden overflow-y-auto overscroll-contain">
+                      {EMOJI_LIST.map((emoji) => (
+                        <button key={emoji} type="button" className="flex size-[30px] items-center justify-center rounded-[6px] text-[18px] transition-colors hover:bg-white/15" onClick={() => insertEmoji(emoji)}>
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-[var(--space-2)]">
+                  <button type="button" className="flex items-center justify-center text-muted" aria-label="Emoticonos" onClick={() => setEmojiPickerOpen((prev) => !prev)}>
+                    <SmileyIcon />
+                  </button>
+                  <input
+                    ref={commentInputRef}
+                    type="text"
+                    value={commentText}
+                    onChange={(e) => setCommentText(e.target.value)}
+                    onKeyDown={onCommentKeyDown}
+                    placeholder="Añade un comentario..."
+                    className="min-w-0 flex-1 bg-transparent py-[4px] text-[15px] text-app outline-none ring-0 focus:outline-none focus:ring-0 focus:border-transparent placeholder:text-muted"
+                    disabled={!currentUserId || commentSubmitting}
+                  />
+                  {commentText.trim() && (
+                    <button type="button" onClick={onSubmitComment} disabled={!currentUserId || commentSubmitting} className="text-[15px] font-[700] text-[#bfc2ca] disabled:opacity-40">
+                      Publicar
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Delete comment confirmation modal */}
       {confirmDeleteId && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center pb-[max(var(--space-6),env(safe-area-inset-bottom))] sm:items-center" onClick={() => setConfirmDeleteId(null)}>
+        <div className="fixed inset-0 z-[70] flex items-end justify-center pb-[max(var(--space-6),env(safe-area-inset-bottom))] sm:items-center" onClick={() => setConfirmDeleteId(null)}>
           <div className="w-full max-w-[340px] rounded-modal border border-app bg-surface p-[var(--space-5)] shadow-elev-2 mx-[var(--space-4)]" onClick={(e) => e.stopPropagation()}>
             <p className="text-body font-[var(--fw-semibold)] text-app">¿Eliminar comentario?</p>
             <p className="mt-[var(--space-1)] text-body-sm text-muted">Esta acción no se puede deshacer.</p>
@@ -1260,8 +1655,8 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
 function PlaneIcon({ liked, animating }: { liked: boolean; animating: boolean }) {
   return (
     <svg
-      width="24"
-      height="24"
+      width="28"
+      height="28"
       viewBox="0 0 24 24"
       fill={liked ? "currentColor" : "none"}
       aria-hidden="true"
@@ -1280,11 +1675,27 @@ function PlaneIcon({ liked, animating }: { liked: boolean; animating: boolean })
 
 function CommentIcon() {
   return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <svg width="31" height="31" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path
-        d="M4 5.5A1.5 1.5 0 0 1 5.5 4H18.5A1.5 1.5 0 0 1 20 5.5V14.5A1.5 1.5 0 0 1 18.5 16H9L4 20V5.5Z"
+        d="M12 4C7.582 4 4 6.91 4 10.5C4 12.31 4.913 13.947 6.39 15.109C6.272 16.213 5.79 17.343 4.98 18.316C4.787 18.549 5.02 18.88 5.315 18.785C7.005 18.243 8.357 17.471 9.235 16.86C10.115 17.113 11.04 17.25 12 17.25C16.418 17.25 20 14.34 20 10.75C20 7.16 16.418 4 12 4Z"
         stroke="currentColor"
         strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function CommentHeartIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M21 16V14L13 9V3.5C13 2.67 12.33 2 11.5 2C10.67 2 10 2.67 10 3.5V9L2 14V16L10 13.5V19L8 20.5V22L11.5 21L15 22V20.5L13 19V13.5L21 16Z"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+        strokeLinecap="round"
       />
     </svg>
   );
@@ -1292,10 +1703,31 @@ function CommentIcon() {
 
 function ShareIcon() {
   return (
+    <svg width="31" height="31" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M19 5L10.25 13.75" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      <path d="M19 5L13.5 19L10.25 13.75L5 10.5L19 5Z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function ModalHeartIcon() {
+  return (
+    <svg width="25" height="25" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M21 16V14L13 9V3.5C13 2.67 12.33 2 11.5 2C10.67 2 10 2.67 10 3.5V9L2 14V16L10 13.5V19L8 20.5V22L11.5 21L15 22V20.5L13 19V13.5L21 16Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function BookmarkIcon() {
+  return (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M4 12V20C4 20.55 4.45 21 5 21H19C19.55 21 20 20.55 20 20V12" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-      <path d="M12 3V15" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-      <path d="M8 7L12 3L16 7" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M7 4.5H17C17.55 4.5 18 4.95 18 5.5V20L12 16.2L6 20V5.5C6 4.95 6.45 4.5 7 4.5Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -1323,3 +1755,10 @@ function SmileyIcon() {
   );
 }
 
+function CloseIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
