@@ -125,7 +125,7 @@ export function useCall() {
   const endCall = useCallback(async (endForAll = false) => {
     if (callState.status === "idle") return;
 
-    const isGroup = callState.status !== "idle" && "miembros" in callState && callState.miembros.length > 2;
+    const isGroup = "miembros" in callState && callState.miembros.length > 2;
 
     if (callState.status === "incoming") {
       void supabase
