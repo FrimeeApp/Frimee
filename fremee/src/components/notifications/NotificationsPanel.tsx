@@ -8,6 +8,8 @@ import {
   marcarNotificacionesLeidas,
   acceptFriendRequest,
   rejectFriendRequest,
+  acceptPlanInvite,
+  rejectPlanInvite,
   type NotificacionDto,
 } from "@/services/api/repositories/notifications.repository";
 
@@ -73,13 +75,28 @@ function NotifItem({
 }) {
   const [acting, setActing] = useState(false);
   const isFriendRequest = n.tipo === "friend_request" && n.actor_id;
+  const isPlanInvite = n.tipo === "plan_invite" && n.entity_id;
 
-  const handle = async (accept: boolean) => {
+  const handleFriend = async (accept: boolean) => {
     if (!n.actor_id || acting) return;
     setActing(true);
     try {
       if (accept) await acceptFriendRequest(n.actor_id);
       else await rejectFriendRequest(n.actor_id);
+      onAction(n.id);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setActing(false);
+    }
+  };
+
+  const handlePlanInvite = async (accept: boolean) => {
+    if (!n.entity_id || acting) return;
+    setActing(true);
+    try {
+      if (accept) await acceptPlanInvite(Number(n.entity_id), n.id);
+      else await rejectPlanInvite(n.id);
       onAction(n.id);
     } catch (e) {
       console.error(e);
@@ -108,12 +125,12 @@ function NotifItem({
         </p>
         <p className="text-caption text-muted mt-0.5">{timeAgo(n.created_at)}</p>
 
-        {isFriendRequest && (
+        {(isFriendRequest || isPlanInvite) && (
           <div className="mt-2 flex gap-2">
             <button
               type="button"
               disabled={acting}
-              onClick={() => void handle(true)}
+              onClick={() => void (isFriendRequest ? handleFriend(true) : handlePlanInvite(true))}
               className="rounded-full bg-[var(--primary)] px-4 py-1.5 text-body-sm font-[var(--fw-semibold)] text-white transition-opacity hover:opacity-80 disabled:opacity-50"
             >
               Aceptar
@@ -121,7 +138,7 @@ function NotifItem({
             <button
               type="button"
               disabled={acting}
-              onClick={() => void handle(false)}
+              onClick={() => void (isFriendRequest ? handleFriend(false) : handlePlanInvite(false))}
               className="rounded-full border border-[var(--border)] px-4 py-1.5 text-body-sm font-[var(--fw-semibold)] transition-colors hover:bg-[var(--surface)] disabled:opacity-50"
             >
               Rechazar

@@ -6,7 +6,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/providers/AuthProvider";
 import CreatePlanModal, { type CreatePlanPayload } from "@/components/plans/CreatePlanModal";
 import { createPlan } from "@/services/api/repositories/plans.repository";
-import { countNotificacionesNoLeidas } from "@/services/api/repositories/notifications.repository";
+import { countNotificacionesNoLeidas, insertNotificacion } from "@/services/api/repositories/notifications.repository";
 import { searchUsers, type PublicUserProfileDto } from "@/services/api/repositories/users.repository";
 import NotificationsPanel from "@/components/notifications/NotificationsPanel";
 type IconProps = {
@@ -174,6 +174,21 @@ export default function AppSidebar({ onCreatePlan }: AppSidebarProps) {
       ownerUserId: user.id,
       creadoPorUserId: user.id,
     });
+
+    // Enviar invitaciones a los amigos seleccionados
+    if (payload.invitedFriendIds.length > 0) {
+      await Promise.allSettled(
+        payload.invitedFriendIds.map((friendId) =>
+          insertNotificacion({
+            userId: friendId,
+            tipo: "plan_invite",
+            actorId: user.id,
+            entityId: String(created.id),
+            entityType: "plan",
+          })
+        )
+      );
+    }
 
     setCreateModalOpen(false);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -103,6 +103,13 @@ export async function fetchPlansByIds(params: { planIds: number[] }): Promise<Pl
   return (data ?? []) as PlanByIdRow[];
 }
 
+export async function fetchPlanMemberIds(planId: number): Promise<string[]> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_get_plan_member_ids", { p_plan_id: planId });
+  if (error) throw error;
+  return (data ?? []).map((r: { user_id: string }) => r.user_id);
+}
+
 export async function fetchUserRelatedPlans(params: { userId: string; limit?: number }): Promise<PlanByIdRow[]> {
   const supabase = createBrowserSupabaseClient();
 

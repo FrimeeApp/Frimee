@@ -6,6 +6,7 @@ import { es } from "date-fns/locale";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import LocationAutocomplete from "@/components/plans/LocationAutocomplete";
+import { fetchActiveFriends, type PublicUserProfileRow } from "@/services/api/endpoints/users.endpoint";
 
 export type CreatePlanPayload = {
   title: string;
@@ -20,6 +21,7 @@ export type CreatePlanPayload = {
   coverFile: File | null;
   visibility: "PÚBLICO" | "SOLO_GRUPO";
   inviteMode: "now" | "later";
+  invitedFriendIds: string[];
 };
 
 type CreatePlanModalProps = {
@@ -68,6 +70,9 @@ export default function CreatePlanModal({ open, onClose, onCreate }: CreatePlanM
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [friends, setFriends] = useState<PublicUserProfileRow[]>([]);
+  const [loadingFriends, setLoadingFriends] = useState(false);
+  const [invitedFriendIds, setInvitedFriendIds] = useState<Set<string>>(new Set());
 
   const canSubmit = useMemo(() => {
     if (!title.trim()) return false;
@@ -93,6 +98,7 @@ export default function CreatePlanModal({ open, onClose, onCreate }: CreatePlanM
     setCoverFile(null);
     setSaving(false);
     setErrorMsg(null);
+    setInvitedFriendIds(new Set());
   };
 
   useEffect(() => {
@@ -121,6 +127,15 @@ export default function CreatePlanModal({ open, onClose, onCreate }: CreatePlanM
       document.body.style.overflow = previousOverflow;
     };
   }, [open]);
+
+  useEffect(() => {
+    if (inviteMode !== "now" || friends.length > 0 || loadingFriends) return;
+    setLoadingFriends(true);
+    fetchActiveFriends()
+      .then(setFriends)
+      .catch(console.error)
+      .finally(() => setLoadingFriends(false));
+  }, [inviteMode]);
 
   useEffect(() => {
     return () => {
@@ -180,6 +195,7 @@ export default function CreatePlanModal({ open, onClose, onCreate }: CreatePlanM
         coverFile,
         visibility,
         inviteMode,
+        invitedFriendIds: [...invitedFriendIds],
       });
     } catch (err) {
       const message =
@@ -252,7 +268,8 @@ export default function CreatePlanModal({ open, onClose, onCreate }: CreatePlanM
         </div>
 
         {/* ─── Form body ─── */}
-        <form onSubmit={onSubmit} className="flex min-h-0 flex-col overflow-y-auto">
+        <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">
+          <div className="flex-1 overflow-y-auto">
           <div className="space-y-[var(--space-3)] p-[var(--space-5)]">
 
             {/* Destino */}
@@ -431,27 +448,65 @@ export default function CreatePlanModal({ open, onClose, onCreate }: CreatePlanM
 
             {/* Invitar amigos (si grupal) */}
             <div
-              className="grid transition-all duration-250 ease-out"
+              className="grid transition-all duration-[250ms] ease-out"
               style={{ gridTemplateRows: inviteMode === "now" ? "1fr" : "0fr", opacity: inviteMode === "now" ? 1 : 0 }}
             >
               <div className="overflow-hidden">
-                <div className="rounded-[12px] border border-dashed border-app p-[var(--space-3)]">
-                  <div className="flex items-center gap-2 text-muted">
-                    <svg viewBox="0 0 24 24" fill="none" className="size-[18px]" aria-hidden="true">
-                      <circle cx="9" cy="7" r="3.5" stroke="currentColor" strokeWidth="1.5" />
-                      <path d="M2 20C2.5 16.5 5.5 14 9 14C12.5 14 15.5 16.5 16 20" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                      <path d="M19 11V15M17 13H21" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                    </svg>
-                    <span className="text-body-sm font-[var(--fw-medium)]">Invitar amigos +</span>
-                  </div>
-                  <p className="mt-[var(--space-2)] text-caption text-muted">
-                    Podrás invitar amigos una vez creado el plan.
+                <div className="rounded-[12px] border border-app p-[var(--space-3)]">
+                  <p className="mb-[var(--space-2)] text-[11px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
+                    Invitar amigos
                   </p>
+                  {loadingFriends ? (
+                    <div className="flex justify-center py-3">
+                      <div className="size-[18px] animate-spin rounded-full border-2 border-[var(--text-primary)] border-t-transparent" />
+                    </div>
+                  ) : friends.length === 0 ? (
+                    <p className="text-body-sm text-muted">No tienes amigos para invitar.</p>
+                  ) : (
+                    <div className="max-h-[calc(3*52px)] overflow-y-auto">
+                      {friends.map((friend) => {
+                        const selected = invitedFriendIds.has(friend.id);
+                        const avatarLabel = (friend.nombre.trim()[0] || "?").toUpperCase();
+                        return (
+                          <button
+                            key={friend.id}
+                            type="button"
+                            onClick={() => {
+                              setInvitedFriendIds((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(friend.id)) next.delete(friend.id);
+                                else next.add(friend.id);
+                                return next;
+                              });
+                            }}
+                            className={`flex h-[52px] w-full items-center gap-[var(--space-3)] rounded-[8px] px-2 transition-colors hover:bg-surface ${selected ? "bg-surface" : ""}`}
+                          >
+                            {friend.profile_image ? (
+                              <img src={friend.profile_image} alt={friend.nombre} className="size-[32px] rounded-full object-cover" referrerPolicy="no-referrer" />
+                            ) : (
+                              <div className="flex size-[32px] items-center justify-center rounded-full bg-[var(--text-primary)] text-[13px] font-[var(--fw-semibold)] text-contrast-token">
+                                {avatarLabel}
+                              </div>
+                            )}
+                            <span className="flex-1 text-left text-body-sm font-[var(--fw-medium)]">{friend.nombre}</span>
+                            <div className={`flex size-[20px] items-center justify-center rounded-full border-2 transition-colors ${selected ? "border-[var(--text-primary)] bg-[var(--text-primary)]" : "border-app"}`}>
+                              {selected && (
+                                <svg viewBox="0 0 24 24" fill="none" className="size-[12px]" aria-hidden="true">
+                                  <path d="M5 13l4 4L19 7" stroke="var(--bg)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
 
             {errorMsg ? <p className="text-body-sm text-error-token">{errorMsg}</p> : null}
+          </div>
           </div>
 
           {/* ─── Footer ─── */}
