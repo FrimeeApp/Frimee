@@ -16,7 +16,7 @@ import {
 // ─── helpers ────────────────────────────────────────────────────────────────
 
 const TIPO_LABELS: Record<string, string> = {
-  like: "le dio like a tu plan.",
+  like: "le dio me gusta a tu plan.",
   comment: "comentó tu plan.",
   friend_request: "te envió una solicitud de amistad.",
   friend_accept: "aceptó tu solicitud de amistad.",
@@ -55,10 +55,10 @@ function groupByPeriod(notifs: NotificacionDto[]): { label: string; items: Notif
 function Avatar({ src, name }: { src: string | null; name: string | null }) {
   const letter = (name ?? "?")[0].toUpperCase();
   if (src) {
-    return <img src={src} alt={name ?? ""} className="size-10 rounded-full object-cover shrink-0" />;
+    return <img src={src} alt={name ?? ""} className="size-10 rounded-full border border-app object-cover shrink-0" />;
   }
   return (
-    <div className="size-10 rounded-full bg-[var(--surface-2)] flex items-center justify-center text-body-sm font-[var(--fw-medium)] shrink-0">
+    <div className="size-10 rounded-full border border-app bg-[var(--surface-2)] flex items-center justify-center text-body-sm font-[var(--fw-medium)] shrink-0">
       {letter}
     </div>
   );
@@ -262,7 +262,7 @@ export default function NotificationsPanel({ open, onClose, onRead, desktopPosit
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border)]">
-          <h2 className="text-body font-[var(--fw-semibold)]">Notificaciones</h2>
+          <h2 className="text-[18px] font-[var(--fw-medium)]">Notificaciones</h2>
           <button
             type="button"
             onClick={onClose}
