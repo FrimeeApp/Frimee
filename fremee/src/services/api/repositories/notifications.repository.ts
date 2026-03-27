@@ -78,6 +78,21 @@ export async function rejectFriendRequest(requesterId: string): Promise<void> {
   if (error) throw error;
 }
 
+export async function acceptPlanInvite(planId: number, notifId: number): Promise<void> {
+  const supabase = createBrowserSupabaseClient();
+  const { error } = await supabase.rpc("fn_accept_plan_invite", { p_plan_id: planId });
+  if (error) {
+    console.error("[acceptPlanInvite] error:", error.code, error.message, error.details);
+    throw error;
+  }
+  await supabase.from("notificaciones").delete().eq("id", notifId);
+}
+
+export async function rejectPlanInvite(notifId: number): Promise<void> {
+  const supabase = createBrowserSupabaseClient();
+  await supabase.from("notificaciones").delete().eq("id", notifId);
+}
+
 export async function countNotificacionesNoLeidas(): Promise<number> {
   const supabase = createBrowserSupabaseClient();
   const { count, error } = await supabase

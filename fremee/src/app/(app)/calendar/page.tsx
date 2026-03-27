@@ -13,6 +13,7 @@ import type { FeedPlanItemDto } from "@/services/api/dtos/plan.dto";
 import { syncGoogleCalendarBidirectional } from "@/services/api/repositories/events.repository";
 import { createPlan, listPlansByIdsInOrder, listUserRelatedPlans } from "@/services/api/repositories/plans.repository";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
+import { insertNotificacion } from "@/services/api/repositories/notifications.repository";
 
 type PlanTab = "active" | "done";
 type CalendarViewMode = "month" | "day";
@@ -202,6 +203,20 @@ function CalendarPageInner() {
         } catch (syncErr) {
           console.warn("[calendar] google sync after create failed:", syncErr);
         }
+      }
+
+      if (payload.invitedFriendIds.length > 0) {
+        await Promise.allSettled(
+          payload.invitedFriendIds.map((friendId) =>
+            insertNotificacion({
+              userId: friendId,
+              tipo: "plan_invite",
+              actorId: user.id,
+              entityId: String(created.id),
+              entityType: "plan",
+            })
+          )
+        );
       }
 
       setSavingPlan(false);

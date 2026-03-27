@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import AppSidebar from "@/components/common/AppSidebar";
 import { useAuth } from "@/providers/AuthProvider";
-import { fetchPlansByIds, type PlanByIdRow } from "@/services/api/endpoints/plans.endpoint";
+import { fetchPlansByIds, fetchPlanMemberIds, type PlanByIdRow } from "@/services/api/endpoints/plans.endpoint";
 import { fetchSubplanes, createSubplan, updateSubplanTransporte, updateSubplanViaje, type SubplanRow, type TipoSubplan, TIPOS_TRANSPORTE } from "@/services/api/endpoints/subplanes.endpoint";
 import { listGastosForPlanEndpoint, type GastoRow } from "@/services/api/endpoints/gastos.endpoint";
 import { Calendar } from "@/components/ui/calendar";
@@ -13,6 +13,8 @@ import TripOverviewMap from "@/components/plans/TripOverviewMap";
 import LocationAutocomplete, { type Coords } from "@/components/plans/LocationAutocomplete";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import AddGastoSheet from "@/components/plans/AddGastoSheet";
+import { fetchActiveFriends, type PublicUserProfileRow } from "@/services/api/endpoints/users.endpoint";
+import { insertNotificacion } from "@/services/api/repositories/notifications.repository";
 
 const MOCK_DAYS = [
   {
@@ -93,6 +95,16 @@ function BackIcon({ className = "size-icon" }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" className={className}>
       <path d="M15 19L8 12L15 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function InviteIcon({ className = "size-icon" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <circle cx="9" cy="7" r="3.5" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M2 20C2.5 16.5 5.5 14 9 14C12.5 14 15.5 16.5 16 20" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M19 11V17M16 14H22" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   );
 }
@@ -951,6 +963,52 @@ export default function PlanDetailPage() {
   const [showAddGastoSheet, setShowAddGastoSheet] = useState(false);
   const [gastos, setGastos] = useState<GastoRow[]>([]);
   const [editingTransporteId, setEditingTransporteId] = useState<number | null>(null);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteFriends, setInviteFriends] = useState<PublicUserProfileRow[]>([]);
+  const [inviteFriendsLoading, setInviteFriendsLoading] = useState(false);
+  const [inviteSelected, setInviteSelected] = useState<Set<string>>(new Set());
+  const [inviteSending, setInviteSending] = useState(false);
+
+  const openInviteModal = async () => {
+    setShowInviteModal(true);
+    setInviteSelected(new Set());
+    setInviteFriendsLoading(true);
+    try {
+      const [friends, memberIds] = await Promise.all([
+        fetchActiveFriends(),
+        fetchPlanMemberIds(Number(id)),
+      ]);
+      const memberSet = new Set(memberIds);
+      setInviteFriends(friends.filter((f) => !memberSet.has(f.id)));
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setInviteFriendsLoading(false);
+    }
+  };
+
+  const handleSendInvites = async () => {
+    if (!user?.id || inviteSelected.size === 0) return;
+    setInviteSending(true);
+    try {
+      await Promise.allSettled(
+        [...inviteSelected].map((friendId) =>
+          insertNotificacion({
+            userId: friendId,
+            tipo: "plan_invite",
+            actorId: user.id,
+            entityId: String(Number(id)),
+            entityType: "plan",
+          })
+        )
+      );
+      setShowInviteModal(false);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setInviteSending(false);
+    }
+  };
 
   const handleSubplanCreated = (s: SubplanRow) => {
     setSubplanes((prev) => {
@@ -1090,6 +1148,9 @@ export default function PlanDetailPage() {
 
               {/* Action buttons */}
               <div className="absolute bottom-[var(--space-6)] right-[var(--page-margin-x)] flex gap-[var(--space-2)]">
+                <button onClick={() => void openInviteModal()} className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-sm transition-colors hover:bg-white/30">
+                  <InviteIcon className="size-[18px]" />
+                </button>
                 <button className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-sm transition-colors hover:bg-white/30">
                   <ShareIcon className="size-[18px]" />
                 </button>
@@ -1475,6 +1536,69 @@ export default function PlanDetailPage() {
           onClose={() => setShowAddGastoSheet(false)}
           onCreated={loadGastos}
         />
+      )}
+
+      {/* Invite modal */}
+      {showInviteModal && (
+        <div className="fixed inset-0 z-[80] flex items-end justify-center sm:items-center bg-black/50 px-4 pb-[max(var(--space-4),env(safe-area-inset-bottom))]" onClick={() => setShowInviteModal(false)}>
+          <div className="w-full max-w-[400px] rounded-modal bg-[var(--bg)] shadow-elev-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-app">
+              <p className="text-body font-[var(--fw-semibold)]">Invitar al plan</p>
+              <button type="button" onClick={() => setShowInviteModal(false)} className="text-muted transition-opacity hover:opacity-70">
+                <svg viewBox="0 0 24 24" fill="none" className="size-[20px]"><path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+            <div className="px-2 py-2">
+              {inviteFriendsLoading ? (
+                <div className="flex justify-center py-6">
+                  <div className="size-[20px] animate-spin rounded-full border-2 border-[var(--text-primary)] border-t-transparent" />
+                </div>
+              ) : inviteFriends.length === 0 ? (
+                <p className="py-6 text-center text-body-sm text-muted">No tienes amigos para invitar.</p>
+              ) : (
+                <div className="max-h-[calc(4*52px)] overflow-y-auto">
+                  {inviteFriends.map((friend) => {
+                    const selected = inviteSelected.has(friend.id);
+                    const avatarLabel = (friend.nombre.trim()[0] || "?").toUpperCase();
+                    return (
+                      <button
+                        key={friend.id}
+                        type="button"
+                        onClick={() => setInviteSelected((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(friend.id)) next.delete(friend.id);
+                          else next.add(friend.id);
+                          return next;
+                        })}
+                        className={`flex h-[52px] w-full items-center gap-3 rounded-[8px] px-3 transition-colors hover:bg-surface ${selected ? "bg-surface" : ""}`}
+                      >
+                        {friend.profile_image ? (
+                          <img src={friend.profile_image} alt={friend.nombre} className="size-[32px] rounded-full object-cover" referrerPolicy="no-referrer" />
+                        ) : (
+                          <div className="flex size-[32px] items-center justify-center rounded-full bg-[var(--text-primary)] text-[13px] font-[var(--fw-semibold)] text-contrast-token">{avatarLabel}</div>
+                        )}
+                        <span className="flex-1 text-left text-body-sm font-[var(--fw-medium)]">{friend.nombre}</span>
+                        <div className={`flex size-[20px] items-center justify-center rounded-full border-2 transition-colors ${selected ? "border-[var(--text-primary)] bg-[var(--text-primary)]" : "border-app"}`}>
+                          {selected && <svg viewBox="0 0 24 24" fill="none" className="size-[12px]"><path d="M5 13l4 4L19 7" stroke="var(--bg)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            <div className="px-5 py-4 border-t border-app">
+              <button
+                type="button"
+                onClick={() => void handleSendInvites()}
+                disabled={inviteSelected.size === 0 || inviteSending}
+                className="w-full rounded-full bg-[var(--text-primary)] py-[10px] text-body-sm font-[var(--fw-semibold)] text-contrast-token transition-opacity hover:opacity-80 disabled:opacity-40"
+              >
+                {inviteSending ? "Enviando..." : `Invitar${inviteSelected.size > 0 ? ` (${inviteSelected.size})` : ""}`}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
