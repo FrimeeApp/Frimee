@@ -173,7 +173,7 @@ export default function MessagesPage() {
 
       <div className="relative mx-auto min-h-dvh max-w-[1440px]">
         <AppSidebar />
-        <main className="px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-4)] md:py-[var(--space-8)] md:pr-[var(--space-14)]">
+        <main className="px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-6)] md:py-[var(--space-8)] md:pr-[var(--space-14)]">
           <div className="mx-auto w-full max-w-[760px]">
             {selectedChat && user ? (
               <ChatConversation

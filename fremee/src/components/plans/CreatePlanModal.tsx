@@ -222,11 +222,11 @@ export default function CreatePlanModal({ open, onClose, onCreate }: CreatePlanM
       >
         {/* ─── Cover header ─── */}
         <div
-          className="relative flex h-[140px] shrink-0 flex-col justify-end bg-cover bg-center"
+          className="relative flex h-[168px] shrink-0 flex-col justify-end bg-cover bg-center sm:h-[192px]"
           style={coverImageUrl ? { backgroundImage: `url(${coverImageUrl})` } : undefined}
         >
           {!coverImageUrl && (
-            <div className="absolute inset-0 bg-[var(--surface-2)]" />
+            <div className="absolute inset-0 bg-[linear-gradient(135deg,#1c1c22_0%,#2b2b33_100%)]" />
           )}
           {coverImageUrl && (
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
@@ -238,9 +238,8 @@ export default function CreatePlanModal({ open, onClose, onCreate }: CreatePlanM
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Nombre del plan"
-              className={`w-full bg-transparent text-[var(--font-h2)] font-[var(--fw-bold)] leading-[var(--lh-h2)] tracking-[-0.01em] outline-none ring-0 focus:ring-0 focus:outline-none ${
-                coverImageUrl ? "text-white placeholder:text-white" : "text-app placeholder:text-tertiary"
-              }`}
+              className="w-full bg-transparent text-[var(--font-h2)] font-[var(--fw-medium)] leading-[var(--lh-h2)] tracking-[0.03em] text-white outline-none ring-0 focus:ring-0 focus:outline-none placeholder:text-white/80"
+              style={{ fontSize: "28px" }}
             />
             <input
               value={description}
@@ -275,7 +274,7 @@ export default function CreatePlanModal({ open, onClose, onCreate }: CreatePlanM
             {/* Destino */}
             <div>
               <p className="mb-[var(--space-2)] text-[11px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Destino</p>
-              <div className="flex h-input items-center gap-[var(--space-2)] rounded-[12px] border border-app bg-app px-[var(--space-3)] focus-within:border-[var(--border-strong)] transition-colors">
+              <div className="flex h-input items-center gap-[var(--space-2)] rounded-[12px] border border-app bg-app px-[var(--space-3)] transition-colors">
                 <svg viewBox="0 0 24 24" fill="none" className="size-[16px] shrink-0 text-primary-token" aria-hidden="true">
                   <path d="M12 2C8.13 2 5 5.13 5 9C5 14.25 12 22 12 22C12 22 19 14.25 19 9C19 5.13 15.87 2 12 2Z" stroke="currentColor" strokeWidth="1.5" />
                   <circle cx="12" cy="9" r="2.5" fill="currentColor" />

@@ -236,7 +236,7 @@ export default function ProfilePage() {
       <div className="min-h-dvh bg-app text-app">
         <div className="relative mx-auto min-h-dvh max-w-[1440px]">
           <AppSidebar />
-          <main className="px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-4)] md:py-[var(--space-8)] md:pr-[var(--space-14)]">
+          <main className="px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-6)] md:py-[var(--space-8)] md:pr-[var(--space-14)]">
             <div className="mx-auto w-full max-w-[760px]">
               <ProfileSkeleton />
             </div>
@@ -251,7 +251,7 @@ export default function ProfilePage() {
       <div className="min-h-dvh bg-app text-app">
         <div className="relative mx-auto min-h-dvh max-w-[1440px]">
           <AppSidebar />
-          <main className="px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-4)] md:py-[var(--space-8)] md:pr-[var(--space-14)]">
+          <main className="px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-6)] md:py-[var(--space-8)] md:pr-[var(--space-14)]">
             <div className="mx-auto w-full max-w-[760px]">
               <p className="py-[var(--space-10)] text-center text-body text-muted">Usuario no encontrado.</p>
             </div>
@@ -270,7 +270,7 @@ export default function ProfilePage() {
       <div className="relative mx-auto min-h-dvh max-w-[1440px]">
         <AppSidebar />
 
-        <main className="px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-4)] md:py-[var(--space-8)] md:pr-[var(--space-14)]">
+        <main className="px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-6)] md:py-[var(--space-8)] md:pr-[var(--space-14)]">
           <div className="mx-auto w-full max-w-[760px]">
             {/* Settings button - own profile only */}
             {isOwnProfile && (

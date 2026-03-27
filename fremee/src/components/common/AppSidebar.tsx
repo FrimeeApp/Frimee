@@ -217,13 +217,13 @@ export default function AppSidebar({ onCreatePlan }: AppSidebarProps) {
     active?: boolean;
     badge?: string | number | null;
   }) => {
-    const cls = `flex h-[24px] items-center transition-opacity duration-150 hover:opacity-70 ${active ? "text-[var(--primary)]" : "text-white"}`;
+    const cls = `flex h-[24px] items-center transition-opacity duration-150 hover:opacity-70 ${active ? "text-[var(--primary)]" : "text-app"}`;
     const content = (
       <>
         <div className="relative flex w-[102px] shrink-0 items-center justify-center">
           {icon({ className: "size-[26px]" })}
           {badge ? (
-            <span className="absolute -top-1 right-[28px] flex min-w-[14px] items-center justify-center rounded-full bg-blue-500 px-1 text-[9px] font-[var(--fw-semibold)] leading-none text-white">
+            <span className="absolute top-0 right-[38px] flex size-[16px] items-center justify-center rounded-full bg-blue-500 text-[9px] font-[var(--fw-semibold)] leading-none text-white">
               {badge}
             </span>
           ) : null}
@@ -290,8 +290,8 @@ export default function AppSidebar({ onCreatePlan }: AppSidebarProps) {
       <aside
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
-        className={`fixed left-0 top-0 z-30 hidden h-dvh border-r border-[#262626] bg-app transition-[width] duration-200 ease-out md:flex md:flex-col md:py-[var(--space-6)] ${
-          expanded ? "w-[220px]" : "w-[102px]"
+        className={`fixed left-0 top-0 z-30 hidden h-dvh border-r border-app bg-app transition-[width] duration-200 ease-out md:flex md:flex-col md:py-[var(--space-6)] ${
+          expanded ? "w-[240px]" : "w-[102px]"
         }`}
       >
         <div className="flex w-full flex-1 flex-col overflow-hidden">
@@ -318,7 +318,7 @@ export default function AppSidebar({ onCreatePlan }: AppSidebarProps) {
                 setNotifPanelOpen(false);
                 setSearchPopoverOpen(true);
               }}
-              className={`flex h-[24px] items-center transition-opacity duration-150 hover:opacity-70 ${searchActive ? "text-[var(--primary)]" : "text-white"}`}
+              className={`flex h-[24px] items-center transition-opacity duration-150 hover:opacity-70 ${searchActive ? "text-[var(--primary)]" : "text-app"}`}
             >
               <div className="relative flex w-[102px] shrink-0 items-center justify-center">
                 <SearchIcon className="size-[26px]" />
@@ -346,7 +346,7 @@ export default function AppSidebar({ onCreatePlan }: AppSidebarProps) {
             type="button"
             aria-label="Crear plan"
             onClick={openCreatePlan}
-            className="mt-[var(--space-14)] flex h-[24px] items-center text-white transition-opacity duration-150 hover:opacity-70"
+            className="mt-[var(--space-14)] flex h-[24px] items-center text-app transition-opacity duration-150 hover:opacity-70"
           >
             <div className="flex w-[102px] shrink-0 items-center justify-center">
               <PlusIcon className="size-[26px]" />
@@ -400,7 +400,7 @@ export default function AppSidebar({ onCreatePlan }: AppSidebarProps) {
           searchPopoverOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <div className="flex items-center justify-between border-b border-[#262626] px-5 py-4">
+        <div className="flex items-center justify-between border-b border-app px-5 py-4">
           <h2 className="text-body font-[var(--fw-semibold)]">Buscar</h2>
           <button
             type="button"
@@ -412,7 +412,7 @@ export default function AppSidebar({ onCreatePlan }: AppSidebarProps) {
           </button>
         </div>
 
-        <div className="border-b border-[#262626] px-5 py-4">
+        <div className="border-b border-app px-5 py-4">
           <div className="relative">
             <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-[18px] -translate-y-1/2 text-muted" />
             <input

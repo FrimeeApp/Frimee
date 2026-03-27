@@ -83,7 +83,7 @@ export default function LocationAutocomplete({
         onChange={(e) => handleChange(e.target.value)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         placeholder={placeholder}
-        className="w-full bg-transparent text-body outline-none placeholder:text-muted"
+        className="w-full border-none bg-transparent text-body outline-none ring-0 focus:border-none focus:outline-none focus:ring-0 placeholder:text-muted"
       />
       {open && suggestions.length > 0 && (
         <ul className="absolute top-[calc(100%+8px)] left-0 z-[90] w-full max-h-[220px] overflow-y-auto scrollbar-thin rounded-[12px] border border-app bg-surface shadow-elev-4">
