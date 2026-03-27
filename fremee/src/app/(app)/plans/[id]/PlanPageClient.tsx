@@ -15,6 +15,7 @@ import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover
 import AddGastoSheet from "@/components/plans/AddGastoSheet";
 import { fetchActiveFriends, type PublicUserProfileRow } from "@/services/api/endpoints/users.endpoint";
 import { insertNotificacion } from "@/services/api/repositories/notifications.repository";
+import { QRCodeSVG } from "qrcode.react";
 
 const MOCK_DAYS = [
   {
@@ -966,12 +967,17 @@ export default function PlanDetailPage() {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteFriends, setInviteFriends] = useState<PublicUserProfileRow[]>([]);
   const [inviteFriendsLoading, setInviteFriendsLoading] = useState(false);
-  const [inviteSelected, setInviteSelected] = useState<Set<string>>(new Set());
-  const [inviteSending, setInviteSending] = useState(false);
+  const [inviteSentIds, setInviteSentIds] = useState<Set<string>>(new Set());
+  const [inviteSendingIds, setInviteSendingIds] = useState<Set<string>>(new Set());
+  const [inviteLinkCopied, setInviteLinkCopied] = useState(false);
+  const [showQr, setShowQr] = useState(false);
 
   const openInviteModal = async () => {
     setShowInviteModal(true);
-    setInviteSelected(new Set());
+    setInviteSentIds(new Set());
+    setInviteSendingIds(new Set());
+    setInviteLinkCopied(false);
+    setShowQr(false);
     setInviteFriendsLoading(true);
     try {
       const [friends, memberIds] = await Promise.all([
@@ -987,27 +993,33 @@ export default function PlanDetailPage() {
     }
   };
 
-  const handleSendInvites = async () => {
-    if (!user?.id || inviteSelected.size === 0) return;
-    setInviteSending(true);
+  const handleInviteFriend = async (friendId: string) => {
+    if (!user?.id) return;
+    setInviteSendingIds((prev) => new Set(prev).add(friendId));
     try {
-      await Promise.allSettled(
-        [...inviteSelected].map((friendId) =>
-          insertNotificacion({
-            userId: friendId,
-            tipo: "plan_invite",
-            actorId: user.id,
-            entityId: String(Number(id)),
-            entityType: "plan",
-          })
-        )
-      );
-      setShowInviteModal(false);
+      await insertNotificacion({
+        userId: friendId,
+        tipo: "plan_invite",
+        actorId: user.id,
+        entityId: String(Number(id)),
+        entityType: "plan",
+      });
+      setInviteSentIds((prev) => new Set(prev).add(friendId));
     } catch (e) {
       console.error(e);
     } finally {
-      setInviteSending(false);
+      setInviteSendingIds((prev) => { const n = new Set(prev); n.delete(friendId); return n; });
     }
+  };
+
+  const inviteLink = plan?.join_code ? `${typeof window !== "undefined" ? window.location.origin : ""}/join/${plan.join_code}` : null;
+
+  const handleCopyInviteLink = () => {
+    if (!inviteLink) return;
+    void navigator.clipboard.writeText(inviteLink).then(() => {
+      setInviteLinkCopied(true);
+      setTimeout(() => setInviteLinkCopied(false), 2000);
+    });
   };
 
   const handleSubplanCreated = (s: SubplanRow) => {
@@ -1541,60 +1553,95 @@ export default function PlanDetailPage() {
       {/* Invite modal */}
       {showInviteModal && (
         <div className="fixed inset-0 z-[80] flex items-end justify-center sm:items-center bg-black/50 px-4 pb-[max(var(--space-4),env(safe-area-inset-bottom))]" onClick={() => setShowInviteModal(false)}>
-          <div className="w-full max-w-[400px] rounded-modal bg-[var(--bg)] shadow-elev-4" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-[440px] rounded-modal bg-[var(--bg)] shadow-elev-4" onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-app">
               <p className="text-body font-[var(--fw-semibold)]">Invitar al plan</p>
               <button type="button" onClick={() => setShowInviteModal(false)} className="text-muted transition-opacity hover:opacity-70">
                 <svg viewBox="0 0 24 24" fill="none" className="size-[20px]"><path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
               </button>
             </div>
-            <div className="px-2 py-2">
+
+            {/* Friends list */}
+            <div className="px-2 pt-2 pb-1">
+              <p className="px-3 pb-1.5 text-[11px] font-[var(--fw-semibold)] uppercase tracking-wider text-muted">Amigos</p>
               {inviteFriendsLoading ? (
                 <div className="flex justify-center py-6">
                   <div className="size-[20px] animate-spin rounded-full border-2 border-[var(--text-primary)] border-t-transparent" />
                 </div>
               ) : inviteFriends.length === 0 ? (
-                <p className="py-6 text-center text-body-sm text-muted">No tienes amigos para invitar.</p>
+                <p className="py-4 text-center text-body-sm text-muted">No hay amigos para invitar.</p>
               ) : (
                 <div className="max-h-[calc(4*52px)] overflow-y-auto">
                   {inviteFriends.map((friend) => {
-                    const selected = inviteSelected.has(friend.id);
+                    const sent = inviteSentIds.has(friend.id);
+                    const sending = inviteSendingIds.has(friend.id);
                     const avatarLabel = (friend.nombre.trim()[0] || "?").toUpperCase();
                     return (
-                      <button
-                        key={friend.id}
-                        type="button"
-                        onClick={() => setInviteSelected((prev) => {
-                          const next = new Set(prev);
-                          if (next.has(friend.id)) next.delete(friend.id);
-                          else next.add(friend.id);
-                          return next;
-                        })}
-                        className={`flex h-[52px] w-full items-center gap-3 rounded-[8px] px-3 transition-colors hover:bg-surface ${selected ? "bg-surface" : ""}`}
-                      >
+                      <div key={friend.id} className="flex h-[52px] w-full items-center gap-3 rounded-[8px] px-3">
                         {friend.profile_image ? (
                           <img src={friend.profile_image} alt={friend.nombre} className="size-[32px] rounded-full object-cover" referrerPolicy="no-referrer" />
                         ) : (
                           <div className="flex size-[32px] items-center justify-center rounded-full bg-[var(--text-primary)] text-[13px] font-[var(--fw-semibold)] text-contrast-token">{avatarLabel}</div>
                         )}
-                        <span className="flex-1 text-left text-body-sm font-[var(--fw-medium)]">{friend.nombre}</span>
-                        <div className={`flex size-[20px] items-center justify-center rounded-full border-2 transition-colors ${selected ? "border-[var(--text-primary)] bg-[var(--text-primary)]" : "border-app"}`}>
-                          {selected && <svg viewBox="0 0 24 24" fill="none" className="size-[12px]"><path d="M5 13l4 4L19 7" stroke="var(--bg)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                        </div>
-                      </button>
+                        <span className="flex-1 text-body-sm font-[var(--fw-medium)]">{friend.nombre}</span>
+                        <button
+                          type="button"
+                          disabled={sent || sending}
+                          onClick={() => void handleInviteFriend(friend.id)}
+                          className={`rounded-full px-4 py-1.5 text-[12px] font-[var(--fw-semibold)] transition-all ${sent ? "bg-surface text-muted cursor-default" : "bg-[var(--text-primary)] text-contrast-token hover:opacity-80 disabled:opacity-50"}`}
+                        >
+                          {sending ? "..." : sent ? "Enviado" : "Invitar"}
+                        </button>
+                      </div>
                     );
                   })}
                 </div>
               )}
             </div>
-            <div className="px-5 py-4 border-t border-app">
+
+            {/* Invite link */}
+            {inviteLink && (
+              <div className="px-5 py-3 border-t border-app">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[11px] font-[var(--fw-semibold)] uppercase tracking-wider text-muted">Enlace de invitación</p>
+                  <button
+                    type="button"
+                    onClick={() => setShowQr((v) => !v)}
+                    className="flex items-center gap-1 text-[12px] text-muted hover:text-[var(--text-primary)] transition-colors"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" className="size-[14px]"><rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="1.8"/><rect x="14" y="3" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="1.8"/><rect x="3" y="14" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="1.8"/><path d="M14 14h3v3M17 17v3h3M14 20h3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+                    QR
+                  </button>
+                </div>
+                <div className="flex items-center gap-2 rounded-[8px] bg-surface px-3 py-2">
+                  <span className="flex-1 truncate text-[12px] text-muted font-mono">{inviteLink}</span>
+                  <button
+                    type="button"
+                    onClick={handleCopyInviteLink}
+                    className="shrink-0 rounded-full bg-[var(--text-primary)] px-3 py-1 text-[12px] font-[var(--fw-semibold)] text-contrast-token transition-all hover:opacity-80"
+                  >
+                    {inviteLinkCopied ? "¡Copiado!" : "Copiar"}
+                  </button>
+                </div>
+                {/* QR code */}
+                {showQr && (
+                  <div className="mt-3 flex justify-center">
+                    <div className="rounded-[12px] bg-white p-3 shadow-sm">
+                      <QRCodeSVG value={inviteLink} size={160} />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="px-5 pb-4 pt-2">
               <button
                 type="button"
-                onClick={() => void handleSendInvites()}
-                disabled={inviteSelected.size === 0 || inviteSending}
-                className="w-full rounded-full bg-[var(--text-primary)] py-[10px] text-body-sm font-[var(--fw-semibold)] text-contrast-token transition-opacity hover:opacity-80 disabled:opacity-40"
+                onClick={() => setShowInviteModal(false)}
+                className="w-full rounded-full border border-app py-[10px] text-body-sm font-[var(--fw-semibold)] transition-opacity hover:opacity-70"
               >
-                {inviteSending ? "Enviando..." : `Invitar${inviteSelected.size > 0 ? ` (${inviteSelected.size})` : ""}`}
+                Cerrar
               </button>
             </div>
           </div>

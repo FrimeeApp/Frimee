@@ -10,7 +10,10 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading && !user) router.replace("/login");
+    if (!loading && !user) {
+      const redirect = encodeURIComponent(window.location.pathname + window.location.search);
+      router.replace(`/login?redirect=${redirect}`);
+    }
   }, [loading, user, router]);
 
   if (loading) return <LoadingScreen />;

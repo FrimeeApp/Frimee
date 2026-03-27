@@ -30,6 +30,7 @@ export type PlanByIdRow = {
   creado_por_user_id: string;
   creador_nombre: string | null;
   creador_profile_image: string | null;
+  join_code: string | null;
 };
 
 export async function fetchExplorePlansRpc(params: {
@@ -108,6 +109,24 @@ export async function fetchPlanMemberIds(planId: number): Promise<string[]> {
   const { data, error } = await supabase.rpc("fn_get_plan_member_ids", { p_plan_id: planId });
   if (error) throw error;
   return (data ?? []).map((r: { user_id: string }) => r.user_id);
+}
+
+export async function fetchPlanByJoinCode(joinCode: string): Promise<{ plan: PlanByIdRow; planId: number; alreadyMember: boolean } | null> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_join_plan_by_code", { p_join_code: joinCode, p_preview_only: true });
+  if (error) throw error;
+  const result = (typeof data === "string" ? JSON.parse(data) : data) as { plan_id?: number; plan?: PlanByIdRow; already_member?: boolean; error?: string };
+  if (result.error || !result.plan || !result.plan_id) return null;
+  return { plan: result.plan, planId: result.plan_id, alreadyMember: result.already_member ?? false };
+}
+
+export async function joinPlanByCode(joinCode: string): Promise<{ plan_id: number } | { error: string }> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_join_plan_by_code", { p_join_code: joinCode, p_preview_only: false });
+  if (error) throw error;
+  const result = (typeof data === "string" ? JSON.parse(data) : data) as { plan_id?: number; error?: string };
+  if (result.error) return { error: result.error };
+  return { plan_id: result.plan_id! };
 }
 
 export async function fetchUserRelatedPlans(params: { userId: string; limit?: number }): Promise<PlanByIdRow[]> {

@@ -4,10 +4,12 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import GoogleAuthButton from "@/components/auth/GoogleAuthButton";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
+  const searchParams = useSearchParams();
+  const redirectTo = searchParams.get("redirect") ?? "/feed";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -29,7 +31,7 @@ export default function LoginPage() {
         userId: session?.user?.id ?? null,
       });
 
-      if (session) router.replace("/feed");
+      if (session) router.replace(redirectTo);
     };
 
     checkSession();
@@ -41,7 +43,7 @@ export default function LoginPage() {
         event,
         hasSession: !!session,
       });
-      if (session) router.replace("/feed");
+      if (session) router.replace(redirectTo);
     });
 
     return () => {
@@ -64,7 +66,7 @@ export default function LoginPage() {
 
       if (error) throw error;
 
-      router.replace("/feed");
+      router.replace(redirectTo);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Error iniciando sesión.";
       setErrorMsg(message);
