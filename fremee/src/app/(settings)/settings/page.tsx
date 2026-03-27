@@ -52,7 +52,7 @@ const DEFAULT_SETTINGS: SettingsForm = {
 };
 
 const LANGUAGE_OPTIONS = [
-  { value: "es", label: "Espanol" },
+  { value: "es", label: "Español" },
   { value: "en", label: "English" },
 ];
 
@@ -64,7 +64,7 @@ const TIMEZONE_OPTIONS = [
 ];
 
 const VISIBILITY_OPTIONS: { value: VisibilityOption; label: string }[] = [
-  { value: "PUBLICO", label: "Publico" },
+  { value: "PUBLICO", label: "Público" },
   { value: "PRIVADO", label: "Privado" },
 ];
 
@@ -419,7 +419,7 @@ export default function SettingsPage() {
   };
 
   const onDeleteAccount = async () => {
-    setErrorMsg("Eliminar cuenta estara disponible proximamente.");
+    setErrorMsg("Eliminar cuenta estará disponible próximamente.");
   };
 
   const disableEditing = settingsLoading || busyAction === "save" || busyAction === "upload-image";
@@ -429,8 +429,8 @@ export default function SettingsPage() {
   return (
     <div className="min-h-dvh bg-app text-app">
       <div className="container-app pb-[calc(var(--space-12)+env(safe-area-inset-bottom))] pt-[var(--space-4)] lg:pt-[var(--space-8)]">
-        <header className="rounded-modal border border-strong bg-surface p-[var(--space-4)] shadow-elev-2 lg:p-[var(--space-6)]">
-          <div className="flex items-center justify-between gap-[var(--space-3)]">
+        <div className="mx-auto max-w-[980px]">
+          <div className="flex flex-wrap items-center justify-between gap-[var(--space-3)]">
             <button
               type="button"
               onClick={goBack}
@@ -439,294 +439,306 @@ export default function SettingsPage() {
               <ArrowLeftIcon />
               Volver
             </button>
-            <span className="rounded-chip border border-app bg-surface-inset px-[var(--space-3)] py-[var(--space-1)] text-body-sm text-muted">
-              Ajustes
-            </span>
+
+            <PrimaryButton
+              label={
+                settingsLoading
+                  ? "Cargando ajustes..."
+                  : busyAction === "save"
+                    ? "Guardando..."
+                    : busyAction === "upload-image"
+                      ? "Subiendo imagen..."
+                      : hasChanges
+                        ? "Guardar cambios"
+                        : "Todo guardado"
+              }
+              onClick={onSaveSettings}
+              disabled={settingsLoading || !hasChanges || busyAction !== null}
+              className="w-full sm:w-auto"
+            />
           </div>
 
-          <div className="mt-[var(--space-5)] flex flex-col gap-[var(--space-4)] sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-[var(--space-4)]">
-              <button
-                type="button"
-                onClick={onPickImage}
-                disabled={disableEditing}
-                className="relative rounded-avatar transition-opacity disabled:opacity-[var(--disabled-opacity)]"
-                aria-label="Cambiar imagen de perfil"
-                title="Cambiar imagen de perfil"
-              >
-                <Avatar profileImage={form.profileImage ?? profile?.profile_image ?? null} fallback={avatarFallback} />
-                <span className="absolute -bottom-[var(--space-1)] -right-[var(--space-1)] rounded-chip border border-app bg-surface-inset p-[var(--space-1)]">
-                  <CameraIcon />
-                </span>
-              </button>
-
-              <div className="min-w-0">
-                <div className="flex items-center gap-[var(--space-2)]">
-                  <input
-                    type="text"
-                    value={form.nombre}
+          <section className="mt-[var(--space-4)]">
+            <div className="py-[var(--space-5)]">
+              <div className="flex flex-col gap-[var(--space-4)] lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex items-center gap-[var(--space-4)]">
+                  <button
+                    type="button"
+                    onClick={onPickImage}
                     disabled={disableEditing}
-                    onChange={(e) => setForm((prev) => ({ ...prev, nombre: e.target.value }))}
-                    className="min-w-[220px] border-b border-transparent bg-transparent [font-family:var(--font-display-face)] text-[var(--font-h3)] font-normal leading-[var(--lh-h3)] outline-none transition-colors focus:border-app disabled:opacity-[var(--disabled-opacity)]"
-                  />
-                  <PencilIcon className="text-tertiary" />
+                    className="relative rounded-full transition-opacity disabled:opacity-[var(--disabled-opacity)]"
+                    aria-label="Cambiar imagen de perfil"
+                    title="Cambiar imagen de perfil"
+                  >
+                    <Avatar profileImage={form.profileImage ?? profile?.profile_image ?? null} fallback={avatarFallback} />
+                    <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 text-white/90 transition-opacity hover:bg-black/50">
+                      <svg viewBox="0 0 24 24" fill="none" className="size-[24px]" aria-hidden="true">
+                        <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                        <circle cx="12" cy="13" r="4" stroke="currentColor" strokeWidth="1.5" />
+                      </svg>
+                    </span>
+                  </button>
+
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-[var(--space-2)]">
+                      <input
+                        type="text"
+                        value={form.nombre}
+                        disabled={disableEditing}
+                        onChange={(e) => setForm((prev) => ({ ...prev, nombre: e.target.value }))}
+                        className="min-w-0 border-b border-transparent bg-transparent [font-family:var(--font-display-face)] text-[var(--font-h3)] font-normal leading-[var(--lh-h3)] outline-none transition-colors focus:border-app disabled:opacity-[var(--disabled-opacity)] sm:min-w-[240px]"
+                      />
+                      <PencilIcon className="shrink-0 text-tertiary" />
+                    </div>
+                    <p className="mt-[var(--space-1)] truncate text-body-sm text-muted">{profile?.email ?? "sin correo"}</p>
+                  </div>
                 </div>
-                <p className="mt-[var(--space-1)] truncate text-body-sm text-muted">{profile?.email ?? "sin correo"}</p>
+
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-[var(--space-2)]">
-              <QuickStat
-                label="Tema"
-                value={form.theme === "SYSTEM" ? "Sistema" : form.theme === "DARK" ? "Oscuro" : "Claro"}
-              />
-              <QuickStat label="Estado" value={hasChanges ? "Sin guardar" : "Guardado"} />
-            </div>
-          </div>
-        </header>
-
-        <div className="mt-[var(--space-5)] grid grid-cols-1 gap-[var(--space-4)] lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-          <section className="space-y-[var(--space-4)]">
-            <SettingsCard title="Perfil" subtitle="Informacion personal visible en tu cuenta">
-              <SettingsRow
-                icon={<UserIcon />}
-                label="Nombre"
-                description="Nombre publico de tu perfil"
-                right={<span className="text-body-sm text-muted">{form.nombre || "Sin nombre"}</span>}
-              />
-              <SettingsRow
-                icon={<CalendarIcon />}
-                label="Fecha de nacimiento"
-                description="Se usa para personalizacion y edad minima"
-                right={
-                  <input
-                    type="date"
-                    value={form.fechaNac}
-                    disabled={disableEditing}
-                    onChange={(e) => setForm((prev) => ({ ...prev, fechaNac: e.target.value }))}
-                    className="rounded-input border border-app bg-surface px-[var(--space-3)] py-[var(--space-1)] text-body-sm disabled:opacity-[var(--disabled-opacity)]"
-                  />
-                }
-              />
-            </SettingsCard>
-
-            <SettingsCard title="Preferencias" subtitle="Personaliza la experiencia de la app">
-              <SettingsRow
-                icon={<MoonIcon />}
-                label="Tema"
-                description="Sistema, claro u oscuro"
-                right={
-                  <div className="flex items-center gap-[var(--space-2)]">
-                    <ModeButton
-                      active={form.theme === "SYSTEM"}
-                      label="Sistema"
+            <SettingsSection
+              title="Perfil"
+            >
+              <div className="mt-[var(--space-2)] border-t border-app">
+                <SettingsRow
+                  icon={<UserIcon />}
+                  label="Nombre"
+                  description="Nombre público que se muestra en tu perfil."
+                  right={<span className="text-body-sm text-muted">{form.nombre || "Sin nombre"}</span>}
+                />
+                <SettingsRow
+                  icon={<CalendarIcon />}
+                  label="Fecha de nacimiento"
+                  description="Se usa para personalización y edad mínima."
+                  right={
+                    <input
+                      type="date"
+                      value={form.fechaNac}
                       disabled={disableEditing}
-                      onClick={() => setForm((prev) => ({ ...prev, theme: "SYSTEM" }))}
+                      onChange={(e) => setForm((prev) => ({ ...prev, fechaNac: e.target.value }))}
+                      className="w-full rounded-input border border-app bg-surface px-[var(--space-3)] py-[var(--space-2)] text-body-sm disabled:opacity-[var(--disabled-opacity)] sm:w-auto"
                     />
-                    <ModeButton
-                      active={form.theme === "LIGHT"}
-                      label="Claro"
+                  }
+                />
+              </div>
+            </SettingsSection>
+
+            <SettingsSection
+              title="Preferencias"
+                         >
+              <div className="mt-[var(--space-2)] border-t border-app">
+                <SettingsRow
+                  icon={<MoonIcon />}
+                  label="Tema"
+                  description="Elige entre sistema, claro u oscuro."
+                  right={
+                    <div className="flex flex-wrap items-center gap-[var(--space-2)]">
+                      <ModeButton
+                        active={form.theme === "SYSTEM"}
+                        label="Sistema"
+                        disabled={disableEditing}
+                        onClick={() => setForm((prev) => ({ ...prev, theme: "SYSTEM" }))}
+                      />
+                      <ModeButton
+                        active={form.theme === "LIGHT"}
+                        label="Claro"
+                        disabled={disableEditing}
+                        onClick={() => setForm((prev) => ({ ...prev, theme: "LIGHT" }))}
+                      />
+                      <ModeButton
+                        active={form.theme === "DARK"}
+                        label="Oscuro"
+                        disabled={disableEditing}
+                        onClick={() => setForm((prev) => ({ ...prev, theme: "DARK" }))}
+                      />
+                    </div>
+                  }
+                />
+                <SettingsRow
+                  icon={<LanguageIcon />}
+                  label="Idioma"
+                  description="Idioma de interfaz."
+                  right={
+                    <FieldSelect
+                      value={form.language}
                       disabled={disableEditing}
-                      onClick={() => setForm((prev) => ({ ...prev, theme: "LIGHT" }))}
+                      onChange={(value) => setForm((prev) => ({ ...prev, language: value }))}
+                      options={LANGUAGE_OPTIONS}
                     />
-                    <ModeButton
-                      active={form.theme === "DARK"}
-                      label="Oscuro"
+                  }
+                />
+                <SettingsRow
+                  icon={<ClockIcon />}
+                  label="Zona horaria"
+                  description="Hora local para tus planes y recordatorios."
+                  right={
+                    <FieldSelect
+                      value={form.timezone}
                       disabled={disableEditing}
-                      onClick={() => setForm((prev) => ({ ...prev, theme: "DARK" }))}
+                      onChange={(value) => setForm((prev) => ({ ...prev, timezone: value }))}
+                      options={TIMEZONE_OPTIONS}
                     />
-                  </div>
-                }
-              />
+                  }
+                />
+              </div>
+            </SettingsSection>
 
-              <SettingsRow
-                icon={<LanguageIcon />}
-                label="Idioma"
-                description="Idioma de interfaz"
-                right={
-                  <FieldSelect
-                    value={form.language}
-                    disabled={disableEditing}
-                    onChange={(value) => setForm((prev) => ({ ...prev, language: value }))}
-                    options={LANGUAGE_OPTIONS}
-                  />
-                }
-              />
+            <SettingsSection
+              title="Notificaciones"
+                         >
+              <div className="mt-[var(--space-2)] border-t border-app">
+                <SettingsRow
+                  icon={<BellIcon />}
+                  label="Push"
+                  description="Alertas en el dispositivo."
+                  right={
+                    <Switch
+                      checked={form.notifyPush}
+                      disabled={disableEditing}
+                      onChange={(next) => setForm((prev) => ({ ...prev, notifyPush: next }))}
+                    />
+                  }
+                />
+                <SettingsRow
+                  icon={<MailIcon />}
+                  label="Email"
+                  description="Resúmenes y actividad por correo."
+                  right={
+                    <Switch
+                      checked={form.notifyEmail}
+                      disabled={disableEditing}
+                      onChange={(next) => setForm((prev) => ({ ...prev, notifyEmail: next }))}
+                    />
+                  }
+                />
+                <SettingsRow
+                  icon={<ChatIcon />}
+                  label="In-app"
+                  description="Avisos dentro de la aplicación."
+                  right={
+                    <Switch
+                      checked={form.notifyInApp}
+                      disabled={disableEditing}
+                      onChange={(next) => setForm((prev) => ({ ...prev, notifyInApp: next }))}
+                    />
+                  }
+                />
+              </div>
+            </SettingsSection>
 
-              <SettingsRow
-                icon={<ClockIcon />}
-                label="Zona horaria"
-                description="Hora local para tus planes"
-                right={
-                  <FieldSelect
-                    value={form.timezone}
-                    disabled={disableEditing}
-                    onChange={(value) => setForm((prev) => ({ ...prev, timezone: value }))}
-                    options={TIMEZONE_OPTIONS}
-                  />
-                }
-              />
-            </SettingsCard>
+            <SettingsSection
+              title="Privacidad"
+                         >
+              <div className="mt-[var(--space-2)] border-t border-app">
+                <SettingsRow
+                  icon={<UserIcon />}
+                  label="Visibilidad del perfil"
+                  description="Decide si tu perfil es público o privado."
+                  right={
+                    <FieldSelect
+                      value={form.profileVisibility}
+                      disabled={disableEditing}
+                      onChange={(value) =>
+                        setForm((prev) => ({ ...prev, profileVisibility: value as VisibilityOption }))
+                      }
+                      options={VISIBILITY_OPTIONS}
+                    />
+                  }
+                />
+                <SettingsRow
+                  icon={<ShieldIcon />}
+                  label="Solicitudes de amistad"
+                  description="Permite que otras personas te agreguen."
+                  right={
+                    <Switch
+                      checked={form.allowFriendRequests}
+                      disabled={disableEditing}
+                      onChange={(next) => setForm((prev) => ({ ...prev, allowFriendRequests: next }))}
+                    />
+                  }
+                />
+              </div>
+            </SettingsSection>
 
-            <SettingsCard title="Notificaciones" subtitle="Controla como quieres recibir avisos">
-              <SettingsRow
-                icon={<BellIcon />}
-                label="Push"
-                description="Alertas en el dispositivo"
-                right={
-                  <Switch
-                    checked={form.notifyPush}
-                    disabled={disableEditing}
-                    onChange={(next) => setForm((prev) => ({ ...prev, notifyPush: next }))}
-                  />
-                }
-              />
-              <SettingsRow
-                icon={<MailIcon />}
-                label="Email"
-                description="Resumenes y actividad por correo"
-                right={
-                  <Switch
-                    checked={form.notifyEmail}
-                    disabled={disableEditing}
-                    onChange={(next) => setForm((prev) => ({ ...prev, notifyEmail: next }))}
-                  />
-                }
-              />
-              <SettingsRow
-                icon={<ChatIcon />}
-                label="In-app"
-                description="Avisos dentro de la aplicacion"
-                right={
-                  <Switch
-                    checked={form.notifyInApp}
-                    disabled={disableEditing}
-                    onChange={(next) => setForm((prev) => ({ ...prev, notifyInApp: next }))}
-                  />
-                }
-              />
-            </SettingsCard>
+            <SettingsSection
+              title="Google Calendar"
+                         >
+              <div className="mt-[var(--space-2)] border-t border-app">
+                <SettingsRow
+                  icon={<CalendarIcon />}
+                  label="Sincronización habilitada"
+                  description="Permite conectar Frimee con Google Calendar."
+                  right={
+                    <Switch
+                      checked={form.googleSyncEnabled}
+                      disabled={disableEditing}
+                      onChange={(next) => setForm((prev) => ({ ...prev, googleSyncEnabled: next }))}
+                    />
+                  }
+                />
+                <SettingsRow
+                  icon={<CalendarIcon />}
+                  label="Exportar planes"
+                  description="Crea y actualiza tus planes en Google Calendar."
+                  right={
+                    <Switch
+                      checked={form.googleSyncExportPlans}
+                      disabled={disableEditing || !form.googleSyncEnabled}
+                      onChange={(next) => setForm((prev) => ({ ...prev, googleSyncExportPlans: next }))}
+                    />
+                  }
+                />
+              </div>
+            </SettingsSection>
 
-            <SettingsCard title="Privacidad" subtitle="Define quien puede ver o interactuar contigo">
-              <SettingsRow
-                icon={<UserIcon />}
-                label="Visibilidad de perfil"
-                description="Publico o privado"
-                right={
-                  <FieldSelect
-                    value={form.profileVisibility}
-                    disabled={disableEditing}
-                    onChange={(value) =>
-                      setForm((prev) => ({ ...prev, profileVisibility: value as VisibilityOption }))
-                    }
-                    options={VISIBILITY_OPTIONS}
-                  />
-                }
-              />
-              <SettingsRow
-                icon={<ShieldIcon />}
-                label="Solicitudes de amistad"
-                description="Permitir que otros te agreguen"
-                right={
-                  <Switch
-                    checked={form.allowFriendRequests}
-                    disabled={disableEditing}
-                    onChange={(next) => setForm((prev) => ({ ...prev, allowFriendRequests: next }))}
-                  />
-                }
-              />
-            </SettingsCard>
+            <SettingsSection
+              title="Cuenta"
+                         >
+              <div className="mt-[var(--space-3)] flex flex-col gap-[var(--space-4)] lg:flex-row lg:items-center lg:justify-between">
+                <div className="min-w-0">
+                  <p className="text-body-sm text-muted">
+                    {hasChanges ? "Tienes cambios pendientes de guardar." : "Todos tus ajustes están al día."}
+                  </p>
+                  {saveMsg && <p className="mt-[var(--space-2)] text-body-sm text-success-token">{saveMsg}</p>}
+                  {errorMsg && <p className="mt-[var(--space-2)] text-body-sm text-error-token">{errorMsg}</p>}
+                </div>
 
-            <SettingsCard title="Google Calendar" subtitle="Controla la sincronizacion con Google">
-              <SettingsRow
-                icon={<CalendarIcon />}
-                label="Sincronizacion habilitada"
-                description="Permite sincronizar Frimee con Google Calendar"
-                right={
-                  <Switch
-                    checked={form.googleSyncEnabled}
-                    disabled={disableEditing}
-                    onChange={(next) => setForm((prev) => ({ ...prev, googleSyncEnabled: next }))}
+                <div className="flex flex-col gap-[var(--space-2)] sm:flex-row">
+                  <PrimaryButton
+                    label={busyAction === "save" ? "Guardando..." : "Guardar cambios"}
+                    onClick={onSaveSettings}
+                    disabled={settingsLoading || !hasChanges || busyAction !== null}
+                    className="w-full sm:w-auto"
                   />
-                }
-              />
-              <SettingsRow
-                icon={<CalendarIcon />}
-                label="Exportar planes"
-                description="Crear y actualizar planes de Frimee en Google Calendar"
-                right={
-                  <Switch
-                    checked={form.googleSyncExportPlans}
-                    disabled={disableEditing || !form.googleSyncEnabled}
-                    onChange={(next) => setForm((prev) => ({ ...prev, googleSyncExportPlans: next }))}
+                  <SettingsButton
+                    icon={<LogOutIcon />}
+                    label={busyAction === "signout" ? "Cerrando sesión..." : "Cerrar sesión"}
+                    onClick={onSignOut}
+                    disabled={busyAction !== null}
                   />
-                }
-              />
-            </SettingsCard>
+                  <SettingsButton
+                    icon={<TrashIcon />}
+                    label={busyAction === "delete" ? "Eliminando cuenta..." : "Eliminar cuenta"}
+                    onClick={onDeleteAccount}
+                    disabled={busyAction !== null}
+                    danger
+                  />
+                </div>
+              </div>
+            </SettingsSection>
           </section>
-
-          <aside className="space-y-[var(--space-4)]">
-            <SettingsCard title="Acciones" subtitle="Guardar cambios y control de sesion">
-              <PrimaryButton
-                label={
-                  settingsLoading
-                    ? "Cargando ajustes..."
-                    : busyAction === "save"
-                      ? "Guardando..."
-                      : busyAction === "upload-image"
-                        ? "Subiendo imagen..."
-                        : "Guardar cambios"
-                }
-                onClick={onSaveSettings}
-                disabled={settingsLoading || !hasChanges || busyAction !== null}
-              />
-              <SettingsButton
-                icon={<LogOutIcon />}
-                label={busyAction === "signout" ? "Cerrando sesion..." : "Cerrar sesion"}
-                onClick={onSignOut}
-                disabled={busyAction !== null}
-              />
-              <SettingsButton
-                icon={<TrashIcon />}
-                label={busyAction === "delete" ? "Eliminando cuenta..." : "Eliminar cuenta"}
-                onClick={onDeleteAccount}
-                disabled={busyAction !== null}
-                danger
-              />
-              {saveMsg && <p className="text-body-sm text-success-token">{saveMsg}</p>}
-              {errorMsg && <p className="text-body-sm text-error-token">{errorMsg}</p>}
-            </SettingsCard>
-          </aside>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={onFileChange}
+            className="hidden"
+            aria-hidden="true"
+          />
         </div>
-
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          onChange={onFileChange}
-          className="hidden"
-          aria-hidden="true"
-        />
       </div>
     </div>
-  );
-}
-
-function SettingsCard({
-  title,
-  subtitle,
-  children,
-}: {
-  title: string;
-  subtitle: string;
-  children: ReactNode;
-}) {
-  return (
-    <section className="rounded-modal border border-strong bg-surface p-[var(--space-4)] shadow-elev-1 lg:p-[var(--space-5)]">
-      <h2 className="[font-family:var(--font-display-face)] text-[var(--font-h5)] font-normal leading-[var(--lh-h5)]">{title}</h2>
-      <p className="mt-[var(--space-1)] text-body-sm text-muted">{subtitle}</p>
-      <div className="mt-[var(--space-4)] space-y-[var(--space-2)]">{children}</div>
-    </section>
   );
 }
 
@@ -734,88 +746,79 @@ function SettingsPageSkeleton() {
   return (
     <div className="min-h-dvh bg-app text-app" role="status" aria-label="Cargando ajustes">
       <div className="container-app pb-[calc(var(--space-12)+env(safe-area-inset-bottom))] pt-[var(--space-4)] lg:pt-[var(--space-8)]">
-        <header className="rounded-modal border border-strong bg-surface p-[var(--space-4)] shadow-elev-2 lg:p-[var(--space-6)]">
+        <div className="mx-auto max-w-[980px]">
           <div className="flex items-center justify-between gap-[var(--space-3)]">
             <div className="feed-skeleton-shimmer h-10 w-28 rounded-chip" />
-            <div className="feed-skeleton-shimmer h-8 w-20 rounded-chip" />
+            <div className="feed-skeleton-shimmer h-11 w-40 rounded-input" />
           </div>
 
-          <div className="mt-[var(--space-5)] flex flex-col gap-[var(--space-4)] sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-[var(--space-4)]">
-              <div className="feed-skeleton-shimmer h-[var(--space-16)] w-[var(--space-16)] rounded-full" />
-              <div className="min-w-0 space-y-2">
-                <div className="feed-skeleton-shimmer h-7 w-44 rounded-full" />
-                <div className="feed-skeleton-shimmer h-4 w-56 rounded-full" />
+          <section className="mt-[var(--space-4)]">
+            <div className="py-[var(--space-5)]">
+              <div className="flex flex-col gap-[var(--space-4)] sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-[var(--space-4)]">
+                  <div className="feed-skeleton-shimmer h-[var(--space-16)] w-[var(--space-16)] rounded-full" />
+                  <div className="min-w-0 space-y-2">
+                    <div className="feed-skeleton-shimmer h-7 w-44 rounded-full" />
+                    <div className="feed-skeleton-shimmer h-4 w-56 rounded-full" />
+                    <div className="feed-skeleton-shimmer h-4 w-24 rounded-full" />
+                  </div>
+                </div>
+
+                <div className="flex gap-[var(--space-2)]">
+                  <div className="feed-skeleton-shimmer h-9 w-28 rounded-chip" />
+                  <div className="feed-skeleton-shimmer h-9 w-36 rounded-chip" />
+                </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-[var(--space-2)]">
-              <div className="rounded-input border border-app bg-surface-2 px-[var(--space-3)] py-[var(--space-2)]">
-                <div className="feed-skeleton-shimmer h-3 w-14 rounded-full" />
-                <div className="mt-[var(--space-1)] feed-skeleton-shimmer h-4 w-20 rounded-full" />
-              </div>
-              <div className="rounded-input border border-app bg-surface-2 px-[var(--space-3)] py-[var(--space-2)]">
-                <div className="feed-skeleton-shimmer h-3 w-16 rounded-full" />
-                <div className="mt-[var(--space-1)] feed-skeleton-shimmer h-4 w-20 rounded-full" />
-              </div>
-            </div>
-          </div>
-        </header>
-
-        <div className="mt-[var(--space-5)] grid grid-cols-1 gap-[var(--space-4)] lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-          <section className="space-y-[var(--space-4)]" aria-hidden="true">
-            {Array.from({ length: 5 }).map((_, index) => (
-              <section
-                key={index}
-                className="rounded-modal border border-strong bg-surface p-[var(--space-4)] shadow-elev-1 lg:p-[var(--space-5)]"
-              >
-                <div className="feed-skeleton-shimmer h-5 w-28 rounded-full" />
-                <div className="mt-[var(--space-2)] feed-skeleton-shimmer h-4 w-52 rounded-full" />
-                <div className="mt-[var(--space-4)] space-y-[var(--space-2)]">
-                  {Array.from({ length: index === 0 ? 2 : 3 }).map((__, rowIndex) => (
-                    <div
-                      key={rowIndex}
-                      className="flex items-center justify-between gap-[var(--space-3)] rounded-input border border-app bg-surface-inset px-[var(--space-3)] py-[var(--space-3)]"
-                    >
-                      <div className="flex min-w-0 flex-1 items-start gap-[var(--space-3)]">
-                        <div className="feed-skeleton-shimmer mt-[var(--space-1)] h-5 w-5 rounded-full" />
-                        <div className="min-w-0 flex-1">
-                          <div className="feed-skeleton-shimmer h-4 w-28 rounded-full" />
-                          <div className="mt-[var(--space-1)] feed-skeleton-shimmer h-3 w-44 rounded-full" />
+            {Array.from({ length: 6 }).map((_, index) => (
+              <section key={index} className={index === 0 ? "" : "border-t border-strong"}>
+                <div className="px-[var(--space-4)] py-[var(--space-5)] lg:px-[var(--space-7)]">
+                  <div className="feed-skeleton-shimmer h-5 w-28 rounded-full" />
+                  <div className="mt-[var(--space-2)] feed-skeleton-shimmer h-4 w-64 rounded-full" />
+                  <div className="mt-[var(--space-4)] border-t border-app">
+                    {Array.from({ length: index === 0 || index >= 4 ? 2 : 3 }).map((__, rowIndex) => (
+                      <div
+                        key={rowIndex}
+                        className="flex flex-col gap-[var(--space-3)] border-b border-app py-[var(--space-4)] sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <div className="flex min-w-0 flex-1 items-start gap-[var(--space-3)]">
+                          <div className="feed-skeleton-shimmer mt-[var(--space-1)] h-5 w-5 rounded-full" />
+                          <div className="min-w-0 flex-1">
+                            <div className="feed-skeleton-shimmer h-4 w-28 rounded-full" />
+                            <div className="mt-[var(--space-1)] feed-skeleton-shimmer h-3 w-44 rounded-full" />
+                          </div>
                         </div>
+                        <div className="feed-skeleton-shimmer h-10 w-28 rounded-input" />
                       </div>
-                      <div className="feed-skeleton-shimmer h-9 w-24 rounded-input" />
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               </section>
             ))}
           </section>
-
-          <aside className="space-y-[var(--space-4)]" aria-hidden="true">
-            <section className="rounded-modal border border-strong bg-surface p-[var(--space-4)] shadow-elev-1 lg:p-[var(--space-5)]">
-              <div className="feed-skeleton-shimmer h-5 w-20 rounded-full" />
-              <div className="mt-[var(--space-2)] feed-skeleton-shimmer h-4 w-44 rounded-full" />
-              <div className="mt-[var(--space-4)] space-y-[var(--space-3)]">
-                <div className="feed-skeleton-shimmer h-[46px] w-full rounded-input" />
-                <div className="feed-skeleton-shimmer h-[54px] w-full rounded-input" />
-                <div className="feed-skeleton-shimmer h-[54px] w-full rounded-input" />
-                <div className="feed-skeleton-shimmer h-4 w-36 rounded-full" />
-              </div>
-            </section>
-          </aside>
         </div>
       </div>
     </div>
   );
 }
 
-function QuickStat({ label, value }: { label: string; value: string }) {
+function SettingsSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
   return (
-    <div className="rounded-input border border-app bg-surface-2 px-[var(--space-3)] py-[var(--space-2)]">
-      <p className="text-caption uppercase text-tertiary">{label}</p>
-      <p className="mt-[var(--space-1)] text-body-sm font-[var(--fw-semibold)]">{value}</p>
-    </div>
+    <section>
+      <div className="px-[var(--space-4)] py-[var(--space-5)] lg:px-[var(--space-7)] lg:py-[var(--space-6)]">
+        <h2 className="[font-family:var(--font-display-face)] text-[var(--font-h5)] font-normal leading-[var(--lh-h5)]">
+          {title}
+        </h2>
+        {children}
+      </div>
+    </section>
   );
 }
 
@@ -831,7 +834,7 @@ function SettingsRow({
   right?: ReactNode;
 }) {
   return (
-    <div className="group flex items-center justify-between gap-[var(--space-3)] rounded-input border border-app bg-surface-inset px-[var(--space-3)] py-[var(--space-3)] transition-colors hover:bg-surface-2">
+    <div className="flex flex-col gap-[var(--space-3)] border-b border-app py-[var(--space-4)] sm:flex-row sm:items-center sm:justify-between">
       <div className="flex min-w-0 items-start gap-[var(--space-3)]">
         <span className="mt-[var(--space-1)] text-app">{icon}</span>
         <div className="min-w-0">
@@ -839,7 +842,9 @@ function SettingsRow({
           <p className="mt-[var(--space-1)] text-body-sm text-muted">{description}</p>
         </div>
       </div>
-      {right ?? <ChevronRightIcon className="shrink-0 text-tertiary" />}
+      <div className="flex w-full flex-wrap items-center gap-[var(--space-2)] sm:w-auto sm:justify-end">
+        {right ?? <ChevronRightIcon className="shrink-0 text-tertiary" />}
+      </div>
     </div>
   );
 }
@@ -860,7 +865,7 @@ function FieldSelect({
       value={value}
       disabled={disabled}
       onChange={(e) => onChange(e.target.value)}
-      className="rounded-input border border-app bg-surface px-[var(--space-3)] py-[var(--space-1)] text-body-sm"
+      className="min-w-[190px] rounded-input border border-app bg-surface px-[var(--space-3)] py-[var(--space-2)] text-body-sm disabled:opacity-[var(--disabled-opacity)]"
     >
       {options.map((option) => (
         <option key={option.value} value={option.value}>
@@ -875,17 +880,19 @@ function PrimaryButton({
   label,
   onClick,
   disabled = false,
+  className = "",
 }: {
   label: string;
   onClick: () => void;
   disabled?: boolean;
+  className?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="h-btn-primary w-full rounded-input border border-primary-token bg-primary-token px-[var(--space-3)] text-body font-[var(--fw-semibold)] text-contrast-token transition-opacity disabled:opacity-[var(--disabled-opacity)]"
+      className={`h-btn-primary rounded-input border border-primary-token bg-primary-token px-[var(--space-4)] text-body font-[var(--fw-semibold)] text-contrast-token transition-opacity disabled:opacity-[var(--disabled-opacity)] ${className}`}
     >
       {label}
     </button>
@@ -898,29 +905,28 @@ function SettingsButton({
   onClick,
   disabled = false,
   danger = false,
+  className = "",
 }: {
   icon: ReactNode;
   label: string;
   onClick: () => void;
   disabled?: boolean;
   danger?: boolean;
+  className?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`flex w-full items-center justify-between rounded-input border px-[var(--space-3)] py-[var(--space-3)] text-left transition-colors disabled:opacity-[var(--disabled-opacity)] ${
+      className={`inline-flex items-center justify-center gap-[var(--space-3)] rounded-input border px-[var(--space-4)] py-[var(--space-3)] text-body font-[var(--fw-medium)] text-left transition-colors disabled:opacity-[var(--disabled-opacity)] ${className} ${
         danger
-          ? "border-error-token bg-surface-inset text-error-token hover:bg-surface-2"
-          : "border-app bg-surface-inset text-app hover:bg-surface-2"
+          ? "border-error-token bg-surface text-error-token hover:bg-surface-2"
+          : "border-app bg-surface text-app hover:bg-surface-2"
       }`}
     >
-      <span className="flex items-center gap-[var(--space-3)]">
-        {icon}
-        <span className="text-body font-[var(--fw-medium)]">{label}</span>
-      </span>
-      <ChevronRightIcon className={danger ? "text-error-token" : "text-tertiary"} />
+      {icon}
+      <span>{label}</span>
     </button>
   );
 }
@@ -941,7 +947,7 @@ function ModeButton({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className={`rounded-chip border px-[var(--space-3)] py-[var(--space-1)] text-body-sm transition-colors disabled:opacity-[var(--disabled-opacity)] ${
+      className={`rounded-chip border px-[var(--space-3)] py-[var(--space-2)] text-body-sm transition-colors disabled:opacity-[var(--disabled-opacity)] ${
         active
           ? "border-primary-token bg-primary-token text-contrast-token"
           : "border-app bg-surface text-app hover:bg-surface-2"
