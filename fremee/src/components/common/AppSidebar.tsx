@@ -101,6 +101,17 @@ export default function AppSidebar({ onCreatePlan }: AppSidebarProps) {
   }, [searchPopoverOpen]);
 
   useEffect(() => {
+    if (!searchPopoverOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (searchPanelRef.current && !searchPanelRef.current.contains(e.target as Node)) {
+        setSearchPopoverOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [searchPopoverOpen]);
+
+  useEffect(() => {
     const trimmedQuery = searchValue.trim();
 
     if (!searchPopoverOpen || trimmedQuery.length < 2) {
@@ -302,7 +313,7 @@ export default function AppSidebar({ onCreatePlan }: AppSidebarProps) {
 
           {/* Nav items — icon always at same position */}
           <nav className="mt-[calc(var(--space-24)+var(--space-8))] flex w-full flex-col gap-[var(--space-8)]">
-            {items.map((item) =>
+            {items.slice(0, 1).map((item) =>
               renderSidebarRow({
                 key: item.key,
                 label: item.label,
@@ -329,6 +340,15 @@ export default function AppSidebar({ onCreatePlan }: AppSidebarProps) {
                 </span>
               )}
             </button>
+            {items.slice(1).map((item) =>
+              renderSidebarRow({
+                key: item.key,
+                label: item.label,
+                icon: item.icon,
+                href: item.href,
+                active: isActive(item.href),
+              })
+            )}
             {renderSidebarRow({
               key: "notifications",
               label: "Notificaciones",
@@ -400,20 +420,8 @@ export default function AppSidebar({ onCreatePlan }: AppSidebarProps) {
           searchPopoverOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <div className="flex items-center justify-between border-b border-app px-5 py-4">
-          <h2 className="text-body font-[var(--fw-semibold)]">Buscar</h2>
-          <button
-            type="button"
-            onClick={() => setSearchPopoverOpen(false)}
-            aria-label="Cerrar"
-            className="text-muted transition-colors hover:text-app"
-          >
-            <CloseIcon className="size-5" />
-          </button>
-        </div>
-
-        <div className="border-b border-app px-5 py-4">
-          <div className="relative">
+        <div className="px-5 pb-3 pt-5">
+          <div className="relative flex items-center">
             <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-[18px] -translate-y-1/2 text-muted" />
             <input
               ref={searchInputRef}
@@ -421,7 +429,7 @@ export default function AppSidebar({ onCreatePlan }: AppSidebarProps) {
               value={searchValue}
               onChange={(e) => setSearchValue(e.target.value)}
               placeholder="Buscar usuarios"
-              className="w-full rounded-[14px] border border-app bg-surface py-3 pl-10 pr-10 text-body text-app outline-none transition-colors focus:border-[var(--border-strong)] [&::-webkit-search-cancel-button]:hidden"
+              className="min-w-0 flex-1 rounded-[10px] border-none bg-surface-inset py-2.5 pl-10 pr-10 text-body text-app shadow-none outline-none ring-0 focus:border-none focus:shadow-none focus:outline-none focus:ring-0 placeholder:text-muted [&::-webkit-search-cancel-button]:hidden"
             />
             {searchValue ? (
               <button
@@ -432,9 +440,20 @@ export default function AppSidebar({ onCreatePlan }: AppSidebarProps) {
               >
                 <CloseIcon className="size-[18px]" />
               </button>
-            ) : null}
+            ) : (
+              <button
+                type="button"
+                onClick={() => setSearchPopoverOpen(false)}
+                aria-label="Cerrar"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted transition-colors hover:text-app"
+              >
+                <CloseIcon className="size-[16px]" />
+              </button>
+            )}
           </div>
         </div>
+
+        <div className="border-b border-app" />
 
         <div className="flex-1 overflow-y-auto overscroll-contain">
           {searchValue.trim().length < 2 ? (
