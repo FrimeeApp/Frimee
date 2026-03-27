@@ -111,6 +111,13 @@ export async function fetchPlanMemberIds(planId: number): Promise<string[]> {
   return (data ?? []).map((r: { user_id: string }) => r.user_id);
 }
 
+export async function fetchPlanUserRol(planId: number, userId: string): Promise<"ADMIN" | "PARTICIPANTE" | null> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_get_plan_user_rol", { p_plan_id: planId, p_user_id: userId });
+  if (error) return null;
+  return (data as "ADMIN" | "PARTICIPANTE" | null) ?? null;
+}
+
 export async function fetchPlanByJoinCode(joinCode: string): Promise<{ plan: PlanByIdRow; planId: number; alreadyMember: boolean } | null> {
   const supabase = createBrowserSupabaseClient();
   const { data, error } = await supabase.rpc("fn_join_plan_by_code", { p_join_code: joinCode, p_preview_only: true });

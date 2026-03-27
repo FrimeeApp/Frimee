@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import AppSidebar from "@/components/common/AppSidebar";
 import { useAuth } from "@/providers/AuthProvider";
-import { fetchPlansByIds, fetchPlanMemberIds, type PlanByIdRow } from "@/services/api/endpoints/plans.endpoint";
+import { fetchPlansByIds, fetchPlanMemberIds, fetchPlanUserRol, type PlanByIdRow } from "@/services/api/endpoints/plans.endpoint";
 import { fetchSubplanes, createSubplan, updateSubplanTransporte, updateSubplanViaje, type SubplanRow, type TipoSubplan, TIPOS_TRANSPORTE } from "@/services/api/endpoints/subplanes.endpoint";
 import { listGastosForPlanEndpoint, type GastoRow } from "@/services/api/endpoints/gastos.endpoint";
 import { Calendar } from "@/components/ui/calendar";
@@ -953,6 +953,7 @@ export default function PlanDetailPage() {
   const [activeTab, setActiveTab] = useState<Tab>("itinerario");
   const [plan, setPlan] = useState<PlanByIdRow | null>(null);
   const isPast = plan ? new Date(plan.fin_at) < new Date() : false;
+  const [isAdmin, setIsAdmin] = useState(false);
   const isMultiDay = plan ? (() => {
     const s = new Date(plan.inicio_at); const e = new Date(plan.fin_at);
     return !(s.getFullYear() === e.getFullYear() && s.getMonth() === e.getMonth() && s.getDate() === e.getDate());
@@ -1088,6 +1089,12 @@ export default function PlanDetailPage() {
     fetchSubplanes(planId).then(setSubplanes).catch(console.error);
   }, [id]);
 
+  useEffect(() => {
+    const planId = Number(id);
+    if (!planId || !user?.id) return;
+    fetchPlanUserRol(planId, user.id).then((rol) => setIsAdmin(rol === "ADMIN")).catch(console.error);
+  }, [id, user?.id]);
+
   const loadGastos = () => {
     const planId = Number(id);
     if (!planId) return;
@@ -1208,7 +1215,7 @@ export default function PlanDetailPage() {
                       <CalendarSmallIcon className="size-[40px] mb-[var(--space-3)] opacity-30" />
                       <p className="text-body font-[var(--fw-medium)]">Sin actividades</p>
                       <p className="text-body-sm mt-[var(--space-1)]">{isPast ? "Este plan ya ha finalizado" : "Añade la primera actividad del plan"}</p>
-                      {!isPast && (
+                      {!isPast && isAdmin && (
                       <button
                         onClick={() => setShowAddSheet(true)}
                         className="mt-[var(--space-5)] flex items-center gap-[var(--space-2)] rounded-chip border border-primary-token px-[var(--space-4)] py-[var(--space-2)] text-body-sm font-[var(--fw-medium)] text-primary-token transition-colors hover:bg-primary-token/10"
@@ -1343,7 +1350,7 @@ export default function PlanDetailPage() {
                       ))}
 
                       {/* Add button */}
-                      {!isPast && (
+                      {!isPast && isAdmin && (
                         <button
                           onClick={() => setShowAddSheet(true)}
                           className="mt-[var(--space-2)] flex w-full items-center gap-[var(--space-3)] rounded-card border border-dashed border-app px-[var(--space-4)] py-[var(--space-3)] text-body-sm text-muted transition-colors hover:border-primary-token hover:text-primary-token"
