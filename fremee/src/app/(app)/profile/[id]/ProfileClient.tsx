@@ -278,10 +278,10 @@ export default function ProfilePage() {
                 <button
                   type="button"
                   onClick={() => router.push("/settings")}
-                  className="flex items-center gap-[var(--space-2)] rounded-card px-3 py-[6px] text-body-sm text-muted transition-colors hover:bg-surface hover:text-app"
+                  aria-label="Ajustes"
+                  className="flex items-center justify-center rounded-full p-2 text-app transition-opacity hover:opacity-70"
                 >
-                  <SettingsIcon className="size-[18px]" />
-                  <span>Ajustes</span>
+                  <SettingsIcon className="size-[20px]" />
                 </button>
               </div>
             )}
@@ -308,10 +308,13 @@ export default function ProfilePage() {
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={uploading}
-                    className="absolute -bottom-1 -right-1 flex size-[30px] items-center justify-center rounded-full border-2 border-[var(--bg)] bg-[var(--text-primary)] text-contrast-token transition-opacity hover:opacity-80 disabled:opacity-50"
+                    className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 text-white/90 transition-opacity hover:bg-black/50 disabled:opacity-50"
                     aria-label="Cambiar foto de perfil"
                   >
-                    <PencilIcon className="size-[14px]" />
+                    <svg viewBox="0 0 24 24" fill="none" className="size-[28px]" aria-hidden="true">
+                      <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                      <circle cx="12" cy="13" r="4" stroke="currentColor" strokeWidth="1.5" />
+                    </svg>
                   </button>
                 )}
 
@@ -391,19 +394,19 @@ export default function ProfilePage() {
               {/* Stats */}
               <div className="mt-[var(--space-5)] flex gap-[var(--space-8)]">
                 <div className="flex flex-col items-center">
-                  <span className="text-[var(--font-h5)] font-[var(--fw-semibold)] leading-[var(--lh-h5)]">
+                  <span className="text-[18px] font-[600] leading-[1.2]" style={{ fontFamily: "var(--font-inter), sans-serif" }}>
                     {finishedPlans.length}
                   </span>
                   <span className="text-body-sm text-muted">Planes</span>
                 </div>
                 <div className="flex flex-col items-center">
-                  <span className="text-[var(--font-h5)] font-[var(--fw-semibold)] leading-[var(--lh-h5)]">
+                  <span className="text-[18px] font-[600] leading-[1.2]" style={{ fontFamily: "var(--font-inter), sans-serif" }}>
                     {followerCount}
                   </span>
                   <span className="text-body-sm text-muted">Seguidores</span>
                 </div>
                 <div className="flex flex-col items-center">
-                  <span className="text-[var(--font-h5)] font-[var(--fw-semibold)] leading-[var(--lh-h5)]">
+                  <span className="text-[18px] font-[600] leading-[1.2]" style={{ fontFamily: "var(--font-inter), sans-serif" }}>
                     0
                   </span>
                   <span className="text-body-sm text-muted">Paises</span>
@@ -412,29 +415,47 @@ export default function ProfilePage() {
             </div>
 
             {/* Tabs */}
-            <div className="mt-[var(--space-6)] border-t border-app">
-              <div className="flex">
+            <div className="mt-[var(--space-6)]">
+              <div className="relative flex">
                 <button
                   type="button"
                   onClick={() => handleTabChange("planes")}
-                  className={`flex-1 py-[var(--space-3)] text-body-sm font-[var(--fw-semibold)] transition-colors border-b-2 ${
-                    activeTab === "planes" ? "border-app text-app" : "border-transparent text-muted hover:text-app"
+                  aria-label="Planes"
+                  className={`flex-1 flex items-center justify-center py-[var(--space-3)] transition-colors duration-200 ${
+                    activeTab === "planes" ? "text-app" : "text-muted hover:text-app"
                   }`}
                 >
-                  Planes
+                  <svg viewBox="0 0 24 24" fill="none" className="size-[20px]" aria-hidden="true">
+                    <rect x="3" y="3" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+                    <rect x="14" y="3" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+                    <rect x="3" y="14" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+                    <rect x="14" y="14" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+                  </svg>
                 </button>
                 {isOwnProfile && (
                   <button
                     type="button"
                     onClick={() => handleTabChange("guardados")}
-                    className={`flex-1 py-[var(--space-3)] text-body-sm font-[var(--fw-semibold)] transition-colors border-b-2 ${
-                      activeTab === "guardados" ? "border-app text-app" : "border-transparent text-muted hover:text-app"
+                    aria-label="Guardados"
+                    className={`flex-1 flex items-center justify-center py-[var(--space-3)] transition-colors duration-200 ${
+                      activeTab === "guardados" ? "text-app" : "text-muted hover:text-app"
                     }`}
                   >
-                    Guardados
+                    <svg viewBox="0 0 24 24" fill="none" className="size-[20px]" aria-hidden="true">
+                      <path d="M19 21l-7-4-7 4V5a2 2 0 012-2h10a2 2 0 012 2z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
                   </button>
                 )}
+                <span
+                  className="absolute bottom-0 h-[2px] w-[28px] rounded-full bg-[var(--text-primary)] transition-all duration-300 ease-[var(--ease-standard)]"
+                  style={{
+                    left: activeTab === "planes"
+                      ? "calc(25% - 14px)"
+                      : isOwnProfile ? "calc(75% - 14px)" : "calc(50% - 14px)",
+                  }}
+                />
               </div>
+              <div className="border-b border-app" />
             </div>
 
             {/* Grid */}
@@ -445,7 +466,7 @@ export default function ProfilePage() {
                     {isOwnProfile ? "Aun no tienes planes publicados." : "No hay planes publicos."}
                   </p>
                 ) : (
-                  <PlanGrid plans={plansWithCover} />
+                  <PlanGrid plans={plansWithCover} onPlanClick={(planId) => router.push(`/plans/${planId}`)} />
                 )
               ) : loadingSaved ? (
                 <div className="py-[var(--space-6)] flex justify-center">
@@ -456,7 +477,7 @@ export default function ProfilePage() {
                   Aun no has guardado ningun plan.
                 </p>
               ) : (
-                <PlanGrid plans={savedPlans.filter((p) => p.coverImage)} />
+                <PlanGrid plans={savedPlans.filter((p) => p.coverImage)} onPlanClick={(planId) => router.push(`/plans/${planId}`)} />
               )}
             </div>
           </div>
@@ -536,12 +557,15 @@ export default function ProfilePage() {
   );
 }
 
-function PlanGrid({ plans }: { plans: FeedPlanItemDto[] }) {
+function PlanGrid({ plans, onPlanClick }: { plans: FeedPlanItemDto[]; onPlanClick?: (id: number) => void }) {
   return (
-    <div className="columns-2 gap-[var(--space-3)] sm:columns-3">
+    <div className="columns-2 gap-[6px] sm:columns-3">
       {plans.map((plan) => (
-        <div key={plan.id} className="mb-[var(--space-3)] break-inside-avoid">
-          <div className="group relative overflow-hidden rounded-card">
+        <div key={plan.id} className="mb-[6px] break-inside-avoid">
+          <div
+            className="group relative cursor-pointer overflow-hidden rounded-[6px]"
+            onClick={() => onPlanClick?.(plan.id)}
+          >
             <img
               src={plan.coverImage!}
               alt={plan.title}
@@ -567,13 +591,8 @@ function PlanGrid({ plans }: { plans: FeedPlanItemDto[] }) {
 function SettingsIcon({ className = "size-icon" }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.8" />
-      <path
-        d="M12 1v2.5M12 20.5V23M23 12h-2.5M3.5 12H1M20.07 3.93l-1.77 1.77M5.7 18.3l-1.77 1.77M20.07 20.07l-1.77-1.77M5.7 5.7L3.93 3.93"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-      />
+      <path d="M12.22 2h-.44a2 2 0 00-2 2v.18a2 2 0 01-1 1.73l-.43.25a2 2 0 01-2 0l-.15-.08a2 2 0 00-2.73.73l-.22.38a2 2 0 00.73 2.73l.15.1a2 2 0 011 1.72v.51a2 2 0 01-1 1.74l-.15.09a2 2 0 00-.73 2.73l.22.38a2 2 0 002.73.73l.15-.08a2 2 0 012 0l.43.25a2 2 0 011 1.73V20a2 2 0 002 2h.44a2 2 0 002-2v-.18a2 2 0 011-1.73l.43-.25a2 2 0 012 0l.15.08a2 2 0 002.73-.73l.22-.39a2 2 0 00-.73-2.73l-.15-.08a2 2 0 01-1-1.74v-.5a2 2 0 011-1.74l.15-.09a2 2 0 00.73-2.73l-.22-.38a2 2 0 00-2.73-.73l-.15.08a2 2 0 01-2 0l-.43-.25a2 2 0 01-1-1.73V4a2 2 0 00-2-2z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.5" />
     </svg>
   );
 }
