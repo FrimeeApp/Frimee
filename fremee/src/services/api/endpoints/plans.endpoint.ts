@@ -136,6 +136,34 @@ export async function joinPlanByCode(joinCode: string): Promise<{ plan_id: numbe
   return { plan_id: result.plan_id! };
 }
 
+export async function demoteAdminEndpoint(planId: number, targetUserId: string): Promise<string> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_plan_demote_admin", { p_plan_id: planId, p_target_user_id: targetUserId });
+  if (error) throw error;
+  return data as string;
+}
+
+export async function promoteToAdminEndpoint(planId: number, targetUserId: string): Promise<string> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_plan_promote_admin", { p_plan_id: planId, p_target_user_id: targetUserId });
+  if (error) throw error;
+  return data as string;
+}
+
+export async function kickMemberEndpoint(planId: number, targetUserId: string): Promise<string> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_plan_kick_member", { p_plan_id: planId, p_target_user_id: targetUserId });
+  if (error) throw error;
+  return data as string;
+}
+
+export async function leavePlanEndpoint(planId: number): Promise<string> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_plan_leave", { p_plan_id: planId });
+  if (error) throw error;
+  return data as string;
+}
+
 export async function fetchUserRelatedPlans(params: { userId: string; limit?: number }): Promise<PlanByIdRow[]> {
   const supabase = createBrowserSupabaseClient();
 

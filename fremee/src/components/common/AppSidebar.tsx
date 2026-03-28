@@ -7,6 +7,7 @@ import { useAuth } from "@/providers/AuthProvider";
 import CreatePlanModal, { type CreatePlanPayload } from "@/components/plans/CreatePlanModal";
 import { createPlan } from "@/services/api/repositories/plans.repository";
 import { countNotificacionesNoLeidas, insertNotificacion } from "@/services/api/repositories/notifications.repository";
+import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { searchUsers, type PublicUserProfileDto } from "@/services/api/repositories/users.repository";
 import NotificationsPanel from "@/components/notifications/NotificationsPanel";
 type IconProps = {
@@ -79,6 +80,20 @@ export default function AppSidebar({ onCreatePlan }: AppSidebarProps) {
   useEffect(() => {
     void countNotificacionesNoLeidas().then(setUnreadNotifs).catch(() => setUnreadNotifs(0));
   }, []);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const supabase = createBrowserSupabaseClient();
+    const channel = supabase
+      .channel(`notif-sidebar-${user.id}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "notificaciones", filter: `user_id=eq.${user.id}` },
+        () => setUnreadNotifs((prev) => prev + 1)
+      )
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [user?.id]);
 
   useEffect(() => {
     setSearchPopoverOpen(false);

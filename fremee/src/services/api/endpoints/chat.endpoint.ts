@@ -2,7 +2,7 @@ import { createBrowserSupabaseClient } from "@/services/supabase/client";
 
 export type ChatListItem = {
   chat_id: string;
-  tipo: "DIRECTO" | "GRUPO";
+  tipo: "DIRECTO" | "GRUPO" | "PLAN";
   nombre: string | null;
   foto: string | null;
   last_message: string | null;
@@ -40,7 +40,16 @@ export async function listChatsEndpoint(): Promise<ChatListItem[]> {
   const supabase = createBrowserSupabaseClient();
   const { data, error } = await supabase.rpc("fn_chats_list");
   if (error) throw error;
-  return (data ?? []) as ChatListItem[];
+  return ((data ?? []) as ChatListItem[]).filter((c) => c.tipo !== "PLAN");
+}
+
+export async function fetchPlanChatItem(planId: number): Promise<ChatListItem | null> {
+  const supabase = createBrowserSupabaseClient();
+  const { data: chatId } = await supabase.rpc("fn_get_plan_chat_id", { p_plan_id: planId });
+  if (!chatId) return null;
+  const { data } = await supabase.rpc("fn_chats_list");
+  if (!data) return null;
+  return ((data as ChatListItem[]).find((c) => c.chat_id === chatId)) ?? null;
 }
 
 export async function getOrCreateDirectoChatEndpoint(otherUserId: string): Promise<string> {
