@@ -4,7 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import AppSidebar from "@/components/common/AppSidebar";
 import { useAuth } from "@/providers/AuthProvider";
+import { useCallContext } from "@/providers/CallProvider";
+import { ChatConversation, PhoneCallIcon, VideoCallIcon } from "@/components/chat/ChatConversation";
+import { fetchPlanChatItem, type ChatListItem } from "@/services/api/repositories/chat.repository";
+import { resolveChatName, resolveChatAvatar } from "@/services/api/repositories/chat.repository";
 import { fetchPlansByIds, fetchPlanMemberIds, fetchPlanUserRol, type PlanByIdRow } from "@/services/api/endpoints/plans.endpoint";
+import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { fetchSubplanes, createSubplan, updateSubplanTransporte, updateSubplanViaje, type SubplanRow, type TipoSubplan, TIPOS_TRANSPORTE } from "@/services/api/endpoints/subplanes.endpoint";
 import { listGastosForPlanEndpoint, type GastoRow } from "@/services/api/endpoints/gastos.endpoint";
 import { Calendar } from "@/components/ui/calendar";
@@ -88,7 +93,7 @@ const MOCK_EXPENSES = {
   ],
 };
 
-type Tab = "itinerario" | "mapa" | "gastos";
+type Tab = "itinerario" | "mapa" | "gastos" | "chat";
 
 /* ───────────── icons ───────────── */
 
@@ -530,9 +535,10 @@ type AddSheetProps = {
   subplanes: SubplanRow[];
   onClose: () => void;
   onCreated: (s: SubplanRow) => void;
+  initialTitulo?: string;
 };
 
-function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClose, onCreated }: AddSheetProps) {
+function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClose, onCreated, initialTitulo }: AddSheetProps) {
   // Use local date to avoid UTC-offset shifting the allowed range by one day
   const toLocalDate = (iso: string) => {
     const d = new Date(iso);
@@ -553,7 +559,7 @@ function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClos
   const defaultHoraInicio = planIsAllDay ? "10:00" : planStartTime;
   const defaultHoraFin    = planIsAllDay ? "11:00" : planEndTime;
 
-  const [titulo, setTitulo] = useState("");
+  const [titulo, setTitulo] = useState(initialTitulo ?? "");
   const [descripcion, setDescripcion] = useState("");
   const [fecha, setFecha] = useState(defaultDate);
   const [fechaFin, setFechaFin] = useState<string | null>(null); // null = mismo día que fecha
@@ -937,6 +943,8 @@ function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClos
 
 export default function PlanDetailPage() {
   const { loading, user } = useAuth();
+  const { startCall, joinCall, callState } = useCallContext();
+  const reloadCallMessagesRef = useRef<(() => void) | null>(null);
   const router = useRouter();
   const { id: paramId } = useParams<{ id: string }>();
   // In Capacitor static export we navigate to /plans/static?id=18.
@@ -954,6 +962,8 @@ export default function PlanDetailPage() {
   const [plan, setPlan] = useState<PlanByIdRow | null>(null);
   const isPast = plan ? new Date(plan.fin_at) < new Date() : false;
   const [isAdmin, setIsAdmin] = useState(false);
+  const [membershipChecked, setMembershipChecked] = useState(false);
+  const [planChat, setPlanChat] = useState<ChatListItem | null>(null);
   const isMultiDay = plan ? (() => {
     const s = new Date(plan.inicio_at); const e = new Date(plan.fin_at);
     return !(s.getFullYear() === e.getFullYear() && s.getMonth() === e.getMonth() && s.getDate() === e.getDate());
@@ -962,6 +972,7 @@ export default function PlanDetailPage() {
   const [subplanes, setSubplanes] = useState<SubplanRow[]>([]);
   const [selectedMapDay, setSelectedMapDay] = useState<string | null>(null);
   const [showAddSheet, setShowAddSheet] = useState(false);
+  const [addSheetInitialTitulo, setAddSheetInitialTitulo] = useState<string | undefined>();
   const [showAddGastoSheet, setShowAddGastoSheet] = useState(false);
   const [gastos, setGastos] = useState<GastoRow[]>([]);
   const [editingTransporteId, setEditingTransporteId] = useState<number | null>(null);
@@ -1092,7 +1103,38 @@ export default function PlanDetailPage() {
   useEffect(() => {
     const planId = Number(id);
     if (!planId || !user?.id) return;
-    fetchPlanUserRol(planId, user.id).then((rol) => setIsAdmin(rol === "ADMIN")).catch(console.error);
+    fetchPlanUserRol(planId, user.id).then((rol) => {
+      if (rol === null) { router.push("/calendar"); return; }
+      setIsAdmin(rol === "ADMIN");
+      setMembershipChecked(true);
+    }).catch(() => router.push("/calendar"));
+  }, [id, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Recargar lista de miembros cuando alguien entra o sale del chat del plan
+  useEffect(() => {
+    if (!planChat?.chat_id || !user?.id) return;
+    const planId = Number(id);
+    const supabase = createBrowserSupabaseClient();
+    const channel = supabase
+      .channel(`chat-members-${planChat.chat_id}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_miembro", filter: `chat_id=eq.${planChat.chat_id}` }, () => {
+        void fetchPlanChatItem(planId).then(setPlanChat);
+      })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "chat_miembro", filter: `chat_id=eq.${planChat.chat_id}` }, () => {
+        void fetchPlanUserRol(planId, user.id).then((rol) => {
+          if (rol === null) { router.push("/calendar"); return; }
+          void fetchPlanChatItem(planId).then(setPlanChat);
+        });
+      })
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [planChat?.chat_id, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+
+  useEffect(() => {
+    const planId = Number(id);
+    if (!planId || !user?.id) return;
+    fetchPlanChatItem(planId).then(setPlanChat).catch(console.error);
   }, [id, user?.id]);
 
   const loadGastos = () => {
@@ -1103,7 +1145,7 @@ export default function PlanDetailPage() {
 
   useEffect(() => { loadGastos(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (loading || planLoading) return <PlanDetailSkeleton />;
+  if (loading || planLoading || !membershipChecked) return <PlanDetailSkeleton />;
   if (!plan) return (
     <div className="flex min-h-dvh items-center justify-center text-muted">
       Plan no encontrado.
@@ -1182,28 +1224,107 @@ export default function PlanDetailPage() {
 
           {/* ─── Tabs ─── */}
           <div className="border-b border-app px-[var(--page-margin-x)]">
-            <div className="flex gap-[var(--space-8)]">
-              {(["itinerario", ...(isMultiDay ? ["mapa"] : []), "gastos"] as Tab[]).map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`relative py-[var(--space-4)] text-body-sm font-[var(--fw-medium)] capitalize transition-colors ${
-                    activeTab === tab
-                      ? "text-app"
-                      : "text-muted hover:text-app"
-                  }`}
-                >
-                  {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                  {activeTab === tab && (
-                    <span className="absolute inset-x-0 bottom-0 h-[2px] rounded-full bg-primary-token" />
-                  )}
-                </button>
-              ))}
+            <div className="flex items-center justify-between">
+              <div className="flex gap-[var(--space-8)]">
+                {(["itinerario", ...(isMultiDay ? ["mapa"] : []), "gastos", "chat"] as Tab[]).map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    className={`relative py-[var(--space-4)] text-body-sm font-[var(--fw-medium)] capitalize transition-colors ${
+                      activeTab === tab
+                        ? "text-app"
+                        : "text-muted hover:text-app"
+                    }`}
+                  >
+                    {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                    {activeTab === tab && (
+                      <span className="absolute inset-x-0 bottom-0 h-[2px] rounded-full bg-primary-token" />
+                    )}
+                  </button>
+                ))}
+              </div>
+              {activeTab === "chat" && planChat && (
+                <div className="flex items-center gap-[var(--space-1)] pb-[2px]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nombre = resolveChatName(planChat, user!.id);
+                      const foto = resolveChatAvatar(planChat, user!.id) ?? undefined;
+                      const miembros = planChat.miembros.map((m) => ({ id: m.id, nombre: m.nombre, foto: m.profile_image ?? undefined }));
+                      void startCall(String(planChat.chat_id), "audio", nombre, foto, miembros);
+                    }}
+                    className="flex size-[32px] items-center justify-center rounded-full text-muted transition-colors hover:bg-surface hover:text-app"
+                    aria-label="Llamada de voz"
+                  >
+                    <PhoneCallIcon className="size-[18px]" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nombre = resolveChatName(planChat, user!.id);
+                      const foto = resolveChatAvatar(planChat, user!.id) ?? undefined;
+                      const miembros = planChat.miembros.map((m) => ({ id: m.id, nombre: m.nombre, foto: m.profile_image ?? undefined }));
+                      void startCall(String(planChat.chat_id), "video", nombre, foto, miembros);
+                    }}
+                    className="flex size-[32px] items-center justify-center rounded-full text-muted transition-colors hover:bg-surface hover:text-app"
+                    aria-label="Videollamada"
+                  >
+                    <VideoCallIcon className="size-[18px]" />
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
+          {/* ─── Chat tab ─── */}
+          {activeTab === "chat" && (
+            <div>
+              {planChat && user ? (
+                <ChatConversation
+                  chat={planChat}
+                  currentUserId={user.id}
+                  onBack={() => setActiveTab("itinerario")}
+                  onNewMessage={() => {}}
+                  onStartCall={(tipo) => {
+                    const nombre = resolveChatName(planChat, user.id);
+                    const foto = resolveChatAvatar(planChat, user.id) ?? undefined;
+                    const miembros = planChat.miembros.map((m) => ({ id: m.id, nombre: m.nombre, foto: m.profile_image ?? undefined }));
+                    void startCall(String(planChat.chat_id), tipo, nombre, foto, miembros);
+                  }}
+                  onJoinCall={(llamadaId, roomName, tipo) => {
+                    const nombre = resolveChatName(planChat, user.id);
+                    const foto = resolveChatAvatar(planChat, user.id) ?? undefined;
+                    const miembros = planChat.miembros.map((m) => ({ id: m.id, nombre: m.nombre, foto: m.profile_image ?? undefined }));
+                    void joinCall(llamadaId, roomName, String(planChat.chat_id), tipo, nombre, foto, miembros);
+                  }}
+                  inCall={callState.status !== "idle"}
+                  registerCallReload={(fn) => { reloadCallMessagesRef.current = fn; }}
+                  containerClassName="flex flex-col h-[650px]"
+                  embedded
+                  planInfo={plan ? { titulo: plan.titulo, inicio_at: plan.inicio_at, fin_at: plan.fin_at, ubicacion_nombre: plan.ubicacion_nombre } : undefined}
+                  planId={plan?.id}
+                  isAdmin={isAdmin}
+                  onAbrirActividad={(titulo) => {
+                    setAddSheetInitialTitulo(titulo);
+                    setShowAddSheet(true);
+                    setActiveTab("itinerario");
+                  }}
+                  onLeave={() => router.push("/calendar")}
+                  onMembersChanged={() => {
+                    const planId = Number(id);
+                    if (planId) void fetchPlanChatItem(planId).then(setPlanChat);
+                  }}
+                />
+              ) : (
+                <div className="flex h-[50vh] items-center justify-center text-body-sm text-muted">
+                  Cargando chat...
+                </div>
+              )}
+            </div>
+          )}
+
           {/* ─── Content ─── */}
-          <div className="px-[var(--page-margin-x)] pt-[var(--space-8)] pb-[var(--space-16)]">
+          {activeTab !== "chat" && <div className="px-[var(--page-margin-x)] pt-[var(--space-8)] pb-[var(--space-16)]">
 
             {activeTab === "itinerario" && (
               <div className="flex flex-col gap-[var(--space-8)] lg:flex-row lg:gap-[var(--space-12)]">
@@ -1532,7 +1653,8 @@ export default function PlanDetailPage() {
               </div>
             )}
 
-          </div>
+          </div>}
+
         </main>
       </div>
 
@@ -1542,8 +1664,9 @@ export default function PlanDetailPage() {
           planStartDate={plan.inicio_at}
           planEndDate={plan.fin_at}
           subplanes={subplanes}
-          onClose={() => setShowAddSheet(false)}
+          onClose={() => { setShowAddSheet(false); setAddSheetInitialTitulo(undefined); }}
           onCreated={handleSubplanCreated}
+          initialTitulo={addSheetInitialTitulo}
         />
       )}
 

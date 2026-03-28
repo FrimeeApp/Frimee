@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/providers/AuthProvider";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import {
@@ -23,6 +24,20 @@ const TIPO_LABELS: Record<string, string> = {
   plan_invite: "te invitó a un plan.",
   mention: "te mencionó en un comentario.",
 };
+
+function recordatorioLabel(entityId: string | null): string {
+  try {
+    const meta = JSON.parse(entityId ?? "") as { plan_titulo?: string; importe?: number; has_tasks?: boolean };
+    const plan = meta.plan_titulo ? ` en ${meta.plan_titulo}` : "";
+    const deuda = (meta.importe ?? 0) > 0.01;
+    const tareas = meta.has_tasks;
+    if (deuda && tareas) return `te recuerda que le debes ${meta.importe!.toFixed(2)}€ y tienes tareas pendientes${plan}.`;
+    if (deuda) return `te recuerda que todavía le debes ${meta.importe!.toFixed(2)}€${plan}.`;
+    return `te recuerda que tienes tareas pendientes${plan}.`;
+  } catch {
+    return "te ha enviado un recordatorio.";
+  }
+}
 
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -69,9 +84,11 @@ function Avatar({ src, name }: { src: string | null; name: string | null }) {
 function NotifItem({
   n,
   onAction,
+  onPlanAccepted,
 }: {
   n: NotificacionDto;
   onAction: (id: number) => void;
+  onPlanAccepted?: (planId: string) => void;
 }) {
   const [acting, setActing] = useState(false);
   const isFriendRequest = n.tipo === "friend_request" && n.actor_id;
@@ -95,9 +112,14 @@ function NotifItem({
     if (!n.entity_id || acting) return;
     setActing(true);
     try {
-      if (accept) await acceptPlanInvite(Number(n.entity_id), n.id);
-      else await rejectPlanInvite(n.id);
-      onAction(n.id);
+      if (accept) {
+        await acceptPlanInvite(Number(n.entity_id), n.id);
+        onAction(n.id);
+        onPlanAccepted?.(n.entity_id!);
+      } else {
+        await rejectPlanInvite(n.id);
+        onAction(n.id);
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -121,7 +143,9 @@ function NotifItem({
         <p className="text-body-sm leading-snug">
           <span className="font-[var(--fw-semibold)]">{n.actor_nombre ?? "Alguien"}</span>
           {" "}
-          <span className="text-muted">{TIPO_LABELS[n.tipo] ?? n.tipo}</span>
+          <span className="text-muted">
+            {n.tipo === "recordatorio" ? recordatorioLabel(n.entity_id) : (TIPO_LABELS[n.tipo] ?? n.tipo)}
+          </span>
         </p>
         <p className="text-caption text-muted mt-0.5">{timeAgo(n.created_at)}</p>
 
@@ -161,6 +185,7 @@ interface Props {
 
 export default function NotificationsPanel({ open, onClose, onRead, desktopPosition = "right" }: Props) {
   const { user } = useAuth();
+  const router = useRouter();
   const [notifs, setNotifs] = useState<NotificacionDto[]>([]);
   const [loading, setLoading] = useState(false);
   const [cursor, setCursor] = useState<number | undefined>();
@@ -302,6 +327,10 @@ export default function NotificationsPanel({ open, onClose, onRead, desktopPosit
                         onAction={(id) =>
                           setNotifs((prev) => prev.filter((x) => x.id !== id))
                         }
+                        onPlanAccepted={(planId) => {
+                          onClose();
+                          router.push(`/plans/${planId}`);
+                        }}
                       />
                     ))}
                   </ul>

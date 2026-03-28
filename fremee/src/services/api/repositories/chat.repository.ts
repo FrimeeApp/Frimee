@@ -1,5 +1,6 @@
 import {
   listChatsEndpoint,
+  fetchPlanChatItem,
   getOrCreateDirectoChatEndpoint,
   createGrupoChatEndpoint,
   listMensajesEndpoint,
@@ -19,6 +20,8 @@ import {
   type MensajeRow,
   type ChatMiembro,
 } from "@/services/api/endpoints/chat.endpoint";
+
+export { fetchPlanChatItem };
 
 export type { ChatListItem, MensajeRow, ChatMiembro };
 
