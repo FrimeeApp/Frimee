@@ -1408,7 +1408,7 @@ export default function PlanDetailPage() {
                                 {!isLast && (
                                   <div className="relative pl-[36px] pb-[var(--space-3)]">
                                     <div className="absolute left-[11px] top-0 bottom-0 w-[1.5px] bg-[var(--border)]" />
-                                    {editingTransporteId === items[idx + 1].id ? (
+                                    {!isPast && editingTransporteId === items[idx + 1].id ? (
                                       <div className="flex flex-wrap gap-[var(--space-2)]">
                                         {TRANSPORT_LLEGADA.map((t) => (
                                           <button
@@ -1427,22 +1427,38 @@ export default function PlanDetailPage() {
                                       </div>
                                     ) : nextTransporte ? (
                                       <div className="flex items-center gap-[var(--space-3)]">
-                                        <button
-                                          onClick={() => setEditingTransporteId(items[idx + 1].id)}
-                                          className="flex items-center gap-[var(--space-2)] text-body-sm text-muted hover:text-primary-token transition-colors"
-                                        >
-                                          <span className="text-[13px]">{nextTransporte.emoji}</span>
-                                          <span>{nextTransporte.label}</span>
-                                          {items[idx + 1].duracion_viaje && (
-                                            <>
-                                              <span className="text-muted opacity-40">·</span>
-                                              <span className="text-primary-token font-[var(--fw-medium)]">{items[idx + 1].duracion_viaje}</span>
-                                              {items[idx + 1].distancia_viaje && (
-                                                <span className="text-caption text-muted">{items[idx + 1].distancia_viaje}</span>
-                                              )}
-                                            </>
-                                          )}
-                                        </button>
+                                        {isPast ? (
+                                          <span className="flex items-center gap-[var(--space-2)] text-body-sm text-muted">
+                                            <span className="text-[13px]">{nextTransporte.emoji}</span>
+                                            <span>{nextTransporte.label}</span>
+                                            {items[idx + 1].duracion_viaje && (
+                                              <>
+                                                <span className="text-muted opacity-40">·</span>
+                                                <span className="text-primary-token font-[var(--fw-medium)]">{items[idx + 1].duracion_viaje}</span>
+                                                {items[idx + 1].distancia_viaje && (
+                                                  <span className="text-caption text-muted">{items[idx + 1].distancia_viaje}</span>
+                                                )}
+                                              </>
+                                            )}
+                                          </span>
+                                        ) : (
+                                          <button
+                                            onClick={() => setEditingTransporteId(items[idx + 1].id)}
+                                            className="flex items-center gap-[var(--space-2)] text-body-sm text-muted hover:text-primary-token transition-colors"
+                                          >
+                                            <span className="text-[13px]">{nextTransporte.emoji}</span>
+                                            <span>{nextTransporte.label}</span>
+                                            {items[idx + 1].duracion_viaje && (
+                                              <>
+                                                <span className="text-muted opacity-40">·</span>
+                                                <span className="text-primary-token font-[var(--fw-medium)]">{items[idx + 1].duracion_viaje}</span>
+                                                {items[idx + 1].distancia_viaje && (
+                                                  <span className="text-caption text-muted">{items[idx + 1].distancia_viaje}</span>
+                                                )}
+                                              </>
+                                            )}
+                                          </button>
+                                        )}
                                         <a
                                           href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(s.ubicacion_fin_nombre ?? s.ubicacion_nombre ?? "")}&destination=${encodeURIComponent(items[idx + 1].ubicacion_nombre ?? "")}&travelmode=${nextTransporte.googleMode ?? "driving"}`}
                                           target="_blank"
@@ -1453,14 +1469,14 @@ export default function PlanDetailPage() {
                                           🗺️
                                         </a>
                                       </div>
-                                    ) : (
+                                    ) : !isPast ? (
                                       <button
                                         onClick={() => setEditingTransporteId(items[idx + 1].id)}
                                         className="text-caption text-muted hover:text-primary-token transition-colors"
                                       >
                                         + ¿Cómo llegas?
                                       </button>
-                                    )}
+                                    ) : null}
                                   </div>
                                 )}
                                 </div>

@@ -39,6 +39,15 @@ function recordatorioLabel(entityId: string | null): string {
   }
 }
 
+function recordatorioDeudaLabel(entityId: string | null): string {
+  try {
+    const meta = JSON.parse(entityId ?? "") as { mensaje?: string };
+    return meta.mensaje ?? "Tienes deudas pendientes de un viaje pasado.";
+  } catch {
+    return "Tienes deudas pendientes de un viaje pasado.";
+  }
+}
+
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60_000);
@@ -134,18 +143,31 @@ function NotifItem({
       }`}
     >
       <div className="relative shrink-0">
-        <Avatar src={n.actor_foto} name={n.actor_nombre} />
+        {n.tipo === "recordatorio_deuda"
+          ? <div className="size-10 rounded-full border border-app bg-[var(--primary)]/15 flex items-center justify-center text-body-sm font-[var(--fw-semibold)] text-[var(--primary)] shrink-0">F</div>
+          : <Avatar src={n.actor_foto} name={n.actor_nombre} />
+        }
         {!n.leida && (
           <span className="absolute bottom-0 right-0 size-2.5 rounded-full bg-blue-500 border-2 border-[var(--bg)]" />
         )}
       </div>
       <div className="flex-1 min-w-0 pt-0.5">
         <p className="text-body-sm leading-snug">
-          <span className="font-[var(--fw-semibold)]">{n.actor_nombre ?? "Alguien"}</span>
-          {" "}
-          <span className="text-muted">
-            {n.tipo === "recordatorio" ? recordatorioLabel(n.entity_id) : (TIPO_LABELS[n.tipo] ?? n.tipo)}
-          </span>
+          {n.tipo === "recordatorio_deuda" ? (
+            <>
+              <span className="font-[var(--fw-semibold)] text-[var(--primary)]">Frimee</span>
+              {" "}
+              <span className="text-muted">{recordatorioDeudaLabel(n.entity_id)}</span>
+            </>
+          ) : (
+            <>
+              <span className="font-[var(--fw-semibold)]">{n.actor_nombre ?? "Alguien"}</span>
+              {" "}
+              <span className="text-muted">
+                {n.tipo === "recordatorio" ? recordatorioLabel(n.entity_id) : (TIPO_LABELS[n.tipo] ?? n.tipo)}
+              </span>
+            </>
+          )}
         </p>
         <p className="text-caption text-muted mt-0.5">{timeAgo(n.created_at)}</p>
 
