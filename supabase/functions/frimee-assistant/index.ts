@@ -118,15 +118,38 @@ async function checkAndIncrementUsage(
   return { allowed: true };
 }
 
+// ─── Reverse geocoding ────────────────────────────────────────────────────────
+
+async function reverseGeocode(lat: number, lng: number): Promise<string> {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=es`,
+      { headers: { "User-Agent": "Frimee/1.0" } },
+    );
+    if (!res.ok) throw new Error("nominatim error");
+    const data = await res.json();
+    const addr = data.address ?? {};
+    const parts = [
+      addr.neighbourhood ?? addr.suburb ?? addr.village ?? addr.town ?? addr.city_district,
+      addr.city ?? addr.town ?? addr.municipality,
+      addr.state,
+      addr.country,
+    ].filter(Boolean);
+    return parts.slice(0, 3).join(", ") || data.display_name?.split(",").slice(0, 3).join(", ") || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+  } catch {
+    return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+  }
+}
+
 // ─── System prompt ────────────────────────────────────────────────────────────
 
 function buildLocationContext(
   planInfo: PlanInfo | undefined,
-  userLocation: { lat: number; lng: number } | undefined,
+  userLocationName: string | undefined,
   subplans: SubplanContext[],
 ): string {
-  if (userLocation) {
-    return `Ubicación GPS del usuario en este momento: ${userLocation.lat.toFixed(5)}, ${userLocation.lng.toFixed(5)} (tiempo real).`;
+  if (userLocationName) {
+    return `Ubicación actual del usuario (GPS en tiempo real): ${userLocationName}.`;
   }
 
   if (subplans.length > 0) {
@@ -169,7 +192,7 @@ function buildSystemPrompt(
   planInfo: PlanInfo | undefined,
   isAdmin: boolean,
   suscripcion: string,
-  userLocation: { lat: number; lng: number } | undefined,
+  userLocationName: string | undefined,
   subplans: SubplanContext[],
 ): string {
   const membersList = members.map((m) => `- ${m.nombre} (id: ${m.id})`).join("\n");
@@ -190,10 +213,11 @@ Tu función es ayudar a los viajeros a coordinar su plan de forma natural, actua
 - Formato: texto plano únicamente. Sin markdown, sin asteriscos, sin guiones, sin emojis a menos que el contexto lo pida de forma muy natural.
 
 ━━━ CONTEXTO DEL VIAJE ━━━
+Fecha y hora actual: ${new Date().toLocaleString("es-ES", { weekday: "long", year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Madrid" })}
 ${planCtx}
 
 ━━━ UBICACIÓN ACTUAL ━━━
-${buildLocationContext(planInfo, userLocation, subplans)}
+${buildLocationContext(planInfo, userLocationName, subplans)}
 
 ━━━ MIEMBROS DEL GRUPO ━━━
 ${membersList}
@@ -215,6 +239,7 @@ CONSULTAS (disponibles para todos):
 SUGERENCIAS (disponibles para todos):
 - Si el usuario pide recomendaciones de restaurantes, actividades, planes u opciones para decidir en grupo, usa la información de UBICACIÓN ACTUAL como referencia geográfica (GPS exacto si disponible, actividad en curso si existe, o destino del plan como fallback). Genera 3-5 opciones concretas con una descripción breve y crea automáticamente una votación con esas opciones para que el grupo decida.
   En "reply" presenta brevemente las opciones. En "command" incluye el /votar con esas opciones entre comillas dobles.
+  IMPORTANTE: las opciones deben ser nombres específicos de lugares o establecimientos reales (ej: "La Taberna del Puerto", "Restaurante El Buey"), nunca categorías genéricas como "chiringuito de playa" o "comida rápida". Si no conoces nombres concretos del lugar, inventa nombres verosímiles típicos de la zona.
 
 ENCUESTAS (disponibles para todos):
 - Crear una votación cuando el usuario quiera decidir algo entre opciones → command="/votar [pregunta]? \\"[opción 1]\\" \\"[opción 2]\\" \\"[opción 3]\\""
@@ -304,8 +329,13 @@ serve(async (req) => {
       subplans = (subplanRows ?? []) as SubplanContext[];
     }
 
+    // Resolve user location name from GPS coords (if provided)
+    const userLocationName = userLocation
+      ? await reverseGeocode(userLocation.lat, userLocation.lng)
+      : undefined;
+
     // Call LLM
-    const systemPrompt = buildSystemPrompt(members, planInfo, isAdmin, suscripcion, userLocation, subplans);
+    const systemPrompt = buildSystemPrompt(members, planInfo, isAdmin, suscripcion, userLocationName, subplans);
 
     const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
