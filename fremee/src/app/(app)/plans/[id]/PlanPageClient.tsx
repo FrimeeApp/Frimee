@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import AppSidebar from "@/components/common/AppSidebar";
 import { useAuth } from "@/providers/AuthProvider";
@@ -10,7 +10,7 @@ import { fetchPlanChatItem, type ChatListItem } from "@/services/api/repositorie
 import { resolveChatName, resolveChatAvatar } from "@/services/api/repositories/chat.repository";
 import { fetchPlansByIds, fetchPlanMemberIds, fetchPlanUserRol, type PlanByIdRow } from "@/services/api/endpoints/plans.endpoint";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
-import { fetchSubplanes, createSubplan, updateSubplanTransporte, updateSubplanViaje, type SubplanRow, type TipoSubplan, TIPOS_TRANSPORTE } from "@/services/api/endpoints/subplanes.endpoint";
+import { fetchSubplanes, createSubplan, updateSubplan, updateSubplanTransporte, updateSubplanViaje, type SubplanRow, type TipoSubplan, TIPOS_TRANSPORTE } from "@/services/api/endpoints/subplanes.endpoint";
 import { listGastosForPlanEndpoint, type GastoRow } from "@/services/api/endpoints/gastos.endpoint";
 import { Calendar } from "@/components/ui/calendar";
 import DayRouteMap from "@/components/plans/DayRouteMap";
@@ -21,77 +21,6 @@ import AddGastoSheet from "@/components/plans/AddGastoSheet";
 import { fetchActiveFriends, type PublicUserProfileRow } from "@/services/api/endpoints/users.endpoint";
 import { insertNotificacion } from "@/services/api/repositories/notifications.repository";
 import { QRCodeSVG } from "qrcode.react";
-
-const MOCK_DAYS = [
-  {
-    day: 1,
-    label: "Arrival",
-    date: "SEPT 14, 2024",
-    activities: [
-      {
-        time: "08:30 AM",
-        title: "Vuelo a Santorini",
-        subtitle: "MAD (T4) → JTR Airport",
-        badge: { text: "CONFIRMED", color: "green" as const },
-        icon: "plane",
-      },
-      {
-        time: "02:00 PM",
-        title: "Check-in Hotel",
-        subtitle: "Katikies Garden Santorini, Fira",
-        badge: { text: "RESERVATION #9301", color: "gray" as const },
-        icon: "hotel",
-      },
-      {
-        time: "08:00 PM",
-        title: "Cena Atardecer",
-        subtitle: "Ammoudi Fish Tavern, Oia",
-        icon: "food",
-      },
-    ],
-  },
-  {
-    day: 2,
-    label: "Exploring Oia",
-    date: "SEPT 15, 2024",
-    activities: [
-      {
-        time: "09:00 AM",
-        title: "Desayuno en el hotel",
-        subtitle: "Katikies Garden Santorini",
-        icon: "food",
-      },
-      {
-        time: "11:00 AM",
-        title: "Paseo por Oia",
-        subtitle: "Calles y cúpulas azules",
-        icon: "walk",
-      },
-      {
-        time: "01:30 PM",
-        title: "Almuerzo en Ammoudi Bay",
-        subtitle: "Sunset Tavern",
-        icon: "food",
-      },
-      {
-        time: "05:00 PM",
-        title: "Catamaran Tour",
-        subtitle: "Sailing Santorini, puerto de Fira",
-        badge: { text: "BOOKED", color: "green" as const },
-        icon: "boat",
-      },
-    ],
-  },
-];
-
-const MOCK_EXPENSES = {
-  total: 1250.0,
-  categories: [
-    { name: "Vuelos", detail: "Lufthansa Airlines", amount: 420.0, status: "PAID" as const, icon: "plane" },
-    { name: "Hotel", detail: "Katikies Garden", amount: 680.0, status: "PENDING" as const, icon: "hotel" },
-    { name: "Excursiones", detail: "Catamaran Tour", amount: 150.0, status: "PAID" as const, icon: "boat" },
-  ],
-};
 
 type Tab = "itinerario" | "mapa" | "gastos" | "chat";
 
@@ -134,65 +63,11 @@ function EditIcon({ className = "size-icon" }: { className?: string }) {
   );
 }
 
-function PlaneIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" className={className}>
-      <path d="M2 16L22 2M22 2L17 22L13 13L22 2ZM22 2L2 7L11 11" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function HotelIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" className={className}>
-      <path d="M3 21V7L12 3L21 7V21" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-      <path d="M9 21V15H15V21" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-      <path d="M9 11H10M14 11H15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function FoodIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" className={className}>
-      <path d="M18 8C18 4.69 15.31 2 12 2C8.69 2 6 4.69 6 8C6 10.22 7.21 12.16 9 13.2V22H15V13.2C16.79 12.16 18 10.22 18 8Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-      <path d="M12 8V2" stroke="currentColor" strokeWidth="1.5" />
-    </svg>
-  );
-}
-
-function BoatIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" className={className}>
-      <path d="M2 20C4 18 6 17 8 17C10 17 12 19 14 19C16 19 18 18 22 16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-      <path d="M12 4V15M12 4L8 8M12 4L16 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M6 15L12 15L18 15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function WalkIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" className={className}>
-      <circle cx="12" cy="4.5" r="2" stroke="currentColor" strokeWidth="1.5" />
-      <path d="M10 22L11 16L9 14V10L12 7L15 10V14L13 16L14 22" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
 function MapPinIcon({ className = "size-icon" }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" className={className}>
       <path d="M12 2C8.13 2 5 5.13 5 9C5 14.25 12 22 12 22C12 22 19 14.25 19 9C19 5.13 15.87 2 12 2Z" stroke="currentColor" strokeWidth="1.5" />
       <circle cx="12" cy="9" r="2.5" stroke="currentColor" strokeWidth="1.5" />
-    </svg>
-  );
-}
-
-function ExpandIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" className={className}>
-      <path d="M15 3H21V9M9 21H3V15M21 3L14 10M3 21L10 14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -206,13 +81,29 @@ function CalendarSmallIcon({ className = "size-icon" }: { className?: string }) 
   );
 }
 
-const ACTIVITY_ICONS: Record<string, React.FC<{ className?: string }>> = {
-  plane: PlaneIcon,
-  hotel: HotelIcon,
-  food: FoodIcon,
-  boat: BoatIcon,
-  walk: WalkIcon,
-};
+function ArrowRightIcon({ className = "size-icon" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <path d="M5 12H19M13 6L19 12L13 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function ChevronDownIcon({ className = "size-icon" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <path d="M6 9L12 15L18 9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function PlusIcon({ className = "size-icon" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <path d="M12 7V17M7 12H17" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+    </svg>
+  );
+}
 
 /* ───────────── skeleton ───────────── */
 
@@ -304,18 +195,6 @@ function isoDateOnly(iso: string) {
   return iso.slice(0, 10);
 }
 
-const TIPO_ICON: Record<string, string> = {
-  VUELO: "✈️",
-  BARCO: "🚢",
-  TREN: "🚆",
-  BUS: "🚌",
-  COCHE: "🚗",
-};
-
-function tipoIcon(tipo: string) {
-  return TIPO_ICON[tipo] ?? "↓";
-}
-
 function groupByDay(subplanes: SubplanRow[]) {
   const map = new Map<string, SubplanRow[]>();
   for (const s of subplanes) {
@@ -336,10 +215,18 @@ function timeToMin(hhmm: string): number {
   return h * 60 + m;
 }
 
-function minToTime(total: number): string {
-  const h = Math.floor(total / 60) % 24;
-  const m = total % 60;
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+function formatMoney(value: number, currency = "EUR") {
+  return new Intl.NumberFormat("es-ES", {
+    style: "currency",
+    currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+function normalizeDateKey(value: string) {
+  if (/^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
+  return isoDateOnly(new Date(value).toISOString());
 }
 
 type Interval = { from: number; to: number };
@@ -378,17 +265,6 @@ function getOccupiedIntervals(subplanes: SubplanRow[], fecha: string): Interval[
   return mergeIntervals(intervals);
 }
 
-function getFreeSlots(occupied: Interval[], dayStart: number, dayEnd: number): Interval[] {
-  const free: Interval[] = [];
-  let cursor = dayStart;
-  for (const iv of occupied) {
-    if (cursor < iv.from) free.push({ from: cursor, to: iv.from });
-    cursor = Math.max(cursor, iv.to);
-  }
-  if (cursor < dayEnd) free.push({ from: cursor, to: dayEnd });
-  return free;
-}
-
 /* ───────────── time wheel picker ───────────── */
 
 const HOURS   = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
@@ -419,7 +295,6 @@ function TimeWheel({ values, selected, onSelect }: { values: string[]; selected:
     if (settling.current) return;
     const idx = values.indexOf(selected);
     if (idx >= 0) snapTo(idx, true);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, values]);
 
   const handleScroll = () => {
@@ -534,11 +409,13 @@ type AddSheetProps = {
   planEndDate: string;
   subplanes: SubplanRow[];
   onClose: () => void;
-  onCreated: (s: SubplanRow) => void;
+  onSaved: (saved: SubplanRow, original?: SubplanRow | null) => void;
   initialTitulo?: string;
+  initialDate?: string;
+  initialSubplan?: SubplanRow | null;
 };
 
-function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClose, onCreated, initialTitulo }: AddSheetProps) {
+function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClose, onSaved, initialTitulo, initialDate, initialSubplan }: AddSheetProps) {
   // Use local date to avoid UTC-offset shifting the allowed range by one day
   const toLocalDate = (iso: string) => {
     const d = new Date(iso);
@@ -553,30 +430,45 @@ function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClos
   const planStartTime = toLocalTime(planStartDate);
   const planEndTime   = toLocalTime(planEndDate);
   const planIsAllDay  = planStartTime === "00:00" && planEndTime === "23:59";
+  const isEditing = Boolean(initialSubplan);
 
-  const defaultDate = minDate;
+  const initialStartDate = initialSubplan ? toLocalDate(initialSubplan.inicio_at) : null;
+  const initialEndDate = initialSubplan ? toLocalDate(initialSubplan.fin_at) : null;
+  const defaultDate = initialStartDate && initialStartDate >= minDate && initialStartDate <= maxDate
+    ? initialStartDate
+    : initialDate && initialDate >= minDate && initialDate <= maxDate
+      ? initialDate
+      : minDate;
   // Default hours clamped to plan bounds (only matters when plan has specific hours)
-  const defaultHoraInicio = planIsAllDay ? "10:00" : planStartTime;
-  const defaultHoraFin    = planIsAllDay ? "11:00" : planEndTime;
+  const defaultHoraInicio = initialSubplan ? toLocalTime(initialSubplan.inicio_at) : (planIsAllDay ? "10:00" : planStartTime);
+  const defaultHoraFin    = initialSubplan ? toLocalTime(initialSubplan.fin_at) : (planIsAllDay ? "11:00" : planEndTime);
 
-  const [titulo, setTitulo] = useState(initialTitulo ?? "");
-  const [descripcion, setDescripcion] = useState("");
+  const [titulo, setTitulo] = useState(initialSubplan?.titulo ?? initialTitulo ?? "");
+  const [descripcion, setDescripcion] = useState(initialSubplan?.descripcion ?? "");
   const [fecha, setFecha] = useState(defaultDate);
-  const [fechaFin, setFechaFin] = useState<string | null>(null); // null = mismo día que fecha
+  const [fechaFin, setFechaFin] = useState<string | null>(initialEndDate && initialEndDate !== defaultDate ? initialEndDate : null); // null = mismo día que fecha
   const [horaInicio, setHoraInicio] = useState(defaultHoraInicio);
   const [horaFin, setHoraFin] = useState(defaultHoraFin);
   const allDay = false;
   const isMultiDay = minDate !== maxDate; // plan tiene más de un día
-  const [tipo, setTipo] = useState<TipoSubplan>("ACTIVIDAD");
-  const [ubicacion, setUbicacion] = useState("");
-  const [ubicacionCoords, setUbicacionCoords] = useState<Coords | null>(null);
-  const [ubicacionFin, setUbicacionFin] = useState("");
-  const [ubicacionFinCoords, setUbicacionFinCoords] = useState<Coords | null>(null);
-  const [transporteLlegada, setTransporteLlegada] = useState<string | null>(null);
+  const [tipo, setTipo] = useState<TipoSubplan>(initialSubplan?.tipo ?? "ACTIVIDAD");
+  const [ubicacion, setUbicacion] = useState(initialSubplan?.ubicacion_nombre ?? "");
+  const [ubicacionCoords, setUbicacionCoords] = useState<Coords | null>(
+    initialSubplan?.ubicacion_lat != null && initialSubplan?.ubicacion_lng != null
+      ? { lat: initialSubplan.ubicacion_lat, lng: initialSubplan.ubicacion_lng }
+      : null
+  );
+  const [ubicacionFin, setUbicacionFin] = useState(initialSubplan?.ubicacion_fin_nombre ?? "");
+  const [ubicacionFinCoords, setUbicacionFinCoords] = useState<Coords | null>(
+    initialSubplan?.ubicacion_fin_lat != null && initialSubplan?.ubicacion_fin_lng != null
+      ? { lat: initialSubplan.ubicacion_fin_lat, lng: initialSubplan.ubicacion_fin_lng }
+      : null
+  );
+  const [transporteLlegada, setTransporteLlegada] = useState<string | null>(initialSubplan?.transporte_llegada ?? null);
   const [saving, setSaving] = useState(false);
 
   // ¿Ya hay actividades ese día? → mostrar selector de transporte
-  const hayActividadEseDia = subplanes.some((s) => isoDateOnly(s.inicio_at) === fecha);
+  const hayActividadEseDia = subplanes.some((s) => s.id !== initialSubplan?.id && isoDateOnly(s.inicio_at) === fecha);
   const esTransporte = TIPOS_TRANSPORTE.includes(tipo);
   const [error, setError] = useState<string | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
@@ -614,10 +506,7 @@ function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClos
   })();
 
   // Occupied intervals for the selected day (existing subplans + travel time)
-  const occupiedIntervals = fecha ? getOccupiedIntervals(subplanes, fecha) : [];
-  const dayStart = fecha === minDate && !planIsAllDay ? timeToMin(planStartTime) : 0;
-  const dayEnd   = fecha === maxDate && !planIsAllDay ? timeToMin(planEndTime)   : 24 * 60 - 1;
-  const freeSlots = getFreeSlots(occupiedIntervals, dayStart, dayEnd);
+  const occupiedIntervals = fecha ? getOccupiedIntervals(subplanes.filter((s) => s.id !== initialSubplan?.id), fecha) : [];
 
   const canSubmit = titulo.trim().length > 0 && fecha.length > 0 && !saving;
 
@@ -641,44 +530,77 @@ function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClos
     try {
       const inicioAt = `${fecha}T${clampedHoraInicio}:00`;
       const finAt    = `${efectivaFechaFin}T${clampedHoraFin}:00`;
-      const newId = await createSubplan({
-        planId,
+      const normalizedSubplan = {
         titulo: titulo.trim(),
         descripcion: descripcion.trim(),
-        inicioAt: new Date(inicioAt).toISOString(),
-        finAt:    new Date(finAt).toISOString(),
-        allDay,
-        tipo,
-        ubicacionNombre: ubicacion.trim(),
-        ubicacionFinNombre: esTransporte ? ubicacionFin.trim() : null,
-        ubicacionLat:    ubicacionCoords?.lat ?? null,
-        ubicacionLng:    ubicacionCoords?.lng ?? null,
-        ubicacionFinLat: esTransporte ? (ubicacionFinCoords?.lat ?? null) : null,
-        ubicacionFinLng: esTransporte ? (ubicacionFinCoords?.lng ?? null) : null,
-        transporteLlegada: hayActividadEseDia ? transporteLlegada : null,
-      });
-      const newSubplan: SubplanRow = {
-        id: newId, plan_id: planId, parent_subplan_id: null,
-        titulo: titulo.trim(), descripcion: descripcion.trim(),
         inicio_at: new Date(inicioAt).toISOString(),
-        fin_at:    new Date(finAt).toISOString(),
-        all_day: allDay, tipo,
-        ubicacion_nombre: ubicacion.trim(), ubicacion_direccion: null,
+        fin_at: new Date(finAt).toISOString(),
+        all_day: allDay,
+        tipo,
+        ubicacion_nombre: ubicacion.trim(),
         ubicacion_fin_nombre: esTransporte ? ubicacionFin.trim() : null,
-        ubicacion_fin_direccion: null,
-        ubicacion_lat:    ubicacionCoords?.lat ?? null,
-        ubicacion_lng:    ubicacionCoords?.lng ?? null,
+        ubicacion_lat: ubicacionCoords?.lat ?? null,
+        ubicacion_lng: ubicacionCoords?.lng ?? null,
         ubicacion_fin_lat: esTransporte ? (ubicacionFinCoords?.lat ?? null) : null,
         ubicacion_fin_lng: esTransporte ? (ubicacionFinCoords?.lng ?? null) : null,
         transporte_llegada: hayActividadEseDia ? transporteLlegada : null,
-        duracion_viaje: null, distancia_viaje: null, ruta_polyline: null,
-        orden: 0, estado: "ACTIVO",
-        creado_por_user_id: "", created_at: new Date().toISOString(),
       };
-      onCreated(newSubplan);
+
+      if (initialSubplan) {
+        await updateSubplan({
+          subplanId: initialSubplan.id,
+          titulo: normalizedSubplan.titulo,
+          descripcion: normalizedSubplan.descripcion,
+          inicioAt: normalizedSubplan.inicio_at,
+          finAt: normalizedSubplan.fin_at,
+          allDay,
+          tipo,
+          ubicacionNombre: normalizedSubplan.ubicacion_nombre,
+          ubicacionFinNombre: normalizedSubplan.ubicacion_fin_nombre,
+          ubicacionLat: normalizedSubplan.ubicacion_lat,
+          ubicacionLng: normalizedSubplan.ubicacion_lng,
+          ubicacionFinLat: normalizedSubplan.ubicacion_fin_lat,
+          ubicacionFinLng: normalizedSubplan.ubicacion_fin_lng,
+          transporteLlegada: normalizedSubplan.transporte_llegada,
+        });
+
+        onSaved({
+          ...initialSubplan,
+          ...normalizedSubplan,
+          ruta_polyline: null,
+          duracion_viaje: null,
+          distancia_viaje: null,
+        }, initialSubplan);
+      } else {
+        const newId = await createSubplan({
+          planId,
+          titulo: normalizedSubplan.titulo,
+          descripcion: normalizedSubplan.descripcion,
+          inicioAt: normalizedSubplan.inicio_at,
+          finAt: normalizedSubplan.fin_at,
+          allDay,
+          tipo,
+          ubicacionNombre: normalizedSubplan.ubicacion_nombre,
+          ubicacionFinNombre: normalizedSubplan.ubicacion_fin_nombre,
+          ubicacionLat: normalizedSubplan.ubicacion_lat,
+          ubicacionLng: normalizedSubplan.ubicacion_lng,
+          ubicacionFinLat: normalizedSubplan.ubicacion_fin_lat,
+          ubicacionFinLng: normalizedSubplan.ubicacion_fin_lng,
+          transporteLlegada: normalizedSubplan.transporte_llegada,
+        });
+        onSaved({
+          id: newId, plan_id: planId, parent_subplan_id: null,
+          ...normalizedSubplan,
+          ubicacion_direccion: null,
+          ubicacion_fin_direccion: null,
+          duracion_viaje: null, distancia_viaje: null, ruta_polyline: null,
+          orden: 0, estado: "ACTIVO",
+          creado_por_user_id: "", created_at: new Date().toISOString(),
+        });
+      }
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al crear la actividad");
+      setError(err instanceof Error ? err.message : `Error al ${isEditing ? "guardar" : "crear"} la actividad`);
     } finally {
       setSaving(false);
     }
@@ -929,7 +851,7 @@ function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClos
               disabled={!canSubmit}
               className="rounded-chip bg-primary-token px-[var(--space-6)] py-[var(--space-2)] text-body-sm font-[var(--fw-semibold)] text-contrast-token disabled:opacity-[var(--disabled-opacity)]"
             >
-              {saving ? "Guardando..." : "Crear"}
+              {saving ? "Guardando..." : isEditing ? "Guardar cambios" : "Crear"}
             </button>
           </div>
         </form>
@@ -971,8 +893,11 @@ export default function PlanDetailPage() {
   const [planLoading, setPlanLoading] = useState(true);
   const [subplanes, setSubplanes] = useState<SubplanRow[]>([]);
   const [selectedMapDay, setSelectedMapDay] = useState<string | null>(null);
+  const [collapsedDays, setCollapsedDays] = useState<Set<string>>(new Set());
   const [showAddSheet, setShowAddSheet] = useState(false);
   const [addSheetInitialTitulo, setAddSheetInitialTitulo] = useState<string | undefined>();
+  const [addSheetInitialDate, setAddSheetInitialDate] = useState<string | undefined>();
+  const [editingSubplan, setEditingSubplan] = useState<SubplanRow | null>(null);
   const [showAddGastoSheet, setShowAddGastoSheet] = useState(false);
   const [gastos, setGastos] = useState<GastoRow[]>([]);
   const [editingTransporteId, setEditingTransporteId] = useState<number | null>(null);
@@ -983,6 +908,77 @@ export default function PlanDetailPage() {
   const [inviteSendingIds, setInviteSendingIds] = useState<Set<string>>(new Set());
   const [inviteLinkCopied, setInviteLinkCopied] = useState(false);
   const [showQr, setShowQr] = useState(false);
+
+  const expenseSummary = useMemo(() => {
+    const confirmedExpenses = gastos.filter((gasto) => gasto.estado === "CONFIRMADO");
+    const currency = confirmedExpenses[0]?.moneda ?? "EUR";
+    const total = confirmedExpenses.reduce((sum, gasto) => sum + gasto.total, 0);
+    const paidByYou = user?.id
+      ? confirmedExpenses
+          .filter((gasto) => gasto.pagado_por_user_id === user.id)
+          .reduce((sum, gasto) => sum + gasto.total, 0)
+      : 0;
+    const yourShare = user?.id
+      ? confirmedExpenses.reduce((sum, gasto) => {
+          const part = gasto.partes?.find((parte) => parte.user_id === user.id)?.importe ?? 0;
+          return sum + part;
+        }, 0)
+      : 0;
+    const net = paidByYou - yourShare;
+
+    const participantIds = new Set<string>();
+    confirmedExpenses.forEach((gasto) => {
+      participantIds.add(gasto.pagado_por_user_id);
+      gasto.partes?.forEach((parte) => participantIds.add(parte.user_id));
+    });
+
+    const categoriesMap = new Map<
+      string,
+      { label: string; amount: number; count: number; icon: string | null }
+    >();
+
+    confirmedExpenses.forEach((gasto) => {
+      const key = gasto.categoria_nombre ?? gasto.subplan_titulo ?? "Otros";
+      const prev = categoriesMap.get(key);
+      categoriesMap.set(key, {
+        label: key,
+        amount: (prev?.amount ?? 0) + gasto.total,
+        count: (prev?.count ?? 0) + 1,
+        icon: prev?.icon ?? gasto.categoria_icono ?? null,
+      });
+    });
+
+    const topCategories = [...categoriesMap.values()]
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 3);
+
+    return {
+      hasExpenses: confirmedExpenses.length > 0,
+      currency,
+      total,
+      count: confirmedExpenses.length,
+      paidByYou,
+      yourShare,
+      net,
+      participantCount: participantIds.size,
+      topCategories,
+    };
+  }, [gastos, user?.id]);
+
+  const dayExpenseTotals = useMemo(() => {
+    const totals = new Map<string, { total: number; currency: string }>();
+    gastos
+      .filter((gasto) => gasto.estado === "CONFIRMADO")
+      .forEach((gasto) => {
+        const key = normalizeDateKey(gasto.fecha_gasto);
+        const prev = totals.get(key);
+        totals.set(key, {
+          total: (prev?.total ?? 0) + gasto.total,
+          currency: prev?.currency ?? gasto.moneda,
+        });
+      });
+    return totals;
+  }, [gastos]);
 
   const openInviteModal = async () => {
     setShowInviteModal(true);
@@ -1048,6 +1044,56 @@ export default function PlanDetailPage() {
         );
       }
       return sorted;
+    });
+  };
+
+  const clearRouteCache = (subplanIds: number[]) => {
+    [...new Set(subplanIds)].forEach((subplanId) => {
+      if (!subplanId) return;
+      void updateSubplanViaje(subplanId, "", "", "").catch(() => {});
+    });
+  };
+
+  const handleSubplanSaved = (saved: SubplanRow, original?: SubplanRow | null) => {
+    if (!original) {
+      handleSubplanCreated(saved);
+      return;
+    }
+
+    setSubplanes((prev) => {
+      const oldDateKey = isoDateOnly(original.inicio_at);
+      const oldDayItems = prev
+        .filter((item) => isoDateOnly(item.inicio_at) === oldDateKey)
+        .sort((a, b) => a.inicio_at.localeCompare(b.inicio_at));
+      const oldIndex = oldDayItems.findIndex((item) => item.id === original.id);
+      const oldSuccessor = oldIndex >= 0 ? oldDayItems[oldIndex + 1] : undefined;
+
+      const updated = prev.map((item) => item.id === saved.id ? saved : item);
+      const sorted = [...updated].sort((a, b) => a.inicio_at.localeCompare(b.inicio_at));
+      const newDateKey = isoDateOnly(saved.inicio_at);
+      const newDayItems = sorted
+        .filter((item) => isoDateOnly(item.inicio_at) === newDateKey)
+        .sort((a, b) => a.inicio_at.localeCompare(b.inicio_at));
+      const newIndex = newDayItems.findIndex((item) => item.id === saved.id);
+      const newSuccessor = newIndex >= 0 ? newDayItems[newIndex + 1] : undefined;
+      const affectedIds = [saved.id, oldSuccessor?.id ?? 0, newSuccessor?.id ?? 0];
+
+      clearRouteCache(affectedIds);
+
+      return sorted.map((item) =>
+        affectedIds.includes(item.id)
+          ? { ...item, ruta_polyline: null, duracion_viaje: null, distancia_viaje: null }
+          : item
+      );
+    });
+  };
+
+  const toggleCollapsedDay = (dateKey: string) => {
+    setCollapsedDays((prev) => {
+      const next = new Set(prev);
+      if (next.has(dateKey)) next.delete(dateKey);
+      else next.add(dateKey);
+      return next;
     });
   };
 
@@ -1305,7 +1351,9 @@ export default function PlanDetailPage() {
                   planId={plan?.id}
                   isAdmin={isAdmin}
                   onAbrirActividad={(titulo) => {
+                    setEditingSubplan(null);
                     setAddSheetInitialTitulo(titulo);
+                    setAddSheetInitialDate(undefined);
                     setShowAddSheet(true);
                     setActiveTab("itinerario");
                   }}
@@ -1327,7 +1375,10 @@ export default function PlanDetailPage() {
           {activeTab !== "chat" && <div className="px-[var(--page-margin-x)] pt-[var(--space-8)] pb-[var(--space-16)]">
 
             {activeTab === "itinerario" && (
-              <div className="flex flex-col gap-[var(--space-8)] lg:flex-row lg:gap-[var(--space-12)]">
+              <div
+                className="flex flex-col gap-[var(--space-8)] lg:flex-row lg:gap-[var(--space-12)]"
+                style={{ fontFamily: "var(--font-inter), sans-serif" }}
+              >
 
                 {/* Left column — itinerary */}
                 <div className="flex-1 min-w-0">
@@ -1338,7 +1389,12 @@ export default function PlanDetailPage() {
                       <p className="text-body-sm mt-[var(--space-1)]">{isPast ? "Este plan ya ha finalizado" : "Añade la primera actividad del plan"}</p>
                       {!isPast && isAdmin && (
                       <button
-                        onClick={() => setShowAddSheet(true)}
+                        onClick={() => {
+                          setEditingSubplan(null);
+                          setAddSheetInitialTitulo(undefined);
+                          setAddSheetInitialDate(undefined);
+                          setShowAddSheet(true);
+                        }}
                         className="mt-[var(--space-5)] flex items-center gap-[var(--space-2)] rounded-chip border border-primary-token px-[var(--space-4)] py-[var(--space-2)] text-body-sm font-[var(--fw-medium)] text-primary-token transition-colors hover:bg-primary-token/10"
                       >
                         <span className="text-lg leading-none">+</span> Añadir actividad
@@ -1348,153 +1404,252 @@ export default function PlanDetailPage() {
                   ) : (
                     <>
                       {groupByDay(subplanes).map(([dateKey, items]) => (
-                        <div key={dateKey} className="mb-[var(--space-6)]">
+                        <div key={dateKey} className={collapsedDays.has(dateKey) ? "mb-[var(--space-4)]" : "mb-[var(--space-6)]"}>
                           {/* Day header */}
-                          <div className="flex items-center justify-between mb-[var(--space-5)]">
-                            <h2 className="text-body font-[var(--fw-semibold)] uppercase tracking-wider text-muted">
-                              {fmtDayHeader(items[0].inicio_at)}
-                            </h2>
+                          <div className={`border-b border-app ${collapsedDays.has(dateKey) ? "pb-[var(--space-4)]" : "mb-[var(--space-5)] pb-[var(--space-4)]"}`}>
+                            <div className="flex items-center justify-between gap-[var(--space-3)]">
+                              <div className="min-w-0 flex items-start gap-[6px]">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleCollapsedDay(dateKey)}
+                                  className="mt-[2px] inline-flex h-[20px] w-[20px] shrink-0 items-center justify-center text-muted transition-colors hover:text-primary-token"
+                                  aria-label={collapsedDays.has(dateKey) ? `Desplegar ${fmtDayHeader(items[0].inicio_at)}` : `Plegar ${fmtDayHeader(items[0].inicio_at)}`}
+                                >
+                                  <ChevronDownIcon className={`size-[15px] transition-transform ${collapsedDays.has(dateKey) ? "-rotate-90" : "rotate-0"}`} />
+                                </button>
+                                {(() => {
+                                  const dayExpense = dayExpenseTotals.get(dateKey);
+                                  const daySummary = [
+                                    `${items.length} actividad${items.length === 1 ? "" : "es"}`,
+                                    dayExpense ? formatMoney(dayExpense.total, dayExpense.currency) : "Sin gastos",
+                                  ].join(" · ");
+                                  return (
+                                    <>
+                                      <div className="min-w-0">
+                                        <h2
+                                          className="font-[var(--fw-semibold)] uppercase tracking-[0.06em] text-app"
+                                          style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "var(--font-h4)", lineHeight: "1.15" }}
+                                        >
+                                          {fmtDayHeader(items[0].inicio_at)}
+                                        </h2>
+                                        <p
+                                          className="mt-[6px] font-[var(--fw-medium)] leading-[1.15] text-muted"
+                                          style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "var(--font-body-sm)" }}
+                                        >
+                                          {daySummary}
+                                        </p>
+                                      </div>
+                                    </>
+                                  );
+                                })()}
+                              </div>
+                              <div className="flex shrink-0 items-center gap-[var(--space-2)]">
+                                {!isPast && isAdmin && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingSubplan(null);
+                                      setAddSheetInitialTitulo(undefined);
+                                      setAddSheetInitialDate(dateKey);
+                                      setShowAddSheet(true);
+                                    }}
+                                    className="inline-flex h-[30px] w-[30px] shrink-0 items-center justify-center self-center rounded-full bg-primary-token text-contrast-token transition-transform hover:scale-[1.04]"
+                                    aria-label={`Añadir actividad en ${fmtDayHeader(items[0].inicio_at)}`}
+                                  >
+                                    <PlusIcon className="size-[16px]" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
                           </div>
 
                           {/* Timeline */}
-                          <div className="relative">
-                            {items.map((s, idx) => {
-                              const isLast = idx === items.length - 1;
-                              const nextTransporte = !isLast ? TRANSPORT_MAP[items[idx + 1]?.transporte_llegada ?? ""] : null;
-                              return (
-                                <div key={s.id}>
-                                <div className="relative flex gap-[var(--space-4)] pb-[var(--space-7)]">
-                                  {/* Timeline line */}
-                                  {!isLast && (
-                                    <div className="absolute left-[11px] top-[26px] bottom-0 w-[1.5px] bg-[var(--border)]" />
-                                  )}
-                                  {/* Dot */}
-                                  <div className="relative z-10 flex h-[24px] w-[24px] shrink-0 items-center justify-center rounded-full border-[2px] border-primary-token bg-app">
-                                    <div className="h-[8px] w-[8px] rounded-full bg-primary-token" />
-                                  </div>
-                                  {/* Content */}
-                                  <div className="flex-1 min-w-0 -mt-[2px]">
-                                    {!s.all_day && (
-                                      <span className="text-body-sm font-[var(--fw-semibold)] text-primary-token">
-                                        {fmtTime(s.inicio_at)} – {fmtTime(s.fin_at)}
-                                      </span>
-                                    )}
-                                    <h4 className="mt-[2px] text-body font-[var(--fw-semibold)]">{s.titulo}</h4>
-                                    {s.descripcion && (
-                                      <p className="mt-[1px] text-body-sm text-muted line-clamp-2">{s.descripcion}</p>
-                                    )}
-                                    {s.ubicacion_nombre && !s.ubicacion_fin_nombre && (
-                                      <p className="mt-[2px] flex items-center gap-[4px] text-body-sm text-muted">
-                                        <MapPinIcon className="size-[13px] shrink-0" />
-                                        {s.ubicacion_nombre}
-                                      </p>
-                                    )}
-                                    {s.ubicacion_nombre && s.ubicacion_fin_nombre && (
-                                      <div className="mt-[2px] flex flex-col gap-[2px] text-body-sm text-muted">
-                                        <p className="flex items-center gap-[4px]">
-                                          <MapPinIcon className="size-[13px] shrink-0" />
-                                          {s.ubicacion_nombre}
-                                        </p>
-                                        <div className="flex justify-center text-[11px] leading-none text-primary-token">↓</div>
-                                        <p className="flex items-center gap-[4px]">
-                                          <MapPinIcon className="size-[13px] shrink-0" />
-                                          {s.ubicacion_fin_nombre}
-                                        </p>
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                                {/* Transport connector between activities */}
-                                {!isLast && (
-                                  <div className="relative pl-[36px] pb-[var(--space-3)]">
-                                    <div className="absolute left-[11px] top-0 bottom-0 w-[1.5px] bg-[var(--border)]" />
-                                    {!isPast && editingTransporteId === items[idx + 1].id ? (
-                                      <div className="flex flex-wrap gap-[var(--space-2)]">
-                                        {TRANSPORT_LLEGADA.map((t) => (
-                                          <button
-                                            key={t.value}
-                                            onClick={() => handleTransporteChange(items[idx + 1].id, t.value)}
-                                            className={`flex items-center gap-[6px] rounded-chip border px-[var(--space-2)] py-[4px] text-caption transition-colors ${
-                                              items[idx + 1].transporte_llegada === t.value
-                                                ? "border-primary-token bg-primary-token/10 text-primary-token"
-                                                : "border-app bg-surface-inset text-muted"
-                                            }`}
-                                          >
-                                            <span>{t.emoji}</span><span>{t.label}</span>
-                                          </button>
-                                        ))}
-                                        <button onClick={() => setEditingTransporteId(null)} className="text-caption text-muted px-[var(--space-2)]">✕</button>
-                                      </div>
-                                    ) : nextTransporte ? (
-                                      <div className="flex items-center gap-[var(--space-3)]">
-                                        {isPast ? (
-                                          <span className="flex items-center gap-[var(--space-2)] text-body-sm text-muted">
-                                            <span className="text-[13px]">{nextTransporte.emoji}</span>
-                                            <span>{nextTransporte.label}</span>
-                                            {items[idx + 1].duracion_viaje && (
-                                              <>
-                                                <span className="text-muted opacity-40">·</span>
-                                                <span className="text-primary-token font-[var(--fw-medium)]">{items[idx + 1].duracion_viaje}</span>
-                                                {items[idx + 1].distancia_viaje && (
-                                                  <span className="text-caption text-muted">{items[idx + 1].distancia_viaje}</span>
-                                                )}
-                                              </>
-                                            )}
+                          <div
+                            className={`grid overflow-hidden transition-[grid-template-rows,opacity,margin] duration-300 ease-out ${
+                              collapsedDays.has(dateKey)
+                                ? "mt-0 grid-rows-[0fr] opacity-0"
+                                : "mt-[var(--space-1)] grid-rows-[1fr] opacity-100"
+                            }`}
+                          >
+                            <div className="overflow-hidden">
+                              <div className="relative pl-[18px]">
+                                {items.map((s, idx) => {
+                                  const isLast = idx === items.length - 1;
+                                  const nextTransporte = !isLast ? TRANSPORT_MAP[items[idx + 1]?.transporte_llegada ?? ""] : null;
+                                  const startTimeLabel = fmtTime(s.inicio_at);
+                                  const endTimeLabel = fmtTime(s.fin_at);
+                                  return (
+                                    <div key={s.id}>
+                                    <div className="relative flex gap-0 pb-[var(--space-2)]">
+                                      <div className="w-[104px] shrink-0 pr-[var(--space-3)] pt-[2px] text-right">
+                                        {s.all_day ? (
+                                          <span className="block text-[11px] font-[var(--fw-medium)] leading-[1.1] tracking-[0.01em] text-muted">
+                                            Todo el día
                                           </span>
                                         ) : (
+                                          <div className="ml-auto flex w-fit flex-col items-start text-left leading-[1.05] text-muted">
+                                            <span className="block tabular-nums text-caption font-[var(--fw-medium)] tracking-[0.01em]">
+                                              {startTimeLabel} -
+                                            </span>
+                                            <span className="mt-[2px] block tabular-nums text-caption font-[var(--fw-medium)] tracking-[0.01em]">
+                                              {endTimeLabel}
+                                            </span>
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      <div className="relative flex w-[28px] shrink-0 justify-center">
+                                        {idx > 0 && (
+                                          <div className="absolute left-1/2 top-[-16px] h-[18px] w-[1.5px] -translate-x-1/2 bg-[var(--border)]" />
+                                        )}
+                                        {!isLast && (
+                                          <div className="absolute left-1/2 top-[26px] bottom-[-10px] w-[1.5px] -translate-x-1/2 bg-[var(--border)]" />
+                                        )}
+                                        <div className="relative z-10 mt-[2px] flex h-[24px] w-[24px] items-center justify-center rounded-full border-[2px] border-primary-token bg-app">
+                                          <div className="h-[8px] w-[8px] rounded-full bg-primary-token" />
+                                        </div>
+                                      </div>
+
+                                      <div className="min-w-0 flex-1 pl-[var(--space-4)]">
+                                        <div className="flex items-start gap-[6px]">
+                                          <h4
+                                            className="min-w-0 shrink text-body font-[var(--fw-semibold)]"
+                                            style={{ fontFamily: "var(--font-inter), sans-serif" }}
+                                          >
+                                            {s.titulo}
+                                          </h4>
+                                          {!isPast && isAdmin && (
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setEditingSubplan(s);
+                                                setAddSheetInitialTitulo(undefined);
+                                                setAddSheetInitialDate(undefined);
+                                                setShowAddSheet(true);
+                                              }}
+                                              className="mt-[1px] inline-flex h-[20px] w-[20px] shrink-0 items-center justify-center text-muted transition-colors hover:text-primary-token"
+                                              aria-label={`Editar ${s.titulo}`}
+                                            >
+                                              <EditIcon className="size-[14px]" />
+                                            </button>
+                                          )}
+                                        </div>
+                                        {s.descripcion && (
+                                          <p className="mt-[2px] text-body-sm text-muted line-clamp-2">{s.descripcion}</p>
+                                        )}
+                                        {s.ubicacion_nombre && !s.ubicacion_fin_nombre && (
+                                          <p className="mt-[4px] flex items-center gap-[4px] text-body-sm text-muted">
+                                            <MapPinIcon className="size-[13px] shrink-0" />
+                                            {s.ubicacion_nombre}
+                                          </p>
+                                        )}
+                                        {s.ubicacion_nombre && s.ubicacion_fin_nombre && (
+                                          <div className="mt-[4px] flex flex-col gap-[2px] text-body-sm text-muted">
+                                            <p className="flex items-center gap-[4px]">
+                                              <MapPinIcon className="size-[13px] shrink-0" />
+                                              {s.ubicacion_nombre}
+                                            </p>
+                                            <div className="pl-[18px] text-[11px] leading-none text-primary-token">↓</div>
+                                            <p className="flex items-center gap-[4px]">
+                                              <MapPinIcon className="size-[13px] shrink-0" />
+                                              {s.ubicacion_fin_nombre}
+                                            </p>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                    {/* Transport connector between activities */}
+                                    {!isLast && (
+                                      <div className="relative flex gap-0 pb-[var(--space-4)]">
+                                        <div className="w-[104px] shrink-0 pr-[var(--space-3)]" />
+                                        <div className="relative flex w-[28px] shrink-0 justify-center">
+                                          <div className="absolute left-1/2 top-0 bottom-0 w-[1.5px] -translate-x-1/2 bg-[var(--border)]" />
+                                          {nextTransporte ? (
+                                            <div className="relative z-10 mt-[2px] flex h-[18px] w-[18px] items-center justify-center rounded-full border border-[var(--info)] bg-app text-[10px] leading-none text-[var(--info)]">
+                                              <span aria-hidden="true">{nextTransporte.emoji}</span>
+                                            </div>
+                                          ) : null}
+                                        </div>
+                                        <div className="min-w-0 flex-1 pl-[var(--space-4)]">
+                                        {!isPast && editingTransporteId === items[idx + 1].id ? (
+                                          <div className="flex flex-wrap gap-[var(--space-2)]">
+                                            {TRANSPORT_LLEGADA.map((t) => (
+                                              <button
+                                                key={t.value}
+                                                onClick={() => handleTransporteChange(items[idx + 1].id, t.value)}
+                                                className={`flex items-center gap-[6px] rounded-chip border px-[var(--space-2)] py-[4px] text-caption transition-colors ${
+                                                  items[idx + 1].transporte_llegada === t.value
+                                                    ? "border-primary-token bg-primary-token/10 text-primary-token"
+                                                    : "border-app bg-surface-inset text-muted"
+                                                }`}
+                                              >
+                                                <span>{t.emoji}</span><span>{t.label}</span>
+                                              </button>
+                                            ))}
+                                            <button onClick={() => setEditingTransporteId(null)} className="text-caption text-muted px-[var(--space-2)]">✕</button>
+                                          </div>
+                                        ) : nextTransporte ? (
+                                          <div className="flex items-center gap-[var(--space-2)] pt-[1px]">
+                                            {isPast ? (
+                                              <span className="flex items-center gap-[6px] text-caption text-muted">
+                                                <span>{nextTransporte.label}</span>
+                                                {items[idx + 1].duracion_viaje && (
+                                                  <>
+                                                    <span className="text-muted opacity-40">·</span>
+                                                    <span>{items[idx + 1].duracion_viaje}</span>
+                                                    {items[idx + 1].distancia_viaje && (
+                                                      <span className="text-caption text-muted">{items[idx + 1].distancia_viaje}</span>
+                                                    )}
+                                                  </>
+                                                )}
+                                              </span>
+                                            ) : (
+                                              <button
+                                                onClick={() => setEditingTransporteId(items[idx + 1].id)}
+                                                className="flex items-center gap-[6px] text-caption text-muted transition-colors hover:text-primary-token"
+                                              >
+                                                <span>{nextTransporte.label}</span>
+                                                {items[idx + 1].duracion_viaje && (
+                                                  <>
+                                                    <span className="text-muted opacity-40">·</span>
+                                                    <span>{items[idx + 1].duracion_viaje}</span>
+                                                    {items[idx + 1].distancia_viaje && (
+                                                      <span className="text-caption text-muted">{items[idx + 1].distancia_viaje}</span>
+                                                    )}
+                                                  </>
+                                                )}
+                                              </button>
+                                            )}
+                                            <a
+                                              href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(s.ubicacion_fin_nombre ?? s.ubicacion_nombre ?? "")}&destination=${encodeURIComponent(items[idx + 1].ubicacion_nombre ?? "")}&travelmode=${nextTransporte.googleMode ?? "driving"}`}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="text-caption text-muted transition-colors hover:text-primary-token"
+                                              title="Abrir en Google Maps"
+                                            >
+                                              🗺️
+                                            </a>
+                                          </div>
+                                        ) : !isPast ? (
                                           <button
                                             onClick={() => setEditingTransporteId(items[idx + 1].id)}
-                                            className="flex items-center gap-[var(--space-2)] text-body-sm text-muted hover:text-primary-token transition-colors"
+                                            className="text-caption text-muted hover:text-primary-token transition-colors"
                                           >
-                                            <span className="text-[13px]">{nextTransporte.emoji}</span>
-                                            <span>{nextTransporte.label}</span>
-                                            {items[idx + 1].duracion_viaje && (
-                                              <>
-                                                <span className="text-muted opacity-40">·</span>
-                                                <span className="text-primary-token font-[var(--fw-medium)]">{items[idx + 1].duracion_viaje}</span>
-                                                {items[idx + 1].distancia_viaje && (
-                                                  <span className="text-caption text-muted">{items[idx + 1].distancia_viaje}</span>
-                                                )}
-                                              </>
-                                            )}
+                                            + ¿Cómo llegas?
                                           </button>
-                                        )}
-                                        <a
-                                          href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(s.ubicacion_fin_nombre ?? s.ubicacion_nombre ?? "")}&destination=${encodeURIComponent(items[idx + 1].ubicacion_nombre ?? "")}&travelmode=${nextTransporte.googleMode ?? "driving"}`}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="text-caption text-muted hover:text-primary-token transition-colors"
-                                          title="Abrir en Google Maps"
-                                        >
-                                          🗺️
-                                        </a>
+                                        ) : null}
+                                        </div>
                                       </div>
-                                    ) : !isPast ? (
-                                      <button
-                                        onClick={() => setEditingTransporteId(items[idx + 1].id)}
-                                        className="text-caption text-muted hover:text-primary-token transition-colors"
-                                      >
-                                        + ¿Cómo llegas?
-                                      </button>
-                                    ) : null}
-                                  </div>
-                                )}
-                                </div>
-                              );
-                            })}
+                                    )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
                           </div>
                         </div>
                       ))}
 
-                      {/* Add button */}
-                      {!isPast && isAdmin && (
-                        <button
-                          onClick={() => setShowAddSheet(true)}
-                          className="mt-[var(--space-2)] flex w-full items-center gap-[var(--space-3)] rounded-card border border-dashed border-app px-[var(--space-4)] py-[var(--space-3)] text-body-sm text-muted transition-colors hover:border-primary-token hover:text-primary-token"
-                        >
-                          <span className="text-lg leading-none">+</span> Añadir actividad
-                        </button>
-                      )}
                     </>
                   )}
                 </div>
@@ -1527,7 +1682,7 @@ export default function PlanDetailPage() {
                     return (
                       <div className="mb-[var(--space-8)]">
                         <div className="mb-[var(--space-3)] flex items-center justify-between">
-                          <h3 className="text-body font-[var(--fw-semibold)]">Ruta del Día</h3>
+                          <h3 className="text-body font-[var(--fw-semibold)]" style={{ fontFamily: "var(--font-inter), sans-serif" }}>Ruta del Día</h3>
                           {hasRoute && (
                             <div className="flex items-center gap-[var(--space-3)]">
                               <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
@@ -1573,45 +1728,144 @@ export default function PlanDetailPage() {
                   })()}
 
                   {/* Expenses summary */}
-                  <div>
-                    <div className="flex items-baseline justify-between mb-[2px]">
-                      <h3 className="text-body font-[var(--fw-semibold)]">Resumen Gastos</h3>
-                      <span className="text-[var(--font-h2)] font-[var(--fw-bold)] leading-[var(--lh-h2)]">
-                        €{MOCK_EXPENSES.total.toFixed(2)}
-                      </span>
+                  <div className="rounded-[16px] border border-app bg-surface px-[var(--space-4)] py-[var(--space-4)]">
+                    <div className="flex items-center justify-between gap-[var(--space-3)]">
+                      <div className="flex min-w-0 items-center gap-[var(--space-2)]">
+                        <h3 className="text-body font-[var(--fw-semibold)]" style={{ fontFamily: "var(--font-inter), sans-serif" }}>Resumen gastos</h3>
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab("gastos")}
+                          className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted transition-colors hover:bg-surface-inset hover:text-app"
+                          aria-label="Ir a la sección de gastos"
+                        >
+                          <ArrowRightIcon className="size-[16px]" />
+                        </button>
+                      </div>
+                      {expenseSummary.hasExpenses ? (
+                        <span
+                          className="font-[var(--fw-bold)] leading-[1.1] text-app"
+                          style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "var(--font-h3)" }}
+                        >
+                          {formatMoney(expenseSummary.total, expenseSummary.currency)}
+                        </span>
+                      ) : null}
                     </div>
-                    <p className="text-caption uppercase tracking-wider text-muted mb-[var(--space-5)]">
-                      Estimación Total
-                    </p>
 
-                    <div className="flex flex-col gap-[var(--space-5)]">
-                      {MOCK_EXPENSES.categories.map((cat) => {
-                        const Icon = ACTIVITY_ICONS[cat.icon] || MapPinIcon;
-                        return (
-                          <div key={cat.name} className="flex items-center gap-[var(--space-3)]">
-                            <div className="flex h-[36px] w-[36px] shrink-0 items-center justify-center rounded-card bg-[var(--surface-2)]">
-                              <Icon className="size-[18px] text-muted" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-body-sm font-[var(--fw-medium)]">{cat.name}</p>
-                              <p className="text-caption text-muted">{cat.detail}</p>
-                            </div>
-                            <div className="text-right">
-                              <p className="text-body-sm font-[var(--fw-semibold)]">€{cat.amount.toFixed(2)}</p>
-                              <p className={`text-[10px] font-[var(--fw-semibold)] uppercase tracking-wider ${
-                                cat.status === "PAID" ? "text-success-token" : "text-warning-token"
+                    {expenseSummary.hasExpenses ? (
+                      <>
+                        <p className="mt-[4px] text-caption text-muted">
+                          {expenseSummary.count} gasto{expenseSummary.count === 1 ? "" : "s"} confirmados
+                          {expenseSummary.participantCount > 0
+                            ? ` · ${expenseSummary.participantCount} participante${expenseSummary.participantCount === 1 ? "" : "s"}`
+                            : ""}
+                        </p>
+
+                        <div className="mt-[var(--space-4)] grid grid-cols-2 gap-[var(--space-3)]">
+                          <div className="rounded-[12px] border border-app bg-app px-[var(--space-3)] py-[var(--space-3)]">
+                            <p className="text-[11px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
+                              Pagado por ti
+                            </p>
+                            <p className="mt-[6px] text-body font-[var(--fw-semibold)] text-app">
+                              {formatMoney(expenseSummary.paidByYou, expenseSummary.currency)}
+                            </p>
+                          </div>
+                          <div className="rounded-[12px] border border-app bg-app px-[var(--space-3)] py-[var(--space-3)]">
+                            <p className="text-[11px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
+                              Tu parte
+                            </p>
+                            <p className="mt-[6px] text-body font-[var(--fw-semibold)] text-app">
+                              {formatMoney(expenseSummary.yourShare, expenseSummary.currency)}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="mt-[var(--space-3)] rounded-[12px] border border-app bg-app px-[var(--space-3)] py-[var(--space-3)]">
+                          <div className="flex items-center justify-between gap-[var(--space-3)]">
+                            <div>
+                              <p className="text-[11px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
+                                Balance del plan
+                              </p>
+                              <p className={`mt-[6px] text-body font-[var(--fw-semibold)] ${
+                                expenseSummary.net > 0
+                                  ? "text-[var(--success)]"
+                                  : expenseSummary.net < 0
+                                    ? "text-[var(--warning)]"
+                                    : "text-app"
                               }`}>
-                                {cat.status === "PAID" ? "Paid" : "Pending"}
+                                {expenseSummary.net > 0 ? "+" : ""}
+                                {formatMoney(expenseSummary.net, expenseSummary.currency)}
                               </p>
                             </div>
+                            <span className={`rounded-full px-[var(--space-3)] py-[6px] text-[11px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] ${
+                              expenseSummary.net > 0
+                                ? "bg-[var(--success)]/12 text-[var(--success)]"
+                                : expenseSummary.net < 0
+                                  ? "bg-[var(--warning)]/12 text-[var(--warning)]"
+                                  : "bg-surface-inset text-muted"
+                            }`}>
+                              {expenseSummary.net > 0
+                                ? "Te deben"
+                                : expenseSummary.net < 0
+                                  ? "Debes"
+                                  : "En equilibrio"}
+                            </span>
                           </div>
-                        );
-                      })}
-                    </div>
+                        </div>
 
-                    <button className="mt-[var(--space-6)] w-full border-t border-app pt-[var(--space-4)] text-center text-caption font-[var(--fw-semibold)] uppercase tracking-wider text-muted hover:text-app transition-colors">
-                      View Detailed Finances
-                    </button>
+                        {expenseSummary.topCategories.length > 0 ? (
+                          <div className="mt-[var(--space-4)]">
+                            <p className="mb-[var(--space-3)] text-[11px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
+                              Categorías principales
+                            </p>
+                            <div className="space-y-[var(--space-2)]">
+                              {expenseSummary.topCategories.map((category) => (
+                                <div key={category.label} className="flex items-center gap-[var(--space-3)] rounded-[12px] border border-app bg-app px-[var(--space-3)] py-[var(--space-3)]">
+                                  <div className="flex size-[34px] shrink-0 items-center justify-center rounded-full bg-surface-inset text-[16px]">
+                                    {category.icon || "•"}
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <p className="truncate text-body-sm font-[var(--fw-medium)] text-app">
+                                      {category.label}
+                                    </p>
+                                    <p className="text-caption text-muted">
+                                      {category.count} gasto{category.count === 1 ? "" : "s"}
+                                    </p>
+                                  </div>
+                                  <p className="shrink-0 text-body-sm font-[var(--fw-semibold)] text-app">
+                                    {formatMoney(category.amount, expenseSummary.currency)}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
+
+                        <div className="mt-[var(--space-4)]">
+                          <button
+                            type="button"
+                            onClick={() => setShowAddGastoSheet(true)}
+                            className="w-full rounded-full bg-primary-token py-[10px] text-body-sm font-[var(--fw-semibold)] text-contrast-token transition-opacity hover:opacity-85"
+                          >
+                            Añadir gasto
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <p className="mt-[var(--space-2)] text-body-sm text-muted">
+                          Aún no hay gastos confirmados en este plan.
+                        </p>
+                        <div className="mt-[var(--space-4)]">
+                          <button
+                            type="button"
+                            onClick={() => setShowAddGastoSheet(true)}
+                            className="w-full rounded-full bg-primary-token py-[10px] text-body-sm font-[var(--fw-semibold)] text-contrast-token transition-opacity hover:opacity-85"
+                          >
+                            Añadir gasto
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1680,9 +1934,16 @@ export default function PlanDetailPage() {
           planStartDate={plan.inicio_at}
           planEndDate={plan.fin_at}
           subplanes={subplanes}
-          onClose={() => { setShowAddSheet(false); setAddSheetInitialTitulo(undefined); }}
-          onCreated={handleSubplanCreated}
+          onClose={() => {
+            setShowAddSheet(false);
+            setEditingSubplan(null);
+            setAddSheetInitialTitulo(undefined);
+            setAddSheetInitialDate(undefined);
+          }}
+          onSaved={handleSubplanSaved}
           initialTitulo={addSheetInitialTitulo}
+          initialDate={addSheetInitialDate}
+          initialSubplan={editingSubplan}
         />
       )}
 

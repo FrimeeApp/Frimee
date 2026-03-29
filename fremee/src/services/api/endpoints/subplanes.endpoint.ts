@@ -86,6 +86,50 @@ export async function createSubplan(params: CreateSubplanParams): Promise<number
   return data as number;
 }
 
+export type UpdateSubplanParams = {
+  subplanId: number;
+  titulo: string;
+  descripcion: string;
+  inicioAt: string;
+  finAt: string;
+  allDay?: boolean;
+  tipo?: TipoSubplan;
+  ubicacionNombre?: string;
+  ubicacionDireccion?: string | null;
+  ubicacionFinNombre?: string | null;
+  ubicacionFinDireccion?: string | null;
+  ubicacionLat?: number | null;
+  ubicacionLng?: number | null;
+  ubicacionFinLat?: number | null;
+  ubicacionFinLng?: number | null;
+  transporteLlegada?: string | null;
+};
+
+export async function updateSubplan(params: UpdateSubplanParams): Promise<void> {
+  const supabase = createBrowserSupabaseClient();
+  const { error } = await supabase
+    .from("subplanes")
+    .update({
+      titulo: params.titulo,
+      descripcion: params.descripcion,
+      inicio_at: params.inicioAt,
+      fin_at: params.finAt,
+      all_day: params.allDay ?? false,
+      tipo: params.tipo ?? "ACTIVIDAD",
+      ubicacion_nombre: params.ubicacionNombre ?? "",
+      ubicacion_direccion: params.ubicacionDireccion ?? null,
+      ubicacion_fin_nombre: params.ubicacionFinNombre ?? null,
+      ubicacion_fin_direccion: params.ubicacionFinDireccion ?? null,
+      ubicacion_lat: params.ubicacionLat ?? null,
+      ubicacion_lng: params.ubicacionLng ?? null,
+      ubicacion_fin_lat: params.ubicacionFinLat ?? null,
+      ubicacion_fin_lng: params.ubicacionFinLng ?? null,
+      transporte_llegada: params.transporteLlegada ?? null,
+    })
+    .eq("id", params.subplanId);
+  if (error) throw error;
+}
+
 export async function updateSubplanTransporte(subplanId: number, transporte: string | null): Promise<void> {
   const supabase = createBrowserSupabaseClient();
   const { error } = await supabase.rpc("fn_subplan_save_transporte", {
