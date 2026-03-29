@@ -5,6 +5,7 @@ import {
   createGrupoChatEndpoint,
   listMensajesEndpoint,
   sendMensajeEndpoint,
+  sendBotMensajeEndpoint,
   markChatReadEndpoint,
   getChatMiembrosEndpoint,
   leaveChatEndpoint,
@@ -62,6 +63,10 @@ export async function sendMensaje(params: {
   imageType?: string | null;
 }): Promise<number> {
   return sendMensajeEndpoint(params);
+}
+
+export async function sendBotMensaje(chatId: string, texto: string): Promise<number> {
+  return sendBotMensajeEndpoint(chatId, texto);
 }
 
 export async function markChatRead(chatId: string): Promise<void> {

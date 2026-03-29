@@ -10,6 +10,7 @@ import {
   deleteMensaje,
   listMensajes,
   sendMensaje,
+  sendBotMensaje,
   markChatRead,
   reactMensaje,
   getMyReacciones,
@@ -29,6 +30,7 @@ import AudioPlayer from "@/components/common/AudioPlayer";
 import { crearTareaEndpoint, misTareasEndpoint, todasTareasEndpoint, updateEstadoTareaEndpoint, recordarEndpoint, type TareaRow } from "@/services/api/endpoints/tareas.endpoint";
 import { createGastoEndpoint, getBalancesForPlanEndpoint } from "@/services/api/endpoints/gastos.endpoint";
 import { promoteToAdminEndpoint, demoteAdminEndpoint, kickMemberEndpoint, leavePlanEndpoint } from "@/services/api/endpoints/plans.endpoint";
+import { callFrimeeAssistant, type FrimeeHistoryEntry } from "@/services/api/endpoints/frimee.endpoint";
 
 export function ChatConversation({
   chat,
@@ -324,9 +326,20 @@ export function ChatConversation({
 
   const CATEGORIAS_VALIDAS = ["vuelo", "ferry", "coche", "alojamiento", "actividad", "comida", "otro"] as const;
 
+  const isPlanFinished = planInfo?.fin_at ? new Date(planInfo.fin_at) < new Date() : false;
+
+  const fmtEstado = (e: string) =>
+    ({ hecho: "Hecho", pendiente: "Pendiente", en_progreso: "En progreso" }[e] ?? e);
+
+  const WRITE_COMMANDS = new Set(["tarea", "gasto", "votar", "voto", "recordar", "admin", "deadmin", "expulsar"]);
+
   const handleCommand = async (cmd: string): Promise<string> => {
     const parts = cmd.slice(1).trim().split(/\s+/);
     const name = parts[0]?.toLowerCase();
+
+    if (isPlanFinished && WRITE_COMMANDS.has(name)) {
+      return "Este plan ya ha finalizado, no se pueden crear ni modificar elementos.";
+    }
 
     if (name === "info") {
       if (!planInfo) return "Este comando solo está disponible en el chat de un plan.";
@@ -382,12 +395,12 @@ export function ChatConversation({
         if (todas) {
           const tareas = await todasTareasEndpoint(planId);
           if (tareas.length === 0) return "No hay tareas en este plan todavía.";
-          return "Tareas del plan:\n" + tareas.map((t) => `• ${t.titulo} → @${t.asignado_nombre} [${t.estado}]`).join("\n");
+          return "Tareas del plan:\n" + tareas.map((t) => `• ${t.titulo} → @${t.asignado_nombre} [${fmtEstado(t.estado)}]`).join("\n");
         } else {
           const tareas = await misTareasEndpoint(planId);
           if (tareas.length === 0) return "No tienes tareas en este plan.";
           pendingTaskListRef.current = tareas;
-          return "Tus tareas:\n" + tareas.map((t, i) => `${i + 1}. ${t.titulo} [${t.estado}]`).join("\n");
+          return "Tus tareas:\n" + tareas.map((t, i) => `${i + 1}. ${t.titulo} [${fmtEstado(t.estado)}]`).join("\n");
         }
       } catch {
         return "No pude obtener las tareas, inténtalo de nuevo.";
@@ -405,7 +418,7 @@ export function ChatConversation({
           const tareas = await misTareasEndpoint(planId);
           if (tareas.length === 0) return "No tienes tareas en este plan.";
           pendingTaskListRef.current = tareas;
-          return `Tus tareas:\n${tareas.map((t, i) => `${i + 1}. ${t.titulo} [${t.estado}]`).join("\n")}\nResponde con /${name} 1, /${name} 2...`;
+          return `Tus tareas:\n${tareas.map((t, i) => `${i + 1}. ${t.titulo} [${fmtEstado(t.estado)}]`).join("\n")}\nResponde con /${name} 1, /${name} 2...`;
         } catch {
           return "No pude obtener las tareas, inténtalo de nuevo.";
         }
@@ -467,6 +480,55 @@ export function ChatConversation({
         return lines.join("\n");
       } catch {
         return "No pude obtener las deudas, inténtalo de nuevo.";
+      }
+    }
+
+    if (name === "simplificar") {
+      if (!planId) return "Este comando solo está disponible en el chat de un plan.";
+      try {
+        const balances = await getBalancesForPlanEndpoint(planId);
+        if (balances.length === 0) return "No hay deudas pendientes en este plan.";
+
+        // Calcular balance neto por persona
+        const net = new Map<string, { nombre: string; balance: number }>();
+        for (const b of balances) {
+          if (!net.has(b.from_user_id)) net.set(b.from_user_id, { nombre: b.from_nombre ?? "?", balance: 0 });
+          if (!net.has(b.to_user_id)) net.set(b.to_user_id, { nombre: b.to_nombre ?? "?", balance: 0 });
+          net.get(b.from_user_id)!.balance -= b.importe;
+          net.get(b.to_user_id)!.balance += b.importe;
+        }
+
+        // Separar acreedores y deudores
+        const creditors: { nombre: string; amount: number }[] = [];
+        const debtors: { nombre: string; amount: number }[] = [];
+        for (const [, v] of net) {
+          if (v.balance > 0.01) creditors.push({ nombre: v.nombre, amount: v.balance });
+          else if (v.balance < -0.01) debtors.push({ nombre: v.nombre, amount: -v.balance });
+        }
+        creditors.sort((a, b) => b.amount - a.amount);
+        debtors.sort((a, b) => b.amount - a.amount);
+
+        // Algoritmo greedy: emparejar mayor acreedor con mayor deudor
+        const transfers: string[] = [];
+        while (creditors.length > 0 && debtors.length > 0) {
+          const creditor = creditors[0];
+          const debtor = debtors[0];
+          const amount = Math.min(creditor.amount, debtor.amount);
+          transfers.push(`  ${debtor.nombre} → ${creditor.nombre}: ${amount.toFixed(2)}€`);
+          creditor.amount -= amount;
+          debtor.amount -= amount;
+          if (creditor.amount < 0.01) creditors.shift();
+          if (debtor.amount < 0.01) debtors.shift();
+        }
+
+        if (transfers.length === 0) return "No hay deudas pendientes en este plan.";
+        const saved = balances.length - transfers.length;
+        const header = saved > 0
+          ? `Deudas simplificadas (${transfers.length} transferencia${transfers.length !== 1 ? "s" : ""} en vez de ${balances.length}):`
+          : `Deudas del plan (${transfers.length} transferencia${transfers.length !== 1 ? "s" : ""}):`;
+        return [header, ...transfers].join("\n");
+      } catch {
+        return "No pude simplificar las deudas, inténtalo de nuevo.";
       }
     }
 
@@ -548,6 +610,7 @@ export function ChatConversation({
           "/gasto [concepto] [importe]€ — registrar un gasto equitativo",
           "/saldo — tu balance en el plan",
           "/deudas — todas las deudas del plan",
+          "/simplificar — calcular las mínimas transferencias para saldar todo",
           "/pagar @usuario [importe]€ — registrar un pago",
           "/presupuesto — ver o establecer el presupuesto",
           "/votar [pregunta] [op1] [op2]... — crear una votación",
@@ -571,7 +634,10 @@ export function ChatConversation({
       if (qIdx === -1) return "Indica la pregunta y al menos dos opciones. Ej: /votar ¿Vamos al Coliseo? Sí No";
 
       const question = rawText.slice(0, qIdx + 1).trim();
-      const restParts = rawText.slice(qIdx + 1).trim().split(/\s+/).filter(Boolean);
+      // Soporta opciones entre comillas: "Restaurante de pescaito" "Chiringuito de playa"
+      const restRaw = rawText.slice(qIdx + 1).trim();
+      const quotedParts = [...restRaw.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+      const restParts = quotedParts.length >= 2 ? quotedParts : restRaw.split(/\s+/).filter(Boolean);
 
       const lastPart = restParts[restParts.length - 1] ?? "";
       let expiresAt: string | undefined;
@@ -883,7 +949,7 @@ export function ChatConversation({
         onNewMessageRef.current(resultMsg);
       } catch { /* resultados igual se muestran localmente */ }
 
-      if (winnerOption && isAdmin) {
+      if (winnerOption && isAdmin && !isPlanFinished) {
         pendingPollWinnerRef.current = { planId, winnerOption, question: poll.question };
         return `¿Añadir "${winnerOption}" al itinerario? Responde "s" para confirmar o "n" para cancelar`;
       }
@@ -928,6 +994,105 @@ export function ChatConversation({
       } catch {
         const botMsg: LocalMsg = { id: -Date.now(), _key: -Date.now(), sender_id: "frimee", sender_nombre: "Frimee", sender_profile_image: null, texto: "No pude registrar el gasto, inténtalo de nuevo.", created_at: new Date().toISOString(), tipo: "bot" };
         setMessages((prev) => [...prev, botMsg]);
+      }
+      return;
+    }
+
+    if (/\@frimee\b/i.test(trimmed) && !trimmed.startsWith("/")) {
+      setText("");
+      const me = chat.miembros.find((m) => m.id === currentUserId);
+      const thinkingKey = -Date.now();
+      const thinkingMsg: LocalMsg = {
+        id: thinkingKey, _key: thinkingKey,
+        sender_id: "frimee", sender_nombre: "Frimee", sender_profile_image: null,
+        texto: "…",
+        created_at: new Date().toISOString(),
+        tipo: "bot",
+      };
+
+      // Build conversation history: last 6 messages between this user and Frimee
+      const frimeeHistory: FrimeeHistoryEntry[] = messages
+        .filter((m) => {
+          if (!m.texto || m.texto === "…") return false;
+          try { const p = JSON.parse(m.texto); if (p.type) return false; } catch { /* not JSON */ }
+          const isBot = m.sender_id === "frimee" || m.sender_id === null || m.tipo === "bot";
+          return isBot || m.sender_id === currentUserId;
+        })
+        .slice(-6)
+        .map((m) => ({
+          role: m.sender_id === currentUserId ? "user" : "assistant",
+          content: m.texto!,
+        }));
+
+      // Try to get GPS location (uses cached position if available, non-blocking)
+      let userLocation: { lat: number; lng: number } | undefined;
+      if (typeof navigator !== "undefined" && navigator.geolocation) {
+        userLocation = await new Promise<{ lat: number; lng: number } | undefined>((resolve) => {
+          const timer = setTimeout(() => resolve(undefined), 3500);
+          navigator.geolocation.getCurrentPosition(
+            (pos) => { clearTimeout(timer); resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }); },
+            () => { clearTimeout(timer); resolve(undefined); },
+            { maximumAge: 300_000, timeout: 3000 }
+          );
+        });
+      }
+
+      // Save user message to DB → visible to all group members via Realtime
+      const userMsgId = await sendMensaje({ chatId: chat.chat_id, texto: trimmed });
+      const userMsg: LocalMsg = {
+        id: userMsgId, _key: userMsgId,
+        sender_id: currentUserId,
+        sender_nombre: me?.nombre ?? "",
+        sender_profile_image: me?.profile_image ?? null,
+        texto: trimmed,
+        created_at: new Date().toISOString(),
+      };
+      void channelRef.current?.send({ type: "broadcast", event: "new_message", payload: userMsg });
+      // Add user message if Realtime hasn't added it yet, then add thinking indicator
+      setMessages((prev) => {
+        const withUser = prev.some((m) => m.id === userMsgId) ? prev : [...prev, userMsg];
+        return [...withUser, thinkingMsg];
+      });
+      onNewMessageRef.current(userMsg);
+
+      try {
+        const result = await callFrimeeAssistant({
+          message: trimmed,
+          members: chat.miembros.map((m) => ({ id: m.id, nombre: m.nombre })),
+          planInfo: planInfo ? { titulo: planInfo.titulo, ubicacion_nombre: planInfo.ubicacion_nombre } : undefined,
+          isAdmin,
+          userId: currentUserId,
+          planId: planId ?? undefined,
+          history: frimeeHistory.length > 0 ? frimeeHistory : undefined,
+          userLocation,
+        });
+
+        let replyText = result.reply;
+        if (result.command) {
+          const cmdResult = await handleCommand(result.command);
+          if (cmdResult) replyText = cmdResult;
+
+          // Si @Frimee votó en nombre del usuario → mensaje público visible para todos
+          if (result.command.startsWith("/voto") && cmdResult?.startsWith("Voto registrado:")) {
+            const opcion = cmdResult.replace("Voto registrado: ", "");
+            const publicTexto = `@Frimee ha votado "${opcion}" en nombre de @${me?.nombre ?? "alguien"}`;
+            const newId = await sendMensaje({ chatId: chat.chat_id, texto: publicTexto });
+            const publicMsg: LocalMsg = { id: newId, _key: newId, sender_id: currentUserId, sender_nombre: me?.nombre ?? "", sender_profile_image: me?.profile_image ?? null, texto: publicTexto, created_at: new Date().toISOString() };
+            void channelRef.current?.send({ type: "broadcast", event: "new_message", payload: publicMsg });
+            setMessages((prev) => prev.some((m) => m.id === newId) ? prev : [...prev, publicMsg]);
+            onNewMessageRef.current(publicMsg);
+          }
+        }
+
+        // Save Frimee's reply to DB → visible to all group members via Realtime
+        const botMsgId = await sendBotMensaje(chat.chat_id, replyText || "…");
+        setMessages((prev) => prev.map((m) =>
+          m.id === thinkingKey ? { ...m, id: botMsgId, _key: botMsgId, texto: replyText || "…" } : m
+        ));
+      } catch {
+        setMessages((prev) => prev.map((m) =>
+          m.id === thinkingKey ? { ...m, texto: "No pude procesar tu mensaje, inténtalo de nuevo." } : m
+        ));
       }
       return;
     }
@@ -1445,7 +1610,7 @@ export function ChatConversation({
               const prevMsg = messages[idx - 1];
               const isFirstInGroup = !prevMsg || prevMsg.sender_id !== msg.sender_id;
               const time = formatChatTime(msg.created_at);
-              const isMediaMessage = Boolean(msg.image_url);
+              const isMediaMessage = Boolean(msg.image_url) || isResumenViaje(msg.texto);
               const reaction = localReactions[msg.id];
               const isStarred = starredIds.has(msg.id);
               const openMsgMenu = (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -1476,7 +1641,7 @@ export function ChatConversation({
                     )}
                     <div className={`break-all ${isMediaMessage ? "bg-transparent p-0" : "rounded-card px-3 py-2"} ${!isMediaMessage ? (isMe ? "bg-[var(--text-primary)] text-contrast-token" : isBot ? "bg-surface" : "bg-surface-inset") : ""} ${contextMenu?.msg.id === msg.id ? "opacity-75" : ""}`}>
                       {!isMe && (chat.tipo === "GRUPO" || isBot) && isFirstInGroup && (
-                        <p className={`mb-[2px] text-[11px] font-[var(--fw-semibold)] ${isBot ? "text-primary-token" : "text-muted"}`}>{msg.sender_nombre}</p>
+                        <p className={`mb-[2px] text-[11px] font-[var(--fw-semibold)] ${isBot ? "text-primary-token" : "text-muted"}`}>{isBot ? "Frimee" : msg.sender_nombre}</p>
                       )}
                       {msg.reply_texto && msg.reply_to_id && (
                         <button
@@ -1502,6 +1667,8 @@ export function ChatConversation({
                         <DocumentBubble url={msg.document_url} name={msg.document_name ?? "Documento"} sending={msg.id < 0} isMe={isMe} />
                       ) : msg.image_url ? (
                         <MediaBubble url={msg.image_url} type={msg.image_type ?? "image/jpeg"} sending={msg.id < 0} time={time} isMe={isMe} onOpenLightbox={!msg.image_type?.startsWith("video/") ? () => setLightboxUrl(msg.image_url!) : undefined} />
+                      ) : isResumenViaje(msg.texto) ? (
+                        <ResumenViajeBubble texto={msg.texto} />
                       ) : isPollMessage(msg.texto) ? (
                         <PollBubble msg={msg} isMe={isMe} onVote={(idx) => {
                           emitPollVote(msg.id);
@@ -2483,6 +2650,81 @@ function MediaBubble({ url, type, sending, time, isMe, onOpenLightbox }: { url: 
 
 function isPollMessage(texto: string): boolean {
   try { return JSON.parse(texto)?.type === "poll"; } catch { return false; }
+}
+
+function isResumenViaje(texto: string): boolean {
+  try { return JSON.parse(texto)?.type === "resumen_viaje"; } catch { return false; }
+}
+
+type ResumenViajeData = {
+  type: "resumen_viaje";
+  total: number;
+  por_persona: number;
+  num_miembros: number;
+  top_pagador: string | null;
+  top_pagador_importe: number | null;
+  deudas_pendientes: number;
+  actividades: number;
+};
+
+function ResumenViajeBubble({ texto }: { texto: string }) {
+  let data: ResumenViajeData;
+  try { data = JSON.parse(texto) as ResumenViajeData; } catch { return null; }
+
+  const fmtEur = (n: number) => n.toFixed(2).replace(".", ",") + "€";
+
+  return (
+    <div className="w-[260px] overflow-hidden rounded-[16px] border border-[var(--border)] bg-[var(--surface)]">
+      {/* Header */}
+      <div className="flex items-center gap-[10px] bg-primary-token/10 px-4 py-3">
+        <span className="text-[22px]">✈️</span>
+        <div>
+          <p className="text-[13px] font-[var(--fw-semibold)] text-primary-token leading-tight">¡El viaje ha terminado!</p>
+          <p className="text-[11px] text-primary-token/70">Aquí va el resumen</p>
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div className="px-4 py-3 space-y-[10px]">
+        {data.total > 0 ? (
+          <div>
+            <p className="text-[11px] text-muted uppercase tracking-wide">Total gastado</p>
+            <p className="text-[18px] font-[var(--fw-semibold)] text-app leading-tight">{fmtEur(data.total)}</p>
+            {data.num_miembros > 1 && (
+              <p className="text-[12px] text-muted">{fmtEur(data.por_persona)} por persona</p>
+            )}
+          </div>
+        ) : (
+          <div>
+            <p className="text-[11px] text-muted uppercase tracking-wide">Total gastado</p>
+            <p className="text-[13px] text-muted">Sin gastos registrados</p>
+          </div>
+        )}
+
+        {data.top_pagador && (
+          <div>
+            <p className="text-[11px] text-muted uppercase tracking-wide">Pagó más</p>
+            <p className="text-[13px] font-[var(--fw-medium)] text-app">
+              {data.top_pagador}
+              <span className="ml-1 text-muted font-normal">{fmtEur(data.top_pagador_importe ?? 0)}</span>
+            </p>
+          </div>
+        )}
+
+        {/* Counters */}
+        <div className="flex gap-[8px] pt-[2px]">
+          <div className="flex-1 rounded-[10px] bg-[var(--surface-inset)] px-3 py-2 text-center">
+            <p className="text-[18px] font-[var(--fw-semibold)] text-app">{data.actividades}</p>
+            <p className="text-[10px] text-muted">actividad{data.actividades !== 1 ? "es" : ""}</p>
+          </div>
+          <div className="flex-1 rounded-[10px] bg-[var(--surface-inset)] px-3 py-2 text-center">
+            <p className="text-[18px] font-[var(--fw-semibold)] text-app">{data.deudas_pendientes}</p>
+            <p className="text-[10px] text-muted">deuda{data.deudas_pendientes !== 1 ? "s" : ""} pend.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // Module-level event emitter para sincronizar votos en tiempo real entre PollBubble y el canal broadcast

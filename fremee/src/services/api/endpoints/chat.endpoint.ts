@@ -116,6 +116,16 @@ export async function sendMensajeEndpoint(params: {
   return data as number;
 }
 
+export async function sendBotMensajeEndpoint(chatId: string, texto: string): Promise<number> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_bot_message_insert", {
+    p_chat_id: chatId,
+    p_texto: texto,
+  });
+  if (error) throw error;
+  return data as number;
+}
+
 export async function markChatReadEndpoint(chatId: string): Promise<void> {
   const supabase = createBrowserSupabaseClient();
   const { error } = await supabase.rpc("fn_chat_mark_read", { p_chat_id: chatId });
