@@ -23,6 +23,7 @@ const items = [
 
 type AppSidebarProps = {
   onCreatePlan?: () => void;
+  hideMobileNav?: boolean;
 };
 
 function dateInputToIso(dateInput: string, hour = 12) {
@@ -30,7 +31,7 @@ function dateInputToIso(dateInput: string, hour = 12) {
   return new Date(year ?? 0, (month ?? 1) - 1, day ?? 1, hour, 0, 0).toISOString();
 }
 
-export default function AppSidebar({ onCreatePlan }: AppSidebarProps) {
+export default function AppSidebar({ onCreatePlan, hideMobileNav }: AppSidebarProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [mobileNavVisible, setMobileNavVisible] = useState(true);
@@ -277,7 +278,7 @@ export default function AppSidebar({ onCreatePlan }: AppSidebarProps) {
       <nav
         className={`fixed inset-x-0 bottom-0 z-sticky flex h-[calc(var(--space-16)+env(safe-area-inset-bottom))] items-center justify-around border-t border-strong bg-app px-[var(--space-5)] pb-safe transition-transform duration-[var(--duration-slow)] [transition-timing-function:var(--ease-decelerate)] md:hidden ${
           mobileNavVisible ? "translate-y-0" : "translate-y-full"
-        }`}
+        } ${hideMobileNav ? "!translate-y-full" : ""}`}
       >
         {items.slice(0, 2).map((item) => (
           <Link

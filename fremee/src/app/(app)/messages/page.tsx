@@ -155,239 +155,335 @@ export default function MessagesPage() {
       })
     : chats;
 
-  return (
-    <div className="min-h-dvh bg-app text-app">
+  const isInChat = !!(selectedChat && user);
 
-      <div className="relative mx-auto min-h-dvh max-w-[1440px]">
-        <AppSidebar />
-        <main className="px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-6)] md:py-[var(--space-8)] md:pr-[var(--space-14)]">
-          <div className="mx-auto w-full max-w-[760px]">
-            {selectedChat && user ? (
-              <ChatConversation
-                chat={selectedChat}
-                currentUserId={user.id}
-                onBack={() => { setSelectedChatId(null); void loadChats(); }}
-                onStartCall={(tipo) => {
-                  const nombre = resolveChatName(selectedChat, user.id);
-                  const foto = resolveChatAvatar(selectedChat, user.id) ?? undefined;
-                  const miembros = selectedChat.miembros.map((m) => ({ id: m.id, nombre: m.nombre, foto: m.profile_image ?? undefined }));
-                  void startCall(String(selectedChat.chat_id), tipo, nombre, foto, miembros);
-                }}
-                onJoinCall={(llamadaId, roomName, tipo) => {
-                  const nombre = resolveChatName(selectedChat, user.id);
-                  const foto = resolveChatAvatar(selectedChat, user.id) ?? undefined;
-                  const miembros = selectedChat.miembros.map((m) => ({ id: m.id, nombre: m.nombre, foto: m.profile_image ?? undefined }));
-                  void joinCall(llamadaId, roomName, String(selectedChat.chat_id), tipo, nombre, foto, miembros);
-                }}
-                inCall={callState.status !== "idle"}
-                onNewMessage={(msg) => {
-                  const preview = msg.audio_url ? "🎤 Nota de voz" : msg.document_url ? `📄 ${msg.document_name ?? "Documento"}` : msg.image_url ? (msg.image_type?.startsWith("video/") ? "🎥 Vídeo" : "📷 Foto") : (() => { try { return JSON.parse(msg.texto)?.type === "poll" ? "📊 Encuesta" : msg.texto; } catch { return msg.texto; } })();
-                  setChats((prev) => prev.map((c) =>
-                    c.chat_id !== selectedChatId ? c : { ...c, last_message: preview, last_message_at: msg.created_at }
-                  ));
-                }}
-                onFotoUpdated={(foto) => {
-                  setChats((prev) => prev.map((c) =>
-                    c.chat_id !== selectedChatId ? c : { ...c, foto }
-                  ));
-                }}
-                registerCallReload={(fn) => { reloadCallMessagesRef.current = fn; }}
-              />
-            ) : showFriendPicker ? (
-              <>
-                {/* Header */}
-                <div className="mb-[var(--space-3)] flex items-center gap-[var(--space-2)]">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (showGroupCreator) setShowGroupCreator(false);
-                      else setShowFriendPicker(false);
-                    }}
-                    className="flex size-[32px] items-center justify-center rounded-full transition-colors hover:bg-surface"
-                    aria-label="Volver"
-                  >
-                    <BackIcon className="size-[18px]" />
-                  </button>
-                  <p className="text-body-sm font-[var(--fw-semibold)] text-app">
-                    {showGroupCreator ? "Nuevo grupo" : "Nueva conversación"}
-                  </p>
-                </div>
+  /* ── Shared chat list panel content (used in both mobile & desktop) ── */
+  const chatListContent = showFriendPicker ? (
+    <div className="flex h-full flex-col">
+      {/* Header */}
+      <div className="flex items-center gap-[var(--space-3)] px-[var(--space-4)] py-[var(--space-3)]">
+        <button
+          type="button"
+          onClick={() => {
+            if (showGroupCreator) setShowGroupCreator(false);
+            else setShowFriendPicker(false);
+          }}
+          className="flex size-[36px] items-center justify-center rounded-full transition-colors hover:bg-surface"
+          aria-label="Volver"
+        >
+          <BackIcon className="size-[18px]" />
+        </button>
+        <h2 className="text-[var(--font-h4)] font-[var(--fw-medium)] text-app">
+          {showGroupCreator ? "Nuevo grupo" : "Nueva conversación"}
+        </h2>
+      </div>
 
-                {friendsLoading ? (
-                  <div className="py-[var(--space-8)] text-center text-body-sm text-muted">Cargando amigos...</div>
-                ) : showGroupCreator ? (
-                  /* ── Creador de grupo ── */
-                  <div className="space-y-[var(--space-4)]">
-                    <input
-                      type="text"
-                      value={groupName}
-                      onChange={(e) => setGroupName(e.target.value)}
-                      placeholder="Nombre del grupo"
-                      className="w-full rounded-card border border-app bg-surface px-4 py-[10px] text-body-sm text-app outline-none transition-colors focus:border-[var(--border-strong)]"
-                      autoFocus
-                    />
-                    <p className="px-1 text-[11px] font-[var(--fw-semibold)] uppercase tracking-wide text-muted">Añadir miembros</p>
-                    {friends.length === 0 ? (
-                      <p className="py-[var(--space-4)] text-center text-body-sm text-muted">No tienes amigos aún</p>
-                    ) : (
-                      <div className="space-y-[1px]">
-                        {friends.map((friend) => {
-                          const avatarLabel = (friend.nombre.trim()[0] || "U").toUpperCase();
-                          const selected = selectedMemberIds.has(friend.id);
-                          return (
-                            <button
-                              key={friend.id}
-                              type="button"
-                              onClick={() => toggleMember(friend.id)}
-                              className="flex w-full items-center gap-[var(--space-3)] rounded-[10px] px-2 py-[10px] text-left transition-colors hover:bg-surface"
-                            >
-                              <div className="avatar-md flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">
-                                {friend.profile_image ? (
-                                  <img src={friend.profile_image} alt={friend.nombre} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
-                                ) : avatarLabel}
-                              </div>
-                              <p className="min-w-0 flex-1 truncate text-body-sm font-[var(--fw-medium)] text-app">{friend.nombre}</p>
-                              <div className={`flex size-[20px] shrink-0 items-center justify-center rounded-full border-2 transition-colors ${selected ? "border-[var(--text-primary)] bg-[var(--text-primary)]" : "border-app"}`}>
-                                {selected && (
-                                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[12px] text-contrast-token">
-                                    <path d="M5 12l5 5L19 7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                                  </svg>
-                                )}
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => void handleCreateGroup()}
-                      disabled={!groupName.trim() || selectedMemberIds.size === 0 || creatingGroup}
-                      className="w-full rounded-full bg-[var(--text-primary)] py-[10px] text-body-sm font-[var(--fw-semibold)] text-contrast-token transition-opacity hover:opacity-80 disabled:opacity-40"
-                    >
-                      {creatingGroup ? "Creando..." : `Crear grupo${selectedMemberIds.size > 0 ? ` (${selectedMemberIds.size})` : ""}`}
-                    </button>
-                  </div>
-                ) : friends.length === 0 ? (
-                  <div className="py-[var(--space-8)] text-center text-body-sm text-muted">No tienes amigos aún</div>
-                ) : (
-                  /* ── Lista: crear grupo + amigos ── */
-                  <div className="space-y-[1px]">
-                    <button
-                      type="button"
-                      onClick={() => setShowGroupCreator(true)}
-                      className="flex w-full items-center gap-[var(--space-3)] rounded-[10px] px-2 py-[10px] text-left transition-colors hover:bg-surface"
-                    >
-                      <div className="avatar-md flex shrink-0 items-center justify-center rounded-full border border-app bg-surface-inset">
-                        <GroupIcon className="size-[16px] text-muted" />
-                      </div>
-                      <p className="text-body-sm font-[var(--fw-medium)] text-app">Crear grupo</p>
-                    </button>
-                    <div className="px-2 py-[var(--space-1)]"><div className="border-t border-app" /></div>
-                    {friends.map((friend) => {
-                      const avatarLabel = (friend.nombre.trim()[0] || "U").toUpperCase();
-                      const isStarting = startingChatWith === friend.id;
-                      return (
-                        <button
-                          key={friend.id}
-                          type="button"
-                          onClick={() => void handleStartChat(friend.id)}
-                          disabled={!!startingChatWith}
-                          className="flex w-full items-center gap-[var(--space-3)] rounded-[10px] px-2 py-[10px] text-left transition-colors hover:bg-surface disabled:opacity-50"
-                        >
-                          <div className="avatar-md flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">
-                            {friend.profile_image ? (
-                              <img src={friend.profile_image} alt={friend.nombre} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
-                            ) : avatarLabel}
-                          </div>
-                          <p className="min-w-0 flex-1 truncate text-body-sm font-[var(--fw-medium)] text-app">{friend.nombre}</p>
-                          {isStarting && <span className="shrink-0 text-[11px] text-muted">...</span>}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </>
-            ) : (
-              <>
-                <div className="mb-[var(--space-3)] flex items-center gap-[var(--space-2)]">
-                  <div className="relative flex-1">
-                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-[16px] -translate-y-1/2 text-muted">
-                      <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.8" />
-                      <path d="M16 16L20.5 20.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                    </svg>
-                    <input
-                      type="text"
-                      value={searchValue}
-                      onChange={(e) => setSearchValue(e.target.value)}
-                      placeholder="Buscar"
-                      className="w-full rounded-full border border-app bg-surface py-[7px] pl-9 pr-8 text-body-sm text-app outline-none transition-colors focus:border-[var(--border-strong)] [&::-webkit-search-cancel-button]:hidden"
-                    />
-                    {searchValue && (
-                      <button type="button" onClick={() => setSearchValue("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted">
-                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[14px]">
-                          <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                        </svg>
-                      </button>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => void openFriendPicker()}
-                    className="flex size-[36px] shrink-0 items-center justify-center rounded-full border border-app transition-colors hover:bg-surface"
-                    aria-label="Nueva conversación"
-                  >
-                    <ComposeIcon className="size-[16px]" />
-                  </button>
-                </div>
-
-                {chatsLoading ? (
-                  <div className="py-[var(--space-8)] text-center text-body-sm text-muted">Cargando...</div>
-                ) : filteredChats.length === 0 ? (
-                  <div className="py-[var(--space-8)] text-center text-body-sm text-muted">No tienes conversaciones aún</div>
-                ) : (
-                  <div className="space-y-[1px]">
-                    {filteredChats.map((chat) => {
-                      const name = resolveChatName(chat, user?.id ?? "");
-                      const avatar = resolveChatAvatar(chat, user?.id ?? "");
-                      const hasUnread = chat.unread_count > 0;
-                      return (
-                        <button
-                          key={chat.chat_id}
-                          type="button"
-                          onClick={() => setSelectedChatId(chat.chat_id)}
-                          className="flex w-full items-center gap-[var(--space-3)] rounded-[10px] px-2 py-[10px] text-left transition-colors hover:bg-surface"
-                        >
-                          <div className="relative shrink-0">
-                            <div className="avatar-md flex items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">
-                              {avatar ? (
-                                <img src={avatar} alt={name} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
-                              ) : chat.tipo === "GRUPO" ? (
-                                <GroupIcon className="size-[16px] text-muted" />
-                              ) : (
-                                (name[0] ?? "?").toUpperCase()
-                              )}
-                            </div>
-                            {hasUnread && (
-                              <span className="absolute -right-[2px] -top-[2px] size-[10px] rounded-full border-2 border-[var(--bg)] bg-[#ff6a3d]" />
-                            )}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className={`truncate text-body-sm ${hasUnread ? "font-[var(--fw-semibold)]" : ""} text-app`}>{name}</p>
-                            <p className={`truncate text-[12px] leading-[16px] ${hasUnread ? "font-[var(--fw-medium)] text-app" : "text-muted"}`}>
-                              {(() => { const m = chat.last_message ?? ""; try { return JSON.parse(m)?.type === "poll" ? "📊 Encuesta" : m; } catch { return m; } })()}
-                            </p>
-                          </div>
-                          <span className="shrink-0 text-[11px] text-muted">{formatChatTime(chat.last_message_at)}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </>
-            )}
+      <div className="flex-1 overflow-y-auto overscroll-contain px-[var(--space-3)]">
+        {friendsLoading ? (
+          <div className="flex justify-center py-[var(--space-12)]">
+            <div className="size-5 animate-spin rounded-full border-2 border-current border-t-transparent opacity-40" />
           </div>
-        </main>
+        ) : showGroupCreator ? (
+          /* ── Creador de grupo ── */
+          <div className="space-y-[var(--space-4)]">
+            <div>
+              <label className="mb-[var(--space-2)] block text-[12px] font-[var(--fw-semibold)] uppercase tracking-wide text-muted">Nombre del grupo</label>
+              <input
+                type="text"
+                value={groupName}
+                onChange={(e) => setGroupName(e.target.value)}
+                placeholder="Ej: Viaje a Roma"
+                className="h-[44px] w-full rounded-[12px] border border-app bg-surface-inset px-[14px] text-[15px] text-app outline-none transition-colors focus:border-[var(--border-strong)] placeholder:text-muted"
+                autoFocus
+              />
+            </div>
+
+            {selectedMemberIds.size > 0 && (
+              <div className="flex flex-wrap gap-[6px]">
+                {friends
+                  .filter((f) => selectedMemberIds.has(f.id))
+                  .map((friend) => (
+                    <button
+                      key={friend.id}
+                      type="button"
+                      onClick={() => toggleMember(friend.id)}
+                      className="flex items-center gap-[6px] rounded-full border border-app bg-surface px-[10px] py-[5px] text-[12px] font-[var(--fw-medium)] text-app transition-colors hover:bg-surface-inset"
+                    >
+                      <span>{friend.nombre.split(" ")[0]}</span>
+                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[12px] text-muted">
+                        <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+                      </svg>
+                    </button>
+                  ))}
+              </div>
+            )}
+
+            <div>
+              <p className="mb-[var(--space-2)] text-[12px] font-[var(--fw-semibold)] uppercase tracking-wide text-muted">Añadir miembros</p>
+              {friends.length === 0 ? (
+                <p className="py-[var(--space-6)] text-center text-body-sm text-muted">No tienes amigos aún</p>
+              ) : (
+                <div className="space-y-[1px]">
+                  {friends.map((friend) => {
+                    const avatarLabel = (friend.nombre.trim()[0] || "U").toUpperCase();
+                    const selected = selectedMemberIds.has(friend.id);
+                    return (
+                      <button
+                        key={friend.id}
+                        type="button"
+                        onClick={() => toggleMember(friend.id)}
+                        className={`flex w-full items-center gap-[var(--space-3)] rounded-[10px] px-[10px] py-[10px] text-left transition-colors hover:bg-surface ${selected ? "bg-surface" : ""}`}
+                      >
+                        <div className="avatar-md flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">
+                          {friend.profile_image ? (
+                            <img src={friend.profile_image} alt={friend.nombre} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                          ) : avatarLabel}
+                        </div>
+                        <p className="min-w-0 flex-1 truncate text-body-sm font-[var(--fw-medium)] text-app">{friend.nombre}</p>
+                        <div className={`flex size-[22px] shrink-0 items-center justify-center rounded-[6px] border-2 transition-colors ${selected ? "border-[var(--text-primary)] bg-[var(--text-primary)]" : "border-[var(--border-strong)]"}`}>
+                          {selected && (
+                            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[13px] text-contrast-token">
+                              <path d="M5 12l5 5L19 7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="sticky bottom-0 bg-app pb-[var(--space-3)] pt-[var(--space-2)]">
+              <button
+                type="button"
+                onClick={() => void handleCreateGroup()}
+                disabled={!groupName.trim() || selectedMemberIds.size === 0 || creatingGroup}
+                className="w-full rounded-full bg-[var(--text-primary)] py-[12px] text-body-sm font-[var(--fw-semibold)] text-contrast-token transition-opacity hover:opacity-80 disabled:opacity-40"
+              >
+                {creatingGroup ? "Creando..." : `Crear grupo${selectedMemberIds.size > 0 ? ` (${selectedMemberIds.size})` : ""}`}
+              </button>
+            </div>
+          </div>
+        ) : friends.length === 0 ? (
+          <div className="py-[var(--space-8)] text-center text-body-sm text-muted">No tienes amigos aún</div>
+        ) : (
+          <div>
+            <button
+              type="button"
+              onClick={() => setShowGroupCreator(true)}
+              className="flex w-full items-center gap-[var(--space-3)] rounded-[10px] px-[10px] py-[12px] text-left transition-colors hover:bg-surface"
+            >
+              <div className="avatar-md flex shrink-0 items-center justify-center rounded-full bg-[var(--text-primary)]">
+                <GroupIcon className="size-[16px] text-contrast-token" />
+              </div>
+              <div>
+                <p className="text-body-sm font-[var(--fw-semibold)] text-app">Nuevo grupo</p>
+                <p className="text-[12px] leading-[16px] text-muted">Crea un chat con varios amigos</p>
+              </div>
+            </button>
+
+            <div className="my-[var(--space-2)] border-t border-app" />
+
+            <p className="mb-[var(--space-1)] px-[10px] pt-[var(--space-1)] text-[12px] font-[var(--fw-semibold)] uppercase tracking-wide text-muted">Amigos</p>
+
+            <div className="space-y-[1px]">
+              {friends.map((friend) => {
+                const avatarLabel = (friend.nombre.trim()[0] || "U").toUpperCase();
+                const isStarting = startingChatWith === friend.id;
+                return (
+                  <button
+                    key={friend.id}
+                    type="button"
+                    onClick={() => void handleStartChat(friend.id)}
+                    disabled={!!startingChatWith}
+                    className="flex w-full items-center gap-[var(--space-3)] rounded-[10px] px-[10px] py-[10px] text-left transition-colors hover:bg-surface disabled:opacity-50"
+                  >
+                    <div className="avatar-md flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">
+                      {friend.profile_image ? (
+                        <img src={friend.profile_image} alt={friend.nombre} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                      ) : avatarLabel}
+                    </div>
+                    <p className="min-w-0 flex-1 truncate text-body-sm font-[var(--fw-medium)] text-app">{friend.nombre}</p>
+                    {isStarting && (
+                      <div className="size-4 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent opacity-40" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  ) : (
+    <div className="flex h-full flex-col">
+      {/* Header + compose */}
+      <div className="flex items-center justify-between px-[var(--space-4)] py-[var(--space-3)]">
+        <h2 className="text-[var(--font-h4)] font-[var(--fw-medium)] text-app">Mensajes</h2>
+        <button
+          type="button"
+          onClick={() => void openFriendPicker()}
+          className="flex size-[36px] shrink-0 items-center justify-center rounded-full bg-[var(--primary)] text-white transition-opacity hover:opacity-80"
+          aria-label="Nueva conversación"
+        >
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[18px]">
+            <path d="M12 4V20M4 12H20" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Search bar */}
+      <div className="px-[var(--space-4)] pb-[var(--space-3)]">
+        <div className="flex h-[44px] w-full items-center gap-[10px] rounded-[12px] border border-app bg-surface-inset px-[14px] text-muted">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[20px] shrink-0">
+            <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.8" />
+            <path d="M16 16L20.5 20.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          </svg>
+          <input
+            type="text"
+            value={searchValue}
+            onChange={(e) => setSearchValue(e.target.value)}
+            placeholder="Buscar"
+            className="min-w-0 flex-1 border-none bg-transparent text-[15px] text-app shadow-none outline-none ring-0 focus:border-none focus:shadow-none focus:outline-none focus:ring-0 placeholder:text-muted [&::-webkit-search-cancel-button]:hidden"
+          />
+          {searchValue && (
+            <button type="button" onClick={() => setSearchValue("")} className="text-muted transition-opacity hover:opacity-70">
+              <svg viewBox="0 0 24 24" fill="none" className="size-[14px]" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Chat list */}
+      <div className="flex-1 overflow-y-auto overscroll-contain px-[var(--space-3)]">
+        {chatsLoading ? (
+          <div className="flex justify-center py-[var(--space-12)]">
+            <div className="size-5 animate-spin rounded-full border-2 border-current border-t-transparent opacity-40" />
+          </div>
+        ) : filteredChats.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-[var(--space-3)] py-[var(--space-12)] text-center">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-12 opacity-20">
+              <path d="M21 3L10 14" stroke="currentColor" strokeWidth="1.8" />
+              <path d="M21 3L14.5 21L10 14L3 9.5L21 3Z" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.8" />
+            </svg>
+            <p className="text-body-sm text-muted">
+              {searchValue.trim() ? "No se encontraron conversaciones" : "No tienes conversaciones aún"}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-[1px]">
+            {filteredChats.map((chat) => {
+              const name = resolveChatName(chat, user?.id ?? "");
+              const avatar = resolveChatAvatar(chat, user?.id ?? "");
+              const hasUnread = chat.unread_count > 0;
+              const isSelected = chat.chat_id === selectedChatId;
+              return (
+                <button
+                  key={chat.chat_id}
+                  type="button"
+                  onClick={() => setSelectedChatId(chat.chat_id)}
+                  className={`flex w-full items-center gap-[var(--space-3)] rounded-[10px] px-[10px] py-[10px] text-left transition-colors hover:bg-surface ${isSelected ? "bg-surface" : ""}`}
+                >
+                  <div className="relative shrink-0">
+                    <div className="avatar-md flex items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">
+                      {avatar ? (
+                        <img src={avatar} alt={name} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                      ) : chat.tipo === "GRUPO" ? (
+                        <GroupIcon className="size-[16px] text-muted" />
+                      ) : (
+                        (name[0] ?? "?").toUpperCase()
+                      )}
+                    </div>
+                    {hasUnread && (
+                      <span className="absolute -right-[2px] -top-[2px] size-[10px] rounded-full border-2 border-[var(--bg)] bg-[#ff6a3d]" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline justify-between gap-[var(--space-2)]">
+                      <p className={`truncate text-body-sm ${hasUnread ? "font-[var(--fw-semibold)]" : ""} text-app`}>{name}</p>
+                      <span className="shrink-0 text-[11px] text-muted">{formatChatTime(chat.last_message_at)}</span>
+                    </div>
+                    <p className={`truncate text-[12px] leading-[16px] ${hasUnread ? "font-[var(--fw-medium)] text-app" : "text-muted"}`}>
+                      {(() => { const m = chat.last_message ?? ""; try { return JSON.parse(m)?.type === "poll" ? "📊 Encuesta" : m; } catch { return m; } })()}
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  /* ── Chat conversation panel (shared) ── */
+  const chatPanel = selectedChat && user ? (
+    <ChatConversation
+      chat={selectedChat}
+      currentUserId={user.id}
+      containerClassName="flex h-full flex-col pt-[var(--space-2)]"
+      onBack={() => { setSelectedChatId(null); void loadChats(); }}
+      onStartCall={(tipo) => {
+        const nombre = resolveChatName(selectedChat, user.id);
+        const foto = resolveChatAvatar(selectedChat, user.id) ?? undefined;
+        const miembros = selectedChat.miembros.map((m) => ({ id: m.id, nombre: m.nombre, foto: m.profile_image ?? undefined }));
+        void startCall(String(selectedChat.chat_id), tipo, nombre, foto, miembros);
+      }}
+      onJoinCall={(llamadaId, roomName, tipo) => {
+        const nombre = resolveChatName(selectedChat, user.id);
+        const foto = resolveChatAvatar(selectedChat, user.id) ?? undefined;
+        const miembros = selectedChat.miembros.map((m) => ({ id: m.id, nombre: m.nombre, foto: m.profile_image ?? undefined }));
+        void joinCall(llamadaId, roomName, String(selectedChat.chat_id), tipo, nombre, foto, miembros);
+      }}
+      inCall={callState.status !== "idle"}
+      onNewMessage={(msg) => {
+        const preview = msg.audio_url ? "🎤 Nota de voz" : msg.document_url ? `📄 ${msg.document_name ?? "Documento"}` : msg.image_url ? (msg.image_type?.startsWith("video/") ? "🎥 Vídeo" : "📷 Foto") : (() => { try { return JSON.parse(msg.texto)?.type === "poll" ? "📊 Encuesta" : msg.texto; } catch { return msg.texto; } })();
+        setChats((prev) => prev.map((c) =>
+          c.chat_id !== selectedChatId ? c : { ...c, last_message: preview, last_message_at: msg.created_at }
+        ));
+      }}
+      onFotoUpdated={(foto) => {
+        setChats((prev) => prev.map((c) =>
+          c.chat_id !== selectedChatId ? c : { ...c, foto }
+        ));
+      }}
+      registerCallReload={(fn) => { reloadCallMessagesRef.current = fn; }}
+    />
+  ) : null;
+
+  return (
+    <div className="h-dvh bg-app text-app">
+      <div className="relative h-full">
+        <AppSidebar hideMobileNav={isInChat} />
+
+        {/* Sliding two-panel layout */}
+        <div className="h-full overflow-hidden md:ml-[102px]">
+          {/* Inner track: 200% wide on mobile so each panel = viewport width; slides left when chat is open */}
+          <div
+            className={`flex h-full w-[200%] md:w-full transition-transform duration-300 [transition-timing-function:var(--ease-standard)] ${
+              isInChat ? "-translate-x-1/2 md:translate-x-0" : "translate-x-0"
+            }`}
+          >
+            {/* Left panel – chat list */}
+            <div className="h-full w-1/2 shrink-0 overflow-hidden pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] md:w-[340px] md:border-r md:border-app md:pb-0 lg:w-[380px]">
+              {chatListContent}
+            </div>
+
+            {/* Right panel – conversation */}
+            <div className="h-full w-1/2 shrink-0 overflow-hidden md:w-0 md:shrink md:flex-1 md:min-w-0">
+              {chatPanel ?? (
+                <div className="flex h-full flex-col items-center justify-center gap-[var(--space-3)] text-center">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-16 opacity-[0.12]">
+                    <path d="M21 3L10 14" stroke="currentColor" strokeWidth="1.8" />
+                    <path d="M21 3L14.5 21L10 14L3 9.5L21 3Z" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.8" />
+                  </svg>
+                  <p className="text-body-sm text-muted">Selecciona una conversación</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

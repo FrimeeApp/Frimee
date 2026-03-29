@@ -1534,7 +1534,7 @@ export function ChatConversation({
 
       {/* Header */}
       {!embedded && (
-        <div className="flex items-center gap-[var(--space-3)] border-b border-app pb-[var(--space-3)]">
+        <div className="flex items-center gap-[var(--space-3)] border-b border-app px-[var(--space-3)] pb-[var(--space-3)] md:px-[var(--space-4)]">
           <button type="button" onClick={onBack} className="flex size-[32px] items-center justify-center rounded-full transition-colors hover:bg-surface" aria-label="Volver">
             <BackIcon className="size-[18px]" />
           </button>
@@ -1590,7 +1590,7 @@ export function ChatConversation({
       )}
 
       {/* Messages */}
-      <div ref={scrollContainerRef} className="scrollbar-thin min-h-0 flex-1 overflow-x-hidden overflow-y-auto py-[var(--space-4)] pr-[var(--space-2)]" onClick={closeOverlays}>
+      <div ref={scrollContainerRef} className="scrollbar-thin min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-[var(--space-3)] py-[var(--space-4)] md:px-[var(--space-4)]" onClick={closeOverlays}>
         {loading ? (
           <div className="flex h-full items-center justify-center text-body-sm text-muted">Cargando...</div>
         ) : messages.length === 0 ? (
@@ -1705,7 +1705,7 @@ export function ChatConversation({
       </div>
 
       {/* Input area */}
-      <div className="border-t border-app pt-[var(--space-3)] pb-[var(--space-3)]">
+      <div className="border-t border-app px-[var(--space-3)] pb-[var(--space-3)] pt-[var(--space-3)] md:px-[var(--space-4)]">
         {replyingTo && (
           <div className="mb-[var(--space-2)] flex items-center gap-[var(--space-2)] rounded-[10px] border-l-2 border-[var(--text-primary)] bg-surface px-3 py-[8px]">
             <div className="min-w-0 flex-1">
@@ -2034,7 +2034,7 @@ function ChatInfoPanel({
   return (
     <div className={containerClassName ?? "relative flex h-[calc(100dvh-var(--space-20)-env(safe-area-inset-bottom))] flex-col md:h-[calc(100dvh-var(--space-16))]"}>
       {/* Header */}
-      <div className="flex items-center gap-[var(--space-2)] border-b border-app pb-[var(--space-3)]">
+      <div className="flex items-center gap-[var(--space-2)] border-b border-app px-[var(--space-3)] pb-[var(--space-3)] md:px-[var(--space-4)]">
         <button type="button" onClick={onBack} className="flex size-[32px] items-center justify-center rounded-full transition-colors hover:bg-surface" aria-label="Volver">
           <BackIcon className="size-[18px]" />
         </button>
@@ -2046,7 +2046,7 @@ function ChatInfoPanel({
       {/* Add members overlay */}
       {showAddMembers && (
         <div className="absolute inset-0 z-40 flex flex-col bg-app">
-          <div className="flex items-center gap-[var(--space-2)] border-b border-app py-[var(--space-3)]">
+          <div className="flex items-center gap-[var(--space-2)] border-b border-app px-[var(--space-3)] py-[var(--space-3)] md:px-[var(--space-4)]">
             <button type="button" onClick={() => setShowAddMembers(false)} className="flex size-[32px] items-center justify-center rounded-full transition-colors hover:bg-surface">
               <BackIcon className="size-[18px]" />
             </button>
