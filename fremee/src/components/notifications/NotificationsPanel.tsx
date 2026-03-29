@@ -302,13 +302,11 @@ export default function NotificationsPanel({ open, onClose, onRead, desktopPosit
         role="dialog"
         aria-label="Notificaciones"
         className={`fixed inset-0 z-50 flex h-dvh w-full flex-col bg-[var(--bg)] transition-transform duration-300 [transition-timing-function:var(--ease-standard)] md:inset-auto md:top-0 md:max-w-[360px] md:shadow-elev-3 ${
-          open
-            ? "translate-x-0"
-            : "translate-x-full md:translate-x-0"
+          open ? "translate-x-0" : "translate-x-full"
         } ${
           desktopPosition === "left"
-            ? `md:left-0 md:border-r md:border-[var(--border)] ${!open ? "md:-translate-x-full" : ""}`
-            : `md:right-0 md:border-l md:border-[var(--border)] ${!open ? "md:translate-x-full" : ""}`
+            ? `md:left-0 md:border-r md:border-[var(--border)] ${open ? "md:translate-x-0" : "md:-translate-x-full"}`
+            : `md:right-0 md:border-l md:border-[var(--border)] ${open ? "md:translate-x-0" : "md:translate-x-full"}`
         }`}
       >
         {/* Header */}
