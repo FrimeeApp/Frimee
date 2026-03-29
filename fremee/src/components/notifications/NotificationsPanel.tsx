@@ -288,33 +288,47 @@ export default function NotificationsPanel({ open, onClose, onRead, desktopPosit
 
   return (
     <>
-      {/* Backdrop — only on mobile */}
+      {/* Backdrop — only on desktop */}
       <div
-        className={`fixed inset-0 z-40 bg-black/40 transition-opacity duration-200 md:hidden ${
+        className={`fixed inset-0 z-40 bg-black/40 transition-opacity duration-200 hidden md:block ${
           open ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
         }`}
         aria-hidden="true"
       />
 
-      {/* Panel */}
+      {/* Panel — fullscreen on mobile, slide-in on desktop */}
       <div
         ref={panelRef}
         role="dialog"
         aria-label="Notificaciones"
-        className={`fixed top-0 z-50 flex h-dvh w-full max-w-[360px] flex-col bg-[var(--bg)] shadow-elev-3 transition-transform duration-300 [transition-timing-function:var(--ease-standard)] ${
+        className={`fixed inset-0 z-50 flex h-dvh w-full flex-col bg-[var(--bg)] transition-transform duration-300 [transition-timing-function:var(--ease-standard)] md:inset-auto md:top-0 md:max-w-[360px] md:shadow-elev-3 ${
+          open
+            ? "translate-x-0"
+            : "translate-x-full md:translate-x-0"
+        } ${
           desktopPosition === "left"
-            ? `left-0 border-r border-[var(--border)] ${open ? "translate-x-0" : "-translate-x-full"}`
-            : `right-0 border-l border-[var(--border)] ${open ? "translate-x-0" : "translate-x-full"}`
+            ? `md:left-0 md:border-r md:border-[var(--border)] ${!open ? "md:-translate-x-full" : ""}`
+            : `md:right-0 md:border-l md:border-[var(--border)] ${!open ? "md:translate-x-full" : ""}`
         }`}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border)]">
-          <h2 className="text-[18px] font-[var(--fw-medium)]">Notificaciones</h2>
+        <div className="flex items-center gap-[var(--space-3)] px-[var(--space-4)] py-[var(--space-3)] border-b border-[var(--border)]">
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Volver"
+            className="flex size-[36px] items-center justify-center rounded-full transition-colors hover:bg-surface md:hidden"
+          >
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[18px]">
+              <path d="M15 19l-7-7 7-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+          <h2 className="flex-1 text-[var(--font-h4)] font-[var(--fw-medium)] text-app">Notificaciones</h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Cerrar"
-            className="text-muted hover:text-app transition-colors"
+            className="hidden text-muted hover:text-app transition-colors md:block"
           >
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-5">
               <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
