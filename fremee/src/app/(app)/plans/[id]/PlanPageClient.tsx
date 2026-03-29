@@ -110,9 +110,11 @@ function PlusIcon({ className = "size-icon" }: { className?: string }) {
 function PlanDetailSkeleton() {
   return (
     <div className="min-h-dvh bg-app text-app">
-      <div className="relative mx-auto min-h-dvh max-w-[1440px]">
+      <div className="relative min-h-dvh w-full">
         <AppSidebar />
-        <main className="pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] transition-[padding] duration-[var(--duration-slow)] [transition-timing-function:var(--ease-standard)] md:py-0 md:pr-[var(--space-14)] md:pl-[102px]">
+        <main className="pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] transition-[padding] duration-[var(--duration-slow)] [transition-timing-function:var(--ease-standard)] md:py-0 md:pl-[102px]">
+          <div className="md:grid md:grid-cols-[minmax(88px,1fr)_minmax(0,1536px)_minmax(88px,1fr)] xl:grid-cols-[minmax(180px,1fr)_minmax(0,1280px)_minmax(180px,1fr)] 2xl:grid-cols-[minmax(240px,1fr)_minmax(0,1240px)_minmax(240px,1fr)]">
+            <div className="md:col-start-2">
 
           {/* Hero skeleton */}
           <div
@@ -154,6 +156,9 @@ function PlanDetailSkeleton() {
                 </div>
               </div>
             ))}
+          </div>
+
+            </div>
           </div>
 
         </main>
@@ -1200,10 +1205,12 @@ export default function PlanDetailPage() {
 
   return (
     <div className="min-h-dvh bg-app text-app">
-      <div className="relative mx-auto min-h-dvh max-w-[1440px]">
+      <div className="relative min-h-dvh w-full">
         <AppSidebar />
 
-        <main className="pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] transition-[padding] duration-[var(--duration-slow)] [transition-timing-function:var(--ease-standard)] md:py-0 md:pr-[var(--space-14)] md:pl-[102px]">
+        <main className="pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] transition-[padding] duration-[var(--duration-slow)] [transition-timing-function:var(--ease-standard)] md:py-0 md:pl-[102px]">
+          <div className="md:grid md:grid-cols-[minmax(88px,1fr)_minmax(0,1536px)_minmax(88px,1fr)] xl:grid-cols-[minmax(180px,1fr)_minmax(0,1280px)_minmax(180px,1fr)] 2xl:grid-cols-[minmax(240px,1fr)_minmax(0,1240px)_minmax(240px,1fr)]">
+            <div className="md:col-start-2">
 
           {/* ─── Hero ─── */}
           <div className="relative w-full overflow-hidden md:ml-0 md:[border-bottom-left-radius:var(--radius-card)] md:[border-bottom-right-radius:var(--radius-card)]" style={{ height: "clamp(260px, 40vh, 380px)" }}>
@@ -1472,7 +1479,7 @@ export default function PlanDetailPage() {
                             }`}
                           >
                             <div className="overflow-hidden">
-                              <div className="relative pl-[18px]">
+                              <div className="relative pl-0">
                                 {items.map((s, idx) => {
                                   const isLast = idx === items.length - 1;
                                   const nextTransporte = !isLast ? TRANSPORT_MAP[items[idx + 1]?.transporte_llegada ?? ""] : null;
@@ -1481,7 +1488,7 @@ export default function PlanDetailPage() {
                                   return (
                                     <div key={s.id}>
                                     <div className="relative flex gap-0 pb-[var(--space-2)]">
-                                      <div className="w-[104px] shrink-0 pr-[var(--space-3)] pt-[2px] text-right">
+                                      <div className="w-[82px] shrink-0 pr-[var(--space-2)] pt-[2px] text-right">
                                         {s.all_day ? (
                                           <span className="block text-[11px] font-[var(--fw-medium)] leading-[1.1] tracking-[0.01em] text-muted">
                                             Todo el día
@@ -1510,7 +1517,7 @@ export default function PlanDetailPage() {
                                         </div>
                                       </div>
 
-                                      <div className="min-w-0 flex-1 pl-[var(--space-4)]">
+                                      <div className="min-w-0 flex-1 pl-[var(--space-3)]">
                                         <div className="flex items-start gap-[6px]">
                                           <h4
                                             className="min-w-0 shrink text-body font-[var(--fw-semibold)]"
@@ -1561,7 +1568,7 @@ export default function PlanDetailPage() {
                                     {/* Transport connector between activities */}
                                     {!isLast && (
                                       <div className="relative flex gap-0 pb-[var(--space-4)]">
-                                        <div className="w-[104px] shrink-0 pr-[var(--space-3)]" />
+                                        <div className="w-[82px] shrink-0 pr-[var(--space-2)]" />
                                         <div className="relative flex w-[28px] shrink-0 justify-center">
                                           <div className="absolute left-1/2 top-0 bottom-0 w-[1.5px] -translate-x-1/2 bg-[var(--border)]" />
                                           {nextTransporte ? (
@@ -1570,7 +1577,7 @@ export default function PlanDetailPage() {
                                             </div>
                                           ) : null}
                                         </div>
-                                        <div className="min-w-0 flex-1 pl-[var(--space-4)]">
+                                        <div className="min-w-0 flex-1 pl-[var(--space-3)]">
                                         {!isPast && editingTransporteId === items[idx + 1].id ? (
                                           <div className="flex flex-wrap gap-[var(--space-2)]">
                                             {TRANSPORT_LLEGADA.map((t) => (
@@ -1924,6 +1931,9 @@ export default function PlanDetailPage() {
             )}
 
           </div>}
+
+            </div>
+          </div>
 
         </main>
       </div>
