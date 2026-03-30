@@ -123,7 +123,7 @@ function PlanDetailSkeleton() {
   return (
     <div className="min-h-dvh bg-app text-app">
       <div className="relative min-h-dvh w-full">
-        <main className="pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] md:py-0">
+        <main className="pb-[max(var(--space-6),env(safe-area-inset-bottom))] md:py-0">
           <div className="md:grid md:grid-cols-[minmax(88px,1fr)_minmax(0,1536px)_minmax(88px,1fr)] xl:grid-cols-[minmax(180px,1fr)_minmax(0,1280px)_minmax(180px,1fr)] 2xl:grid-cols-[minmax(240px,1fr)_minmax(0,1240px)_minmax(240px,1fr)]">
             <div className="md:col-start-2">
 
@@ -981,6 +981,7 @@ export default function PlanDetailPage() {
   const [subplanes, setSubplanes] = useState<SubplanRow[]>([]);
   const [selectedMapDay, setSelectedMapDay] = useState<string | null>(null);
   const [showMapFullscreen, setShowMapFullscreen] = useState(false);
+  const [routeSectionVisible, setRouteSectionVisible] = useState(false);
   const [collapsedDays, setCollapsedDays] = useState<Set<string>>(new Set());
   const [showAddSheet, setShowAddSheet] = useState(false);
   const [addSheetInitialTitulo, setAddSheetInitialTitulo] = useState<string | undefined>();
@@ -998,6 +999,7 @@ export default function PlanDetailPage() {
   const [inviteSendingIds, setInviteSendingIds] = useState<Set<string>>(new Set());
   const [inviteLinkCopied, setInviteLinkCopied] = useState(false);
   const [showQr, setShowQr] = useState(false);
+  const routeSectionRef = useRef<HTMLDivElement | null>(null);
 
   const expenseSummary = useMemo(() => {
     const confirmedExpenses = gastos.filter((gasto) => gasto.estado === "CONFIRMADO");
@@ -1105,6 +1107,44 @@ export default function PlanDetailPage() {
     if (!routeHasRoute) return null;
     return `https://waze.com/ul?q=${encodeURIComponent(routeStops[routeStops.length - 1])}&navigate=yes`;
   }, [routeHasRoute, routeStops]);
+
+  useEffect(() => {
+    if (activeTab !== "itinerario") {
+      setRouteSectionVisible(false);
+      return;
+    }
+
+    const target = routeSectionRef.current;
+    if (!target || typeof IntersectionObserver === "undefined") return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setRouteSectionVisible(entry.isIntersecting);
+      },
+      {
+        threshold: 0.15,
+        rootMargin: "0px 0px -8% 0px",
+      },
+    );
+
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [activeTab, subplanes.length]);
+
+  useEffect(() => {
+    if (!showMapFullscreen) return;
+
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousHtmlOverflow;
+    };
+  }, [showMapFullscreen]);
 
   const visibleBalances = useMemo(() => {
     const scopedBalances =
@@ -1361,7 +1401,7 @@ export default function PlanDetailPage() {
     <div className="min-h-dvh bg-app text-app">
       <div className="relative min-h-dvh w-full">
         <AppSidebar hideMobileNav={true} />
-        <main className="pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] md:py-0">
+        <main className="pb-[max(var(--space-6),env(safe-area-inset-bottom))] md:py-0">
           <div className="md:grid md:grid-cols-[minmax(88px,1fr)_minmax(0,1536px)_minmax(88px,1fr)] xl:grid-cols-[minmax(180px,1fr)_minmax(0,1280px)_minmax(180px,1fr)] 2xl:grid-cols-[minmax(240px,1fr)_minmax(0,1240px)_minmax(240px,1fr)]">
             <div className="md:col-start-2">
 
@@ -1389,7 +1429,7 @@ export default function PlanDetailPage() {
 
             {/* Title & meta */}
             <div className="absolute bottom-0 left-0 right-0 px-[var(--page-margin-x)] pb-[var(--space-6)]">
-              <h1 className="text-[clamp(24px,5vw,36px)] font-[var(--fw-bold)] leading-[1.1] tracking-[-0.02em] text-white">
+              <h1 className="text-[clamp(24px,5vw,36px)] font-[var(--fw-medium)] leading-[1.1] tracking-[-0.01em] text-white">
                 {plan.titulo}
               </h1>
               {plan.descripcion && (
@@ -1532,7 +1572,7 @@ export default function PlanDetailPage() {
           )}
 
           {/* ─── Content ─── */}
-          {activeTab !== "chat" && <div className="px-[var(--page-margin-x)] pt-[var(--space-8)] pb-[var(--space-16)]">
+          {activeTab !== "chat" && <div className="px-[var(--page-margin-x)] pt-[var(--space-8)] pb-[var(--space-3)] md:pb-[var(--space-16)]">
 
             {activeTab === "itinerario" && (
               <div
@@ -1566,7 +1606,7 @@ export default function PlanDetailPage() {
                       {groupByDay(subplanes).map(([dateKey, items]) => (
                         <div key={dateKey} className={collapsedDays.has(dateKey) ? "mb-[var(--space-4)]" : "mb-[var(--space-6)]"}>
                           {/* Day header */}
-                          <div className={`border-b border-app ${collapsedDays.has(dateKey) ? "pb-[var(--space-4)]" : "mb-[var(--space-5)] pb-[var(--space-4)]"}`}>
+                          <div className={`-mx-[var(--page-margin-x)] border-b border-app px-[var(--page-margin-x)] md:mx-0 md:px-0 ${collapsedDays.has(dateKey) ? "pb-[var(--space-4)]" : "mb-[var(--space-5)] pb-[var(--space-4)]"}`}>
                             <div className="flex items-start gap-[var(--space-3)]">
                               <div className="min-w-0 flex items-start gap-[6px]">
                                 <button
@@ -1832,7 +1872,7 @@ export default function PlanDetailPage() {
 
                   {/* Route map card */}
                   {routeShouldShowMap && (
-                    <div className="mb-[var(--space-8)]">
+                    <div ref={routeSectionRef} className="mb-[var(--space-8)]">
                       <div className="mb-[var(--space-3)] flex items-center justify-between">
                         <h3 className="text-body font-[var(--fw-semibold)]" style={{ fontFamily: "var(--font-inter), sans-serif" }}>Ruta del Día</h3>
                       </div>
@@ -2019,31 +2059,12 @@ export default function PlanDetailPage() {
                             </div>
                           </div>
                         ) : null}
-
-                        <div className="mt-[var(--space-4)]">
-                          <button
-                            type="button"
-                            onClick={() => setShowAddGastoSheet(true)}
-                            className="w-full rounded-full bg-primary-token py-[10px] text-body-sm font-[var(--fw-semibold)] text-contrast-token transition-opacity hover:opacity-85"
-                          >
-                            Añadir gasto
-                          </button>
-                        </div>
                       </>
                     ) : (
                       <>
                         <p className="mt-[var(--space-2)] text-body-sm text-muted">
                           Aún no hay gastos confirmados en este plan.
                         </p>
-                        <div className="mt-[var(--space-4)]">
-                          <button
-                            type="button"
-                            onClick={() => setShowAddGastoSheet(true)}
-                            className="w-full rounded-full bg-primary-token py-[10px] text-body-sm font-[var(--fw-semibold)] text-contrast-token transition-opacity hover:opacity-85"
-                          >
-                            Añadir gasto
-                          </button>
-                        </div>
                       </>
                     )}
                   </div>
@@ -2268,10 +2289,58 @@ export default function PlanDetailPage() {
       </div>
 
       {showMapFullscreen && routeShouldShowMap && plan && (
-        <div className="fixed inset-0 z-[85] bg-app">
-          <div className="flex h-full flex-col px-[var(--page-margin-x)] pb-[max(var(--space-4),env(safe-area-inset-bottom))] pt-[calc(env(safe-area-inset-top)+var(--space-4))]">
+        <div className="fixed inset-0 z-[85] bg-app overscroll-none">
+          <div className="relative h-full w-full">
+            <DayRouteMap
+              subplanes={subplanes}
+              selectedDate={activeRouteDay}
+              ubicacionNombre={plan.ubicacion_nombre ?? undefined}
+              onViajeComputed={handleViajeComputed}
+              heightClassName="h-full"
+              containerClassName="h-full"
+            />
+            <div className="absolute left-[max(var(--space-3),env(safe-area-inset-left))] top-[calc(env(safe-area-inset-top)+var(--space-3))] z-10 flex items-center gap-[var(--space-2)]">
+              {routeHasRoute && routeMapsUrl && (
+                <a
+                  href={routeMapsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="relative flex h-[38px] w-[38px] items-center justify-center rounded-full border border-app bg-app/88 shadow-elev-2 backdrop-blur-sm transition-transform hover:scale-[1.04]"
+                  title="Abrir ruta en Google Maps"
+                >
+                  <Image src="/brands/google-maps.svg" alt="Google Maps" width={20} height={20} className="size-[20px]" />
+                  <span className="absolute right-[-3px] top-[-3px] flex h-[15px] w-[15px] items-center justify-center rounded-full border border-app bg-app text-app shadow-[0_2px_8px_rgba(0,0,0,0.18)]">
+                    <ExternalLinkIcon className="size-[8px]" />
+                  </span>
+                </a>
+              )}
+              {routeHasRoute && routeWazeUrl && (
+                <a
+                  href={routeWazeUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="relative flex h-[38px] w-[38px] items-center justify-center rounded-full border border-app bg-app/88 shadow-elev-2 backdrop-blur-sm transition-transform hover:scale-[1.04]"
+                  title="Abrir ruta en Waze"
+                >
+                  <Image src="/brands/waze-icon.svg" alt="Waze" width={20} height={20} className="size-[20px]" />
+                  <span className="absolute right-[-3px] top-[-3px] flex h-[15px] w-[15px] items-center justify-center rounded-full border border-app bg-app text-app shadow-[0_2px_8px_rgba(0,0,0,0.18)]">
+                    <ExternalLinkIcon className="size-[8px]" />
+                  </span>
+                </a>
+              )}
+            </div>
+            <div className="absolute right-[max(var(--space-3),env(safe-area-inset-right))] top-[calc(env(safe-area-inset-top)+var(--space-3))] z-10 flex items-center gap-[var(--space-2)]">
+              <button
+                type="button"
+                onClick={() => setShowMapFullscreen(false)}
+                className="flex h-[38px] w-[38px] items-center justify-center rounded-full border border-white/12 bg-black/58 text-white shadow-[0_8px_20px_rgba(0,0,0,0.34)] backdrop-blur-sm transition-colors hover:bg-black/66"
+                aria-label="Cerrar mapa"
+              >
+                <X className="size-[18px]" strokeWidth={1.9} />
+              </button>
+            </div>
             {routeDayGroups.length > 1 && (
-              <div className="mb-[var(--space-3)] flex flex-wrap gap-[var(--space-2)]">
+              <div className="absolute inset-x-[var(--page-margin-x)] bottom-[calc(env(safe-area-inset-bottom)+var(--space-4))] z-10 flex flex-wrap justify-center gap-[var(--space-2)]">
                 {routeDayGroups.map(([dateKey]) => {
                   const d = new Date(dateKey);
                   const label = `${d.getDate()} ${["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"][d.getMonth()]}`;
@@ -2281,7 +2350,7 @@ export default function PlanDetailPage() {
                       key={dateKey}
                       type="button"
                       onClick={() => setSelectedMapDay(dateKey)}
-                      className={`rounded-chip border px-[var(--space-3)] py-[4px] text-caption transition-colors ${isActive ? "border-primary-token bg-primary-token/10 text-primary-token" : "border-app text-muted hover:text-app"}`}
+                      className={`rounded-full px-[var(--space-3)] py-[5px] text-caption font-[var(--fw-medium)] shadow-[0_2px_8px_rgba(0,0,0,0.25)] backdrop-blur-md transition-colors ${isActive ? "bg-primary-token text-contrast-token" : "bg-app/82 text-app hover:bg-app"}`}
                     >
                       {label}
                     </button>
@@ -2289,59 +2358,25 @@ export default function PlanDetailPage() {
                 })}
               </div>
             )}
-
-            <div className="relative min-h-0 flex-1">
-              <DayRouteMap
-                subplanes={subplanes}
-                selectedDate={activeRouteDay}
-                ubicacionNombre={plan.ubicacion_nombre ?? undefined}
-                onViajeComputed={handleViajeComputed}
-                heightClassName="h-full"
-                containerClassName="h-full"
-              />
-              <div className="absolute left-[var(--space-3)] top-[var(--space-3)] z-10 flex items-center gap-[var(--space-2)]">
-                {routeHasRoute && routeMapsUrl && (
-                  <a
-                    href={routeMapsUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="relative flex h-[38px] w-[38px] items-center justify-center rounded-full border border-app bg-app/88 shadow-elev-2 backdrop-blur-sm transition-transform hover:scale-[1.04]"
-                    title="Abrir ruta en Google Maps"
-                  >
-                    <Image src="/brands/google-maps.svg" alt="Google Maps" width={20} height={20} className="size-[20px]" />
-                    <span className="absolute right-[-3px] top-[-3px] flex h-[15px] w-[15px] items-center justify-center rounded-full border border-app bg-app text-app shadow-[0_2px_8px_rgba(0,0,0,0.18)]">
-                      <ExternalLinkIcon className="size-[8px]" />
-                    </span>
-                  </a>
-                )}
-                {routeHasRoute && routeWazeUrl && (
-                  <a
-                    href={routeWazeUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="relative flex h-[38px] w-[38px] items-center justify-center rounded-full border border-app bg-app/88 shadow-elev-2 backdrop-blur-sm transition-transform hover:scale-[1.04]"
-                    title="Abrir ruta en Waze"
-                  >
-                    <Image src="/brands/waze-icon.svg" alt="Waze" width={20} height={20} className="size-[20px]" />
-                    <span className="absolute right-[-3px] top-[-3px] flex h-[15px] w-[15px] items-center justify-center rounded-full border border-app bg-app text-app shadow-[0_2px_8px_rgba(0,0,0,0.18)]">
-                      <ExternalLinkIcon className="size-[8px]" />
-                    </span>
-                  </a>
-                )}
-              </div>
-              <div className="absolute right-[var(--space-3)] top-[var(--space-3)] z-10 flex items-center gap-[var(--space-2)]">
-                <button
-                  type="button"
-                  onClick={() => setShowMapFullscreen(false)}
-                  className="flex h-[38px] w-[38px] items-center justify-center rounded-full border border-white/12 bg-black/58 text-white shadow-[0_8px_20px_rgba(0,0,0,0.34)] backdrop-blur-sm transition-colors hover:bg-black/66"
-                  aria-label="Cerrar mapa"
-                >
-                  <X className="size-[18px]" strokeWidth={1.9} />
-                </button>
-              </div>
-            </div>
           </div>
         </div>
+      )}
+
+      {!isPast && isAdmin && activeTab === "itinerario" && subplanes.length > 0 && !routeSectionVisible && (
+        <button
+          type="button"
+          onClick={() => {
+            setEditingSubplan(null);
+            setAddSheetInitialTitulo(undefined);
+            setAddSheetInitialDate(undefined);
+            setShowAddSheet(true);
+          }}
+          className="fixed bottom-[calc(var(--space-6)+env(safe-area-inset-bottom))] right-[var(--page-margin-x)] z-[65] flex h-[54px] w-[54px] items-center justify-center rounded-full bg-primary-token text-contrast-token shadow-[0_16px_32px_rgba(0,0,0,0.24)] transition-transform hover:scale-[1.03] hover:opacity-90 md:hidden"
+          aria-label="Añadir actividad"
+          title="Añadir actividad"
+        >
+          <PlusIcon className="size-[18px]" />
+        </button>
       )}
 
       {showAddSheet && plan && (

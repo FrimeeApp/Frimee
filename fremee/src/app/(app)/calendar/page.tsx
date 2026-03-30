@@ -53,18 +53,21 @@ export default function CalendarPage() {
 }
 
 function CalendarPageInner() {
-  const { user, session, googleProviderToken, settings, loading: authLoading, profile } = useAuth();
+  const { user, session, googleProviderToken, settings, loading: authLoading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const createFromQuery = searchParams.get("create");
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const navigateToPlan = (id: number) => {
-    const isCapacitor = typeof window !== "undefined" && !!(window as any).Capacitor?.isNativePlatform?.();
+    const appWindow = window as Window & {
+      Capacitor?: {
+        isNativePlatform?: () => boolean;
+      };
+    };
+    const isCapacitor = typeof window !== "undefined" && !!appWindow.Capacitor?.isNativePlatform?.();
     router.push(isCapacitor ? `/plans/static?id=${id}` : `/plans/${id}`);
   };
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   const [loading, setLoading] = useState(true);
-  const [backgroundRefreshing, setBackgroundRefreshing] = useState(false);
 
   const [syncingGoogle, setSyncingGoogle] = useState(false);
   const [plans, setPlans] = useState<FeedPlanItemDto[]>([]);
@@ -504,7 +507,7 @@ function CalendarPageInner() {
                 <CalendarPageSkeleton />
               ) : (
                 <>
-                  <aside className={`md:col-start-2 md:row-start-1 flex flex-col overflow-hidden rounded-[10px] border border-app bg-surface shadow-[0_14px_32px_rgb(28_28_34_/_0.08)] md:rounded-[10px] md:border-app md:bg-surface md:shadow-elev-1 md:sticky md:top-[var(--space-6)] md:self-start transition-all duration-300 ${calendarOpen ? (viewMode === "day" ? "h-[430px] md:h-[420px]" : "md:h-auto") : "h-auto md:h-auto"}`}>
+                  <aside className={`md:col-start-2 md:row-start-1 flex flex-col overflow-hidden rounded-[10px] border border-app bg-surface shadow-[0_14px_32px_rgb(28_28_34_/_0.08)] md:rounded-[10px] md:border-app md:bg-surface md:shadow-elev-1 md:sticky md:top-[var(--space-6)] md:self-start transition-all [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] ${calendarOpen ? "duration-[720ms]" : "duration-[560ms]"} ${calendarOpen ? (viewMode === "day" ? "h-[430px] md:h-[420px]" : "md:h-auto") : "h-auto md:h-auto"}`}>
                     <button
                       type="button"
                       onClick={() => setCalendarOpen((prev) => !prev)}
@@ -532,7 +535,7 @@ function CalendarPageInner() {
                     </button>
                     <div
                       id="calendar-mobile-panel"
-                      className={`min-h-0 flex-1 overflow-hidden px-[var(--space-4)] transition-[max-height,opacity,padding] duration-300 ease-out md:block md:p-[var(--space-4)] ${
+                      className={`min-h-0 flex-1 overflow-hidden px-[var(--space-4)] transition-[max-height,opacity,padding] [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] ${calendarOpen ? "duration-[720ms]" : "duration-[560ms]"} md:block md:p-[var(--space-4)] ${
                         calendarOpen
                           ? "max-h-[860px] opacity-100 pb-[var(--space-4)]"
                           : "max-h-0 opacity-0 pb-0 md:max-h-none md:opacity-100 md:pb-[var(--space-4)]"
@@ -772,12 +775,15 @@ function CalendarPageInner() {
                     <div className="grid grid-cols-1 gap-[var(--space-3)] sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2">
                       {filteredPlans.map((plan) => {
                         const creatorLabel = plan.creator.id === user?.id ? "Creado por ti" : `De ${plan.creator.name}`;
-                        const scheduleLabel = formatPlanSchedule(plan);
                         const statusLabel = tab === "active" ? "Activo" : "Finalizado";
                         const statusClass =
                           tab === "active"
                             ? "border-[color-mix(in_srgb,var(--success)_35%,transparent)] bg-[color-mix(in_srgb,var(--success)_20%,transparent_80%)] text-success-token"
                             : "border-app bg-surface/90 text-muted";
+                        const heroStatusClass =
+                          tab === "active"
+                            ? "border-[color-mix(in_srgb,var(--success)_40%,transparent)] bg-[color-mix(in_srgb,var(--success)_26%,rgba(17,17,17,0.56)_74%)] text-[var(--success)] backdrop-blur-sm"
+                            : "border-white/20 bg-[rgba(17,17,17,0.48)] text-white/78 backdrop-blur-sm";
 
                         return (
                           <article
@@ -794,7 +800,7 @@ function CalendarPageInner() {
                               }}
                             >
                               <span
-                                className={`absolute right-3 top-3 hidden rounded-chip border px-2.5 py-1 text-[11px] font-[var(--fw-medium)] leading-none lg:inline-flex ${statusClass}`}
+                                className={`absolute right-3 top-3 hidden rounded-chip border px-2.5 py-1 text-[11px] font-[var(--fw-medium)] leading-none lg:inline-flex ${heroStatusClass}`}
                               >
                                 {statusLabel}
                               </span>
@@ -814,18 +820,35 @@ function CalendarPageInner() {
                               </button>
                             </div>
 
-                            <div className="flex min-w-0 flex-1 items-center justify-between gap-2 p-[var(--space-3)] lg:items-end lg:p-[var(--space-4)]">
-                              <div className="min-w-0">
-                                <h2 className="truncate text-[18px] font-[var(--fw-medium)] leading-[1.2] tracking-[0.03em] text-app lg:text-[24px] lg:font-[var(--fw-medium)] lg:leading-[1.15]">
+                            <div className="flex min-w-0 flex-1 p-[var(--space-3)] lg:p-[var(--space-4)]" style={{ fontFamily: "var(--font-inter), sans-serif" }}>
+                              <div className="flex min-w-0 flex-1 flex-col">
+                                <h2
+                                  className="truncate text-[16px] font-[var(--fw-medium)] leading-[1.2] tracking-[0.012em] text-app sm:text-[17px] lg:text-[24px] lg:font-[var(--fw-medium)] lg:leading-[1.15] lg:tracking-[0.02em]"
+                                  style={{ fontFamily: "var(--font-inter), sans-serif" }}
+                                >
                                   {plan.title}
                                 </h2>
-                                <p className="mt-0.5 text-caption text-muted lg:mt-1 lg:text-body-sm">{formatDateRange(plan.startsAt, plan.endsAt)}</p>
-                                <p className="mt-0.5 truncate text-caption text-tertiary lg:mt-1">{creatorLabel}</p>
+                                <p
+                                  className="mt-0.5 text-caption text-muted lg:mt-1 lg:text-body-sm"
+                                  style={{ fontFamily: "var(--font-inter), sans-serif" }}
+                                >
+                                  {formatDateRange(plan.startsAt, plan.endsAt)}
+                                </p>
+                                <div className="mt-1 flex items-end justify-between gap-2">
+                                  <p
+                                    className="min-w-0 truncate text-caption text-tertiary"
+                                    style={{ fontFamily: "var(--font-inter), sans-serif" }}
+                                  >
+                                    {creatorLabel}
+                                  </p>
+                                  <span
+                                    className={`shrink-0 rounded-chip border px-2 py-1 text-[10px] font-[var(--fw-medium)] leading-none lg:hidden ${statusClass}`}
+                                    style={{ fontFamily: "var(--font-inter), sans-serif" }}
+                                  >
+                                    {statusLabel}
+                                  </span>
+                                </div>
                               </div>
-
-                              <span className={`shrink-0 rounded-chip border px-2 py-1 text-[10px] font-[var(--fw-medium)] leading-none lg:rounded-[10px] lg:px-3 lg:py-2 lg:text-[12px] ${statusClass}`}>
-                                {statusLabel}
-                              </span>
                             </div>
                           </article>
                         );
@@ -950,11 +973,6 @@ function formatDateRange(startsAtIso: string, endsAtIso: string) {
   return `${startDate} - ${endDate}`;
 }
 
-function formatPlanSchedule(plan: FeedPlanItemDto) {
-  if (plan.allDay) return "Todo el dia";
-  return formatTimeRange(plan.startsAt, plan.endsAt);
-}
-
 function formatTimeRange(startsAtIso: string, endsAtIso: string) {
   const startsAt = new Date(startsAtIso);
   const endsAt = new Date(endsAtIso);
@@ -969,13 +987,6 @@ function formatDayHeading(date: Date) {
     month: "long",
     year: "numeric",
   });
-}
-
-function formatWeekdayShort(date: Date) {
-  return date
-    .toLocaleDateString("es-ES", { weekday: "short" })
-    .replace(".", "")
-    .toUpperCase();
 }
 
 function getMinutesWithinDay(iso: string, day: Date, clampToEnd = false) {
