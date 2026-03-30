@@ -821,6 +821,8 @@
 
 .rdp-month {
   position: relative;
+  /* caption(28px) + margin(8px) + weekdays row + 6 week rows = prevents height jump between months */
+  min-height: calc(28px + var(--space-2) + (7 * var(--rdp-cell)));
 }
 
 .rdp-month_caption,
