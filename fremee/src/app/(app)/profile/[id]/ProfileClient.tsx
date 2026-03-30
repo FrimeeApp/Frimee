@@ -88,7 +88,7 @@ export default function ProfilePage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!id) return;
+    if (!id || authLoading) return;
 
     const load = async () => {
       setLoading(true);
@@ -134,7 +134,7 @@ export default function ProfilePage() {
     };
 
     load();
-  }, [id, isOwnProfile, myProfile?.id]);
+  }, [id, authLoading, isOwnProfile, myProfile?.id]);
 
   const handleTabChange = async (tab: "planes" | "guardados") => {
     setActiveTab(tab);
@@ -263,7 +263,6 @@ export default function ProfilePage() {
 
   const avatarLabel = (profileData.nombre.trim()[0] || "U").toUpperCase();
   const finishedPlans = plans.filter((p) => new Date(p.endsAt) < new Date());
-  const plansWithCover = plans.filter((p) => p.coverImage);
 
   return (
     <div className="min-h-dvh bg-app text-app">
@@ -395,7 +394,7 @@ export default function ProfilePage() {
               <div className="mt-[var(--space-5)] flex gap-[var(--space-8)]">
                 <div className="flex flex-col items-center">
                   <span className="text-[18px] font-[600] leading-[1.2]" style={{ fontFamily: "var(--font-inter), sans-serif" }}>
-                    {finishedPlans.length}
+                    {plans.length}
                   </span>
                   <span className="text-body-sm text-muted">Planes</span>
                 </div>
@@ -461,23 +460,23 @@ export default function ProfilePage() {
             {/* Grid */}
             <div className="mt-[var(--space-5)]">
               {activeTab === "planes" ? (
-                plansWithCover.length === 0 ? (
+                plans.length === 0 ? (
                   <p className="py-[var(--space-6)] text-center text-body-sm text-muted">
                     {isOwnProfile ? "Aun no tienes planes publicados." : "No hay planes publicos."}
                   </p>
                 ) : (
-                  <PlanGrid plans={plansWithCover} onPlanClick={(planId) => router.push(`/plans/${planId}`)} />
+                  <PlanGrid plans={plans} onPlanClick={(planId) => router.push(`/plans/${planId}`)} />
                 )
               ) : loadingSaved ? (
                 <div className="py-[var(--space-6)] flex justify-center">
                   <div className="size-[20px] animate-spin rounded-full border-2 border-[var(--text-primary)] border-t-transparent" />
                 </div>
-              ) : savedPlans.filter((p) => p.coverImage).length === 0 ? (
+              ) : savedPlans.length === 0 ? (
                 <p className="py-[var(--space-6)] text-center text-body-sm text-muted">
                   Aun no has guardado ningun plan.
                 </p>
               ) : (
-                <PlanGrid plans={savedPlans.filter((p) => p.coverImage)} onPlanClick={(planId) => router.push(`/plans/${planId}`)} />
+                <PlanGrid plans={savedPlans} onPlanClick={(planId) => router.push(`/plans/${planId}`)} />
               )}
             </div>
           </div>
@@ -566,11 +565,19 @@ function PlanGrid({ plans, onPlanClick }: { plans: FeedPlanItemDto[]; onPlanClic
             className="group relative cursor-pointer overflow-hidden rounded-[6px]"
             onClick={() => onPlanClick?.(plan.id)}
           >
-            <img
-              src={plan.coverImage!}
-              alt={plan.title}
-              className="w-full object-cover transition-transform duration-300 group-hover:scale-105"
-            />
+            {plan.coverImage && (
+              <img
+                src={plan.coverImage}
+                alt={plan.title}
+                className="w-full object-cover transition-transform duration-300 group-hover:scale-105"
+              />
+            )}
+            {!plan.coverImage && <div className="aspect-[4/3] w-full bg-black" />}
+            {new Date(plan.endsAt) < new Date() && (
+              <div className="absolute right-2 top-2 rounded-full bg-black/50 px-2 py-[3px] text-[10px] font-[var(--fw-medium)] leading-tight text-white/90 backdrop-blur-sm">
+                Finalizado
+              </div>
+            )}
             <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-3 pb-3 pt-6">
               <p className="text-body-sm font-[var(--fw-medium)] leading-tight text-white">
                 {plan.title}

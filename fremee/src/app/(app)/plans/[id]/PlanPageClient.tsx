@@ -22,6 +22,7 @@ import AddGastoSheet from "@/components/plans/AddGastoSheet";
 import { fetchActiveFriends, type PublicUserProfileRow } from "@/services/api/endpoints/users.endpoint";
 import { insertNotificacion } from "@/services/api/repositories/notifications.repository";
 import { QRCodeSVG } from "qrcode.react";
+import AppSidebar from "@/components/common/AppSidebar";
 
 type Tab = "itinerario" | "gastos" | "chat";
 type PlanExpenseScope = "group" | "mine";
@@ -1359,6 +1360,7 @@ export default function PlanDetailPage() {
   return (
     <div className="min-h-dvh bg-app text-app">
       <div className="relative min-h-dvh w-full">
+        <AppSidebar hideMobileNav={true} />
         <main className="pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] md:py-0">
           <div className="md:grid md:grid-cols-[minmax(88px,1fr)_minmax(0,1536px)_minmax(88px,1fr)] xl:grid-cols-[minmax(180px,1fr)_minmax(0,1280px)_minmax(180px,1fr)] 2xl:grid-cols-[minmax(240px,1fr)_minmax(0,1240px)_minmax(240px,1fr)]">
             <div className="md:col-start-2">
