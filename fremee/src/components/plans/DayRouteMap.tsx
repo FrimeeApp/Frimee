@@ -73,7 +73,7 @@ export default function DayRouteMap({
   selectedDate,
   ubicacionNombre,
   onViajeComputed,
-  heightClassName = "h-[240px]",
+  heightClassName = "h-[300px] md:h-[240px]",
   containerClassName = "",
 }: Props) {
   const mapRef = useRef<HTMLDivElement>(null);
@@ -292,7 +292,7 @@ export default function DayRouteMap({
 
   if (points.length < 2) {
     return (
-      <div className={`overflow-hidden rounded-card border border-app ${containerClassName}`}>
+      <div className={`overflow-hidden ${containerClassName ?? "rounded-card border border-app"}`}>
         <div className={`relative w-full bg-surface-inset ${heightClassName}`}>
           <div ref={fallbackMapRef} className="absolute inset-0" />
           {loading && (
@@ -311,7 +311,7 @@ export default function DayRouteMap({
   }
 
   return (
-    <div className={`overflow-hidden rounded-card border border-app ${containerClassName}`}>
+    <div className={`overflow-hidden ${containerClassName ?? "rounded-card border border-app"}`}>
       {/* Wrapper: mapRef is a leaf div React never renders children into */}
       <div className={`relative w-full bg-surface-inset ${heightClassName}`}>
         <div ref={mapRef} className="absolute inset-0" />
