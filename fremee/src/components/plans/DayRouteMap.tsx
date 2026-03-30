@@ -9,6 +9,8 @@ type Props = {
   selectedDate: string; // "YYYY-MM-DD"
   ubicacionNombre?: string; // plan destination used as fallback map center
   onViajeComputed?: (subplanId: number, duracion: string, distancia: string, polyline: string) => void;
+  heightClassName?: string;
+  containerClassName?: string;
 };
 
 function isoDateOnly(iso: string) { return iso.slice(0, 10); }
@@ -33,7 +35,7 @@ async function geocode(address: string): Promise<{ lat: number; lng: number } | 
   return new Promise((resolve) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const geocoder = new (window as any).google.maps.Geocoder();
-    geocoder.geocode({ address }, (results: any, status: string) => {
+    geocoder.geocode({ address }, (results: Array<{ geometry: { location: { lat: () => number; lng: () => number } } }> | null, status: string) => {
       if (status !== "OK" || !results?.[0]) { resolve(null); return; }
       const loc = results[0].geometry.location;
       resolve({ lat: loc.lat(), lng: loc.lng() });
@@ -66,11 +68,14 @@ const darkMapStyles = [
   { featureType: "water", elementType: "all", stylers: [{ color: "#aee0f4" }] },
 ];
 
-const TIPO_ICON: Record<string, string> = {
-  VUELO: "✈️", BARCO: "🚢", TREN: "🚆", BUS: "🚌", COCHE: "🚗",
-};
-
-export default function DayRouteMap({ subplanes, selectedDate, ubicacionNombre, onViajeComputed }: Props) {
+export default function DayRouteMap({
+  subplanes,
+  selectedDate,
+  ubicacionNombre,
+  onViajeComputed,
+  heightClassName = "h-[240px]",
+  containerClassName = "",
+}: Props) {
   const mapRef = useRef<HTMLDivElement>(null);
   const fallbackMapRef = useRef<HTMLDivElement>(null);
   const renderGenRef = useRef(0); // increments on each render attempt; stale renders abort
@@ -287,8 +292,8 @@ export default function DayRouteMap({ subplanes, selectedDate, ubicacionNombre, 
 
   if (points.length < 2) {
     return (
-      <div className="overflow-hidden rounded-card border border-app">
-        <div className="relative h-[240px] w-full bg-surface-inset">
+      <div className={`overflow-hidden rounded-card border border-app ${containerClassName}`}>
+        <div className={`relative w-full bg-surface-inset ${heightClassName}`}>
           <div ref={fallbackMapRef} className="absolute inset-0" />
           {loading && (
             <div className="absolute inset-0 flex items-center justify-center bg-surface-inset text-body-sm text-muted">
@@ -306,9 +311,9 @@ export default function DayRouteMap({ subplanes, selectedDate, ubicacionNombre, 
   }
 
   return (
-    <div className="overflow-hidden rounded-card border border-app">
+    <div className={`overflow-hidden rounded-card border border-app ${containerClassName}`}>
       {/* Wrapper: mapRef is a leaf div React never renders children into */}
-      <div className="relative h-[240px] w-full bg-surface-inset">
+      <div className={`relative w-full bg-surface-inset ${heightClassName}`}>
         <div ref={mapRef} className="absolute inset-0" />
         {loading && (
           <div className="absolute inset-0 flex items-center justify-center bg-surface-inset text-body-sm text-muted">
