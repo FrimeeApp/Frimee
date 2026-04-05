@@ -332,7 +332,7 @@ function MisGastosContent() {
           className={`px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-4)] transition-[padding] duration-[var(--duration-slow)] [transition-timing-function:var(--ease-standard)] md:py-[var(--space-8)] md:pr-[var(--space-14)]`}
         >
           <section className="mx-auto w-full max-w-[860px]">
-            <div className="mb-[var(--space-5)] grid grid-cols-1 gap-[var(--space-3)] sm:grid-cols-3">
+            <div className="mb-[var(--space-5)] grid grid-cols-3">
               <KpiCard
                 label="Te deben"
                 value={formatAmount(kpis.owedToYou)}
@@ -357,57 +357,10 @@ function MisGastosContent() {
               />
             </div>
 
-            {planOptions.length > 0 && (
-              <div className="mb-[var(--space-5)]">
-                <label className="mb-[var(--space-2)] block text-caption font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
-                  Filtrar por plan
-                </label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      className="flex h-[44px] w-full max-w-[360px] items-center justify-between rounded-[12px] border border-app bg-surface px-[14px] text-left text-body-sm font-[var(--fw-medium)] text-app transition-colors hover:bg-surface-inset"
-                    >
-                      <span className="min-w-0 truncate">
-                        {selectedPlanName ?? "Todos los planes"}
-                      </span>
-                      <div className="ml-[var(--space-3)] flex shrink-0 items-center gap-[var(--space-2)]">
-                        <span className="inline-flex min-w-[24px] items-center justify-center rounded-full bg-[var(--primary)] px-1.5 py-[2px] text-[11px] font-[var(--fw-semibold)] text-[var(--contrast)]">
-                          {filteredVisibleItems.length}
-                        </span>
-                        <svg viewBox="0 0 24 24" fill="none" className="size-[18px] text-muted" aria-hidden="true">
-                          <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      </div>
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent align="start" className="w-[min(360px,calc(100vw-32px))] p-[var(--space-2)]">
-                    <div className="space-y-[2px]">
-                      <PlanFilterOption
-                        label="Todos los planes"
-                        count={visibleItems.length}
-                        active={selectedPlanId === "all"}
-                        onClick={() => setSelectedPlanId("all")}
-                      />
-                      {planOptions.map((plan) => (
-                        <PlanFilterOption
-                          key={plan.id}
-                          label={plan.name}
-                          count={visibleItems.filter((item) => item.planId === plan.id).length}
-                          active={selectedPlanId === plan.id}
-                          onClick={() => setSelectedPlanId(plan.id)}
-                        />
-                      ))}
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              </div>
-            )}
-
-            {/* Tabs */}
+            {/* Tabs + filtro plan */}
             <div
               ref={tabRowRef}
-              className="relative mb-[var(--space-5)] flex gap-[var(--space-4)] border-b border-app pb-[var(--space-2)] text-body text-muted"
+              className="relative mb-[var(--space-3)] mt-[var(--space-5)] sm:mt-[var(--space-10)] flex items-center gap-[var(--space-4)] border-b border-app pb-[var(--space-2)] text-body text-muted"
             >
               <button
                 ref={paidTabRef}
@@ -441,27 +394,48 @@ function MisGastosContent() {
                 style={{ left: indicator.left, width: indicator.width }}
                 aria-hidden="true"
               />
-              <span className="ml-auto pb-[var(--space-2)] opacity-0" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" className="size-[20px]">
-                  <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.8" />
-                  <path d="M16 16L20.5 20.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                </svg>
-              </span>
-              <span className="pb-[var(--space-2)] opacity-0" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" className="size-[20px]">
-                  <path
-                    d="M6 10.5C6 7.46 8.24 5 12 5s6 2.46 6 5.5v3l1.5 2.5H4.5L6 13.5v-3Z"
-                    stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"
-                  />
-                  <path
-                    d="M10 17.5a2 2 0 0 0 4 0"
-                    stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"
-                  />
-                </svg>
-              </span>
+              {planOptions.length > 0 && (
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="-mb-[2px] flex w-[150px] items-center gap-[5px] overflow-hidden pb-0 text-caption text-muted transition-colors hover:text-app"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" className="size-[13px] shrink-0" aria-hidden="true" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3 6h18M7 12h10M11 18h2" />
+                      </svg>
+                      <span className="min-w-0 flex-1 truncate font-[var(--fw-medium)]">
+                        {selectedPlanId === "all" ? "Todos los planes" : selectedPlanName}
+                      </span>
+                      <svg viewBox="0 0 24 24" fill="none" className="size-[11px] shrink-0" aria-hidden="true" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M6 9l6 6 6-6" />
+                      </svg>
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-[min(300px,calc(100vw-32px))] p-[var(--space-2)]">
+                    <div className="max-h-[calc(5*44px)] overflow-y-auto space-y-[2px]">
+                      <PlanFilterOption
+                        label="Todos los planes"
+                        count={visibleItems.length}
+                        active={selectedPlanId === "all"}
+                        onClick={() => setSelectedPlanId("all")}
+                      />
+                      {planOptions.map((plan) => (
+                        <PlanFilterOption
+                          key={plan.id}
+                          label={plan.name}
+                          count={visibleItems.filter((item) => item.planId === plan.id).length}
+                          active={selectedPlanId === plan.id}
+                          onClick={() => setSelectedPlanId(plan.id)}
+                        />
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              )}
             </div>
 
-            <div className="space-y-[var(--space-3)]">
+            <div className="divide-y divide-app">
               {dataLoading ? (
                 <SkeletonList />
               ) : filteredVisibleItems.length === 0 ? (
@@ -494,7 +468,7 @@ function MisGastosContent() {
                           setSelectedExpenseId(item.id);
                         }
                       }}
-                      className="flex cursor-pointer items-center gap-3 rounded-[10px] border border-app bg-app px-[var(--space-4)] py-[var(--space-3)] transition-colors hover:bg-surface focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring-color)]"
+                      className="flex cursor-pointer items-center gap-3 px-[var(--space-4)] py-[var(--space-3)] transition-colors hover:bg-surface focus:outline-none"
                     >
                       <ExpenseAvatar name={senderName} image={senderImage} />
 
@@ -623,7 +597,6 @@ function ExpenseAvatar({ name, image }: { name: string; image: string | null }) 
 function KpiCard({
   label,
   value,
-  description,
   tone,
 }: {
   label: string;
@@ -631,25 +604,44 @@ function KpiCard({
   description: string;
   tone: "success" | "warning" | "info";
 }) {
-  const toneClass =
-    tone === "success"
-      ? "border-[var(--success)]/35 bg-app"
-      : tone === "warning"
-        ? "border-[var(--warning)]/35 bg-app"
-        : "border-[var(--info)]/35 bg-app";
+  const color =
+    tone === "success" ? "var(--success)" : tone === "warning" ? "var(--warning)" : "var(--info)";
+
+  const icon =
+    tone === "success" ? (
+      /* Arrow down into hand – "te deben" */
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[20px] shrink-0" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 4v12M8 12l4 4 4-4" />
+        <path d="M4 18h16" />
+      </svg>
+    ) : tone === "warning" ? (
+      /* Arrow up from hand – "debes" */
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[20px] shrink-0" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 20V8M8 12l4-4 4 4" />
+        <path d="M4 6h16" />
+      </svg>
+    ) : (
+      /* Clock – "por confirmar" */
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[20px] shrink-0" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 7v5l3 2" />
+      </svg>
+    );
 
   return (
-    <div className={`rounded-[14px] border px-[var(--space-4)] py-[var(--space-4)] ${toneClass}`}>
-      <p className="text-caption font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
-        {label}
-      </p>
-      <p
-        className="mt-[8px] font-[var(--fw-bold)] leading-[1.1] text-app"
-        style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "var(--font-h3)" }}
-      >
-        {value}
-      </p>
-      <p className="mt-[6px] text-body-sm text-muted">{description}</p>
+    <div className="flex items-end justify-center gap-[var(--space-2)] px-[var(--space-2)] pb-[var(--space-4)] pt-[var(--space-3)] sm:px-[var(--space-4)] sm:gap-[var(--space-3)]">
+      <span className="mb-[2px] shrink-0" style={{ color }}>{icon}</span>
+      <div className="min-w-0">
+        <p className="truncate text-[10px] font-[var(--fw-semibold)] uppercase tracking-[0.06em] text-muted sm:text-caption">
+          {label}
+        </p>
+        <p
+          className="mt-[4px] font-[var(--fw-bold)] leading-[1.1] text-app"
+          style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "clamp(14px, 3.5vw, var(--font-h3))" }}
+        >
+          {value}
+        </p>
+      </div>
     </div>
   );
 }
