@@ -210,7 +210,7 @@ function InlineRangeCalendar({
         <button
           type="button"
           onClick={() => setMonthCount((c) => c + 4)}
-          className="w-full rounded-[14px] bg-surface py-[var(--space-4)] text-body-sm font-[var(--fw-semibold)] text-app transition-colors hover:bg-surface-inset"
+          className="w-full py-[var(--space-4)] text-body-sm font-[var(--fw-semibold)] text-muted transition-colors hover:text-app"
         >
           Cargar más fechas
         </button>
@@ -540,7 +540,7 @@ export default function CreatePlanModal({ open, onClose, onCreate }: CreatePlanM
                 <input
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="p.ej. Verano en Italia"
+                  placeholder="Verano en Italia"
                   autoFocus
                   className="w-full flex-1 bg-transparent text-[22px] font-[var(--fw-semibold)] text-app shadow-none outline-none ring-0 placeholder:text-muted focus:outline-none focus:ring-0 focus:shadow-none focus-visible:shadow-none"
                 />
@@ -608,14 +608,14 @@ export default function CreatePlanModal({ open, onClose, onCreate }: CreatePlanM
                       type="button"
                       onClick={() => setVisibility(value)}
                       className={`flex flex-col items-start gap-[var(--space-2)] rounded-[16px] border-2 p-[var(--space-4)] text-left transition-colors ${
-                        visibility === value ? "border-[var(--border-strong)] bg-[var(--surface-2)] shadow-[0_10px_22px_rgb(0_0_0_/_0.06)]" : "border-app bg-app hover:bg-surface"
+                        visibility === value ? "border-[var(--primary)]/40 bg-[var(--primary)]/10" : "border-app bg-app hover:bg-surface"
                       }`}
                     >
                       <div className="flex items-center gap-[var(--space-2)]">
-                        <Icon className={`${visibility === value ? "text-app" : "text-muted"} size-[18px] shrink-0`} strokeWidth={1.7} />
-                        <span className={`text-body-sm font-[var(--fw-semibold)] ${visibility === value ? "text-app" : "text-app"}`}>{label}</span>
+                        <Icon className={`${visibility === value ? "text-primary-token" : "text-muted"} size-[18px] shrink-0`} strokeWidth={1.7} />
+                        <span className="text-body-sm font-[var(--fw-semibold)] text-app">{label}</span>
                       </div>
-                      <span className={`text-caption ${visibility === value ? "text-app/75" : "text-muted"}`}>{description}</span>
+                      <span className="text-caption text-muted">{description}</span>
                     </button>
                   ))}
                 </div>
@@ -643,14 +643,14 @@ export default function CreatePlanModal({ open, onClose, onCreate }: CreatePlanM
                       type="button"
                       onClick={() => setInviteMode(value)}
                       className={`flex flex-col items-start gap-[var(--space-2)] rounded-[16px] border-2 p-[var(--space-4)] text-left transition-colors ${
-                        inviteMode === value ? "border-[var(--border-strong)] bg-[var(--surface-2)] shadow-[0_10px_22px_rgb(0_0_0_/_0.06)]" : "border-app bg-app hover:bg-surface"
+                        inviteMode === value ? "border-[var(--primary)]/40 bg-[var(--primary)]/10" : "border-app bg-app hover:bg-surface"
                       }`}
                     >
                       <div className="flex items-center gap-[var(--space-2)]">
-                        <Icon className={`${inviteMode === value ? "text-app" : "text-muted"} size-[18px] shrink-0`} strokeWidth={1.7} />
+                        <Icon className={`${inviteMode === value ? "text-primary-token" : "text-muted"} size-[18px] shrink-0`} strokeWidth={1.7} />
                         <span className="text-body-sm font-[var(--fw-semibold)] text-app">{label}</span>
                       </div>
-                      <span className={`text-caption ${inviteMode === value ? "text-app/75" : "text-muted"}`}>{description}</span>
+                      <span className="text-caption text-muted">{description}</span>
                     </button>
                   ))}
                 </div>

@@ -470,6 +470,150 @@ function TimeWheelPicker({ value, onChange, minTime, maxTime, blockedIntervals }
 }
 
 
+/* ───────────── plan inline calendar ───────────── */
+
+function PlanInlineCalendar({
+  minDate, maxDate, startDate, endDate, onChange,
+}: {
+  minDate: string; maxDate: string;
+  startDate: string; endDate: string | null;
+  onChange: (start: string, end: string | null) => void;
+}) {
+  const [phase, setPhase] = useState<"start" | "end">("start");
+  const [hoverDate, setHoverDate] = useState<string | null>(null);
+
+  const parseYMD = (s: string) => new Date(s + "T12:00:00");
+
+  const handleDayClick = (dateStr: string) => {
+    if (dateStr < minDate || dateStr > maxDate) return;
+    if (phase === "start") {
+      onChange(dateStr, null);
+      setPhase("end");
+    } else {
+      if (dateStr === startDate) { onChange(startDate, null); setPhase("start"); }
+      else if (dateStr > startDate) { onChange(startDate, dateStr); setPhase("start"); }
+      else { onChange(dateStr, null); setPhase("end"); }
+    }
+  };
+
+  const hasRange = !!endDate && endDate !== startDate;
+  const previewEnd = phase === "end" && hoverDate && hoverDate > startDate ? hoverDate : null;
+
+  const renderMonth = (year: number, month: number) => {
+    const firstDay = new Date(year, month, 1);
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    let startDow = firstDay.getDay();
+    startDow = (startDow + 6) % 7;
+    const monthLabel = firstDay.toLocaleDateString("es-ES", { month: "long", year: "numeric" });
+
+    const cells: React.ReactNode[] = Array.from({ length: startDow }, (_, i) => <div key={`pad-${i}`} />);
+
+    for (let i = 0; i < daysInMonth; i++) {
+      const day = i + 1;
+      const mm = String(month + 1).padStart(2, "0");
+      const dd = String(day).padStart(2, "0");
+      const dateStr = `${year}-${mm}-${dd}`;
+      const isOutside = dateStr < minDate || dateStr > maxDate;
+      const isStart = dateStr === startDate;
+      const isEnd = hasRange && dateStr === endDate;
+      const inRange = hasRange && dateStr > startDate && dateStr < endDate!;
+      const inPreview = !!previewEnd && dateStr > startDate && dateStr < previewEnd && !hasRange;
+      const isPreviewEnd = dateStr === previewEnd && !hasRange;
+
+      cells.push(
+        <div
+          key={dateStr}
+          className="relative flex h-12 items-center justify-center"
+          onClick={() => !isOutside && handleDayClick(dateStr)}
+          onMouseEnter={() => !isOutside && setHoverDate(dateStr)}
+          onMouseLeave={() => setHoverDate(null)}
+        >
+          {inRange && <div className="absolute inset-y-[4px] inset-x-0 bg-[var(--surface-2)]" />}
+          {!inRange && inPreview && <div className="absolute inset-y-[4px] inset-x-0 bg-[var(--surface-2)] opacity-50" />}
+          {isStart && (hasRange || !!previewEnd) && (
+            <div className={`absolute inset-y-[4px] left-1/2 right-0 bg-[var(--surface-2)] ${!hasRange ? "opacity-50" : ""}`} />
+          )}
+          {(isEnd || isPreviewEnd) && (
+            <div className={`absolute inset-y-[4px] left-0 right-1/2 bg-[var(--surface-2)] ${isPreviewEnd ? "opacity-50" : ""}`} />
+          )}
+          <div className={[
+            "relative z-10 flex size-10 items-center justify-center rounded-full text-[15px] font-[var(--fw-semibold)] select-none transition-colors",
+            isStart || isEnd ? "bg-[var(--text-primary)] text-[var(--bg)]" :
+            isPreviewEnd ? "bg-[var(--surface-2)] text-app" :
+            isOutside ? "cursor-default text-muted opacity-20" :
+            "cursor-pointer text-app hover:bg-[var(--surface-2)]",
+          ].join(" ")}>
+            {day}
+          </div>
+        </div>
+      );
+    }
+
+    while (cells.length < 42) cells.push(<div key={`tail-${cells.length}`} />);
+
+    return (
+      <div key={`${year}-${month}`}>
+        <p className="mb-[var(--space-4)] text-center text-[15px] font-[var(--fw-bold)] capitalize text-app">{monthLabel}</p>
+        <div className="mb-[var(--space-1)] grid grid-cols-7 text-center">
+          {["L","M","X","J","V","S","D"].map((d) => (
+            <span key={d} className="py-1 text-[11px] font-[var(--fw-semibold)] text-muted">{d}</span>
+          ))}
+        </div>
+        <div className="grid grid-cols-7">{cells}</div>
+      </div>
+    );
+  };
+
+  // Build months in plan range
+  const startMonthDate = parseYMD(minDate);
+  const endMonthDate = parseYMD(maxDate);
+  const allMonths: { year: number; month: number }[] = [];
+  const cur = new Date(startMonthDate.getFullYear(), startMonthDate.getMonth(), 1);
+  const last = new Date(endMonthDate.getFullYear(), endMonthDate.getMonth(), 1);
+  while (cur <= last) {
+    allMonths.push({ year: cur.getFullYear(), month: cur.getMonth() });
+    cur.setMonth(cur.getMonth() + 1);
+  }
+
+  // Reset phase when dates change externally
+  useEffect(() => { setPhase("start"); }, [minDate, maxDate]);
+
+  const totalMonths = allMonths.length;
+
+  return (
+    <div>
+      {/* Mobile: all months stacked */}
+      <div className="space-y-[var(--space-8)] md:hidden">
+        {allMonths.map(({ year, month }) => renderMonth(year, month))}
+      </div>
+
+      {/* Desktop: 1 month → centered; 2+ → 2-col grid (parent scrolls for overflow) */}
+      <div className="hidden md:block">
+        {totalMonths === 1 ? (
+          <div className="mx-auto max-w-[320px]">
+            {allMonths.map(({ year, month }) => renderMonth(year, month))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-[var(--space-8)]">
+            {allMonths.map(({ year, month }) => renderMonth(year, month))}
+          </div>
+        )}
+      </div>
+
+      {/* Range hint */}
+      <p className="mt-[var(--space-3)] text-center text-caption text-muted">
+        {!endDate || endDate === startDate
+          ? parseYMD(startDate).toLocaleDateString("es-ES", { day: "numeric", month: "short" })
+          : `${parseYMD(startDate).toLocaleDateString("es-ES", { day: "numeric", month: "short" })} → ${parseYMD(endDate).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}`
+        }
+        {phase === "end" && (!endDate || endDate === startDate) && (
+          <span className="ml-1 opacity-60">— elige fecha de fin o continúa</span>
+        )}
+      </p>
+    </div>
+  );
+}
+
 /* ───────────── add sheet ───────────── */
 
 const TRANSPORT_LLEGADA = [
@@ -514,6 +658,13 @@ type AddSheetProps = {
 };
 
 function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClose, onSaved, initialTitulo, initialDate, initialSubplan }: AddSheetProps) {
+  const TOTAL_STEPS = 3;
+  const STEP_META = [
+    { title: "¿Qué hacéis?", subtitle: "Tipo y lugar de la actividad" },
+    { title: "¿Cuándo?", subtitle: "Fecha y horario" },
+    { title: initialSubplan ? "Editar actividad" : "¿Cómo se llama?", subtitle: "Dale un nombre a la actividad" },
+  ];
+
   // Use local date to avoid UTC-offset shifting the allowed range by one day
   const toLocalDate = (iso: string) => {
     const d = new Date(iso);
@@ -564,6 +715,25 @@ function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClos
   );
   const [transporteLlegada, setTransporteLlegada] = useState<string | null>(initialSubplan?.transporte_llegada ?? null);
   const [saving, setSaving] = useState(false);
+  const [wizardStep, setWizardStep] = useState(1);
+
+  const planMonthCount = useMemo(() => {
+    const s = new Date(minDate + "T12:00:00");
+    const e = new Date(maxDate + "T12:00:00");
+    return (e.getFullYear() - s.getFullYear()) * 12 + (e.getMonth() - s.getMonth()) + 1;
+  }, [minDate, maxDate]);
+
+  // All valid days in the plan range (for date pills)
+  const planDays = useMemo(() => {
+    const days: string[] = [];
+    const cur = new Date(minDate + "T12:00:00");
+    const end = new Date(maxDate + "T12:00:00");
+    while (cur <= end) {
+      days.push(toLocalDate(cur.toISOString()));
+      cur.setDate(cur.getDate() + 1);
+    }
+    return days;
+  }, [minDate, maxDate]);
 
   // ¿Ya hay actividades ese día? → mostrar selector de transporte
   const hayActividadEseDia = subplanes.some((s) => s.id !== initialSubplan?.id && isoDateOnly(s.inicio_at) === fecha);
@@ -608,8 +778,8 @@ function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClos
 
   const canSubmit = titulo.trim().length > 0 && fecha.length > 0 && !saving;
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault();
     if (!canSubmit) return;
 
     // Validate no overlap with existing subplans + travel time
@@ -704,249 +874,271 @@ function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClos
     }
   };
 
+  const canContinueWizard = wizardStep === 3 ? titulo.trim().length > 0 : true;
+  const isLastStep = wizardStep === TOTAL_STEPS;
+  const meta = STEP_META[wizardStep - 1];
+
+  const formatDayPill = (dateStr: string) => {
+    const d = new Date(dateStr + "T12:00:00");
+    return {
+      weekday: d.toLocaleDateString("es-ES", { weekday: "short" }).replace(".", ""),
+      day: d.getDate(),
+      month: d.toLocaleDateString("es-ES", { month: "short" }).replace(".", ""),
+    };
+  };
+
   return (
     <>
-      {/* Backdrop with blur */}
       <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center">
+        <div
+          ref={sheetRef}
+          className={`flex h-dvh w-full flex-col overflow-hidden bg-[var(--bg)] transition-[max-width] duration-[400ms] [transition-timing-function:var(--ease-standard)] md:h-auto md:max-h-[90dvh] md:rounded-[24px] md:shadow-elev-4 ${
+            wizardStep === 2
+              ? planMonthCount === 1 ? "md:max-w-[420px]" : "md:max-w-[760px]"
+              : "md:max-w-[520px]"
+          }`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Progress bar */}
+          <div className="h-[3px] w-full shrink-0 bg-[var(--surface-2)]">
+            <div
+              className="h-full bg-primary-token transition-all duration-[400ms] [transition-timing-function:var(--ease-standard)]"
+              style={{ width: `${(wizardStep / TOTAL_STEPS) * 100}%` }}
+            />
+          </div>
 
-      {/* Modal */}
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-[var(--space-4)]">
-      <div
-        ref={sheetRef}
-        className="flex w-full max-w-[540px] flex-col rounded-[20px] bg-surface shadow-elev-3 max-h-[90dvh] overflow-hidden"
-      >
-
-        {/* Scrollable body */}
-        <form onSubmit={handleSubmit} className="flex flex-col overflow-y-auto scrollbar-thin">
-          <div className="px-[var(--page-margin-x)] pt-[var(--space-5)] pb-[var(--space-2)] space-y-[var(--space-6)]">
-
-            {/* Título + descripción */}
-            <div>
-              <input
-                value={titulo}
-                onChange={(e) => setTitulo(e.target.value)}
-                placeholder="Nombre de la actividad"
-                className="w-full bg-transparent text-[22px] font-[var(--fw-semibold)] outline-none placeholder:text-muted"
-              />
-              <input
-                value={descripcion}
-                onChange={(e) => setDescripcion(e.target.value)}
-                placeholder="Descripción breve (opcional)"
-                className="mt-[var(--space-1)] w-full bg-transparent text-body-sm text-muted outline-none placeholder:text-muted/60"
-              />
-            </div>
-
-            {/* Tipo de actividad */}
-            <div>
-              <p className="mb-[var(--space-2)] text-caption font-[var(--fw-semibold)] uppercase tracking-wider text-muted">Tipo</p>
-              <div className="flex flex-wrap gap-[var(--space-2)]">
-                {ACTIVITY_TYPE_OPTIONS.map((t) => (
-                  <button
-                    key={t.value}
-                    type="button"
-                    onClick={() => setTipo(t.value)}
-                    className={`flex items-center gap-[var(--space-1)] rounded-chip px-[var(--space-3)] py-[var(--space-1)] text-body-sm font-[var(--fw-medium)] border transition-colors ${
-                      tipo === t.value
-                        ? "border-primary-token bg-primary-token/15 text-primary-token"
-                        : "border-app bg-surface-inset text-muted"
-                    }`}
-                  >
-                    <t.Icon className="size-[14px] shrink-0" />
-                    <span>{t.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Ubicación */}
-            <div className="space-y-[var(--space-3)]">
-              <p className="text-caption font-[var(--fw-semibold)] uppercase tracking-wider text-muted">
-                {esTransporte ? "Origen" : "Ubicación"}
-              </p>
-              <div className="flex h-input items-center gap-[var(--space-2)] rounded-input border border-app bg-surface-inset px-[var(--space-3)]">
-                <MapPinIcon className="size-[16px] shrink-0 text-muted" />
-                <LocationAutocomplete
-                  value={ubicacion}
-                  onChange={(v, coords) => { setUbicacion(v); if (coords) setUbicacionCoords(coords); else setUbicacionCoords(null); }}
-                  placeholder={
-                    tipo === "VUELO"       ? "Aeropuerto de salida" :
-                    tipo === "BARCO"       ? "Puerto de salida" :
-                    tipo === "HOTEL"       ? "Nombre del hotel" :
-                    tipo === "RESTAURANTE" ? "Nombre del restaurante" :
-                    "¿Dónde será?"
-                  }
-                />
-              </div>
-              {esTransporte && (
-                <>
-                  <p className="text-caption font-[var(--fw-semibold)] uppercase tracking-wider text-muted">Destino</p>
-                  <div className="flex h-input items-center gap-[var(--space-2)] rounded-input border border-app bg-surface-inset px-[var(--space-3)]">
-                    <MapPinIcon className="size-[16px] shrink-0 text-primary-token" />
-                    <LocationAutocomplete
-                      value={ubicacionFin}
-                      onChange={(v, coords) => { setUbicacionFin(v); if (coords) setUbicacionFinCoords(coords); else setUbicacionFinCoords(null); }}
-                      placeholder={
-                        tipo === "VUELO" ? "Aeropuerto de llegada" : "Puerto de llegada"
-                      }
-                    />
-                  </div>
-                </>
+          {/* Top nav */}
+          <div className="flex shrink-0 items-center justify-between px-[var(--space-5)] py-[var(--space-3)]">
+            <button
+              type="button"
+              onClick={wizardStep === 1 ? onClose : () => setWizardStep((s) => s - 1)}
+              className="flex size-9 items-center justify-center rounded-full text-app transition-colors hover:bg-surface"
+            >
+              {wizardStep === 1 ? (
+                <svg viewBox="0 0 24 24" fill="none" className="size-[18px]">
+                  <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" fill="none" className="size-[18px]">
+                  <path d="M15 19l-7-7 7-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
               )}
+            </button>
+            <span className="text-caption font-[var(--fw-medium)] text-muted">{wizardStep} de {TOTAL_STEPS}</span>
+            <div className="size-9" aria-hidden="true" />
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto px-[var(--space-6)] pb-[var(--space-8)] pt-[var(--space-2)]">
+            <div className="mb-[var(--space-6)]">
+              <h2 className="font-[var(--fw-bold)] leading-tight text-app" style={{ fontSize: "clamp(22px, 5vw, 28px)" }}>
+                {meta.title}
+              </h2>
+              <p className="mt-[var(--space-1)] text-body-sm text-muted">{meta.subtitle}</p>
             </div>
 
-            {/* Transporte llegada */}
-            {hayActividadEseDia && (
-              <div className="space-y-[var(--space-2)]">
-                <p className="text-caption font-[var(--fw-semibold)] uppercase tracking-wider text-muted">
-                  ¿Cómo llegas?
-                </p>
-                <div className="flex flex-wrap gap-[var(--space-2)]">
-                  {TRANSPORT_LLEGADA.map((t) => (
+            {/* ── Step 1: Tipo + Ubicación ── */}
+            {wizardStep === 1 && (
+              <div className="space-y-[var(--space-6)]">
+                {/* Activity type grid */}
+                <div className="grid grid-cols-3 gap-[var(--space-3)]">
+                  {ACTIVITY_TYPE_OPTIONS.map((t) => (
                     <button
                       key={t.value}
                       type="button"
-                      onClick={() => setTransporteLlegada(transporteLlegada === t.value ? null : t.value)}
-                      className={`flex items-center gap-[6px] rounded-chip border px-[var(--space-3)] py-[6px] text-body-sm transition-colors ${
-                        transporteLlegada === t.value
-                          ? "border-primary-token bg-primary-token/10 text-primary-token"
-                          : "border-app bg-surface-inset text-muted"
+                      onClick={() => setTipo(t.value)}
+                      className={`flex flex-col items-start gap-[var(--space-2)] rounded-[16px] border-2 p-[var(--space-4)] text-left transition-colors ${
+                        tipo === t.value
+                          ? "border-[var(--primary)]/40 bg-[var(--primary)]/10"
+                          : "border-app bg-app hover:bg-surface"
                       }`}
                     >
-                      <t.Icon className="size-[14px] shrink-0" />
-                      <span>{t.label}</span>
+                      <t.Icon className={`size-5 shrink-0 ${tipo === t.value ? "text-primary-token" : "text-muted"}`} strokeWidth={1.5} />
+                      <span className="text-body-sm font-[var(--fw-semibold)] text-app">{t.label}</span>
                     </button>
                   ))}
+                </div>
+
+                {/* Ubicación */}
+                <div>
+                  <p className="mb-[var(--space-2)] text-[11px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
+                    {esTransporte ? "Origen" : "Ubicación"} <span className="normal-case font-[var(--fw-normal)]">(opcional)</span>
+                  </p>
+                  <div className="group flex items-center gap-[var(--space-3)] border-b-2 border-app pb-[var(--space-2)] transition-colors focus-within:border-primary-token">
+                    <MapPinIcon className="size-[16px] shrink-0 text-muted transition-colors group-focus-within:text-primary-token" />
+                    <LocationAutocomplete
+                      value={ubicacion}
+                      onChange={(v, coords) => { setUbicacion(v); if (coords) setUbicacionCoords(coords); else setUbicacionCoords(null); }}
+                      placeholder={
+                        tipo === "VUELO" ? "Aeropuerto de salida" :
+                        tipo === "BARCO" ? "Puerto de salida" :
+                        tipo === "HOTEL" ? "Nombre del hotel" :
+                        tipo === "RESTAURANTE" ? "Nombre del restaurante" :
+                        "¿Dónde será?"
+                      }
+                    />
+                  </div>
+                </div>
+
+                {/* Destino (transport only) */}
+                {esTransporte && (
+                  <div>
+                    <p className="mb-[var(--space-2)] text-[11px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Destino</p>
+                    <div className="group flex items-center gap-[var(--space-3)] border-b-2 border-app pb-[var(--space-2)] transition-colors focus-within:border-primary-token">
+                      <MapPinIcon className="size-[16px] shrink-0 text-primary-token" />
+                      <LocationAutocomplete
+                        value={ubicacionFin}
+                        onChange={(v, coords) => { setUbicacionFin(v); if (coords) setUbicacionFinCoords(coords); else setUbicacionFinCoords(null); }}
+                        placeholder={tipo === "VUELO" ? "Aeropuerto de llegada" : "Puerto de llegada"}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* ¿Cómo llegas? */}
+                {hayActividadEseDia && (
+                  <div>
+                    <p className="mb-[var(--space-3)] text-[11px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">¿Cómo llegas?</p>
+                    <div className="grid grid-cols-3 gap-[var(--space-2)]">
+                      {TRANSPORT_LLEGADA.map((t) => (
+                        <button
+                          key={t.value}
+                          type="button"
+                          onClick={() => setTransporteLlegada(transporteLlegada === t.value ? null : t.value)}
+                          className={`flex flex-col items-center gap-[var(--space-1)] rounded-[14px] border-2 py-[var(--space-3)] transition-colors ${
+                            transporteLlegada === t.value
+                              ? "border-[var(--primary)]/40 bg-[var(--primary)]/10"
+                              : "border-app bg-app hover:bg-surface"
+                          }`}
+                        >
+                          <t.Icon className={`size-[18px] shrink-0 ${transporteLlegada === t.value ? "text-primary-token" : "text-muted"}`} strokeWidth={1.5} />
+                          <span className={`text-[11px] font-[var(--fw-semibold)] ${transporteLlegada === t.value ? "text-primary-token" : "text-app"}`}>{t.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── Step 2: Cuándo (calendar + hours) ── */}
+            {wizardStep === 2 && (
+              <div className="space-y-[var(--space-6)]">
+                <PlanInlineCalendar
+                  minDate={minDate}
+                  maxDate={maxDate}
+                  startDate={fecha}
+                  endDate={fechaFin}
+                  onChange={(start, end) => { setFecha(start); setFechaFin(end); }}
+                />
+                {/* Time pickers */}
+                <div className="grid grid-cols-2 gap-[var(--space-5)]">
+                  <div>
+                    <p className="mb-[var(--space-2)] text-[11px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Hora inicio</p>
+                    <div className="border-b-2 border-app pb-[var(--space-1)] transition-colors focus-within:border-primary-token">
+                      <input
+                        type="time"
+                        value={horaInicio}
+                        onChange={(e) => setHoraInicio(e.target.value)}
+                        min={fecha === minDate && !planIsAllDay ? planStartTime : undefined}
+                        max={fecha === maxDate && !planIsAllDay ? planEndTime : undefined}
+                        className="w-full bg-transparent text-[28px] font-[var(--fw-bold)] text-app outline-none"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <p className="mb-[var(--space-2)] text-[11px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Hora fin</p>
+                    <div className="border-b-2 border-app pb-[var(--space-1)] transition-colors focus-within:border-primary-token">
+                      <input
+                        type="time"
+                        value={horaFin}
+                        onChange={(e) => setHoraFin(e.target.value)}
+                        min={efectivaFechaFin === fecha ? horaInicio : undefined}
+                        max={efectivaFechaFin === maxDate && !planIsAllDay ? planEndTime : undefined}
+                        className="w-full bg-transparent text-[28px] font-[var(--fw-bold)] text-app outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+                {error && wizardStep === 2 && <p className="text-body-sm text-[var(--error)]">{error}</p>}
+              </div>
+            )}
+
+            {/* ── Step 3: Nombre ── */}
+            {wizardStep === 3 && (
+              <div className="space-y-[var(--space-5)]">
+                <div className="border-b-2 border-app pb-[var(--space-2)] transition-colors focus-within:border-primary-token">
+                  <input
+                    value={titulo}
+                    onChange={(e) => setTitulo(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter" && titulo.trim()) { e.preventDefault(); setWizardStep(4); } }}
+                    placeholder={
+                      tipo === "VUELO" ? "Vuelo a París" :
+                      tipo === "HOTEL" ? "Hotel Marina Bay" :
+                      tipo === "RESTAURANTE" ? "Cena en La Trattoria" :
+                      tipo === "BARCO" ? "Ferry a Ibiza" :
+                      "Tarde en el museo"
+                    }
+                    // eslint-disable-next-line jsx-a11y/no-autofocus
+                    autoFocus
+                    className="w-full bg-transparent text-[22px] font-[var(--fw-semibold)] text-app outline-none placeholder:text-muted"
+                  />
+                </div>
+                <div className="border-b border-app pb-[var(--space-1)] transition-colors focus-within:border-[var(--border-strong)]">
+                  <input
+                    value={descripcion}
+                    onChange={(e) => setDescripcion(e.target.value)}
+                    placeholder="Descripción breve (opcional)"
+                    className="w-full bg-transparent text-body-sm text-app outline-none placeholder:text-muted"
+                  />
                 </div>
               </div>
             )}
 
-            {/* Fechas */}
-            <div className="grid grid-cols-2 gap-[var(--space-3)]">
-              <div>
-                <p className="mb-[var(--space-2)] text-caption font-[var(--fw-semibold)] uppercase tracking-wider text-muted">Fecha inicio</p>
-                <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      className="flex h-input w-full items-center rounded-input border border-app bg-surface-inset px-[var(--space-3)] text-body"
-                    >
-                      {fecha
-                        ? new Date(fecha + "T00:00:00").toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" })
-                        : "Seleccionar"}
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={fecha ? new Date(fecha + "T00:00:00") : undefined}
-                      onSelect={(d) => {
-                        if (d) {
-                          const y = d.getFullYear();
-                          const m = String(d.getMonth() + 1).padStart(2, "0");
-                          const day = String(d.getDate()).padStart(2, "0");
-                          setFecha(`${y}-${m}-${day}`);
-                        }
-                        setCalendarOpen(false);
-                      }}
-                      disabled={(d) => {
-                        const iso = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-                        return iso < minDate || iso > maxDate;
-                      }}
-                    />
-                  </PopoverContent>
-                </Popover>
-              </div>
-
-              {/* Fecha fin opcional — solo si el plan abarca más de un día */}
-              {isMultiDay && (
-                <div>
-                  <p className="mb-[var(--space-2)] text-caption font-[var(--fw-semibold)] uppercase tracking-wider text-muted">
-                    Fecha fin <span className="normal-case font-normal">(opcional)</span>
-                  </p>
-                  <Popover open={calendarFinOpen} onOpenChange={setCalendarFinOpen}>
-                    <PopoverTrigger asChild>
-                      <button
-                        type="button"
-                        className="flex h-input w-full items-center rounded-input border border-app bg-surface-inset px-[var(--space-3)] text-body"
-                      >
-                        {fechaFin
-                          ? new Date(fechaFin + "T12:00:00").toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" })
-                          : <span className="text-muted text-body-sm">Mismo día</span>}
-                      </button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={fechaFin ? new Date(fechaFin + "T00:00:00") : undefined}
-                        onSelect={(d) => {
-                          if (d) {
-                            const y = d.getFullYear();
-                            const mo = String(d.getMonth() + 1).padStart(2, "0");
-                            const day = String(d.getDate()).padStart(2, "0");
-                            const selected = `${y}-${mo}-${day}`;
-                            setFechaFin(selected === fecha ? null : selected);
-                          } else {
-                            setFechaFin(null);
-                          }
-                          setCalendarFinOpen(false);
-                        }}
-                        disabled={(d) => {
-                          const iso = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-                          return iso < fecha || iso > maxDate;
-                        }}
-                      />
-                    </PopoverContent>
-                  </Popover>
-                </div>
-              )}
-            </div>
-
-            {/* Horas */}
-            <div className="grid grid-cols-2 gap-[var(--space-3)]">
-              <div>
-                <p className="mb-[var(--space-2)] text-caption font-[var(--fw-semibold)] uppercase tracking-wider text-muted">Hora inicio</p>
-                <TimeWheelPicker
-                  value={horaInicio}
-                  onChange={setHoraInicio}
-                  minTime={fecha === minDate && !planIsAllDay ? planStartTime : undefined}
-                  maxTime={fecha === maxDate && !planIsAllDay ? planEndTime   : undefined}
-                  blockedIntervals={occupiedIntervals}
-                />
-              </div>
-              <div>
-                <p className="mb-[var(--space-2)] text-caption font-[var(--fw-semibold)] uppercase tracking-wider text-muted">Hora fin</p>
-                <TimeWheelPicker
-                  value={horaFin}
-                  onChange={setHoraFin}
-                  minTime={efectivaFechaFin === fecha ? horaInicio : undefined}
-                  maxTime={efectivaFechaFin === maxDate && !planIsAllDay ? planEndTime : undefined}
-                  blockedIntervals={efectivaFechaFin === fecha ? occupiedIntervals : undefined}
-                />
-              </div>
-            </div>
-
-            {error && <p className="text-body-sm text-[var(--error)]">{error}</p>}
+            {error && isLastStep && <p className="text-body-sm text-[var(--error)]">{error}</p>}
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-between border-t border-app px-[var(--page-margin-x)] py-[var(--space-4)]">
-            <button
-              type="button"
-              onClick={onClose}
-              className="text-body-sm font-[var(--fw-medium)] text-[var(--error)] transition-opacity hover:opacity-70"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={!canSubmit}
-              className="rounded-chip bg-primary-token px-[var(--space-6)] py-[var(--space-2)] text-body-sm font-[var(--fw-semibold)] text-contrast-token disabled:opacity-[var(--disabled-opacity)]"
-            >
-              {saving ? "Guardando..." : isEditing ? "Guardar cambios" : "Crear"}
-            </button>
+          <div className="shrink-0 border-t border-app px-[var(--space-5)] py-[var(--space-4)]">
+            {wizardStep === 2 ? (
+              <div className="flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => { setFecha(defaultDate); setFechaFin(null); setHoraInicio(defaultHoraInicio); setHoraFin(defaultHoraFin); }}
+                  className="text-body-sm font-[var(--fw-semibold)] text-app underline underline-offset-2 transition-opacity hover:opacity-60"
+                >
+                  Restablecer
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWizardStep((s) => s + 1)}
+                  className="rounded-[14px] bg-[var(--text-primary)] px-[var(--space-8)] py-[12px] text-body-sm font-[var(--fw-semibold)] text-contrast-token transition-opacity hover:opacity-85"
+                >
+                  Siguiente
+                </button>
+              </div>
+            ) : isLastStep ? (
+              <button
+                type="button"
+                disabled={!canContinueWizard || saving}
+                onClick={() => { void handleSubmit(); }}
+                className="w-full rounded-full bg-primary-token py-[14px] text-body-sm font-[var(--fw-semibold)] text-contrast-token transition-opacity hover:opacity-85 disabled:opacity-[var(--disabled-opacity)]"
+              >
+                {saving ? "Guardando..." : isEditing ? "Guardar cambios" : "Crear actividad"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setWizardStep((s) => s + 1)}
+                disabled={!canContinueWizard}
+                className="w-full rounded-full bg-primary-token py-[14px] text-body-sm font-[var(--fw-semibold)] text-contrast-token transition-opacity hover:opacity-85 disabled:opacity-[var(--disabled-opacity)]"
+              >
+                Continuar
+              </button>
+            )}
           </div>
-        </form>
-      </div>
+        </div>
       </div>
     </>
   );
