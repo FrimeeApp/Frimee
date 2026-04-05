@@ -35,6 +35,16 @@ export default function AppSidebar({ onCreatePlan, hideMobileNav }: AppSidebarPr
   const router = useRouter();
   const pathname = usePathname();
   const [mobileNavVisible, setMobileNavVisible] = useState(true);
+  const [createPlanModalOpen, setCreatePlanModalOpen] = useState(false);
+
+  // Hide bottom nav whenever CreatePlanModal is open (from any page)
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      setCreatePlanModalOpen(document.body.hasAttribute("data-create-plan-open"));
+    });
+    observer.observe(document.body, { attributes: true, attributeFilter: ["data-create-plan-open"] });
+    return () => observer.disconnect();
+  }, []);
   const lastScrollYRef = useRef(0);
   const [hovered, setHovered] = useState(false);
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -278,7 +288,7 @@ export default function AppSidebar({ onCreatePlan, hideMobileNav }: AppSidebarPr
       <nav
         className={`fixed inset-x-0 bottom-0 z-sticky flex h-[calc(var(--space-16)+env(safe-area-inset-bottom))] items-center justify-around border-t border-strong bg-app px-[var(--space-5)] pb-safe transition-transform duration-[var(--duration-slow)] [transition-timing-function:var(--ease-decelerate)] md:hidden ${
           mobileNavVisible ? "translate-y-0" : "translate-y-full"
-        } ${hideMobileNav ? "!translate-y-full" : ""}`}
+        } ${hideMobileNav || createPlanModalOpen ? "!translate-y-full" : ""}`}
       >
         {items.slice(0, 2).map((item) => (
           <Link
