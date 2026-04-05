@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { MapPin } from "lucide-react";
 
 type PlaceSuggestion = {
   placePrediction: {
@@ -18,20 +20,33 @@ export default function LocationAutocomplete({
   onChange,
   placeholder = "¿Dónde será?",
   className,
+  onCommit,
+  onEnter,
 }: {
   value: string;
   onChange: (v: string, coords?: Coords) => void;
   placeholder?: string;
   className?: string;
+  onCommit?: () => void;
+  onEnter?: () => void;
 }) {
-  const [mapsReady, setMapsReady] = useState(false);
+  const [mapsReady, setMapsReady] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      Boolean((window as any).google?.maps?.places?.AutocompleteSuggestion)
+  );
   const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
   const [open, setOpen] = useState(false);
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isMounted = typeof document !== "undefined";
 
   useEffect(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if ((window as any).google?.maps?.places?.AutocompleteSuggestion) { setMapsReady(true); return; }
+    if ((window as any).google?.maps?.places?.AutocompleteSuggestion) return;
     if (document.getElementById("google-maps-script")) {
       const existing = document.getElementById("google-maps-script");
       existing?.addEventListener("load", () => setMapsReady(true));
@@ -44,6 +59,31 @@ export default function LocationAutocomplete({
     script.onload = () => setMapsReady(true);
     document.head.appendChild(script);
   }, []);
+
+  // Recalculate dropdown position whenever it opens or window scrolls/resizes
+  useEffect(() => {
+    if (!open || !wrapperRef.current) return;
+    const updatePos = () => {
+      if (!wrapperRef.current) return;
+      // Use the parent container (includes leading icon) for full-width alignment
+      const anchor = wrapperRef.current.parentElement ?? wrapperRef.current;
+      const rect = anchor.getBoundingClientRect();
+      setDropdownStyle({
+        position: "fixed",
+        top: rect.bottom + 8,
+        left: rect.left,
+        width: rect.width,
+        zIndex: 9999,
+      });
+    };
+    updatePos();
+    window.addEventListener("scroll", updatePos, true);
+    window.addEventListener("resize", updatePos);
+    return () => {
+      window.removeEventListener("scroll", updatePos, true);
+      window.removeEventListener("resize", updatePos);
+    };
+  }, [open, suggestions]);
 
   const fetchSuggestions = async (input: string) => {
     if (!input || input.length < 2) { setSuggestions([]); setOpen(false); return; }
@@ -60,6 +100,7 @@ export default function LocationAutocomplete({
     onChange(text);
     setSuggestions([]);
     setOpen(false);
+    onCommit?.();
     try {
       const place = s.placePrediction.toPlace();
       await place.fetchFields({ fields: ["location"] });
@@ -77,27 +118,38 @@ export default function LocationAutocomplete({
   };
 
   return (
-    <div className={`relative flex-1 ${className ?? ""}`}>
+    <div ref={wrapperRef} className={`relative flex-1 ${className ?? ""}`}>
       <input
+        ref={inputRef}
         value={value}
         onChange={(e) => handleChange(e.target.value)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") { e.preventDefault(); setOpen(false); onEnter?.(); }
+        }}
         placeholder={placeholder}
         className="w-full border-none bg-transparent text-body outline-none ring-0 focus:border-none focus:outline-none focus:ring-0 placeholder:text-muted"
       />
-      {open && suggestions.length > 0 && (
-        <ul className="absolute top-[calc(100%+8px)] left-0 z-[90] w-full max-h-[220px] overflow-y-auto scrollbar-thin rounded-[12px] border border-app bg-surface shadow-elev-4">
+      {isMounted && open && suggestions.length > 0 && createPortal(
+        <ul
+          style={dropdownStyle}
+          className="rounded-[12px] border-0 bg-transparent shadow-none max-md:rounded-none"
+        >
           {suggestions.slice(0, 5).map((s, i) => (
             <li
               key={i}
               onMouseDown={(e) => { e.preventDefault(); void handleSelect(s); }}
-              className="cursor-pointer px-[var(--space-3)] py-[var(--space-3)] hover:bg-surface-inset"
+              className="flex cursor-pointer items-center gap-[var(--space-3)] px-[var(--space-3)] py-[var(--space-3)] hover:bg-surface"
             >
-              <p className="text-body-sm font-[var(--fw-medium)] text-primary">{s.placePrediction.mainText.toString()}</p>
-              <p className="text-caption text-muted">{s.placePrediction.secondaryText?.toString() ?? ""}</p>
+              <MapPin className="size-4 shrink-0 text-muted" strokeWidth={1.5} />
+              <div className="min-w-0">
+                <p className="truncate text-body-sm font-[var(--fw-medium)] text-app">{s.placePrediction.mainText.toString()}</p>
+                <p className="truncate text-caption text-muted">{s.placePrediction.secondaryText?.toString() ?? ""}</p>
+              </div>
             </li>
           ))}
-        </ul>
+        </ul>,
+        document.body
       )}
     </div>
   );

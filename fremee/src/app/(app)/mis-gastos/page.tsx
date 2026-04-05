@@ -705,7 +705,7 @@ function ExpenseDetailModal({
 
   return (
     <div
-      className="fixed inset-0 z-[var(--z-modal)] flex items-end justify-center bg-black/40 px-[var(--space-4)] pb-[max(var(--space-4),env(safe-area-inset-bottom))] pt-[var(--space-6)] md:items-center md:pb-[var(--space-6)]"
+      className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center bg-black/50 px-[var(--space-4)] py-[var(--space-6)] backdrop-blur-sm"
       onClick={onClose}
     >
       <div
@@ -718,7 +718,17 @@ function ExpenseDetailModal({
               {item.planName}
             </p>
             <h2 className="mt-[6px] text-[var(--font-h3)] font-[var(--fw-bold)] leading-[1.15] text-app">
-              {incoming ? "Pago recibido" : "Pago realizado"}
+              {incoming
+                ? item.estado === "CONFIRMADA"
+                  ? "Pago recibido"
+                  : item.estado === "EN_REVISION"
+                  ? "Pago por confirmar"
+                  : "Pago pendiente"
+                : item.estado === "CONFIRMADA"
+                  ? "Pago realizado"
+                  : item.estado === "EN_REVISION"
+                  ? "Pago enviado"
+                  : "Pago pendiente"}
             </h2>
           </div>
           <button
@@ -748,7 +758,7 @@ function ExpenseDetailModal({
             </span>
           </div>
 
-          <p className="rounded-[12px] bg-surface px-[var(--space-4)] py-[var(--space-3)] text-body-sm text-muted">
+          <p className="text-body-sm text-muted">
             {statusMeta.description}
           </p>
 
@@ -797,11 +807,11 @@ function ExpenseDetailModal({
 
 function DetailCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-[12px] border border-app bg-surface px-[var(--space-4)] py-[var(--space-3)]">
+    <div className="py-[var(--space-2)]">
       <p className="text-caption font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
         {label}
       </p>
-      <p className="mt-[6px] text-body-sm font-[var(--fw-semibold)] text-app">{value}</p>
+      <p className="mt-[4px] text-body-sm font-[var(--fw-semibold)] text-app">{value}</p>
     </div>
   );
 }
