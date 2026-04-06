@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/providers/AuthProvider";
@@ -79,7 +80,7 @@ function groupByPeriod(notifs: NotificacionDto[]): { label: string; items: Notif
 function Avatar({ src, name }: { src: string | null; name: string | null }) {
   const letter = (name ?? "?")[0].toUpperCase();
   if (src) {
-    return <img src={src} alt={name ?? ""} className="size-10 rounded-full border border-app object-cover shrink-0" />;
+    return <Image src={src} alt={name ?? ""} width={40} height={40} className="size-10 rounded-full border border-app object-cover shrink-0" unoptimized />;
   }
   return (
     <div className="size-10 rounded-full border border-app bg-[var(--surface-2)] flex items-center justify-center text-body-sm font-[var(--fw-medium)] shrink-0">
@@ -227,8 +228,15 @@ export default function NotificationsPanel({ open, onClose, onRead, desktopPosit
   useEffect(() => {
     if (!open || !user) return;
     markedRef.current = false;
-    setLoading(true);
-    void load().finally(() => setLoading(false));
+    const run = async () => {
+      setLoading(true);
+      try {
+        await load();
+      } finally {
+        setLoading(false);
+      }
+    };
+    void run();
   }, [open, user, load]);
 
   // Mark as read after brief delay

@@ -31,7 +31,6 @@ export async function uploadPlanCoverFile(params: { file: File; userId: string }
 }
 
 export async function uploadDocumentFile(params: { file: File; userId: string }) {
-  const ext = params.file.name.split(".").pop()?.toLowerCase() ?? "bin";
   const filePath = `documentos/${params.userId}/${Date.now()}_${params.file.name}`;
   const fileRef = ref(storage, filePath);
 

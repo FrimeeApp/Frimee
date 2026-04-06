@@ -262,7 +262,6 @@ function CalendarPageInner() {
     if (!user?.id) {
       setPlans([]);
       setLoading(false);
-      setBackgroundRefreshing(false);
       hasLoadedOnceRef.current = false;
       return;
     }
@@ -270,9 +269,7 @@ function CalendarPageInner() {
     let cancelled = false;
 
     const load = async () => {
-      if (hasLoadedOnceRef.current) {
-        setBackgroundRefreshing(true);
-      } else {
+      if (!hasLoadedOnceRef.current) {
         setLoading(true);
       }
       try {
@@ -302,7 +299,6 @@ function CalendarPageInner() {
       } finally {
         if (!cancelled) {
           setLoading(false);
-          setBackgroundRefreshing(false);
         }
       }
     };
@@ -873,14 +869,14 @@ function CalendarPageSkeleton() {
       <section className="grid grid-cols-1 gap-[var(--space-4)] md:grid-cols-2" aria-hidden="true">
         {Array.from({ length: 4 }).map((_, index) => (
           <article key={index} className="overflow-hidden rounded-card border border-app bg-surface shadow-elev-1">
-            <div className="feed-skeleton-shimmer h-[138px] w-full" />
+            <div className="skeleton-shimmer h-[138px] w-full" />
             <div className="flex items-end justify-between gap-3 p-[var(--space-4)]">
               <div className="min-w-0 flex-1 space-y-2">
-                <div className="feed-skeleton-shimmer h-7 w-[62%] rounded-full" />
-                <div className="feed-skeleton-shimmer h-4 w-[48%] rounded-full" />
-                <div className="feed-skeleton-shimmer h-3 w-[34%] rounded-full" />
+                <div className="skeleton-shimmer h-7 w-[62%] rounded-full" />
+                <div className="skeleton-shimmer h-4 w-[48%] rounded-full" />
+                <div className="skeleton-shimmer h-3 w-[34%] rounded-full" />
               </div>
-              <div className="feed-skeleton-shimmer h-10 w-24 rounded-[10px]" />
+              <div className="skeleton-shimmer h-10 w-24 rounded-[10px]" />
             </div>
           </article>
         ))}
@@ -891,14 +887,14 @@ function CalendarPageSkeleton() {
         aria-hidden="true"
       >
         <div className="mb-[var(--space-2)] flex items-center justify-between">
-          <div className="feed-skeleton-shimmer h-8 w-10 rounded-input" />
-          <div className="feed-skeleton-shimmer h-4 w-24 rounded-full" />
-          <div className="feed-skeleton-shimmer h-8 w-10 rounded-input" />
+          <div className="skeleton-shimmer h-8 w-10 rounded-input" />
+          <div className="skeleton-shimmer h-4 w-24 rounded-full" />
+          <div className="skeleton-shimmer h-8 w-10 rounded-input" />
         </div>
 
         <div className="grid grid-cols-7 gap-x-1 gap-y-2 text-center">
           {Array.from({ length: 7 }).map((_, index) => (
-            <div key={`calendar-head-${index}`} className="feed-skeleton-shimmer mx-auto h-3 w-5 rounded-full" />
+            <div key={`calendar-head-${index}`} className="skeleton-shimmer mx-auto h-3 w-5 rounded-full" />
           ))}
         </div>
 
@@ -907,15 +903,15 @@ function CalendarPageSkeleton() {
             <div key={`calendar-week-${weekIndex}`} className="h-[48px] p-1.5">
               <div className="grid grid-cols-7 gap-x-1">
                 {Array.from({ length: 7 }).map((__, dayIndex) => (
-                  <div key={`calendar-day-${weekIndex}-${dayIndex}`} className="feed-skeleton-shimmer h-7" />
+                  <div key={`calendar-day-${weekIndex}-${dayIndex}`} className="skeleton-shimmer h-7" />
                 ))}
               </div>
               <div className="mt-1 space-y-0.5">
                 <div className="grid grid-cols-7 gap-x-1">
-                  <div className="feed-skeleton-shimmer col-span-4 h-3 rounded-full" />
+                  <div className="skeleton-shimmer col-span-4 h-3 rounded-full" />
                 </div>
                 <div className="grid grid-cols-7 gap-x-1">
-                  <div className="feed-skeleton-shimmer col-span-3 h-3 rounded-full" />
+                  <div className="skeleton-shimmer col-span-3 h-3 rounded-full" />
                 </div>
               </div>
             </div>

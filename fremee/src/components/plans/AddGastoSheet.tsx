@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import type { SubplanRow } from "@/services/api/endpoints/subplanes.endpoint";
 import {
@@ -22,11 +23,14 @@ function Avatar({ foto, nombre, size = 32 }: { foto: string | null; nombre: stri
   const initials = (nombre ?? "?").slice(0, 1).toUpperCase();
   if (foto) {
     return (
-      <img
+      <Image
         src={foto}
         alt={nombre ?? ""}
+        width={size}
+        height={size}
         style={{ width: size, height: size }}
         className="rounded-full object-cover"
+        unoptimized
       />
     );
   }
@@ -479,7 +483,8 @@ export default function AddGastoSheet({ planId, userId, subplanes, onClose, onCr
                           type="button"
                           onClick={() => setSeleccionados((prev) => {
                             const next = new Set(prev);
-                            next.has(m.user_id) ? next.delete(m.user_id) : next.add(m.user_id);
+                            if (next.has(m.user_id)) next.delete(m.user_id);
+                            else next.add(m.user_id);
                             return next;
                           })}
                           className={`flex items-center gap-[var(--space-3)] rounded-input border px-[var(--space-3)] py-[var(--space-2)] transition-colors ${

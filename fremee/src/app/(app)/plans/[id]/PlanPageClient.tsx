@@ -14,10 +14,8 @@ import { fetchPlansByIds, fetchPlanMemberIds, fetchPlanUserRol, type PlanByIdRow
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { fetchSubplanes, createSubplan, updateSubplan, updateSubplanTransporte, updateSubplanViaje, type SubplanRow, type TipoSubplan, TIPOS_TRANSPORTE } from "@/services/api/endpoints/subplanes.endpoint";
 import { getBalancesForPlanEndpoint, listGastosForPlanEndpoint, type BalanceRow, type GastoRow } from "@/services/api/endpoints/gastos.endpoint";
-import { Calendar } from "@/components/ui/calendar";
 import DayRouteMap from "@/components/plans/DayRouteMap";
 import LocationAutocomplete, { type Coords } from "@/components/plans/LocationAutocomplete";
-import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import AddGastoSheet from "@/components/plans/AddGastoSheet";
 import { fetchActiveFriends, type PublicUserProfileRow } from "@/services/api/endpoints/users.endpoint";
 import { insertNotificacion } from "@/services/api/repositories/notifications.repository";
@@ -345,131 +343,6 @@ function getOccupiedIntervals(subplanes: SubplanRow[], fecha: string): Interval[
   return mergeIntervals(intervals);
 }
 
-/* ───────────── time wheel picker ───────────── */
-
-const HOURS   = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
-const MINUTES = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, "0"));
-const ITEM_H    = 32;
-const PAD_ITEMS = 1;
-const PAD_PX    = ITEM_H * PAD_ITEMS;
-const TOTAL_H   = ITEM_H * (PAD_ITEMS * 2 + 1);
-
-function TimeWheel({ values, selected, onSelect }: { values: string[]; selected: string; onSelect: (v: string) => void }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const settling = useRef(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const snapTo = (idx: number, smooth: boolean) => {
-    ref.current?.scrollTo({ top: idx * ITEM_H, behavior: smooth ? "smooth" : "instant" });
-  };
-
-  // Scroll to selected on mount (instant)
-  useEffect(() => {
-    const idx = values.indexOf(selected);
-    if (idx >= 0) snapTo(idx, false);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Follow external selected changes (e.g. min/max clamp from parent)
-  useEffect(() => {
-    if (settling.current) return;
-    const idx = values.indexOf(selected);
-    if (idx >= 0) snapTo(idx, true);
-  }, [selected, values]);
-
-  const handleScroll = () => {
-    settling.current = true;
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => {
-      if (!ref.current) return;
-      const idx = Math.round(ref.current.scrollTop / ITEM_H);
-      const clamped = Math.max(0, Math.min(idx, values.length - 1));
-      snapTo(clamped, true); // smooth-snap to nearest
-      const v = values[clamped];
-      if (v && v !== selected) onSelect(v);
-      setTimeout(() => { settling.current = false; }, 200);
-    }, 60);
-  };
-
-  return (
-    <div className="relative overflow-hidden" style={{ width: 52, height: TOTAL_H }}>
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-10" style={{ height: PAD_PX, background: "linear-gradient(to bottom, var(--surface), transparent)" }} />
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10" style={{ height: PAD_PX, background: "linear-gradient(to top, var(--surface), transparent)" }} />
-      <div className="pointer-events-none absolute inset-x-1 z-0 rounded-[8px] bg-primary-token/20 border border-primary-token/40" style={{ top: PAD_PX, height: ITEM_H }} />
-      <div
-        ref={ref}
-        onScroll={handleScroll}
-        className="scrollbar-hide h-full overflow-y-scroll"
-        style={{ paddingTop: PAD_PX, paddingBottom: PAD_PX }}
-      >
-        {values.map((v) => (
-          <div
-            key={v}
-            style={{ height: ITEM_H }}
-            className={`flex cursor-pointer select-none items-center justify-center text-[16px] font-[var(--fw-semibold)] transition-colors ${v === selected ? "text-primary-token" : "text-muted/50"}`}
-            onMouseDown={() => {
-              const idx = values.indexOf(v);
-              snapTo(idx, true);
-              onSelect(v);
-            }}
-          >
-            {v}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function TimeWheelPicker({ value, onChange, minTime, maxTime, blockedIntervals }: {
-  value: string;
-  onChange: (v: string) => void;
-  minTime?: string;
-  maxTime?: string;
-  blockedIntervals?: Interval[]; // minutes from midnight
-}) {
-  const [hh, mm] = value.split(":");
-  const minH = minTime ? Number(minTime.split(":")[0]) : 0;
-  const maxH = maxTime ? Number(maxTime.split(":")[0]) : 23;
-  const minM = minTime ? Number(minTime.split(":")[1]) : 0;
-  const maxM = maxTime ? Number(maxTime.split(":")[1]) : 59;
-
-  // An hour is fully blocked if every minute [h*60, h*60+59] is inside a blocked interval
-  const isHourFullyBlocked = (h: number) =>
-    !!blockedIntervals?.some(b => b.from <= h * 60 && b.to >= h * 60 + 59);
-
-  const hours = HOURS.filter(h => {
-    const hN = Number(h);
-    return hN >= minH && hN <= maxH && !isHourFullyBlocked(hN);
-  });
-  const minutes = MINUTES.filter(m => {
-    const mN = Number(m), hN = Number(hh);
-    if (hN === minH && mN < minM) return false;
-    if (hN === maxH && mN > maxM) return false;
-    return true;
-  });
-
-  const safeHh = hours.includes(hh)  ? hh  : (hours[0]   ?? "00");
-  const safeMm = minutes.includes(mm) ? mm  : (minutes[0] ?? "00");
-
-  const handleHourChange = (h: string) => {
-    const hN = Number(h);
-    const newMinM = hN === minH ? minM : 0;
-    const newMaxM = hN === maxH ? maxM : 59;
-    const clampedM = Math.max(newMinM, Math.min(newMaxM, Number(safeMm)));
-    onChange(`${h}:${String(clampedM).padStart(2, "0")}`);
-  };
-
-  return (
-    <div className="flex items-center justify-center gap-1 rounded-[12px] border border-app bg-surface-inset py-[var(--space-2)]">
-      <TimeWheel values={hours}   selected={safeHh} onSelect={handleHourChange} />
-      <span className="text-[16px] font-[var(--fw-semibold)] text-primary-token">:</span>
-      <TimeWheel values={minutes} selected={safeMm} onSelect={(m) => onChange(`${safeHh}:${m}`)} />
-    </div>
-  );
-}
-
-
 /* ───────────── plan inline calendar ───────────── */
 
 function PlanInlineCalendar({
@@ -574,9 +447,6 @@ function PlanInlineCalendar({
     allMonths.push({ year: cur.getFullYear(), month: cur.getMonth() });
     cur.setMonth(cur.getMonth() + 1);
   }
-
-  // Reset phase when dates change externally
-  useEffect(() => { setPhase("start"); }, [minDate, maxDate]);
 
   const totalMonths = allMonths.length;
 
@@ -699,7 +569,6 @@ function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClos
   const [horaInicio, setHoraInicio] = useState(defaultHoraInicio);
   const [horaFin, setHoraFin] = useState(defaultHoraFin);
   const allDay = false;
-  const isMultiDay = minDate !== maxDate; // plan tiene más de un día
   const [tipo, setTipo] = useState<TipoSubplan>(initialSubplan?.tipo ?? "ACTIVIDAD");
   const [ubicacion, setUbicacion] = useState(initialSubplan?.ubicacion_nombre ?? "");
   const [ubicacionCoords, setUbicacionCoords] = useState<Coords | null>(
@@ -723,24 +592,10 @@ function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClos
     return (e.getFullYear() - s.getFullYear()) * 12 + (e.getMonth() - s.getMonth()) + 1;
   }, [minDate, maxDate]);
 
-  // All valid days in the plan range (for date pills)
-  const planDays = useMemo(() => {
-    const days: string[] = [];
-    const cur = new Date(minDate + "T12:00:00");
-    const end = new Date(maxDate + "T12:00:00");
-    while (cur <= end) {
-      days.push(toLocalDate(cur.toISOString()));
-      cur.setDate(cur.getDate() + 1);
-    }
-    return days;
-  }, [minDate, maxDate]);
-
   // ¿Ya hay actividades ese día? → mostrar selector de transporte
   const hayActividadEseDia = subplanes.some((s) => s.id !== initialSubplan?.id && isoDateOnly(s.inicio_at) === fecha);
   const esTransporte = TIPOS_TRANSPORTE.includes(tipo);
   const [error, setError] = useState<string | null>(null);
-  const [calendarOpen, setCalendarOpen] = useState(false);
-  const [calendarFinOpen, setCalendarFinOpen] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
 
   // Lock body scroll while modal is open
@@ -877,15 +732,6 @@ function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClos
   const canContinueWizard = wizardStep === 3 ? titulo.trim().length > 0 : true;
   const isLastStep = wizardStep === TOTAL_STEPS;
   const meta = STEP_META[wizardStep - 1];
-
-  const formatDayPill = (dateStr: string) => {
-    const d = new Date(dateStr + "T12:00:00");
-    return {
-      weekday: d.toLocaleDateString("es-ES", { weekday: "short" }).replace(".", ""),
-      day: d.getDate(),
-      month: d.toLocaleDateString("es-ES", { month: "short" }).replace(".", ""),
-    };
-  };
 
   return (
     <>
@@ -1026,6 +872,7 @@ function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClos
             {wizardStep === 2 && (
               <div className="space-y-[var(--space-6)]">
                 <PlanInlineCalendar
+                  key={`${minDate}-${maxDate}`}
                   minDate={minDate}
                   maxDate={maxDate}
                   startDate={fecha}
@@ -1080,7 +927,6 @@ function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClos
                       tipo === "BARCO" ? "Ferry a Ibiza" :
                       "Tarde en el museo"
                     }
-                    // eslint-disable-next-line jsx-a11y/no-autofocus
                     autoFocus
                     className="w-full bg-transparent text-[22px] font-[var(--fw-semibold)] text-app outline-none placeholder:text-muted"
                   />
@@ -1600,10 +1446,13 @@ export default function PlanDetailPage() {
           {/* ─── Hero ─── */}
           <div className="relative w-full overflow-hidden md:ml-0 md:[border-bottom-left-radius:var(--radius-card)] md:[border-bottom-right-radius:var(--radius-card)]" style={{ height: "clamp(260px, 40vh, 380px)" }}>
             {plan.foto_portada ? (
-              <img
+              <Image
                 src={plan.foto_portada}
                 alt={plan.titulo}
+                fill
+                sizes="100vw"
                 className="absolute inset-0 h-full w-full object-cover"
+                unoptimized
               />
             ) : (
               <div className="absolute inset-0 bg-gradient-to-br from-primary/60 to-primary/30" />
@@ -2633,7 +2482,7 @@ export default function PlanDetailPage() {
                     return (
                       <div key={friend.id} className="flex h-[52px] w-full items-center gap-3 rounded-[8px] px-3">
                         {friend.profile_image ? (
-                          <img src={friend.profile_image} alt={friend.nombre} className="size-[32px] rounded-full object-cover" referrerPolicy="no-referrer" />
+                          <Image src={friend.profile_image} alt={friend.nombre} width={32} height={32} className="size-[32px] rounded-full object-cover" referrerPolicy="no-referrer" unoptimized />
                         ) : (
                           <div className="flex size-[32px] items-center justify-center rounded-full bg-[var(--text-primary)] text-[13px] font-[var(--fw-semibold)] text-contrast-token">{avatarLabel}</div>
                         )}
@@ -2668,7 +2517,7 @@ export default function PlanDetailPage() {
                   </button>
                 </div>
                 <div className="flex items-center gap-2 rounded-[8px] bg-surface px-3 py-2">
-                  <span className="flex-1 truncate text-[12px] text-muted font-mono">{inviteLink}</span>
+                  <span className="flex-1 truncate text-[12px] text-muted">{inviteLink}</span>
                   <button
                     type="button"
                     onClick={handleCopyInviteLink}

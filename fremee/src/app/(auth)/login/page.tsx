@@ -1,12 +1,20 @@
 ﻿"use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import GoogleAuthButton from "@/components/auth/GoogleAuthButton";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { useRouter, useSearchParams } from "next/navigation";
 
 export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginPageInner />
+    </Suspense>
+  );
+}
+
+function LoginPageInner() {
   const [showPassword, setShowPassword] = useState(false);
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirect") ?? "/feed";
@@ -49,7 +57,7 @@ export default function LoginPage() {
     return () => {
       subscription.unsubscribe();
     };
-  }, [router]);
+  }, [redirectTo, router]);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

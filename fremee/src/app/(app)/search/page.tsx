@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
@@ -683,11 +684,14 @@ function RecentActivityGlobe() {
 function Avatar({ label, image }: { label: string; image?: string | null }) {
   if (image) {
     return (
-      <img
+      <Image
         src={image}
         alt={`Avatar de ${label}`}
+        width={34}
+        height={34}
         className="avatar-md rounded-full border border-app object-cover"
         referrerPolicy="no-referrer"
+        unoptimized
       />
     );
   }

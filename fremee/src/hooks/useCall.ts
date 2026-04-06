@@ -16,15 +16,16 @@ export type CallState =
 
 export function useCall() {
   const { user } = useAuth();
+  const userId = user?.id ?? null;
   const [callState, setCallState] = useState<CallState>({ status: "idle" });
   const activeSinceRef = useRef<number | null>(null);
 
   // Listen for incoming calls via Supabase Realtime
   useEffect(() => {
-    if (!user?.id) return;
+    if (!userId) return;
 
     const channel = supabase
-      .channel(`incoming-calls-${user.id}`)
+      .channel(`incoming-calls-${userId}`)
       .on(
         "postgres_changes",
         {
@@ -38,7 +39,7 @@ export function useCall() {
             tipo: "audio" | "video"; iniciado_por_user_id: string;
           };
 
-          if (llamada.iniciado_por_user_id === user.id) return;
+          if (llamada.iniciado_por_user_id === userId) return;
 
           // Resolve display info using fn_chats_list (avoids RLS issues)
           const { data: chatsList } = await supabase.rpc("fn_chats_list");
@@ -72,16 +73,16 @@ export function useCall() {
       .subscribe((status) => console.log("[call] channel status", status));
 
     return () => { supabase.removeChannel(channel); };
-  }, [user?.id]);
+  }, [userId]);
 
   const startCall = useCallback(async (chatId: string, tipo: "audio" | "video" = "audio", participanteNombre = "Usuario", participanteFoto?: string, miembros: CallMiembro[] = []) => {
-    if (!user?.id) return;
+    if (!userId) return;
 
     const roomName = `call_${chatId}_${Date.now()}`;
 
     const { data: llamada, error } = await supabase
       .from("llamadas")
-      .insert({ chat_id: chatId, room_name: roomName, iniciado_por_user_id: user.id, tipo, estado: "ringing" })
+      .insert({ chat_id: chatId, room_name: roomName, iniciado_por_user_id: userId, tipo, estado: "ringing" })
       .select()
       .single();
     if (error || !llamada) { console.error("[call] create error", error?.message, error?.code, error?.details, error?.hint); return; }
@@ -99,7 +100,7 @@ export function useCall() {
 
     activeSinceRef.current = null;
     setCallState({ status: "outgoing", roomName, chatId, tipo, token, isInitiator: true, participanteNombre, participanteFoto, miembros });
-  }, [user?.id]);
+  }, [userId]);
 
   const acceptCall = useCallback(async () => {
     if (callState.status !== "incoming") return;
@@ -168,7 +169,7 @@ export function useCall() {
   }, [callState]);
 
   const joinCall = useCallback(async (llamadaId: number, roomName: string, chatId: string, tipo: "audio" | "video", participanteNombre: string, participanteFoto: string | undefined, miembros: CallMiembro[]) => {
-    if (!user?.id) return;
+    if (!userId) return;
     void llamadaId; // kept for potential future use (e.g. marking active)
     const { data: { session } } = await supabase.auth.getSession();
     const res = await fetch("/api/livekit/token", {
@@ -179,7 +180,7 @@ export function useCall() {
     const { token } = await res.json() as { token: string };
     activeSinceRef.current = Date.now();
     setCallState({ status: "active", roomName, chatId, tipo, token, isInitiator: false, participanteNombre, participanteFoto, miembros });
-  }, [user?.id]);
+  }, [userId]);
 
   const markActive = useCallback(() => {
     if (callState.status === "outgoing") {
