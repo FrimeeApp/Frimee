@@ -154,15 +154,6 @@
     color: var(--text-primary);
   }
 
-  [class*="text-[var(--font-h"] {
-    font-family: var(--font-sans) !important;
-  }
-
-  [class*="text-[var(--font-h1"],
-  [class*="text-[clamp("] {
-    font-family: var(--font-display-face), "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif !important;
-  }
-
   p {
     margin: 0;
   }

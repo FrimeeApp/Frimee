@@ -130,16 +130,25 @@
   --z-modal: 1100;
   --z-toast: 1200;
 
-  --focus-ring-color: color-mix(in srgb, var(--primary) 60%, transparent);
+  --focus-ring-color: color-mix(in srgb, var(--text-primary) 18%, transparent);
   --focus-ring-width: 2px;
   --focus-ring-offset: 2px;
 
   --input-bg: var(--surface);
   --input-border: var(--border);
-  --input-border-hover: color-mix(in srgb, var(--border) 70%, var(--primary) 30%);
-  --input-border-focus: color-mix(in srgb, var(--border) 35%, var(--primary) 65%);
+  --input-border-hover: color-mix(in srgb, var(--border) 72%, var(--text-primary) 28%);
+  --input-border-focus: color-mix(in srgb, var(--border) 28%, var(--text-primary) 72%);
   --input-border-error: color-mix(in srgb, var(--error) 70%, var(--border) 30%);
   --input-placeholder: var(--text-secondary);
+
+  --auth-solid-bg: #111111;
+  --auth-solid-bg-hover: #000000;
+  --auth-solid-text: #ffffff;
+  --auth-neutral-hover: color-mix(in srgb, var(--surface) 90%, var(--text-primary) 10%);
+  --auth-neutral-active: color-mix(in srgb, var(--surface) 84%, var(--text-primary) 16%);
+  --auth-link-color: color-mix(in srgb, var(--text-primary) 82%, var(--surface) 18%);
+  --auth-link-hover: #000000;
+  --auth-link-muted-hover: color-mix(in srgb, var(--text-primary) 74%, var(--surface) 26%);
 }
 
 .dark {
@@ -182,14 +191,23 @@
   --shadow-lg: 0 12px 24px rgb(0 0 0 / 0.34), 0 4px 8px rgb(0 0 0 / 0.2);
   --shadow-xl: 0 20px 40px rgb(0 0 0 / 0.4), 0 8px 16px rgb(0 0 0 / 0.22);
 
-  --focus-ring-color: color-mix(in srgb, var(--primary) 65%, transparent);
+  --focus-ring-color: color-mix(in srgb, var(--text-primary) 22%, transparent);
 
   --input-bg: var(--surface);
   --input-border: var(--border);
-  --input-border-hover: color-mix(in srgb, var(--border) 55%, var(--primary) 45%);
-  --input-border-focus: color-mix(in srgb, var(--border) 25%, var(--primary) 75%);
+  --input-border-hover: color-mix(in srgb, var(--border) 52%, var(--text-primary) 48%);
+  --input-border-focus: color-mix(in srgb, var(--border) 18%, var(--text-primary) 82%);
   --input-border-error: color-mix(in srgb, var(--error) 72%, var(--border) 28%);
   --input-placeholder: var(--text-secondary);
+
+  --auth-solid-bg: #f5f5f5;
+  --auth-solid-bg-hover: #ffffff;
+  --auth-solid-text: #111111;
+  --auth-neutral-hover: color-mix(in srgb, var(--surface) 88%, var(--text-primary) 12%);
+  --auth-neutral-active: color-mix(in srgb, var(--surface) 82%, var(--text-primary) 18%);
+  --auth-link-color: color-mix(in srgb, var(--text-primary) 84%, var(--surface) 16%);
+  --auth-link-hover: #ffffff;
+  --auth-link-muted-hover: color-mix(in srgb, var(--text-primary) 76%, var(--surface) 24%);
 }
 
 @media (min-width: 768px) {
@@ -222,3 +240,4 @@
     --font-h6: 16px;
   }
 }
+

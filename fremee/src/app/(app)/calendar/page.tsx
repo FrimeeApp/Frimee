@@ -382,10 +382,10 @@ function CalendarPageInner() {
   }, [localPlans, plans]);
 
   const visiblePlans = useMemo(() => {
-    const startToday = startOfDay(new Date());
+    const now = new Date();
     return mergedPlans.filter((plan) => {
       const endsAt = new Date(plan.endsAt);
-      return tab === "active" ? endsAt >= startToday : endsAt < startToday;
+      return tab === "active" ? endsAt >= now : endsAt < now;
     });
   }, [mergedPlans, tab]);
 
