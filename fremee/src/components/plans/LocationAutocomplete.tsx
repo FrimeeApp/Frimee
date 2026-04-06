@@ -22,6 +22,7 @@ export default function LocationAutocomplete({
   className,
   onCommit,
   onEnter,
+  dropdownVariant = "plain",
 }: {
   value: string;
   onChange: (v: string, coords?: Coords) => void;
@@ -29,6 +30,7 @@ export default function LocationAutocomplete({
   className?: string;
   onCommit?: () => void;
   onEnter?: () => void;
+  dropdownVariant?: "plain" | "surface";
 }) {
   const [mapsReady, setMapsReady] = useState(
     () =>
@@ -68,11 +70,20 @@ export default function LocationAutocomplete({
       // Use the parent container (includes leading icon) for full-width alignment
       const anchor = wrapperRef.current.parentElement ?? wrapperRef.current;
       const rect = anchor.getBoundingClientRect();
+      const desiredHeight = Math.min(Math.max(suggestions.length, 1), 5) * 56;
+      const spaceBelow = window.innerHeight - rect.bottom - 12;
+      const spaceAbove = rect.top - 12;
+      const openUpwards = spaceBelow < Math.min(desiredHeight, 220) && spaceAbove > spaceBelow;
+      const maxHeight = Math.max(120, openUpwards ? spaceAbove : spaceBelow);
+
       setDropdownStyle({
         position: "fixed",
-        top: rect.bottom + 8,
         left: rect.left,
+        top: openUpwards ? "auto" : rect.bottom + 8,
+        bottom: openUpwards ? window.innerHeight - rect.top + 8 : "auto",
         width: rect.width,
+        maxHeight,
+        overflowY: "auto",
         zIndex: 9999,
       });
     };
@@ -133,7 +144,11 @@ export default function LocationAutocomplete({
       {isMounted && open && suggestions.length > 0 && createPortal(
         <ul
           style={dropdownStyle}
-          className="rounded-[12px] border-0 bg-transparent shadow-none max-md:rounded-none"
+          className={
+            dropdownVariant === "surface"
+              ? "overflow-hidden rounded-[14px] border border-app bg-app shadow-[0_18px_48px_rgba(0,0,0,0.24)] max-md:rounded-[14px]"
+              : "rounded-[12px] border-0 bg-transparent shadow-none max-md:rounded-none"
+          }
         >
           {suggestions.slice(0, 5).map((s, i) => (
             <li

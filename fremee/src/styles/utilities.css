@@ -62,6 +62,78 @@
   .h-btn-primary { height: var(--button-height-primary); }
   .h-input { height: var(--input-height); }
 
+  .auth-solid-button {
+    background-color: var(--auth-solid-bg);
+    color: var(--auth-solid-text);
+  }
+
+  .auth-solid-button:hover {
+    background-color: var(--auth-solid-bg-hover);
+  }
+
+  .auth-neutral-button:hover {
+    background-color: var(--auth-neutral-hover);
+  }
+
+  .auth-neutral-button:active {
+    background-color: var(--auth-neutral-active);
+  }
+
+  .auth-neutral-button:focus-visible {
+    box-shadow: 0 0 0 var(--focus-ring-width) var(--focus-ring-color);
+  }
+
+  .auth-link {
+    color: var(--auth-link-color);
+    text-decoration-color: color-mix(in srgb, currentColor 32%, transparent);
+    transition:
+      color var(--duration-fast) var(--ease-standard),
+      text-decoration-color var(--duration-fast) var(--ease-standard);
+  }
+
+  .auth-link:hover {
+    color: var(--auth-link-hover);
+    text-decoration-color: currentColor;
+  }
+
+  .auth-link:focus-visible {
+    color: var(--auth-link-hover);
+    text-decoration-color: currentColor;
+  }
+
+  .auth-link-muted:hover {
+    color: var(--auth-link-muted-hover);
+  }
+
+  .auth-link-muted:focus-visible {
+    color: var(--auth-link-muted-hover);
+  }
+
+  .auth-link-primary {
+    color: var(--primary);
+    text-decoration-color: color-mix(in srgb, var(--primary) 34%, transparent);
+  }
+
+  .auth-link-primary:hover {
+    color: var(--primary-hover);
+    text-decoration-color: currentColor;
+  }
+
+  .auth-link-primary:focus-visible {
+    color: var(--primary-hover);
+    text-decoration-color: currentColor;
+  }
+
+  .auth-page {
+    font-family: var(--font-sans);
+  }
+
+  .auth-title {
+    font-size: clamp(1.7rem, 2.2vw, 2.3rem);
+    line-height: 1.08;
+    letter-spacing: -0.02em;
+  }
+
   .size-icon {
     width: var(--icon-size);
     height: var(--icon-size);
@@ -132,3 +204,4 @@
     background-color: var(--text-tertiary);
   }
 }
+

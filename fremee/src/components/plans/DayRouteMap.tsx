@@ -120,7 +120,7 @@ export default function DayRouteMap({
       fallbackMapRef.current.innerHTML = "";
       const map = new google.maps.Map(fallbackMapRef.current, {
         mapTypeId: "roadmap", disableDefaultUI: true, zoomControl: true, styles: darkMapStyles,
-        center: { lat: 0, lng: 0 }, zoom: 2,
+        center: { lat: 0, lng: 0 }, zoom: 2, gestureHandling: "greedy",
       });
       const coord = await geocode(ubicacionNombre);
       if (gen !== renderGenRef.current || !fallbackMapRef.current) return;
@@ -164,6 +164,7 @@ export default function DayRouteMap({
         disableDefaultUI: true,
         zoomControl: true,
         styles: darkMapStyles,
+        gestureHandling: "greedy",
       });
 
       const bounds = new google.maps.LatLngBounds();
@@ -292,7 +293,7 @@ export default function DayRouteMap({
 
   if (points.length < 2) {
     return (
-      <div className={`overflow-hidden ${containerClassName ?? "rounded-card border border-app"}`}>
+      <div className={`overflow-hidden ${containerClassName ?? "rounded-[12px] border border-app"}`} style={containerClassName ? undefined : { clipPath: "inset(0 round 12px)" }}>
         <div className={`relative w-full bg-surface-inset ${heightClassName}`}>
           <div ref={fallbackMapRef} className="absolute inset-0" />
           {loading && (
@@ -311,7 +312,7 @@ export default function DayRouteMap({
   }
 
   return (
-    <div className={`overflow-hidden ${containerClassName ?? "rounded-card border border-app"}`}>
+    <div className={`overflow-hidden ${containerClassName ?? "rounded-[12px] border border-app"}`} style={containerClassName ? undefined : { clipPath: "inset(0 round 12px)" }}>
       {/* Wrapper: mapRef is a leaf div React never renders children into */}
       <div className={`relative w-full bg-surface-inset ${heightClassName}`}>
         <div ref={mapRef} className="absolute inset-0" />

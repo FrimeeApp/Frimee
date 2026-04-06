@@ -121,7 +121,7 @@ function PlanDetailSkeleton() {
   return (
     <div className="min-h-dvh bg-app text-app">
       <div className="relative min-h-dvh w-full">
-        <main className="pb-[max(var(--space-6),env(safe-area-inset-bottom))] md:py-0">
+        <main className="pb-[max(var(--space-6),env(safe-area-inset-bottom))] md:py-0 md:pl-[102px]">
           <div className="md:grid md:grid-cols-[minmax(88px,1fr)_minmax(0,1536px)_minmax(88px,1fr)] xl:grid-cols-[minmax(180px,1fr)_minmax(0,1280px)_minmax(180px,1fr)] 2xl:grid-cols-[minmax(240px,1fr)_minmax(0,1240px)_minmax(240px,1fr)]">
             <div className="md:col-start-2">
 
@@ -484,6 +484,66 @@ function PlanInlineCalendar({
   );
 }
 
+/* ───────────── time wheel input ───────────── */
+
+function TimeWheelInput({ value, onChange, minTime, maxTime }: {
+  value: string;
+  onChange: (v: string) => void;
+  minTime?: string;
+  maxTime?: string;
+}) {
+  const [hStr, mStr] = value.split(":");
+  const h = parseInt(hStr ?? "0", 10);
+  const m = parseInt(mStr ?? "0", 10);
+  const touchHRef = useRef<{ startY: number; start: number } | null>(null);
+  const touchMRef = useRef<{ startY: number; start: number } | null>(null);
+
+  const emit = (hh: number, mm: number) => {
+    let total = Math.max(0, Math.min(23 * 60 + 59, hh * 60 + mm));
+    if (minTime) { const [a, b] = minTime.split(":").map(Number); total = Math.max((a ?? 0) * 60 + (b ?? 0), total); }
+    if (maxTime) { const [a, b] = maxTime.split(":").map(Number); total = Math.min((a ?? 0) * 60 + (b ?? 0), total); }
+    onChange(`${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`);
+  };
+
+  const inputCls = "w-[46px] bg-transparent text-[28px] font-[var(--fw-bold)] text-app outline-none text-center [appearance:textfield] [&::-webkit-inner-spin-button]:hidden [&::-webkit-outer-spin-button]:hidden";
+
+  return (
+    <div className="flex items-baseline">
+      <input
+        type="number" min={0} max={23}
+        value={String(h).padStart(2, "0")}
+        onChange={(e) => emit(Math.max(0, Math.min(23, parseInt(e.target.value) || 0)), m)}
+        onWheel={(e) => { e.preventDefault(); emit(h + (e.deltaY > 0 ? -1 : 1), m); }}
+        onTouchStart={(e) => { touchHRef.current = { startY: e.touches[0]!.clientY, start: h }; }}
+        onTouchMove={(e) => {
+          if (!touchHRef.current) return;
+          e.preventDefault();
+          const delta = Math.round((touchHRef.current.startY - e.touches[0]!.clientY) / 20);
+          emit(touchHRef.current.start + delta, m);
+        }}
+        onTouchEnd={() => { touchHRef.current = null; }}
+        className={inputCls}
+      />
+      <span className="text-[28px] font-[var(--fw-bold)] text-app select-none">:</span>
+      <input
+        type="number" min={0} max={59}
+        value={String(m).padStart(2, "0")}
+        onChange={(e) => emit(h, Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
+        onWheel={(e) => { e.preventDefault(); emit(h, m + (e.deltaY > 0 ? -1 : 1)); }}
+        onTouchStart={(e) => { touchMRef.current = { startY: e.touches[0]!.clientY, start: m }; }}
+        onTouchMove={(e) => {
+          if (!touchMRef.current) return;
+          e.preventDefault();
+          const delta = Math.round((touchMRef.current.startY - e.touches[0]!.clientY) / 8);
+          emit(h, touchMRef.current.start + delta);
+        }}
+        onTouchEnd={() => { touchMRef.current = null; }}
+        className={inputCls}
+      />
+    </div>
+  );
+}
+
 /* ───────────── add sheet ───────────── */
 
 const TRANSPORT_LLEGADA = [
@@ -631,11 +691,21 @@ function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClos
   // Occupied intervals for the selected day (existing subplans + travel time)
   const occupiedIntervals = fecha ? getOccupiedIntervals(subplanes.filter((s) => s.id !== initialSubplan?.id), fecha) : [];
 
-  const canSubmit = titulo.trim().length > 0 && fecha.length > 0 && !saving;
+  const canSubmit = titulo.trim().length > 0 && fecha.length > 0 && fecha >= minDate && fecha <= maxDate && !saving;
 
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!canSubmit) return;
+
+    // Validate dates are within plan range
+    if (fecha < minDate || fecha > maxDate) {
+      setError(`La actividad debe estar entre el ${minDate} y el ${maxDate}.`);
+      return;
+    }
+    if (efectivaFechaFin > maxDate) {
+      setError(`La fecha de fin debe estar dentro del rango del plan.`);
+      return;
+    }
 
     // Validate no overlap with existing subplans + travel time
     if (!allDay && occupiedIntervals.length > 0) {
@@ -733,10 +803,30 @@ function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClos
   const isLastStep = wizardStep === TOTAL_STEPS;
   const meta = STEP_META[wizardStep - 1];
 
+  const handleAdvance = () => {
+    if (!canContinueWizard || saving) return;
+    if (isLastStep) { void handleSubmit(); }
+    else { setWizardStep((s) => s + 1); }
+  };
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== "Enter") return;
+      const tag = (e.target as HTMLElement).tagName;
+      // Let textarea handle Enter naturally; text inputs in step 3 handled separately
+      if (tag === "TEXTAREA") return;
+      e.preventDefault();
+      handleAdvance();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canContinueWizard, saving, isLastStep, wizardStep, titulo]);
+
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center">
+      <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center" onClick={onClose}>
         <div
           ref={sheetRef}
           className={`flex h-dvh w-full flex-col overflow-hidden bg-[var(--bg)] transition-[max-width] duration-[400ms] [transition-timing-function:var(--ease-standard)] md:h-auto md:max-h-[90dvh] md:rounded-[24px] md:shadow-elev-4 ${
@@ -816,6 +906,7 @@ function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClos
                     <LocationAutocomplete
                       value={ubicacion}
                       onChange={(v, coords) => { setUbicacion(v); if (coords) setUbicacionCoords(coords); else setUbicacionCoords(null); }}
+                      dropdownVariant="surface"
                       placeholder={
                         tipo === "VUELO" ? "Aeropuerto de salida" :
                         tipo === "BARCO" ? "Puerto de salida" :
@@ -836,11 +927,82 @@ function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClos
                       <LocationAutocomplete
                         value={ubicacionFin}
                         onChange={(v, coords) => { setUbicacionFin(v); if (coords) setUbicacionFinCoords(coords); else setUbicacionFinCoords(null); }}
+                        dropdownVariant="surface"
                         placeholder={tipo === "VUELO" ? "Aeropuerto de llegada" : "Puerto de llegada"}
                       />
                     </div>
                   </div>
                 )}
+
+              </div>
+            )}
+
+            {/* ── Step 2: Cuándo (calendar + hours) ── */}
+            {wizardStep === 2 && (
+              <div className="space-y-[var(--space-6)]">
+                <PlanInlineCalendar
+                  key={`${minDate}-${maxDate}`}
+                  minDate={minDate}
+                  maxDate={maxDate}
+                  startDate={fecha}
+                  endDate={fechaFin}
+                  onChange={(start, end) => { setFecha(start); setFechaFin(end); }}
+                />
+                {/* Time pickers */}
+                <div className="grid grid-cols-2 gap-[var(--space-5)]">
+                  <div>
+                    <p className="mb-[var(--space-2)] text-[11px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Hora inicio</p>
+                    <div className="border-b-2 border-app pb-[var(--space-1)] transition-colors focus-within:border-primary-token">
+                      <TimeWheelInput
+                        value={horaInicio}
+                        onChange={setHoraInicio}
+                        minTime={fecha === minDate && !planIsAllDay ? planStartTime : undefined}
+                        maxTime={fecha === maxDate && !planIsAllDay ? planEndTime : undefined}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <p className="mb-[var(--space-2)] text-[11px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Hora fin</p>
+                    <div className="border-b-2 border-app pb-[var(--space-1)] transition-colors focus-within:border-primary-token">
+                      <TimeWheelInput
+                        value={horaFin}
+                        onChange={setHoraFin}
+                        minTime={efectivaFechaFin === fecha ? horaInicio : undefined}
+                        maxTime={efectivaFechaFin === maxDate && !planIsAllDay ? planEndTime : undefined}
+                      />
+                    </div>
+                  </div>
+                </div>
+                {error && wizardStep === 2 && <p className="text-body-sm text-[var(--error)]">{error}</p>}
+              </div>
+            )}
+
+            {/* ── Step 3: Nombre ── */}
+            {wizardStep === 3 && (
+              <div className="space-y-[var(--space-5)]">
+                <div className="border-b-2 border-app pb-[var(--space-2)] transition-colors focus-within:border-primary-token">
+                  <input
+                    value={titulo}
+                    onChange={(e) => setTitulo(e.target.value)}
+                    placeholder={
+                      tipo === "VUELO" ? "Vuelo a París" :
+                      tipo === "HOTEL" ? "Hotel Marina Bay" :
+                      tipo === "RESTAURANTE" ? "Cena en La Trattoria" :
+                      tipo === "BARCO" ? "Ferry a Ibiza" :
+                      "Tarde en el museo"
+                    }
+                    autoFocus
+                    className="w-full bg-transparent text-[22px] font-[var(--fw-semibold)] text-app outline-none placeholder:text-muted"
+                  />
+                </div>
+                <div className="border-b border-app pb-[var(--space-1)] transition-colors focus-within:border-[var(--border-strong)]">
+                  <input
+                    value={descripcion}
+                    onChange={(e) => setDescripcion(e.target.value)}
+                    placeholder="Descripción breve (opcional)"
+                    className="w-full bg-transparent text-body-sm text-app outline-none placeholder:text-muted"
+                  />
+                </div>
 
                 {/* ¿Cómo llegas? */}
                 {hayActividadEseDia && (
@@ -868,87 +1030,13 @@ function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClos
               </div>
             )}
 
-            {/* ── Step 2: Cuándo (calendar + hours) ── */}
-            {wizardStep === 2 && (
-              <div className="space-y-[var(--space-6)]">
-                <PlanInlineCalendar
-                  key={`${minDate}-${maxDate}`}
-                  minDate={minDate}
-                  maxDate={maxDate}
-                  startDate={fecha}
-                  endDate={fechaFin}
-                  onChange={(start, end) => { setFecha(start); setFechaFin(end); }}
-                />
-                {/* Time pickers */}
-                <div className="grid grid-cols-2 gap-[var(--space-5)]">
-                  <div>
-                    <p className="mb-[var(--space-2)] text-[11px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Hora inicio</p>
-                    <div className="border-b-2 border-app pb-[var(--space-1)] transition-colors focus-within:border-primary-token">
-                      <input
-                        type="time"
-                        value={horaInicio}
-                        onChange={(e) => setHoraInicio(e.target.value)}
-                        min={fecha === minDate && !planIsAllDay ? planStartTime : undefined}
-                        max={fecha === maxDate && !planIsAllDay ? planEndTime : undefined}
-                        className="w-full bg-transparent text-[28px] font-[var(--fw-bold)] text-app outline-none"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <p className="mb-[var(--space-2)] text-[11px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Hora fin</p>
-                    <div className="border-b-2 border-app pb-[var(--space-1)] transition-colors focus-within:border-primary-token">
-                      <input
-                        type="time"
-                        value={horaFin}
-                        onChange={(e) => setHoraFin(e.target.value)}
-                        min={efectivaFechaFin === fecha ? horaInicio : undefined}
-                        max={efectivaFechaFin === maxDate && !planIsAllDay ? planEndTime : undefined}
-                        className="w-full bg-transparent text-[28px] font-[var(--fw-bold)] text-app outline-none"
-                      />
-                    </div>
-                  </div>
-                </div>
-                {error && wizardStep === 2 && <p className="text-body-sm text-[var(--error)]">{error}</p>}
-              </div>
-            )}
-
-            {/* ── Step 3: Nombre ── */}
-            {wizardStep === 3 && (
-              <div className="space-y-[var(--space-5)]">
-                <div className="border-b-2 border-app pb-[var(--space-2)] transition-colors focus-within:border-primary-token">
-                  <input
-                    value={titulo}
-                    onChange={(e) => setTitulo(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter" && titulo.trim()) { e.preventDefault(); setWizardStep(4); } }}
-                    placeholder={
-                      tipo === "VUELO" ? "Vuelo a París" :
-                      tipo === "HOTEL" ? "Hotel Marina Bay" :
-                      tipo === "RESTAURANTE" ? "Cena en La Trattoria" :
-                      tipo === "BARCO" ? "Ferry a Ibiza" :
-                      "Tarde en el museo"
-                    }
-                    autoFocus
-                    className="w-full bg-transparent text-[22px] font-[var(--fw-semibold)] text-app outline-none placeholder:text-muted"
-                  />
-                </div>
-                <div className="border-b border-app pb-[var(--space-1)] transition-colors focus-within:border-[var(--border-strong)]">
-                  <input
-                    value={descripcion}
-                    onChange={(e) => setDescripcion(e.target.value)}
-                    placeholder="Descripción breve (opcional)"
-                    className="w-full bg-transparent text-body-sm text-app outline-none placeholder:text-muted"
-                  />
-                </div>
-              </div>
-            )}
-
             {error && isLastStep && <p className="text-body-sm text-[var(--error)]">{error}</p>}
           </div>
 
           {/* Footer */}
           <div className="shrink-0 border-t border-app px-[var(--space-5)] py-[var(--space-4)]">
-            {wizardStep === 2 ? (
-              <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between">
+              {wizardStep === 2 ? (
                 <button
                   type="button"
                   onClick={() => { setFecha(defaultDate); setFechaFin(null); setHoraInicio(defaultHoraInicio); setHoraFin(defaultHoraFin); }}
@@ -956,33 +1044,18 @@ function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClos
                 >
                   Restablecer
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setWizardStep((s) => s + 1)}
-                  className="rounded-[14px] bg-[var(--text-primary)] px-[var(--space-8)] py-[12px] text-body-sm font-[var(--fw-semibold)] text-contrast-token transition-opacity hover:opacity-85"
-                >
-                  Siguiente
-                </button>
-              </div>
-            ) : isLastStep ? (
+              ) : (
+                <div />
+              )}
               <button
                 type="button"
-                disabled={!canContinueWizard || saving}
-                onClick={() => { void handleSubmit(); }}
-                className="w-full rounded-full bg-primary-token py-[14px] text-body-sm font-[var(--fw-semibold)] text-contrast-token transition-opacity hover:opacity-85 disabled:opacity-[var(--disabled-opacity)]"
+                disabled={!canContinueWizard || (isLastStep && saving)}
+                onClick={handleAdvance}
+                className="rounded-[14px] bg-[var(--text-primary)] px-[var(--space-8)] py-[12px] text-body-sm font-[var(--fw-semibold)] text-contrast-token transition-opacity hover:opacity-85 disabled:opacity-[var(--disabled-opacity)]"
               >
-                {saving ? "Guardando..." : isEditing ? "Guardar cambios" : "Crear actividad"}
+                {isLastStep ? (saving ? "Guardando..." : isEditing ? "Guardar cambios" : "Crear actividad") : wizardStep === 2 ? "Siguiente" : "Continuar"}
               </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setWizardStep((s) => s + 1)}
-                disabled={!canContinueWizard}
-                className="w-full rounded-full bg-primary-token py-[14px] text-body-sm font-[var(--fw-semibold)] text-contrast-token transition-opacity hover:opacity-85 disabled:opacity-[var(--disabled-opacity)]"
-              >
-                Continuar
-              </button>
-            )}
+            </div>
           </div>
         </div>
       </div>
@@ -1439,7 +1512,7 @@ export default function PlanDetailPage() {
     <div className="min-h-dvh bg-app text-app">
       <div className="relative min-h-dvh w-full">
         <AppSidebar hideMobileNav={true} />
-        <main className="pb-[max(var(--space-6),env(safe-area-inset-bottom))] md:py-0">
+        <main className="pb-[max(var(--space-6),env(safe-area-inset-bottom))] md:py-0 md:pl-[102px]">
           <div className="md:grid md:grid-cols-[minmax(88px,1fr)_minmax(0,1536px)_minmax(88px,1fr)] xl:grid-cols-[minmax(180px,1fr)_minmax(0,1280px)_minmax(180px,1fr)] 2xl:grid-cols-[minmax(240px,1fr)_minmax(0,1240px)_minmax(240px,1fr)]">
             <div className="md:col-start-2">
 
@@ -1470,7 +1543,7 @@ export default function PlanDetailPage() {
 
             {/* Title & meta */}
             <div className="absolute bottom-0 left-0 right-0 px-[var(--page-margin-x)] pb-[var(--space-6)]">
-              <h1 className="text-[clamp(24px,5vw,36px)] font-[var(--fw-medium)] leading-[1.1] tracking-[-0.01em] text-white">
+              <h1 className="[font-family:var(--font-display-face)] text-[clamp(24px,5vw,36px)] font-[var(--fw-medium)] leading-[1.1] tracking-[-0.01em] text-white">
                 {plan.titulo}
               </h1>
               {plan.descripcion && (
@@ -1496,15 +1569,19 @@ export default function PlanDetailPage() {
 
               {/* Action buttons */}
               <div className="absolute bottom-[var(--space-6)] right-[var(--page-margin-x)] flex gap-[var(--space-2)]">
-                <button onClick={() => void openInviteModal()} className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-sm transition-colors hover:bg-white/30">
-                  <InviteIcon className="size-[18px]" />
-                </button>
+                {!isPast && isAdmin && (
+                  <button onClick={() => void openInviteModal()} className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-sm transition-colors hover:bg-white/30">
+                    <InviteIcon className="size-[18px]" />
+                  </button>
+                )}
                 <button className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-sm transition-colors hover:bg-white/30">
                   <ShareIcon className="size-[18px]" />
                 </button>
-                <button className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-sm transition-colors hover:bg-white/30">
-                  <EditIcon className="size-[18px]" />
-                </button>
+                {!isPast && isAdmin && (
+                  <button className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-sm transition-colors hover:bg-white/30">
+                    <EditIcon className="size-[18px]" />
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -1592,6 +1669,7 @@ export default function PlanDetailPage() {
                   planId={plan?.id}
                   isAdmin={isAdmin}
                   onAbrirActividad={(titulo) => {
+                    if (isPast || !isAdmin) return;
                     setEditingSubplan(null);
                     setAddSheetInitialTitulo(titulo);
                     setAddSheetInitialDate(undefined);
@@ -1879,7 +1957,7 @@ export default function PlanDetailPage() {
                                       setAddSheetInitialDate(dateKey);
                                       setShowAddSheet(true);
                                     }}
-                                    className="group relative flex w-full gap-0 pt-[var(--space-2)] pb-[var(--space-2)] text-left"
+                                    className="group relative flex w-full gap-0 pb-[var(--space-2)] pt-[var(--space-2)] text-left"
                                     aria-label={`Añadir actividad en ${fmtDayHeader(items[0].inicio_at)}`}
                                   >
                                     <div className="w-[82px] shrink-0 pr-[var(--space-2)]" />
@@ -1890,9 +1968,7 @@ export default function PlanDetailPage() {
                                       </div>
                                     </div>
                                     <div className="min-w-0 flex-1 self-center pl-[var(--space-3)]">
-                                      <span
-                                        className="text-body-sm font-[var(--fw-regular)] text-primary-token transition-colors group-hover:text-primary-token"
-                                      >
+                                      <span className="text-body-sm font-[var(--fw-regular)] text-primary-token transition-colors group-hover:text-primary-token">
                                         Añadir actividad
                                       </span>
                                     </div>
@@ -2420,7 +2496,7 @@ export default function PlanDetailPage() {
         </button>
       )}
 
-      {showAddSheet && plan && (
+      {showAddSheet && plan && !isPast && isAdmin && (
         <AddSubplanSheet
           planId={plan.id}
           planStartDate={plan.inicio_at}
