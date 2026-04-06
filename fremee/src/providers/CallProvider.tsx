@@ -32,15 +32,16 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   const [widgetDuration, setWidgetDuration] = useState(0);
 
   const isGroup = callState.status !== "idle" && "miembros" in callState && callState.miembros.length > 2;
-  const isInitiator = (callState.status !== "idle" && "isInitiator" in callState && callState.isInitiator) ?? false;
   const isActive = callState.status === "active";
 
   // Reset minimized when call ends
   useEffect(() => {
-    if (callState.status === "idle") {
+    if (callState.status !== "idle") return;
+    const resetTimer = setTimeout(() => {
       setMinimized(false);
       setWidgetDuration(0);
-    }
+    }, 0);
+    return () => clearTimeout(resetTimer);
   }, [callState.status]);
 
   // Drive widget timer independently when minimized
@@ -78,7 +79,6 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
             miembros={callState.miembros}
             participanteNombre={participanteNombre}
             isActive={isActive}
-            isInitiator={isInitiator ?? false}
             isGroup={isGroup}
             onEnd={() => void endCall()}
             onEndForAll={() => void endCall(true)}

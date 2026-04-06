@@ -1,9 +1,9 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import AppSidebar from "@/components/common/AppSidebar";
-import LoadingScreen from "@/components/common/LoadingScreen";
 import { useAuth } from "@/providers/AuthProvider";
 import { getPublicUserProfile } from "@/services/api/repositories/users.repository";
 import { sendFriendRequest, getFriendshipStatuses, getFollowStatuses, removeFriend, getFollowerCount } from "@/services/api/endpoints/users.endpoint";
@@ -134,7 +134,7 @@ export default function ProfilePage() {
     };
 
     load();
-  }, [id, authLoading, isOwnProfile, myProfile?.id]);
+  }, [id, authLoading, isOwnProfile, myProfile]);
 
   const handleTabChange = async (tab: "planes" | "guardados") => {
     setActiveTab(tab);
@@ -262,7 +262,6 @@ export default function ProfilePage() {
   }
 
   const avatarLabel = (profileData.nombre.trim()[0] || "U").toUpperCase();
-  const finishedPlans = plans.filter((p) => new Date(p.endsAt) < new Date());
 
   return (
     <div className="min-h-dvh bg-app text-app">
@@ -290,11 +289,14 @@ export default function ProfilePage() {
               {/* Avatar with edit button */}
               <div className="relative">
                 {profileData.profile_image ? (
-                  <img
+                  <Image
                     src={profileData.profile_image}
                     alt={profileData.nombre}
+                    width={96}
+                    height={96}
                     className={`size-[96px] rounded-full border-2 border-app object-cover ${uploading ? "opacity-50" : ""}`}
                     referrerPolicy="no-referrer"
+                    unoptimized
                   />
                 ) : (
                   <div className={`flex size-[96px] items-center justify-center rounded-full bg-[var(--text-primary)] text-[32px] font-[var(--fw-semibold)] text-contrast-token ${uploading ? "opacity-50" : ""}`}>
@@ -566,10 +568,13 @@ function PlanGrid({ plans, onPlanClick }: { plans: FeedPlanItemDto[]; onPlanClic
             onClick={() => onPlanClick?.(plan.id)}
           >
             {plan.coverImage && (
-              <img
+              <Image
                 src={plan.coverImage}
                 alt={plan.title}
+                width={760}
+                height={570}
                 className="w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                unoptimized
               />
             )}
             {!plan.coverImage && <div className="aspect-[4/3] w-full bg-black" />}
@@ -608,51 +613,30 @@ function ProfileSkeleton() {
   return (
     <div className="flex flex-col items-center" aria-label="Cargando perfil" role="status">
       {/* Avatar */}
-      <div className="feed-skeleton-shimmer size-[96px] rounded-full" />
+      <div className="skeleton-shimmer size-[96px] rounded-full" />
       {/* Name */}
-      <div className="feed-skeleton-shimmer mt-[var(--space-3)] h-5 w-[140px] rounded-full" />
+      <div className="skeleton-shimmer mt-[var(--space-3)] h-5 w-[140px] rounded-full" />
       {/* Subtitle */}
-      <div className="feed-skeleton-shimmer mt-[var(--space-2)] h-3 w-[90px] rounded-full" />
+      <div className="skeleton-shimmer mt-[var(--space-2)] h-3 w-[90px] rounded-full" />
       {/* Stats */}
       <div className="mt-[var(--space-5)] flex gap-[var(--space-8)]">
         {[0, 1, 2].map((i) => (
           <div key={i} className="flex flex-col items-center gap-[6px]">
-            <div className="feed-skeleton-shimmer h-5 w-[28px] rounded-full" />
-            <div className="feed-skeleton-shimmer h-3 w-[50px] rounded-full" />
+            <div className="skeleton-shimmer h-5 w-[28px] rounded-full" />
+            <div className="skeleton-shimmer h-3 w-[50px] rounded-full" />
           </div>
         ))}
       </div>
       {/* Divider */}
-      <div className="feed-skeleton-shimmer mt-[var(--space-6)] h-[1px] w-full" />
+      <div className="skeleton-shimmer mt-[var(--space-6)] h-[1px] w-full" />
       {/* Grid */}
       <div className="mt-[var(--space-5)] w-full columns-2 gap-[var(--space-3)] sm:columns-3">
         {[120, 160, 130, 150, 140, 170].map((h, i) => (
           <div key={i} className="mb-[var(--space-3)] break-inside-avoid">
-            <div className="feed-skeleton-shimmer w-full rounded-[12px]" style={{ height: `${h}px` }} />
+            <div className="skeleton-shimmer w-full rounded-[12px]" style={{ height: `${h}px` }} />
           </div>
         ))}
       </div>
     </div>
-  );
-}
-
-function PencilIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <path
-        d="M16.474 5.408l2.118 2.118m-.756-3.982L12.109 9.27a2.118 2.118 0 0 0-.58 1.082L11 13l2.648-.53a2.118 2.118 0 0 0 1.082-.58l5.727-5.727a1.853 1.853 0 1 0-2.621-2.621z"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M19 15v3a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h3"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
   );
 }

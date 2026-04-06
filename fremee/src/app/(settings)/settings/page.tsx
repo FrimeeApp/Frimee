@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Capacitor } from "@capacitor/core";
@@ -748,25 +749,25 @@ function SettingsPageSkeleton() {
       <div className="container-app pb-[calc(var(--space-12)+env(safe-area-inset-bottom))] pt-[var(--space-4)] lg:pt-[var(--space-8)]">
         <div className="mx-auto max-w-[980px]">
           <div className="flex items-center justify-between gap-[var(--space-3)]">
-            <div className="feed-skeleton-shimmer h-10 w-28 rounded-chip" />
-            <div className="feed-skeleton-shimmer h-11 w-40 rounded-input" />
+            <div className="skeleton-shimmer h-10 w-28 rounded-chip" />
+            <div className="skeleton-shimmer h-11 w-40 rounded-input" />
           </div>
 
           <section className="mt-[var(--space-4)]">
             <div className="py-[var(--space-5)]">
               <div className="flex flex-col gap-[var(--space-4)] sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-[var(--space-4)]">
-                  <div className="feed-skeleton-shimmer h-[var(--space-16)] w-[var(--space-16)] rounded-full" />
+                  <div className="skeleton-shimmer h-[var(--space-16)] w-[var(--space-16)] rounded-full" />
                   <div className="min-w-0 space-y-2">
-                    <div className="feed-skeleton-shimmer h-7 w-44 rounded-full" />
-                    <div className="feed-skeleton-shimmer h-4 w-56 rounded-full" />
-                    <div className="feed-skeleton-shimmer h-4 w-24 rounded-full" />
+                    <div className="skeleton-shimmer h-7 w-44 rounded-full" />
+                    <div className="skeleton-shimmer h-4 w-56 rounded-full" />
+                    <div className="skeleton-shimmer h-4 w-24 rounded-full" />
                   </div>
                 </div>
 
                 <div className="flex gap-[var(--space-2)]">
-                  <div className="feed-skeleton-shimmer h-9 w-28 rounded-chip" />
-                  <div className="feed-skeleton-shimmer h-9 w-36 rounded-chip" />
+                  <div className="skeleton-shimmer h-9 w-28 rounded-chip" />
+                  <div className="skeleton-shimmer h-9 w-36 rounded-chip" />
                 </div>
               </div>
             </div>
@@ -774,8 +775,8 @@ function SettingsPageSkeleton() {
             {Array.from({ length: 6 }).map((_, index) => (
               <section key={index} className={index === 0 ? "" : "border-t border-strong"}>
                 <div className="px-[var(--space-4)] py-[var(--space-5)] lg:px-[var(--space-7)]">
-                  <div className="feed-skeleton-shimmer h-5 w-28 rounded-full" />
-                  <div className="mt-[var(--space-2)] feed-skeleton-shimmer h-4 w-64 rounded-full" />
+                  <div className="skeleton-shimmer h-5 w-28 rounded-full" />
+                  <div className="mt-[var(--space-2)] skeleton-shimmer h-4 w-64 rounded-full" />
                   <div className="mt-[var(--space-4)] border-t border-app">
                     {Array.from({ length: index === 0 || index >= 4 ? 2 : 3 }).map((__, rowIndex) => (
                       <div
@@ -783,13 +784,13 @@ function SettingsPageSkeleton() {
                         className="flex flex-col gap-[var(--space-3)] border-b border-app py-[var(--space-4)] sm:flex-row sm:items-center sm:justify-between"
                       >
                         <div className="flex min-w-0 flex-1 items-start gap-[var(--space-3)]">
-                          <div className="feed-skeleton-shimmer mt-[var(--space-1)] h-5 w-5 rounded-full" />
+                          <div className="skeleton-shimmer mt-[var(--space-1)] h-5 w-5 rounded-full" />
                           <div className="min-w-0 flex-1">
-                            <div className="feed-skeleton-shimmer h-4 w-28 rounded-full" />
-                            <div className="mt-[var(--space-1)] feed-skeleton-shimmer h-3 w-44 rounded-full" />
+                            <div className="skeleton-shimmer h-4 w-28 rounded-full" />
+                            <div className="mt-[var(--space-1)] skeleton-shimmer h-3 w-44 rounded-full" />
                           </div>
                         </div>
-                        <div className="feed-skeleton-shimmer h-10 w-28 rounded-input" />
+                        <div className="skeleton-shimmer h-10 w-28 rounded-input" />
                       </div>
                     ))}
                   </div>
@@ -991,11 +992,14 @@ function Avatar({ profileImage, fallback }: { profileImage: string | null; fallb
   return (
     <div className="flex h-[var(--space-16)] w-[var(--space-16)] items-center justify-center overflow-hidden rounded-avatar border border-strong bg-surface-2 shadow-elev-2">
       {profileImage ? (
-        <img
+        <Image
           src={profileImage}
           alt="Foto de perfil"
+          width={64}
+          height={64}
           className="h-full w-full object-cover"
           referrerPolicy="no-referrer"
+          unoptimized
         />
       ) : (
         <span className="text-[var(--font-h2)] font-[var(--fw-semibold)] text-app">{fallback}</span>
@@ -1025,15 +1029,6 @@ function PencilIcon({ className = "" }: { className?: string }) {
     <svg viewBox="0 0 24 24" width="17" height="17" fill="none" aria-hidden="true" className={className}>
       <path d="M4 20H8L18.6 9.4L14.6 5.4L4 16V20Z" stroke="currentColor" strokeWidth="1.7" />
       <path d="M12.8 7.2L16.8 11.2" stroke="currentColor" strokeWidth="1.7" />
-    </svg>
-  );
-}
-
-function CameraIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" aria-hidden="true">
-      <path d="M4.5 8.3H7L8.2 6.5H15.8L17 8.3H19.5V18H4.5V8.3Z" stroke="currentColor" strokeWidth="1.7" />
-      <circle cx="12" cy="13" r="3.1" stroke="currentColor" strokeWidth="1.7" />
     </svg>
   );
 }

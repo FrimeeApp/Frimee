@@ -124,7 +124,6 @@ function animatePlane(
       map,
     });
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const planeIcon = (coord: { lat: number; lng: number }, nextCoord: { lat: number; lng: number }) => ({
       path: PLANE_PATH,
       fillColor: color,
@@ -261,7 +260,6 @@ export default function TripOverviewMap({ subplanes }: Props) {
         coords.forEach(c => { if (c) bounds.extend(c); });
 
         // Create invisible markers
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const markers: DayData["markers"] = coords.map((coord, i) => {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const marker: any = coord ? new google.maps.Marker({

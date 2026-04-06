@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 
-export default function AudioPlayer({ src, isMe, sending }: { src: string; isMe: boolean; sending?: boolean }) {
+export default function AudioPlayer({ src, sending }: { src: string; sending?: boolean }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);

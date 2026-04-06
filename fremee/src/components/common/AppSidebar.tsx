@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter, usePathname } from "next/navigation";
@@ -58,7 +59,6 @@ export default function AppSidebar({ onCreatePlan, hideMobileNav }: AppSidebarPr
   const searchPanelRef = useRef<HTMLDivElement>(null);
 
   const { user, profile } = useAuth();
-  const hasProfileImage = Boolean(profile?.profile_image);
 
   const expanded = hovered;
 
@@ -411,7 +411,7 @@ export default function AppSidebar({ onCreatePlan, hideMobileNav }: AppSidebarPr
               <div className="overflow-hidden rounded-avatar border border-strong bg-[var(--text-primary)] p-0 text-contrast-token">
                 <div className="flex avatar-lg items-center justify-center overflow-hidden rounded-avatar">
                   {profile?.profile_image ? (
-                    <img src={profile.profile_image} alt="Foto de perfil" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                    <Image src={profile.profile_image} alt="Foto de perfil" width={44} height={44} className="h-full w-full object-cover" referrerPolicy="no-referrer" unoptimized />
                   ) : (
                     <ProfileIcon className="size-[calc(var(--icon-size)+8px)]" />
                   )}
@@ -519,7 +519,7 @@ export default function AppSidebar({ onCreatePlan, hideMobileNav }: AppSidebarPr
 
 function SearchUserAvatar({ name, image }: { name: string; image: string | null }) {
   if (image) {
-    return <img src={image} alt={name} className="size-9 shrink-0 rounded-full object-cover" referrerPolicy="no-referrer" />;
+    return <Image src={image} alt={name} width={36} height={36} className="size-9 shrink-0 rounded-full object-cover" referrerPolicy="no-referrer" unoptimized />;
   }
 
   return (

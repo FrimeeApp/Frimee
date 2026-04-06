@@ -67,7 +67,7 @@ export type UserProfileAndSettingsRow = {
 
 const profileImagesBucket = process.env.NEXT_PUBLIC_SUPABASE_PROFILE_BUCKET ?? "profile-images";
 
-export async function fetchUserSettingsByUserId(_userId: string): Promise<UserSettingsRow | null> {
+export async function fetchUserSettingsByUserId(): Promise<UserSettingsRow | null> {
   const supabase = createBrowserSupabaseClient();
 
   const { data, error } = await supabase.rpc("fn_user_settings_get");

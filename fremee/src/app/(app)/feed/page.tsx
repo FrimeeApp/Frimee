@@ -1,5 +1,6 @@
 ﻿"use client";
 
+import NextImage from "next/image";
 import Link from "next/link";
 import PlaneIcon from "@/components/ui/PlaneIcon";
 import { useFollow } from "@/hooks/useFollow";
@@ -441,7 +442,7 @@ export default function FeedPage() {
                   className="flex h-[44px] w-[44px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset transition-opacity hover:opacity-80"
                 >
                   {profile?.profile_image ? (
-                    <img src={profile.profile_image} alt="Foto de perfil" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                    <NextImage src={profile.profile_image} alt="Foto de perfil" width={44} height={44} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
                   ) : (
                     <span className="text-[14px] font-[var(--fw-semibold)] text-app">
                       {(profile?.nombre?.trim()[0] ?? "P").toUpperCase()}
@@ -522,7 +523,7 @@ export default function FeedPage() {
                             className="flex items-center gap-3 rounded-xl px-2 py-3 transition-colors active:bg-surface"
                           >
                             {u.profile_image ? (
-                              <img src={u.profile_image} alt={u.nombre} className="size-10 shrink-0 rounded-full object-cover" referrerPolicy="no-referrer" />
+                              <NextImage src={u.profile_image} alt={u.nombre} width={40} height={40} className="size-10 shrink-0 rounded-full object-cover" unoptimized referrerPolicy="no-referrer" />
                             ) : (
                               <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-surface text-body-sm font-[var(--fw-semibold)] text-app">
                                 {(u.nombre.trim()[0] || "U").toUpperCase()}
@@ -547,7 +548,7 @@ export default function FeedPage() {
                               className="flex items-center gap-3 rounded-xl px-2 py-3 transition-colors active:bg-surface"
                             >
                               {u.profile_image ? (
-                                <img src={u.profile_image} alt={u.nombre} className="size-10 shrink-0 rounded-full object-cover" referrerPolicy="no-referrer" />
+                                <NextImage src={u.profile_image} alt={u.nombre} width={40} height={40} className="size-10 shrink-0 rounded-full object-cover" unoptimized referrerPolicy="no-referrer" />
                               ) : (
                                 <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-surface text-body-sm font-[var(--fw-semibold)] text-app">
                                   {(u.nombre.trim()[0] || "U").toUpperCase()}
@@ -571,7 +572,7 @@ export default function FeedPage() {
                                 className="flex min-w-0 flex-1 items-center gap-3"
                               >
                                 {u.profile_image ? (
-                                  <img src={u.profile_image} alt={u.nombre} className="size-10 shrink-0 rounded-full object-cover" referrerPolicy="no-referrer" />
+                                  <NextImage src={u.profile_image} alt={u.nombre} width={40} height={40} className="size-10 shrink-0 rounded-full object-cover" unoptimized referrerPolicy="no-referrer" />
                                 ) : (
                                   <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-surface text-body-sm font-[var(--fw-semibold)] text-app">
                                     {(u.nombre.trim()[0] || "U").toUpperCase()}
@@ -674,7 +675,7 @@ export default function FeedPage() {
                     {!loadingFeed && uiPosts.length > 0 && (
                       <div className="sr-only" aria-hidden="true">
                         {uiPosts.filter((p) => p.coverImage).slice(0, 1).map((post) => (
-                          <img key={post.id} src={post.coverImage!} onLoad={() => setFirstImageReady(true)} onError={() => setFirstImageReady(true)} alt="" />
+                          <NextImage key={post.id} src={post.coverImage!} alt="" width={1200} height={900} className="h-auto w-full" unoptimized onLoad={() => setFirstImageReady(true)} onError={() => setFirstImageReady(true)} />
                         ))}
                       </div>
                     )}
@@ -861,7 +862,7 @@ function FeedChatPanel({ currentUserId }: { currentUserId: string | null }) {
             </svg>
           </button>
           <div className="flex size-[32px] items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-[11px] font-[var(--fw-semibold)] text-app">
-            {chatAvatar ? <img src={chatAvatar} alt={chatName} className="h-full w-full object-cover" referrerPolicy="no-referrer" /> : (chatName[0] ?? "?").toUpperCase()}
+            {chatAvatar ? <NextImage src={chatAvatar} alt={chatName} width={32} height={32} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" /> : (chatName[0] ?? "?").toUpperCase()}
           </div>
           <span className="min-w-0 truncate text-body-sm font-[var(--fw-semibold)]">{chatName}</span>
         </div>
@@ -882,7 +883,7 @@ function FeedChatPanel({ currentUserId }: { currentUserId: string | null }) {
                         {isFirstInGroup && (
                           <div className="flex size-[20px] items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-[9px] font-[var(--fw-semibold)] text-app">
                             {msg.sender_profile_image
-                              ? <img src={msg.sender_profile_image} alt={msg.sender_nombre} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                              ? <NextImage src={msg.sender_profile_image} alt={msg.sender_nombre} width={20} height={20} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
                               : (msg.sender_nombre[0] ?? "?").toUpperCase()}
                           </div>
                         )}
@@ -893,7 +894,7 @@ function FeedChatPanel({ currentUserId }: { currentUserId: string | null }) {
                         <p className="mb-[2px] text-[10px] font-[var(--fw-semibold)] text-muted">{msg.sender_nombre}</p>
                       )}
                       {msg.audio_url ? (
-                        <AudioPlayer src={msg.audio_url} isMe={isMe} />
+                        <AudioPlayer src={msg.audio_url} />
                       ) : msg.document_url ? (
                         <div className="flex items-center gap-[8px] py-[2px] opacity-80">
                           <span className="text-[18px]">📄</span>
@@ -905,7 +906,7 @@ function FeedChatPanel({ currentUserId }: { currentUserId: string | null }) {
                         ) : (
                           <a href={msg.image_url} target="_blank" rel="noopener noreferrer">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={msg.image_url} alt="Imagen" className="max-w-[200px] rounded-card object-cover" style={{ maxHeight: 200 }} referrerPolicy="no-referrer" />
+                            <NextImage src={msg.image_url} alt="Imagen" width={200} height={200} className="max-w-[200px] rounded-card object-cover" style={{ maxHeight: 200 }} unoptimized referrerPolicy="no-referrer" />
                           </a>
                         )
                       ) : msg.tipo?.startsWith("call_") ? (() => {
@@ -972,7 +973,7 @@ function FeedChatPanel({ currentUserId }: { currentUserId: string | null }) {
                 className="flex w-full items-center gap-[var(--space-3)] rounded-[10px] px-2 py-[10px] text-left transition-colors hover:bg-surface">
                 <div className="relative shrink-0">
                   <div className="flex size-[42px] items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">
-                    {avatar ? <img src={avatar} alt={name} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                    {avatar ? <NextImage src={avatar} alt={name} width={42} height={42} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
                       : chat.tipo === "GRUPO" ? <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[16px] text-muted"><circle cx="9" cy="7" r="3" stroke="currentColor" strokeWidth="1.6" /><path d="M2 19c1-3 3.5-4.5 7-4.5s6 1.5 7 4.5" stroke="currentColor" strokeWidth="1.6" /></svg>
                       : (name[0] ?? "?").toUpperCase()}
                   </div>
@@ -999,7 +1000,7 @@ function FeedSkeleton() {
       {[0, 1].map((i) => (
         <article key={`img-${i}`} className="pb-[var(--space-2)]">
           <div className="feed-image-container relative overflow-hidden">
-            <div className="feed-skeleton-shimmer aspect-[4/3] w-full" />
+            <div className="skeleton-shimmer aspect-[4/3] w-full" />
             {/* Top overlay shimmer — avatar + name */}
             <div className="absolute inset-x-0 top-0 flex items-center gap-[var(--space-2)] px-[var(--space-4)] pt-[var(--space-3)]">
               <div className="size-[32px] rounded-full bg-white/20" />
@@ -1013,23 +1014,23 @@ function FeedSkeleton() {
           </div>
           {/* Actions + text shimmer */}
           <div className="mt-[var(--space-2)] flex items-center gap-[var(--space-2)] px-[var(--space-1)]">
-            <div className="feed-skeleton-shimmer h-[24px] w-[24px] rounded-full" />
-            <div className="feed-skeleton-shimmer h-3 w-[120px] rounded-full" />
+            <div className="skeleton-shimmer h-[24px] w-[24px] rounded-full" />
+            <div className="skeleton-shimmer h-3 w-[120px] rounded-full" />
           </div>
         </article>
       ))}
       {/* Text-only post skeleton (Twitter style) */}
       <article className="pb-[var(--space-2)]">
         <div className="flex gap-[var(--space-2)] px-[var(--space-1)]">
-          <div className="feed-skeleton-shimmer size-[32px] shrink-0 rounded-full" />
+          <div className="skeleton-shimmer size-[32px] shrink-0 rounded-full" />
           <div className="min-w-0 flex-1">
-            <div className="feed-skeleton-shimmer h-3 w-[90px] rounded-full" />
-            <div className="feed-skeleton-shimmer mt-[6px] h-3 w-[85%] rounded-full" />
-            <div className="feed-skeleton-shimmer mt-[4px] h-3 w-[60%] rounded-full" />
+            <div className="skeleton-shimmer h-3 w-[90px] rounded-full" />
+            <div className="skeleton-shimmer mt-[6px] h-3 w-[85%] rounded-full" />
+            <div className="skeleton-shimmer mt-[4px] h-3 w-[60%] rounded-full" />
             <div className="mt-[var(--space-3)] flex items-center gap-[10px]">
-              <div className="feed-skeleton-shimmer h-[24px] w-[24px] rounded-full" />
-              <div className="feed-skeleton-shimmer h-[24px] w-[24px] rounded-full" />
-              <div className="feed-skeleton-shimmer h-[24px] w-[24px] rounded-full" />
+              <div className="skeleton-shimmer h-[24px] w-[24px] rounded-full" />
+              <div className="skeleton-shimmer h-[24px] w-[24px] rounded-full" />
+              <div className="skeleton-shimmer h-[24px] w-[24px] rounded-full" />
             </div>
           </div>
         </div>
@@ -1161,7 +1162,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
       setAuthorAvatars((prev) => ({ ...prev, ...results }));
     };
     void fetchAvatars();
-  }, [commentsSection]);
+  }, [authorAvatars, commentsSection, currentUserId, currentUserName, post.avatarImage]);
 
   // Close emoji picker on outside click
   useEffect(() => {
@@ -1417,7 +1418,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
       <div key={comment.commentId} className="flex items-start gap-3">
         <div className={`-mt-[4px] flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset ${isReply ? "size-[28px]" : "size-[36px]"}`}>
           {avatarImg ? (
-            <img src={avatarImg} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+            <NextImage src={avatarImg} alt="" width={36} height={36} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
           ) : (
             <span className={`font-[var(--fw-semibold)] text-app ${isReply ? "text-[11px]" : "text-[13px]"}`}>{initial}</span>
           )}
@@ -1530,13 +1531,16 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
         >
           {/* Shimmer mientras la imagen carga */}
           {!imgLoaded && (
-            <div className="feed-skeleton-shimmer absolute inset-0" aria-hidden="true" />
+            <div className="skeleton-shimmer absolute inset-0" aria-hidden="true" />
           )}
-          <img
-            src={post.coverImage ?? undefined}
+          <NextImage
+            src={post.coverImage!}
             alt="Imagen del plan"
+            width={1200}
+            height={900}
             className="feed-image-responsive transition-opacity duration-300"
             style={{ opacity: imgLoaded ? 1 : 0 }}
+            unoptimized
             onLoad={() => setImgLoaded(true)}
             onError={() => setImgLoaded(true)}
           />
@@ -1545,7 +1549,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
           <div className="absolute inset-x-0 top-0 flex items-center gap-[var(--space-2)] bg-gradient-to-b from-black/50 to-transparent px-[var(--space-4)] pb-[var(--space-8)] pt-[var(--space-3)]">
             <div className="flex size-[32px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/30 bg-white/20">
               {post.avatarImage ? (
-                <img src={post.avatarImage} alt={post.avatarLabel} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                <NextImage src={post.avatarImage} alt={post.avatarLabel} width={32} height={32} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
               ) : (
                 <span className="text-[13px] font-[var(--fw-semibold)] text-[#F5F5F5]">{post.avatarLabel}</span>
               )}
@@ -1574,7 +1578,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
         <div className="flex gap-[var(--space-2)] px-[var(--space-1)]">
           <div className="flex size-[32px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset">
             {post.avatarImage ? (
-              <img src={post.avatarImage} alt={post.avatarLabel} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+              <NextImage src={post.avatarImage} alt={post.avatarLabel} width={32} height={32} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
             ) : (
               <span className="text-[13px] font-[var(--fw-semibold)] text-app">{post.avatarLabel}</span>
             )}
@@ -1647,7 +1651,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
           <div className="comments-modal-panel grid h-dvh w-full overflow-hidden border border-[#262626] bg-app shadow-elev-4 md:h-[min(88dvh,760px)] md:max-w-[1120px] md:rounded-[6px] md:grid-cols-[minmax(0,1fr)_420px]" onClick={(e) => e.stopPropagation()}>
             <div className="relative hidden min-h-0 bg-[#111] md:block">
               {post.hasImage && post.coverImage ? (
-                <img src={post.coverImage} alt="Imagen del plan" className="h-full w-full object-contain" referrerPolicy="no-referrer" />
+                <NextImage src={post.coverImage} alt="Imagen del plan" width={1200} height={900} className="h-full w-full object-contain" unoptimized referrerPolicy="no-referrer" />
               ) : (
                 <div className="flex h-full flex-col justify-end bg-[radial-gradient(circle_at_top,#2a2a2a,transparent_55%),linear-gradient(180deg,#171717,#0d0d0d)] p-[var(--space-6)]">
                   <p className="text-[28px] font-[800] leading-tight text-white">{post.userName}</p>
@@ -1659,7 +1663,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                 <div className="pointer-events-auto flex items-center gap-3">
                   <div className="flex size-[42px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/25 bg-white/10">
                     {post.avatarImage ? (
-                      <img src={post.avatarImage} alt={post.userName} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                      <NextImage src={post.avatarImage} alt={post.userName} width={42} height={42} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
                     ) : (
                       <span className="text-[15px] font-[var(--fw-semibold)] text-white">{post.avatarLabel}</span>
                     )}
@@ -1682,7 +1686,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                 <div className="flex min-w-0 items-center gap-3">
                   <div className="flex size-[42px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset">
                     {post.avatarImage ? (
-                      <img src={post.avatarImage} alt={post.userName} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                      <NextImage src={post.avatarImage} alt={post.userName} width={42} height={42} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
                     ) : (
                       <span className="text-[15px] font-[var(--fw-semibold)] text-app">{post.avatarLabel}</span>
                     )}
@@ -1842,19 +1846,6 @@ function ShareIcon() {
   );
 }
 
-function ModalHeartIcon() {
-  return (
-    <svg width="25" height="25" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d="M21 16V14L13 9V3.5C13 2.67 12.33 2 11.5 2C10.67 2 10 2.67 10 3.5V9L2 14V16L10 13.5V19L8 20.5V22L11.5 21L15 22V20.5L13 19V13.5L21 16Z"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
 
 function BookmarkIcon({ saved = false }: { saved?: boolean }) {
   return (

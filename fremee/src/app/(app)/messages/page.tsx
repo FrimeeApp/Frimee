@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useRef, useState, useCallback } from "react";
 import AppSidebar from "@/components/common/AppSidebar";
 import LoadingScreen from "@/components/common/LoadingScreen";
@@ -14,11 +15,10 @@ import {
   resolveChatAvatar,
   formatChatTime,
   type ChatListItem,
-  type MensajeRow,
 } from "@/services/api/repositories/chat.repository";
 import { fetchActiveFriends, type PublicUserProfileRow } from "@/services/api/endpoints/users.endpoint";
 import { createGrupoEndpoint } from "@/services/api/endpoints/grupos.endpoint";
-import { ChatConversation, BackIcon, GroupIcon, ComposeIcon } from "@/components/chat/ChatConversation";
+import { ChatConversation, BackIcon, GroupIcon } from "@/components/chat/ChatConversation";
 
 export default function MessagesPage() {
   const { user, loading } = useAuth();
@@ -84,7 +84,8 @@ export default function MessagesPage() {
   const toggleMember = (id: string) => {
     setSelectedMemberIds((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   };
@@ -236,7 +237,7 @@ export default function MessagesPage() {
                       >
                         <div className="avatar-md flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">
                           {friend.profile_image ? (
-                            <img src={friend.profile_image} alt={friend.nombre} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                            <Image src={friend.profile_image} alt={friend.nombre} width={34} height={34} className="h-full w-full object-cover" referrerPolicy="no-referrer" unoptimized />
                           ) : avatarLabel}
                         </div>
                         <p className="min-w-0 flex-1 truncate text-body-sm font-[var(--fw-medium)] text-app">{friend.nombre}</p>
@@ -301,7 +302,7 @@ export default function MessagesPage() {
                   >
                     <div className="avatar-md flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">
                       {friend.profile_image ? (
-                        <img src={friend.profile_image} alt={friend.nombre} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                        <Image src={friend.profile_image} alt={friend.nombre} width={34} height={34} className="h-full w-full object-cover" referrerPolicy="no-referrer" unoptimized />
                       ) : avatarLabel}
                     </div>
                     <p className="min-w-0 flex-1 truncate text-body-sm font-[var(--fw-medium)] text-app">{friend.nombre}</p>
@@ -388,7 +389,7 @@ export default function MessagesPage() {
                   <div className="relative shrink-0">
                     <div className="avatar-md flex items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">
                       {avatar ? (
-                        <img src={avatar} alt={name} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                        <Image src={avatar} alt={name} width={34} height={34} className="h-full w-full object-cover" referrerPolicy="no-referrer" unoptimized />
                       ) : chat.tipo === "GRUPO" ? (
                         <GroupIcon className="size-[16px] text-muted" />
                       ) : (
@@ -488,4 +489,4 @@ export default function MessagesPage() {
     </div>
   );
 }
-
+

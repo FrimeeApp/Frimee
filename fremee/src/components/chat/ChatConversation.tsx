@@ -1,5 +1,6 @@
 "use client";
 
+import NextImage from "next/image";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import {
@@ -103,7 +104,7 @@ export function ChatConversation({
   const [showPollCreator, setShowPollCreator] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
-  const [audioError, setAudioError] = useState<string | null>(null);
+  const [, setAudioError] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -190,7 +191,7 @@ export function ChatConversation({
       }
     })();
     void markChatRead(chat.chat_id);
-  }, [chat.chat_id]);
+  }, [chat.chat_id, currentUserId, onLeave]);
 
   useEffect(() => {
     const supabase = supabaseRef.current;
@@ -241,7 +242,7 @@ export function ChatConversation({
       void supabase.removeChannel(channel);
       channelRef.current = null;
     };
-  }, [chat.chat_id]);
+  }, [chat.chat_id, currentUserId, onLeave]);
 
   const isNearBottomRef = useRef(true);
   const observerReadyRef = useRef(false);
@@ -288,7 +289,6 @@ export function ChatConversation({
     }, { root: scrollContainerRef.current, threshold: 0 });
     observer.observe(sentinel);
     return () => observer.disconnect();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chat.chat_id, loadingMore, hasMore, loading]);
 
   useEffect(() => {
@@ -1452,7 +1452,15 @@ export function ChatConversation({
           onReact={() => { setReactingToId(contextMenu.msg.id); setReactingPos({ x: contextMenu.x, y: contextMenu.triggerTop - 56 }); setContextMenu(null); }}
           onForward={() => { setForwardMsg(contextMenu.msg); closeOverlays(); }}
           onPin={() => { setPinnedId((p) => (p === contextMenu.msg.id ? null : contextMenu.msg.id)); closeOverlays(); }}
-          onStar={() => { setStarredIds((p) => { const n = new Set(p); n.has(contextMenu.msg.id) ? n.delete(contextMenu.msg.id) : n.add(contextMenu.msg.id); return n; }); closeOverlays(); }}
+          onStar={() => {
+            setStarredIds((p) => {
+              const n = new Set(p);
+              if (n.has(contextMenu.msg.id)) n.delete(contextMenu.msg.id);
+              else n.add(contextMenu.msg.id);
+              return n;
+            });
+            closeOverlays();
+          }}
           onDelete={() => { void handleDeleteMsg(contextMenu.msg); closeOverlays(); }}
         />
       )}
@@ -1514,7 +1522,7 @@ export function ChatConversation({
                     className="flex w-full items-center gap-[var(--space-3)] rounded-[10px] px-2 py-[10px] text-left transition-colors hover:bg-surface disabled:opacity-50"
                   >
                     <div className="avatar-md flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">
-                      {cavatar ? <img src={cavatar} alt={cname} className="h-full w-full object-cover" referrerPolicy="no-referrer" /> : c.tipo === "GRUPO" ? <GroupIcon className="size-[14px] text-muted" /> : (cname[0] ?? "?").toUpperCase()}
+                      {cavatar ? <NextImage src={cavatar} alt={cname} width={40} height={40} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" /> : c.tipo === "GRUPO" ? <GroupIcon className="size-[14px] text-muted" /> : (cname[0] ?? "?").toUpperCase()}
                     </div>
                     <p className="min-w-0 flex-1 truncate text-body-sm text-app">{cname}</p>
                     {forwardSending === c.chat_id && <span className="text-[11px] text-muted">...</span>}
@@ -1540,7 +1548,7 @@ export function ChatConversation({
           </button>
           <button type="button" onClick={() => setShowInfo(true)} className="flex min-w-0 flex-1 items-center gap-[var(--space-3)] rounded-[8px] px-1 py-1 text-left transition-colors hover:bg-surface">
             <div className="avatar-md flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">
-              {avatar ? <img src={avatar} alt={name} className="h-full w-full object-cover" referrerPolicy="no-referrer" /> : chat.tipo === "GRUPO" ? <GroupIcon className="size-[16px] text-muted" /> : (name[0] ?? "?").toUpperCase()}
+              {avatar ? <NextImage src={avatar} alt={name} width={40} height={40} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" /> : chat.tipo === "GRUPO" ? <GroupIcon className="size-[16px] text-muted" /> : (name[0] ?? "?").toUpperCase()}
             </div>
             <div className="min-w-0">
               <p className="truncate text-body-sm font-[var(--fw-semibold)] text-app">{name}</p>
@@ -1626,7 +1634,7 @@ export function ChatConversation({
                     <div className="mr-[var(--space-2)] w-[24px] shrink-0">
                       {isFirstInGroup && (
                         <div className={`flex size-[24px] items-center justify-center overflow-hidden rounded-full text-[10px] font-[var(--fw-semibold)] ${isBot ? "bg-primary-token/15 text-primary-token" : "border border-app bg-surface-inset text-app"}`}>
-                          {isBot ? "F" : msg.sender_profile_image ? <img src={msg.sender_profile_image} alt={msg.sender_nombre} className="h-full w-full object-cover" referrerPolicy="no-referrer" /> : (msg.sender_nombre[0] ?? "?").toUpperCase()}
+                          {isBot ? "F" : msg.sender_profile_image ? <NextImage src={msg.sender_profile_image} alt={msg.sender_nombre} width={24} height={24} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" /> : (msg.sender_nombre[0] ?? "?").toUpperCase()}
                         </div>
                       )}
                     </div>
@@ -1662,9 +1670,9 @@ export function ChatConversation({
                       {msg.tipo?.startsWith("call_") ? (
                         <CallBubble tipo={msg.tipo} duracion={parseInt(msg.texto) || 0} />
                       ) : msg.audio_url ? (
-                        <AudioPlayer src={msg.audio_url} isMe={isMe} sending={msg.id < 0} />
+                        <AudioPlayer src={msg.audio_url} sending={msg.id < 0} />
                       ) : msg.document_url ? (
-                        <DocumentBubble url={msg.document_url} name={msg.document_name ?? "Documento"} sending={msg.id < 0} isMe={isMe} />
+                        <DocumentBubble url={msg.document_url} name={msg.document_name ?? "Documento"} sending={msg.id < 0} />
                       ) : msg.image_url ? (
                         <MediaBubble url={msg.image_url} type={msg.image_type ?? "image/jpeg"} sending={msg.id < 0} time={time} isMe={isMe} onOpenLightbox={!msg.image_type?.startsWith("video/") ? () => setLightboxUrl(msg.image_url!) : undefined} />
                       ) : isResumenViaje(msg.texto) ? (
@@ -2071,7 +2079,7 @@ function ChatInfoPanel({
                       className="flex w-full items-center gap-[var(--space-3)] rounded-[10px] px-2 py-[10px] text-left transition-colors hover:bg-surface disabled:opacity-50"
                     >
                       <div className="avatar-md flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">
-                        {f.profile_image ? <img src={f.profile_image} alt={f.nombre} className="h-full w-full object-cover" referrerPolicy="no-referrer" /> : label}
+                        {f.profile_image ? <NextImage src={f.profile_image} alt={f.nombre} width={40} height={40} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" /> : label}
                       </div>
                       <p className="min-w-0 flex-1 truncate text-body-sm font-[var(--fw-medium)] text-app">{f.nombre}</p>
                       {isAdding ? (
@@ -2096,7 +2104,7 @@ function ChatInfoPanel({
           <div className="relative">
             <div className="flex size-[96px] items-center justify-center overflow-hidden rounded-full border-2 border-app bg-surface-inset text-[34px] font-[var(--fw-semibold)] text-app">
               {displayAvatar ? (
-                <img src={displayAvatar} alt={name} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                <NextImage src={displayAvatar} alt={name} width={96} height={96} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
               ) : isGrupo ? (
                 <GroupIcon className="size-[40px] text-muted" />
               ) : avatarLabel}
@@ -2156,7 +2164,7 @@ function ChatInfoPanel({
                 return (
                   <div key={m.id} className="flex items-center gap-[var(--space-3)] rounded-[10px] px-2 py-[10px]">
                     <div className="avatar-md flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">
-                      {m.profile_image ? <img src={m.profile_image} alt={m.nombre} className="h-full w-full object-cover" referrerPolicy="no-referrer" /> : label}
+                      {m.profile_image ? <NextImage src={m.profile_image} alt={m.nombre} width={40} height={40} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" /> : label}
                     </div>
                     <p className="min-w-0 flex-1 truncate text-body-sm text-app">{m.nombre}</p>
                     {isMe && (
@@ -2516,7 +2524,7 @@ function CameraModal({ onCapture, onClose }: { onCapture: (file: File) => void; 
           <div className="relative flex-1 overflow-hidden">
             {captured ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={captured} alt="Captura" className="h-full w-full object-contain" />
+              <NextImage src={captured} alt="Captura" width={1200} height={900} className="h-full w-full object-contain" unoptimized />
             ) : (
               <video src={capturedVideoUrl ?? undefined} controls autoPlay className="h-full w-full object-contain" />
             )}
@@ -2615,14 +2623,16 @@ function MediaBubble({ url, type, sending, time, isMe, onOpenLightbox }: { url: 
         <video src={url} controls={!sending} playsInline className="block w-full rounded-card" style={{ maxHeight: 300 }} />
       ) : (
         <button type="button" onClick={!sending && onOpenLightbox ? onOpenLightbox : undefined} className="block w-full text-left cursor-pointer" tabIndex={sending ? -1 : 0}>
-          {!loaded && <div className="feed-skeleton-shimmer rounded-card" style={{ width: 220, height: 165 }} />}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+          {!loaded && <div className="skeleton-shimmer rounded-card" style={{ width: 220, height: 165 }} />}
+          <NextImage
             src={url}
             alt="Imagen"
+            width={220}
+            height={165}
             className="block w-full rounded-card object-cover"
             style={{ maxHeight: 300, opacity: loaded ? 1 : 0, transition: "opacity 0.2s", ...(loaded ? {} : { position: "absolute", pointerEvents: "none" }) }}
             referrerPolicy="no-referrer"
+            unoptimized
             onLoad={() => setLoaded(true)}
             onError={() => setLoaded(true)}
           />
@@ -2903,7 +2913,7 @@ function PollCreatorModal({ onClose, onCreate }: { onClose: () => void; onCreate
   );
 }
 
-function DocumentBubble({ url, name, sending, isMe }: { url: string; name: string; sending?: boolean; isMe: boolean }) {
+function DocumentBubble({ url, name, sending }: { url: string; name: string; sending?: boolean }) {
   const ext = name.split(".").pop()?.toUpperCase() ?? "DOC";
   const extColors: Record<string, string> = { PDF: "#E44", DOCX: "#2B7CD3", DOC: "#2B7CD3", XLSX: "#217346", XLS: "#217346", PPTX: "#D24726", PPT: "#D24726", TXT: "#888", CSV: "#217346", ZIP: "#F90", RAR: "#F90" };
   const color = extColors[ext] ?? "#888";
@@ -3047,8 +3057,7 @@ function Lightbox({ url, imageUrls, onClose }: { url: string; imageUrls: string[
             <svg viewBox="0 0 24 24" fill="none" className="size-6"><path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
           </button>
         )}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={current} alt="Imagen" className="max-h-full max-w-full object-contain" referrerPolicy="no-referrer" />
+        <NextImage src={current} alt="Imagen" width={1600} height={1200} className="max-h-full max-w-full object-contain" unoptimized referrerPolicy="no-referrer" />
         {hasNext && (
           <button type="button" onClick={() => setCurrent(imageUrls[idx + 1])} className="absolute right-3 z-10 rounded-full bg-white/10 p-2 text-white hover:bg-white/20">
             <svg viewBox="0 0 24 24" fill="none" className="size-6"><path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -3061,8 +3070,7 @@ function Lightbox({ url, imageUrls, onClose }: { url: string; imageUrls: string[
         <div ref={thumbsRef} className="flex shrink-0 gap-2 overflow-x-auto scrollbar-hide" style={{ padding: "12px calc(50% - 28px)" }} onClick={(e) => e.stopPropagation()}>
           {imageUrls.map((u, i) => (
             <button key={u} type="button" onClick={() => setCurrent(u)} className={`shrink-0 overflow-hidden rounded-[6px] border-2 transition-all ${u === current ? "border-white" : "border-transparent opacity-50 hover:opacity-80"}`} style={{ width: 56, height: 56 }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={u} alt={`Imagen ${i + 1}`} className="size-full object-cover" referrerPolicy="no-referrer" />
+              <NextImage src={u} alt={`Imagen ${i + 1}`} width={56} height={56} className="size-full object-cover" unoptimized referrerPolicy="no-referrer" />
             </button>
           ))}
         </div>

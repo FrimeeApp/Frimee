@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useRef, useState, useCallback } from "react";
 import {
   Room,
@@ -18,7 +19,6 @@ type Props = {
   miembros: CallMiembro[];
   participanteNombre: string;
   isActive?: boolean;
-  isInitiator?: boolean;
   isGroup?: boolean;
   onEnd: () => void;
   onEndForAll?: () => void;
@@ -35,7 +35,7 @@ type ParticipantTile = {
   videoMuted: boolean;
 };
 
-export default function CallRoom({ token, livekitUrl, tipo, miembros, participanteNombre, isActive, isInitiator, isGroup, onEnd, onEndForAll, onParticipantConnected, onMinimize }: Props) {
+export default function CallRoom({ token, livekitUrl, tipo, miembros, participanteNombre, isActive, isGroup, onEnd, onEndForAll, onParticipantConnected, onMinimize }: Props) {
   const roomRef = useRef<Room | null>(null);
   const [connected, setConnected] = useState(false);
   const [tiles, setTiles] = useState<ParticipantTile[]>([]);
@@ -287,7 +287,7 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
           <div className="flex flex-col items-center gap-2 z-10">
             <div className="h-14 w-14 overflow-hidden rounded-full bg-white/10 border border-white/10">
               {foto ? (
-                <img src={foto} className="h-full w-full object-cover" />
+                <Image src={foto} alt={baseName} width={56} height={56} className="h-full w-full object-cover" unoptimized />
               ) : (
                 <div className="flex h-full w-full items-center justify-center text-xl font-bold">
                   {baseName[0]?.toUpperCase()}
@@ -363,7 +363,7 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
               {tiles.length === 0 && miembros.map((m) => (
                 <div key={m.id} className="aspect-square overflow-hidden rounded-2xl bg-[#2a2a2a] flex flex-col items-center justify-center gap-2 opacity-50">
                   <div className="h-14 w-14 overflow-hidden rounded-full bg-white/10">
-                    {m.foto ? <img src={m.foto} className="h-full w-full object-cover" /> : (
+                    {m.foto ? <Image src={m.foto} alt={m.nombre} width={56} height={56} className="h-full w-full object-cover" unoptimized /> : (
                       <div className="flex h-full w-full items-center justify-center text-xl font-bold">{m.nombre[0]?.toUpperCase()}</div>
                     )}
                   </div>

@@ -1,5 +1,7 @@
 "use client";
 
+import Image from "next/image";
+
 type Props = {
   participanteNombre: string;
   participanteFoto?: string;
@@ -21,7 +23,7 @@ export default function CallWidget({ participanteNombre, participanteFoto, durat
       {/* Avatar */}
       <div className="size-8 shrink-0 overflow-hidden rounded-full bg-white/10 border border-white/10">
         {participanteFoto ? (
-          <img src={participanteFoto} alt={participanteNombre} className="h-full w-full object-cover" />
+          <Image src={participanteFoto} alt={participanteNombre} width={32} height={32} className="h-full w-full object-cover" unoptimized />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-sm font-bold text-white">
             {participanteNombre[0]?.toUpperCase()}
