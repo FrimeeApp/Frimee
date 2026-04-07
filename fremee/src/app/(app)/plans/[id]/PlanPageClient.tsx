@@ -19,6 +19,7 @@ import LocationAutocomplete, { type Coords } from "@/components/plans/LocationAu
 import AddGastoSheet from "@/components/plans/AddGastoSheet";
 import { fetchActiveFriends, type PublicUserProfileRow } from "@/services/api/endpoints/users.endpoint";
 import { insertNotificacion } from "@/services/api/repositories/notifications.repository";
+import { syncPlanWidget } from "@/services/widget/planWidget";
 import { QRCodeSVG } from "qrcode.react";
 import AppSidebar from "@/components/common/AppSidebar";
 
@@ -1222,6 +1223,11 @@ export default function PlanDetailPage() {
   const [inviteLinkCopied, setInviteLinkCopied] = useState(false);
   const [showQr, setShowQr] = useState(false);
   const routeSectionRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    void syncPlanWidget(user.id);
+  }, [user?.id, plan?.id]);
 
   const expenseSummary = useMemo(() => {
     const confirmedExpenses = gastos.filter((gasto) => gasto.estado === "CONFIRMADO");

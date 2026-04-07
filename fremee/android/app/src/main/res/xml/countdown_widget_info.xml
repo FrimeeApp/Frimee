@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
-    android:description="@string/app_widget_description"
-    android:initialKeyguardLayout="@layout/plan_widget"
-    android:initialLayout="@layout/plan_widget"
+    android:description="@string/countdown_widget_description"
+    android:initialKeyguardLayout="@layout/countdown_widget"
+    android:initialLayout="@layout/countdown_widget"
     android:minWidth="250dp"
     android:minHeight="110dp"
-    android:previewLayout="@layout/plan_widget"
+    android:previewLayout="@layout/countdown_widget"
     android:resizeMode="none"
     android:targetCellWidth="4"
     android:targetCellHeight="2"
-    android:updatePeriodMillis="86400000"
+    android:updatePeriodMillis="1800000"
     android:widgetCategory="home_screen" />

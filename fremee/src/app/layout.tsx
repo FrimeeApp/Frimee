@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter, Instrument_Serif } from "next/font/google";
 import "../styles/globals.css";
 import { AuthProvider } from "@/providers/AuthProvider";
+import NativeDeepLinks from "@/components/common/NativeDeepLinks";
 import NativeSystemUi from "@/components/common/NativeSystemUi";
 
 const inter = Inter({
@@ -55,6 +56,7 @@ export default function RootLayout({
       </head>
       <body className={`${inter.variable} ${instrumentSerif.variable} antialiased`}>
         <NativeSystemUi />
+        <NativeDeepLinks />
         <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
