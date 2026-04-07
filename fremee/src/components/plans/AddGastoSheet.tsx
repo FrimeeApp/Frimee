@@ -2,7 +2,6 @@
 
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
-import type { SubplanRow } from "@/services/api/endpoints/subplanes.endpoint";
 import {
   createGastoEndpoint,
   fetchPlanMiembrosEndpoint,
@@ -19,6 +18,22 @@ function todayISO() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+function clampNumber(value: number, min?: number, max?: number) {
+  if (typeof min === "number" && value < min) return min;
+  if (typeof max === "number" && value > max) return max;
+  return value;
+}
+
+function adjustNumericString(
+  current: string,
+  delta: number,
+  { min, max, decimals = 0 }: { min?: number; max?: number; decimals?: number } = {},
+) {
+  const base = Number.parseFloat(current || "0");
+  const next = clampNumber((Number.isFinite(base) ? base : 0) + delta, min, max);
+  return decimals > 0 ? next.toFixed(decimals) : String(next);
+}
+
 function Avatar({ foto, nombre, size = 32 }: { foto: string | null; nombre: string | null; size?: number }) {
   const initials = (nombre ?? "?").slice(0, 1).toUpperCase();
   if (foto) {
@@ -29,7 +44,7 @@ function Avatar({ foto, nombre, size = 32 }: { foto: string | null; nombre: stri
         width={size}
         height={size}
         style={{ width: size, height: size }}
-        className="rounded-full object-cover"
+        className="rounded-full border border-app object-cover"
         unoptimized
       />
     );
@@ -37,9 +52,42 @@ function Avatar({ foto, nombre, size = 32 }: { foto: string | null; nombre: stri
   return (
     <div
       style={{ width: size, height: size, fontSize: size * 0.4 }}
-      className="flex items-center justify-center rounded-full bg-primary-token/20 font-[var(--fw-semibold)] text-primary-token"
+      className="flex items-center justify-center rounded-full border border-app bg-primary-token/20 font-[var(--fw-semibold)] text-primary-token"
     >
       {initials}
+    </div>
+  );
+}
+
+function StepperButtons({
+  onIncrement,
+  onDecrement,
+}: {
+  onIncrement: () => void;
+  onDecrement: () => void;
+}) {
+  return (
+    <div className="flex shrink-0 flex-col items-center justify-center">
+      <button
+        type="button"
+        onClick={onIncrement}
+        aria-label="Aumentar valor"
+        className="flex h-3.5 w-3.5 items-center justify-center rounded text-muted transition-colors hover:bg-surface hover:text-app"
+      >
+        <svg className="h-2.5 w-2.5" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+          <path d="M3 7.5 6 4.5l3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        onClick={onDecrement}
+        aria-label="Disminuir valor"
+        className="flex h-3.5 w-3.5 items-center justify-center rounded text-muted transition-colors hover:bg-surface hover:text-app"
+      >
+        <svg className="h-2.5 w-2.5" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+          <path d="M3 4.5 6 7.5l3-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
     </div>
   );
 }
@@ -62,14 +110,13 @@ type ItemAsignacion = OcrItem & {
 type Props = {
   planId: number;
   userId: string;
-  subplanes: SubplanRow[];
   onClose: () => void;
   onCreated: () => void;
 };
 
 // ── component ─────────────────────────────────────────────────────────────────
 
-export default function AddGastoSheet({ planId, userId, subplanes, onClose, onCreated }: Props) {
+export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Props) {
   // ── form state ──
   const [titulo, setTitulo] = useState("");
   const [descripcion, setDescripcion] = useState("");
@@ -77,7 +124,6 @@ export default function AddGastoSheet({ planId, userId, subplanes, onClose, onCr
   const [moneda, setMoneda] = useState("EUR");
   const [fechaGasto, setFechaGasto] = useState(todayISO());
   const [pagadoPor, setPagadoPor] = useState(userId);
-  const [subplanId, setSubplanId] = useState<number | null>(null);
   const [metodo, setMetodo] = useState<MetodoReparto>("IGUAL");
 
   // ── participants state ──
@@ -262,7 +308,6 @@ export default function AddGastoSheet({ planId, userId, subplanes, onClose, onCr
         metodo_reparto: metodo,
         participantes,
         descripcion: descripcion.trim() || undefined,
-        subplan_id: subplanId ?? undefined,
         items: metodo === "POR_ITEMS" ? buildItems() : undefined,
       });
       onCreated();
@@ -276,203 +321,188 @@ export default function AddGastoSheet({ planId, userId, subplanes, onClose, onCr
 
   // ── render ────────────────────────────────────────────────────────────────
 
-  const labelCls = "text-caption font-[var(--fw-semibold)] uppercase tracking-wider text-muted";
-  const inputCls = "flex h-input w-full items-center rounded-input border border-app bg-surface-inset px-[var(--space-3)] text-body outline-none";
+  const labelCls = "text-[12px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted md:text-muted [color:color-mix(in_oklab,var(--text-primary)_72%,transparent)] dark:text-muted";
+  const fieldLineCls = "border-b-2 border-app pb-[var(--space-2)] transition-colors focus-within:border-primary-token";
+  const activeMetodo = METODOS.find((m) => m.value === metodo);
 
   return (
     <>
-      <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-[var(--space-4)]">
-        <div className="flex w-full max-w-[540px] flex-col rounded-[20px] bg-surface shadow-elev-3 max-h-[90dvh] overflow-hidden">
+      <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm" />
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-[var(--space-4)]"
+        onClick={(e) => {
+          if (e.target !== e.currentTarget) return;
+          if (window.matchMedia("(min-width: 768px)").matches) onClose();
+        }}
+      >
+        <div
+          className="flex h-full w-full flex-col overflow-hidden bg-app md:h-auto md:max-h-[92dvh] md:max-w-[620px] md:rounded-[22px] md:border md:border-app md:shadow-elev-4"
+          onClick={(e) => e.stopPropagation()}
+        >
 
           <form onSubmit={handleSubmit} className="flex flex-col overflow-hidden">
-            {/* Scrollable body */}
-            <div className="overflow-y-auto scrollbar-thin px-[var(--page-margin-x)] pt-[var(--space-5)] pb-[var(--space-2)] space-y-[var(--space-6)]">
+            <div className="flex shrink-0 items-center justify-between px-[var(--space-5)] py-[var(--space-3)]">
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex size-9 shrink-0 items-center justify-center rounded-full text-app transition-colors hover:bg-surface"
+                aria-label="Cerrar"
+              >
+                <svg viewBox="0 0 24 24" fill="none" className="size-[18px]">
+                  <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+              </button>
+              <div className="size-9" aria-hidden="true" />
+            </div>
 
-              {/* Título + descripción */}
-              <div>
-                <input
-                  value={titulo}
-                  onChange={(e) => setTitulo(e.target.value)}
-                  placeholder="Nombre del gasto"
-                  className="w-full bg-transparent text-[22px] font-[var(--fw-semibold)] outline-none placeholder:text-muted"
-                />
-                <input
-                  value={descripcion}
-                  onChange={(e) => setDescripcion(e.target.value)}
-                  placeholder="Descripción (opcional)"
-                  className="mt-[var(--space-1)] w-full bg-transparent text-body-sm text-muted outline-none placeholder:text-muted/60"
-                />
+            <div className="flex-1 overflow-y-auto scrollbar-thin px-[var(--space-6)] pb-[var(--space-8)] pt-[var(--space-2)] space-y-[var(--space-6)]">
+              <div className="mb-[var(--space-3)]">
+                <h2 className="font-[var(--fw-bold)] leading-tight text-app" style={{ fontSize: "clamp(22px, 5vw, 28px)" }}>
+                  ¿Qué es?
+                </h2>
               </div>
 
-              {/* Factura / OCR */}
-              <div>
-                <p className={`${labelCls} mb-[var(--space-2)]`}>Factura o ticket</p>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*,.pdf"
-                  className="hidden"
-                  onChange={handleFileChange}
-                />
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={ocrLoading}
-                  className="flex h-input w-full items-center gap-[var(--space-2)] rounded-input border border-dashed border-app bg-surface-inset px-[var(--space-3)] text-body-sm text-muted transition-colors hover:border-primary-token hover:text-primary-token disabled:opacity-60"
-                >
-                  {ocrLoading ? (
-                    <>
-                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                      Analizando...
-                    </>
-                  ) : receiptUrl ? (
-                    <>
-                      <svg viewBox="0 0 24 24" fill="none" className="size-4 text-success-token" stroke="currentColor" strokeWidth="2">
-                        <path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                      <span className="text-success-token">Factura detectada · Cambiar</span>
-                    </>
-                  ) : (
-                    <>
-                      <svg viewBox="0 0 24 24" fill="none" className="size-4" stroke="currentColor" strokeWidth="1.8">
-                        <path d="M12 16v-8M8 12l4-4 4 4" strokeLinecap="round" strokeLinejoin="round" />
-                        <rect x="3" y="3" width="18" height="18" rx="3" />
-                      </svg>
-                      Subir factura (auto-rellena los campos)
-                    </>
-                  )}
-                </button>
-              </div>
-
-              {/* Total + moneda */}
-              <div>
-                <p className={`${labelCls} mb-[var(--space-2)]`}>Importe</p>
-                <div className="flex gap-[var(--space-2)]">
+              <section className="space-y-[var(--space-4)]">
+                <div className={fieldLineCls}>
                   <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={total}
-                    onChange={(e) => setTotal(e.target.value)}
-                    placeholder="0.00"
-                    className={`${inputCls} flex-1`}
+                    value={titulo}
+                    onChange={(e) => setTitulo(e.target.value)}
+                    placeholder="Concepto"
+                    className="w-full bg-transparent text-[22px] font-[var(--fw-semibold)] text-app outline-none placeholder:text-muted"
                   />
-                  <select
-                    value={moneda}
-                    onChange={(e) => setMoneda(e.target.value)}
-                    className="h-input rounded-input border border-app bg-surface-inset px-[var(--space-2)] text-body outline-none"
-                  >
-                    {MONEDAS.map((m) => <option key={m}>{m}</option>)}
-                  </select>
                 </div>
-              </div>
 
-              {/* Fecha */}
-              <div>
-                <p className={`${labelCls} mb-[var(--space-2)]`}>Fecha</p>
-                <input
-                  type="date"
-                  value={fechaGasto}
-                  onChange={(e) => setFechaGasto(e.target.value)}
-                  className={inputCls}
-                />
-              </div>
+                <div className="grid gap-[var(--space-5)] sm:grid-cols-2">
+                  <div>
+                    <p className="mb-[var(--space-2)] text-[12px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted [color:color-mix(in_oklab,var(--text-primary)_72%,transparent)] dark:text-muted">Importe</p>
+                    <div className={`${fieldLineCls} flex items-center gap-[var(--space-3)]`}>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={total}
+                        onChange={(e) => setTotal(e.target.value)}
+                        placeholder="0.00"
+                        className="min-w-0 flex-1 bg-transparent text-body text-app outline-none placeholder:text-muted"
+                      />
+                      <select
+                        value={moneda}
+                        onChange={(e) => setMoneda(e.target.value)}
+                        className="shrink-0 bg-transparent text-body text-app outline-none"
+                      >
+                        {MONEDAS.map((m) => <option key={m}>{m}</option>)}
+                      </select>
+                    </div>
+                  </div>
 
-              {/* Pagado por */}
+                  <div>
+                    <p className="mb-[var(--space-2)] text-[12px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted [color:color-mix(in_oklab,var(--text-primary)_72%,transparent)] dark:text-muted">Fecha</p>
+                    <div className={fieldLineCls}>
+                      <input
+                        type="date"
+                        value={fechaGasto}
+                        onChange={(e) => setFechaGasto(e.target.value)}
+                        className="w-full bg-transparent text-body text-app outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-[var(--space-2)]">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*,.pdf"
+                    className="hidden"
+                    onChange={handleFileChange}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={ocrLoading}
+                    className={`inline-flex items-center gap-[var(--space-2)] rounded-[14px] border px-[var(--space-4)] py-[10px] text-body-sm font-[var(--fw-semibold)] transition-colors disabled:opacity-60 ${
+                      receiptUrl
+                        ? "border-success-token/30 bg-success-token/10 text-success-token hover:bg-success-token/15"
+                        : "border-app bg-surface text-app hover:border-primary-token hover:text-primary-token"
+                    }`}
+                  >
+                    {ocrLoading ? (
+                      <>
+                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                        Analizando...
+                      </>
+                    ) : receiptUrl ? (
+                      <>
+                        <svg viewBox="0 0 24 24" fill="none" className="size-4 text-success-token" stroke="currentColor" strokeWidth="2">
+                          <path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                        Ticket leído · Campos e ítems detectados
+                      </>
+                    ) : (
+                      <>
+                        <svg viewBox="0 0 24 24" fill="none" className="size-4" stroke="currentColor" strokeWidth="1.8">
+                          <path d="M12 16v-8M8 12l4-4 4 4" strokeLinecap="round" strokeLinejoin="round" />
+                          <rect x="3" y="3" width="18" height="18" rx="3" />
+                        </svg>
+                        Leer ticket o factura
+                      </>
+                    )}
+                  </button>
+                  <p className="text-caption text-muted">
+                    * Rellena los campos automáticamente y detecta los ítems del ticket.
+                  </p>
+                </div>
+              </section>
+
               {miembros.length > 0 && (
-                <div>
-                  <p className={`${labelCls} mb-[var(--space-2)]`}>Pagado por</p>
-                  <div className="flex flex-wrap gap-[var(--space-2)]">
+                <section className="space-y-[var(--space-3)] border-t border-app pt-[var(--space-5)]">
+                  <p className={labelCls}>¿Quién ha pagado?</p>
+                  <div className="grid grid-cols-2 gap-[var(--space-2)] sm:grid-cols-3">
                     {miembros.map((m) => (
                       <button
                         key={m.user_id}
                         type="button"
                         onClick={() => setPagadoPor(m.user_id)}
-                        className={`flex items-center gap-[var(--space-2)] rounded-chip border px-[var(--space-3)] py-[var(--space-1)] text-body-sm transition-colors ${
+                        className={`flex w-full items-center gap-[var(--space-2)] rounded-[12px] border px-[var(--space-2)] py-[10px] text-left transition-colors ${
                           pagadoPor === m.user_id
-                            ? "border-primary-token bg-primary-token/15 text-primary-token"
-                            : "border-app bg-surface-inset text-muted"
+                            ? "border-primary-token bg-primary-token/10"
+                            : "border-app bg-app hover:bg-surface"
                         }`}
                       >
-                        <Avatar foto={m.foto} nombre={m.nombre} size={20} />
-                        {m.nombre ?? m.user_id.slice(0, 8)}
+                        <Avatar foto={m.foto} nombre={m.nombre} size={24} />
+                        <span className={`min-w-0 flex-1 truncate text-body-sm font-[var(--fw-medium)] ${pagadoPor === m.user_id ? "text-primary-token" : "text-app"}`}>
+                          {m.nombre ?? m.user_id.slice(0, 8)}
+                        </span>
                       </button>
                     ))}
                   </div>
-                </div>
+                </section>
               )}
 
-              {/* Subplan (opcional) */}
-              {subplanes.length > 0 && (
-                <div>
-                  <p className={`${labelCls} mb-[var(--space-2)]`}>Actividad relacionada <span className="normal-case font-normal">(opcional)</span></p>
-                  <div className="flex flex-wrap gap-[var(--space-2)]">
-                    <button
-                      type="button"
-                      onClick={() => setSubplanId(null)}
-                      className={`rounded-chip border px-[var(--space-3)] py-[var(--space-1)] text-body-sm transition-colors ${
-                        subplanId === null
-                          ? "border-primary-token bg-primary-token/15 text-primary-token"
-                          : "border-app bg-surface-inset text-muted"
-                      }`}
-                    >
-                      Ninguna
-                    </button>
-                    {subplanes.map((s) => (
-                      <button
-                        key={s.id}
-                        type="button"
-                        onClick={() => setSubplanId(s.id)}
-                        className={`rounded-chip border px-[var(--space-3)] py-[var(--space-1)] text-body-sm transition-colors ${
-                          subplanId === s.id
-                            ? "border-primary-token bg-primary-token/15 text-primary-token"
-                            : "border-app bg-surface-inset text-muted"
-                        }`}
-                      >
-                        {s.titulo}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
+              <section className="space-y-[var(--space-4)] border-t border-app pt-[var(--space-5)]">
+                <p className={labelCls}>Se reparte entre</p>
 
-              {/* Método de reparto */}
-              <div>
-                <p className={`${labelCls} mb-[var(--space-2)]`}>Cómo se divide</p>
-                <div className="flex flex-col gap-[var(--space-2)]">
+                <div className="grid grid-cols-2 gap-[var(--space-2)] sm:grid-cols-4">
                   {METODOS.map((m) => (
                     <button
                       key={m.value}
                       type="button"
                       onClick={() => setMetodo(m.value)}
-                      className={`flex items-center justify-between rounded-input border px-[var(--space-3)] py-[var(--space-2)] text-left transition-colors ${
+                      className={`rounded-[14px] border px-[var(--space-3)] py-[var(--space-3)] text-left text-body-sm transition-colors ${
                         metodo === m.value
-                          ? "border-primary-token bg-primary-token/10"
-                          : "border-app bg-surface-inset"
+                          ? "border-primary-token bg-primary-token/10 text-primary-token"
+                          : "border-app bg-app text-app hover:bg-surface"
                       }`}
                     >
-                      <div>
-                        <p className={`text-body-sm font-[var(--fw-medium)] ${metodo === m.value ? "text-primary-token" : ""}`}>{m.label}</p>
-                        <p className="text-caption text-muted">{m.desc}</p>
-                      </div>
-                      {metodo === m.value && (
-                        <svg viewBox="0 0 24 24" fill="none" className="size-4 shrink-0 text-primary-token" stroke="currentColor" strokeWidth="2.5">
-                          <path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      )}
+                      <span className="block font-[var(--fw-semibold)]">{m.label}</span>
                     </button>
                   ))}
                 </div>
-              </div>
 
-              {/* ── Participantes según método ── */}
+                <p className="text-body-sm text-muted">{activeMetodo?.desc}</p>
 
-              {/* IGUAL */}
-              {metodo === "IGUAL" && miembros.length > 0 && (
-                <div>
-                  <p className={`${labelCls} mb-[var(--space-2)]`}>Quién participa</p>
-                  <div className="flex flex-col gap-[var(--space-2)]">
+                {metodo === "IGUAL" && miembros.length > 0 && (
+                  <div className="grid grid-cols-2 gap-[var(--space-2)] sm:grid-cols-3">
                     {miembros.map((m) => {
                       const checked = seleccionados.has(m.user_id);
                       const count = seleccionados.size;
@@ -487,16 +517,16 @@ export default function AddGastoSheet({ planId, userId, subplanes, onClose, onCr
                             else next.add(m.user_id);
                             return next;
                           })}
-                          className={`flex items-center gap-[var(--space-3)] rounded-input border px-[var(--space-3)] py-[var(--space-2)] transition-colors ${
-                            checked ? "border-primary-token bg-primary-token/10" : "border-app bg-surface-inset"
+                          className={`flex w-full items-center gap-[var(--space-2)] rounded-[12px] border px-[var(--space-2)] py-[10px] text-left transition-colors ${
+                            checked ? "border-primary-token bg-primary-token/10" : "border-app bg-app hover:bg-surface"
                           }`}
                         >
-                          <Avatar foto={m.foto} nombre={m.nombre} size={28} />
-                          <span className={`flex-1 text-left text-body-sm font-[var(--fw-medium)] ${checked ? "text-primary-token" : ""}`}>
+                          <Avatar foto={m.foto} nombre={m.nombre} size={24} />
+                          <span className={`min-w-0 flex-1 truncate text-body-sm font-[var(--fw-medium)] ${checked ? "text-primary-token" : "text-app"}`}>
                             {m.nombre ?? m.user_id.slice(0, 8)}
                           </span>
                           {checked && totalNum > 0 && (
-                            <span className="text-body-sm text-primary-token font-[var(--fw-semibold)]">
+                            <span className="shrink-0 text-caption text-primary-token font-[var(--fw-semibold)]">
                               {part.toFixed(2)} {moneda}
                             </span>
                           )}
@@ -504,39 +534,52 @@ export default function AddGastoSheet({ planId, userId, subplanes, onClose, onCr
                       );
                     })}
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* PORCENTAJE */}
-              {metodo === "PORCENTAJE" && miembros.length > 0 && (
-                <div>
-                  <p className={`${labelCls} mb-[var(--space-2)]`}>Porcentaje por persona</p>
-                  <div className="flex flex-col gap-[var(--space-2)]">
+                {metodo === "PORCENTAJE" && miembros.length > 0 && (
+                  <div className="grid grid-cols-2 gap-[var(--space-2)] sm:grid-cols-3">
                     {miembros.map((m) => {
                       const pct = parseFloat(porcentajes[m.user_id] || "0");
                       const amount = totalNum * pct / 100;
                       return (
-                        <div key={m.user_id} className="flex items-center gap-[var(--space-3)] rounded-input border border-app bg-surface-inset px-[var(--space-3)] py-[var(--space-2)]">
-                          <Avatar foto={m.foto} nombre={m.nombre} size={28} />
-                          <span className="flex-1 text-body-sm font-[var(--fw-medium)]">
+                        <div key={m.user_id} className="flex items-center gap-[var(--space-2)] rounded-[12px] border border-app px-[var(--space-2)] py-[10px]">
+                          <Avatar foto={m.foto} nombre={m.nombre} size={24} />
+                          <span className="min-w-0 flex-1 truncate text-body-sm font-[var(--fw-medium)] text-app">
                             {m.nombre ?? m.user_id.slice(0, 8)}
                           </span>
-                          <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            step="1"
-                            value={porcentajes[m.user_id] ?? ""}
-                            onChange={(e) => setPorcentajes((prev) => ({ ...prev, [m.user_id]: e.target.value }))}
-                            placeholder="0"
-                            className="w-[60px] bg-transparent text-right text-body-sm outline-none"
-                          />
-                          <span className="text-body-sm text-muted">%</span>
                           {pct > 0 && totalNum > 0 && (
-                            <span className="w-[70px] text-right text-body-sm text-primary-token font-[var(--fw-semibold)]">
-                              {amount.toFixed(2)}
+                            <span className="shrink-0 text-caption font-[var(--fw-semibold)] text-primary-token">
+                              {amount.toFixed(2)} {moneda}
                             </span>
                           )}
+                          <div className="flex shrink-0 items-center gap-1.5">
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="1"
+                              value={porcentajes[m.user_id] ?? ""}
+                              onChange={(e) => setPorcentajes((prev) => ({ ...prev, [m.user_id]: e.target.value }))}
+                              placeholder="0"
+                              inputMode="numeric"
+                              className="w-[32px] appearance-none bg-transparent text-right text-body-sm text-app outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                            />
+                            <span className="shrink-0 text-caption text-app">%</span>
+                            <StepperButtons
+                              onIncrement={() =>
+                                setPorcentajes((prev) => ({
+                                  ...prev,
+                                  [m.user_id]: adjustNumericString(prev[m.user_id] ?? "", 1, { min: 0, max: 100 }),
+                                }))
+                              }
+                              onDecrement={() =>
+                                setPorcentajes((prev) => ({
+                                  ...prev,
+                                  [m.user_id]: adjustNumericString(prev[m.user_id] ?? "", -1, { min: 0, max: 100 }),
+                                }))
+                              }
+                            />
+                          </div>
                         </div>
                       );
                     })}
@@ -547,30 +590,43 @@ export default function AddGastoSheet({ planId, userId, subplanes, onClose, onCr
                       ) : null;
                     })()}
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* CANTIDAD */}
-              {metodo === "CANTIDAD" && miembros.length > 0 && (
-                <div>
-                  <p className={`${labelCls} mb-[var(--space-2)]`}>Cantidad por persona</p>
-                  <div className="flex flex-col gap-[var(--space-2)]">
+                {metodo === "CANTIDAD" && miembros.length > 0 && (
+                  <div className="grid grid-cols-2 gap-[var(--space-2)] sm:grid-cols-3">
                     {miembros.map((m) => (
-                      <div key={m.user_id} className="flex items-center gap-[var(--space-3)] rounded-input border border-app bg-surface-inset px-[var(--space-3)] py-[var(--space-2)]">
-                        <Avatar foto={m.foto} nombre={m.nombre} size={28} />
-                        <span className="flex-1 text-body-sm font-[var(--fw-medium)]">
+                      <div key={m.user_id} className="flex items-center gap-[var(--space-2)] rounded-[12px] border border-app px-[var(--space-2)] py-[10px]">
+                        <Avatar foto={m.foto} nombre={m.nombre} size={24} />
+                        <span className="min-w-0 flex-1 truncate text-body-sm font-[var(--fw-medium)] text-app">
                           {m.nombre ?? m.user_id.slice(0, 8)}
                         </span>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={cantidades[m.user_id] ?? ""}
-                          onChange={(e) => setCantidades((prev) => ({ ...prev, [m.user_id]: e.target.value }))}
-                          placeholder="0.00"
-                          className="w-[80px] bg-transparent text-right text-body-sm outline-none"
-                        />
-                        <span className="text-body-sm text-muted">{moneda}</span>
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={cantidades[m.user_id] ?? ""}
+                            onChange={(e) => setCantidades((prev) => ({ ...prev, [m.user_id]: e.target.value }))}
+                            placeholder="0.00"
+                            inputMode="decimal"
+                            className="w-[46px] appearance-none bg-transparent text-right text-body-sm text-app outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                          />
+                          <span className="shrink-0 text-caption text-app">{moneda}</span>
+                          <StepperButtons
+                            onIncrement={() =>
+                              setCantidades((prev) => ({
+                                ...prev,
+                                [m.user_id]: adjustNumericString(prev[m.user_id] ?? "", 0.01, { min: 0, decimals: 2 }),
+                              }))
+                            }
+                            onDecrement={() =>
+                              setCantidades((prev) => ({
+                                ...prev,
+                                [m.user_id]: adjustNumericString(prev[m.user_id] ?? "", -0.01, { min: 0, decimals: 2 }),
+                              }))
+                            }
+                          />
+                        </div>
                       </div>
                     ))}
                     {(() => {
@@ -582,110 +638,104 @@ export default function AddGastoSheet({ planId, userId, subplanes, onClose, onCr
                       ) : null;
                     })()}
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* POR_ITEMS */}
-              {metodo === "POR_ITEMS" && (
-                <div>
-                  <div className="flex items-center justify-between mb-[var(--space-2)]">
-                    <p className={labelCls}>Ítems del ticket</p>
-                    <button
-                      type="button"
-                      onClick={addItem}
-                      className="text-body-sm text-primary-token font-[var(--fw-medium)]"
-                    >
-                      + Añadir ítem
-                    </button>
-                  </div>
-                  {items.length === 0 && (
-                    <p className="text-body-sm text-muted text-center py-[var(--space-4)]">
-                      Sube una factura para autodetectar los ítems, o añádelos manualmente
-                    </p>
-                  )}
-                  <div className="flex flex-col gap-[var(--space-4)]">
-                    {items.map((item, idx) => (
-                      <div key={idx} className="rounded-input border border-app bg-surface-inset p-[var(--space-3)] space-y-[var(--space-2)]">
-                        <div className="flex items-center gap-[var(--space-2)]">
-                          <input
-                            value={item.nombre}
-                            onChange={(e) => updateItem(idx, { nombre: e.target.value })}
-                            placeholder="Nombre del ítem"
-                            className="flex-1 bg-transparent text-body-sm font-[var(--fw-medium)] outline-none"
-                          />
-                          <button type="button" onClick={() => removeItem(idx)} className="text-muted hover:text-[var(--error)]">
-                            <svg viewBox="0 0 24 24" fill="none" className="size-4" stroke="currentColor" strokeWidth="2">
-                              <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" />
-                            </svg>
-                          </button>
-                        </div>
-                        <div className="flex gap-[var(--space-2)] text-caption text-muted">
-                          <span>×</span>
-                          <input
-                            type="number"
-                            min="1"
-                            step="1"
-                            value={item.cantidad}
-                            onChange={(e) => updateItem(idx, { cantidad: parseInt(e.target.value) || 1 })}
-                            className="w-[40px] bg-transparent outline-none text-center"
-                          />
-                          <span>ud ·</span>
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={item.precio_unitario || ""}
-                            onChange={(e) => updateItem(idx, { precio_unitario: parseFloat(e.target.value) || 0 })}
-                            placeholder="0.00"
-                            className="w-[60px] bg-transparent outline-none text-right"
-                          />
-                          <span>{moneda} · Subtotal: {item.subtotal.toFixed(2)} {moneda}</span>
-                        </div>
-                        {/* Assign to members */}
-                        <div>
-                          <p className="text-caption text-muted mb-[var(--space-1)]">¿Quién lo consume?</p>
-                          <div className="flex flex-wrap gap-[var(--space-1)]">
-                            {miembros.map((m) => (
-                              <button
-                                key={m.user_id}
-                                type="button"
-                                onClick={() => toggleItemUser(idx, m.user_id)}
-                                className={`flex items-center gap-1 rounded-chip border px-2 py-0.5 text-caption transition-colors ${
-                                  item.asignados[m.user_id]
-                                    ? "border-primary-token bg-primary-token/15 text-primary-token"
-                                    : "border-app text-muted"
-                                }`}
-                              >
-                                <Avatar foto={m.foto} nombre={m.nombre} size={14} />
-                                {m.nombre ?? m.user_id.slice(0, 6)}
+                {metodo === "POR_ITEMS" && (
+                  <div className="space-y-[var(--space-3)]">
+                    <div className="flex items-center justify-between">
+                      <p className={labelCls}>Ítems</p>
+                      <button
+                        type="button"
+                        onClick={addItem}
+                        className="text-body-sm text-primary-token font-[var(--fw-medium)]"
+                      >
+                        + Añadir ítem
+                      </button>
+                    </div>
+                    {items.length === 0 ? (
+                      <p className="text-body-sm text-muted text-center py-[var(--space-4)]">
+                        Sube un ticket para detectar ítems o añádelos manualmente.
+                      </p>
+                    ) : (
+                      <div className="flex flex-col gap-[var(--space-3)]">
+                        {items.map((item, idx) => (
+                          <div key={idx} className="rounded-[16px] border border-app px-[var(--space-3)] py-[var(--space-3)] space-y-[var(--space-3)]">
+                            <div className="flex items-center gap-[var(--space-2)]">
+                              <input
+                                value={item.nombre}
+                                onChange={(e) => updateItem(idx, { nombre: e.target.value })}
+                                placeholder="Nombre del ítem"
+                                className="min-w-0 flex-1 bg-transparent text-body-sm font-[var(--fw-medium)] text-app outline-none"
+                              />
+                              <button type="button" onClick={() => removeItem(idx)} className="text-muted hover:text-[var(--error)]">
+                                <svg viewBox="0 0 24 24" fill="none" className="size-4" stroke="currentColor" strokeWidth="2">
+                                  <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" />
+                                </svg>
                               </button>
-                            ))}
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-[var(--space-2)] text-caption text-muted">
+                              <span>×</span>
+                              <input
+                                type="number"
+                                min="1"
+                                step="1"
+                                value={item.cantidad}
+                                onChange={(e) => updateItem(idx, { cantidad: parseInt(e.target.value) || 1 })}
+                                className="w-[42px] bg-transparent outline-none text-center"
+                              />
+                              <span>ud ·</span>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={item.precio_unitario || ""}
+                                onChange={(e) => updateItem(idx, { precio_unitario: parseFloat(e.target.value) || 0 })}
+                                placeholder="0.00"
+                                className="w-[68px] bg-transparent outline-none text-right"
+                              />
+                              <span>{moneda} · Subtotal: {item.subtotal.toFixed(2)} {moneda}</span>
+                            </div>
+
+                            <div>
+                              <p className="text-caption text-muted mb-[var(--space-1)]">¿Quién lo consume?</p>
+                              <div className="flex flex-wrap gap-[var(--space-1)]">
+                                {miembros.map((m) => (
+                                  <button
+                                    key={m.user_id}
+                                    type="button"
+                                    onClick={() => toggleItemUser(idx, m.user_id)}
+                                    className={`flex items-center gap-1 rounded-chip border px-2 py-0.5 text-caption transition-colors ${
+                                      item.asignados[m.user_id]
+                                        ? "border-primary-token bg-primary-token/15 text-primary-token"
+                                        : "border-app text-muted"
+                                    }`}
+                                  >
+                                    <Avatar foto={m.foto} nombre={m.nombre} size={14} />
+                                    {m.nombre ?? m.user_id.slice(0, 6)}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
                           </div>
-                        </div>
+                        ))}
                       </div>
-                    ))}
+                    )}
                   </div>
-                </div>
-              )}
+                )}
+              </section>
 
               {error && <p className="text-body-sm text-[var(--error)]">{error}</p>}
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-between border-t border-app px-[var(--page-margin-x)] py-[var(--space-4)]">
-              <button
-                type="button"
-                onClick={onClose}
-                className="text-body-sm font-[var(--fw-medium)] text-[var(--error)] transition-opacity hover:opacity-70"
-              >
-                Cancelar
-              </button>
+            <div className="flex items-center justify-end border-t border-app px-[var(--page-margin-x)] py-[var(--space-4)]">
               <button
                 type="submit"
                 disabled={saving || ocrLoading}
-                className="rounded-chip bg-primary-token px-[var(--space-6)] py-[var(--space-2)] text-body-sm font-[var(--fw-semibold)] text-contrast-token disabled:opacity-[var(--disabled-opacity)]"
+                className="rounded-[14px] bg-[var(--text-primary)] px-[var(--space-8)] py-[12px] text-body-sm font-[var(--fw-semibold)] text-contrast-token transition-opacity hover:opacity-85 disabled:opacity-[var(--disabled-opacity)]"
               >
-                {saving ? "Guardando..." : "Guardar gasto"}
+                {saving ? "Creando..." : "Crear gasto"}
               </button>
             </div>
           </form>

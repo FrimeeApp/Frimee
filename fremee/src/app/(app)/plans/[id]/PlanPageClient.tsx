@@ -23,7 +23,6 @@ import { QRCodeSVG } from "qrcode.react";
 import AppSidebar from "@/components/common/AppSidebar";
 
 type Tab = "itinerario" | "gastos" | "chat";
-type PlanExpenseScope = "group" | "mine";
 
 /* ───────────── icons ───────────── */
 
@@ -257,30 +256,6 @@ function getInitial(value: string | null | undefined) {
   return (value?.trim()[0] || "U").toUpperCase();
 }
 
-function getMovementStatusMeta(estado: GastoRow["estado"]) {
-  if (estado === "CONFIRMADO") {
-    return {
-      label: "Confirmado",
-      amountClass: "text-[var(--success,#15803d)]",
-      pillClass: "border-[var(--success)]/25 bg-[var(--success)]/10 text-[var(--success)]",
-    };
-  }
-
-  if (estado === "BORRADOR") {
-    return {
-      label: "Borrador",
-      amountClass: "text-[var(--warning,#b45309)]",
-      pillClass: "border-[var(--warning)]/25 bg-[var(--warning)]/10 text-[var(--warning)]",
-    };
-  }
-
-  return {
-    label: "Anulado",
-    amountClass: "text-muted",
-    pillClass: "border-app bg-surface text-muted",
-  };
-}
-
 function summarizeRecipients(parts: GastoRow["partes"], excludeUserId?: string | null) {
   const filtered = (parts ?? []).filter((part) => part.user_id !== excludeUserId);
   if (!filtered.length) return "Sin reparto";
@@ -303,6 +278,142 @@ function PlanExpenseAvatar({ name, image }: { name: string; image: string | null
   return (
     <div className="flex size-11 shrink-0 items-center justify-center rounded-full border border-app bg-surface-2 text-body-sm font-[var(--fw-semibold)] text-muted">
       {getInitial(name)}
+    </div>
+  );
+}
+
+function formatExpenseDetailDate(value: string) {
+  return new Intl.DateTimeFormat("es-ES", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function PlanGastoDetailModal({
+  gasto,
+  planName,
+  currentUserId,
+  onClose,
+}: {
+  gasto: GastoRow | null;
+  planName: string;
+  currentUserId: string | null;
+  onClose: () => void;
+}) {
+  if (!gasto) return null;
+
+  const payerName = gasto.pagado_por_nombre ?? "Usuario";
+  const categoryLine = gasto.subplan_titulo ?? gasto.categoria_nombre ?? gasto.descripcion?.trim() ?? "Sin detalle";
+  const categoryLabel = gasto.subplan_titulo
+    ? "Actividad"
+    : gasto.categoria_nombre
+      ? "Categoría"
+      : "Detalle";
+  const yourShare = currentUserId
+    ? gasto.partes?.find((parte) => parte.user_id === currentUserId)?.importe ?? null
+    : null;
+  return (
+    <div
+      className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center bg-black/50 px-[var(--space-4)] py-[var(--space-6)] backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-[560px] rounded-[18px] border border-app bg-app shadow-elev-4"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-[var(--space-4)] border-b border-app px-[var(--space-5)] py-[var(--space-4)]">
+          <div className="min-w-0">
+            <p className="text-caption font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
+              {planName}
+            </p>
+            <h2 className="mt-[6px] truncate text-[var(--font-h3)] font-[var(--fw-bold)] leading-[1.15] text-app">
+              {gasto.titulo}
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex size-9 items-center justify-center rounded-full text-muted transition-colors hover:bg-surface"
+            aria-label="Cerrar detalle"
+          >
+            <X className="size-[18px]" strokeWidth={2} />
+          </button>
+        </div>
+
+        <div className="space-y-[var(--space-5)] px-[var(--space-5)] py-[var(--space-5)]">
+          <div className="flex items-start justify-between gap-[var(--space-4)]">
+            <div>
+              <p className="text-caption font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
+                Importe
+              </p>
+              <p className="mt-[6px] text-[32px] font-[var(--fw-bold)] leading-none text-app">
+                {formatMoney(gasto.total, gasto.moneda)}
+              </p>
+            </div>
+            {yourShare != null && (
+              <div className="text-right">
+                <p className="text-caption font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
+                  Tu parte
+                </p>
+                <p className="mt-[6px] text-body font-[var(--fw-semibold)] text-app">
+                  {formatMoney(yourShare, gasto.moneda)}
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 gap-[var(--space-3)] sm:grid-cols-2">
+            <PlanExpenseDetailItem label="Pagado por" value={payerName} />
+            <PlanExpenseDetailItem label="Fecha" value={formatExpenseDetailDate(gasto.fecha_gasto)} />
+            <PlanExpenseDetailItem label={categoryLabel} value={categoryLine} />
+          </div>
+
+          {gasto.descripcion?.trim() && (
+            <div>
+              <p className="text-caption font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
+                Descripción
+              </p>
+              <p className="mt-[4px] text-body-sm text-app">{gasto.descripcion.trim()}</p>
+            </div>
+          )}
+
+          <div>
+            <p className="text-caption font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
+              Repartido entre
+            </p>
+            <div className="mt-[var(--space-3)] divide-y divide-app">
+              {(gasto.partes ?? []).map((parte) => {
+                const partName = parte.user_id === currentUserId ? "Tú" : (parte.nombre ?? "Usuario");
+                return (
+                  <div key={`${gasto.id}-${parte.user_id}`} className="flex items-center gap-3 py-[var(--space-3)]">
+                    <PlanExpenseAvatar name={partName} image={parte.foto ?? null} />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-body-sm font-[var(--fw-semibold)] text-app">{partName}</p>
+                    </div>
+                    <p className="shrink-0 text-body-sm font-[var(--fw-semibold)] text-app">
+                      {formatMoney(parte.importe, gasto.moneda)}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PlanExpenseDetailItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="py-[var(--space-2)]">
+      <p className="text-caption font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
+        {label}
+      </p>
+      <p className="mt-[4px] text-body-sm font-[var(--fw-semibold)] text-app">{value}</p>
     </div>
   );
 }
@@ -878,20 +989,20 @@ function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClos
             {wizardStep === 1 && (
               <div className="space-y-[var(--space-6)]">
                 {/* Activity type grid */}
-                <div className="grid grid-cols-3 gap-[var(--space-3)]">
+                <div className="grid grid-cols-3 gap-[var(--space-2)] sm:gap-[var(--space-3)]">
                   {ACTIVITY_TYPE_OPTIONS.map((t) => (
                     <button
                       key={t.value}
                       type="button"
                       onClick={() => setTipo(t.value)}
-                      className={`flex flex-col items-start gap-[var(--space-2)] rounded-[16px] border-2 p-[var(--space-4)] text-left transition-colors ${
+                      className={`flex flex-col items-start gap-[var(--space-2)] rounded-[14px] border-2 px-[var(--space-3)] py-[var(--space-3)] text-left transition-colors sm:rounded-[16px] sm:p-[var(--space-4)] ${
                         tipo === t.value
                           ? "border-[var(--primary)]/40 bg-[var(--primary)]/10"
                           : "border-app bg-app hover:bg-surface"
                       }`}
                     >
                       <t.Icon className={`size-5 shrink-0 ${tipo === t.value ? "text-primary-token" : "text-muted"}`} strokeWidth={1.5} />
-                      <span className="text-body-sm font-[var(--fw-semibold)] text-app">{t.label}</span>
+                      <span className="text-[13px] leading-[1.15] font-[var(--fw-semibold)] text-app sm:text-body-sm">{t.label}</span>
                     </button>
                   ))}
                 </div>
@@ -1100,8 +1211,8 @@ export default function PlanDetailPage() {
   const [editingSubplan, setEditingSubplan] = useState<SubplanRow | null>(null);
   const [showAddGastoSheet, setShowAddGastoSheet] = useState(false);
   const [gastos, setGastos] = useState<GastoRow[]>([]);
+  const [selectedGastoId, setSelectedGastoId] = useState<number | null>(null);
   const [balances, setBalances] = useState<BalanceRow[]>([]);
-  const [expenseScope, setExpenseScope] = useState<PlanExpenseScope>("group");
   const [editingTransporteId, setEditingTransporteId] = useState<number | null>(null);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteFriends, setInviteFriends] = useState<PublicUserProfileRow[]>([]);
@@ -1258,30 +1369,21 @@ export default function PlanDetailPage() {
   }, [showMapFullscreen]);
 
   const visibleBalances = useMemo(() => {
-    const scopedBalances =
-      expenseScope === "group" || !user?.id
-        ? balances
-        : balances.filter((balance) => balance.from_user_id === user.id || balance.to_user_id === user.id);
-
-    return [...scopedBalances].sort((a, b) => b.importe - a.importe);
-  }, [balances, expenseScope, user?.id]);
+    return [...balances].sort((a, b) => b.importe - a.importe);
+  }, [balances]);
 
   const visiblePlanGastos = useMemo(() => {
-    const scopedExpenses =
-      expenseScope === "group" || !user?.id
-        ? gastos
-        : gastos.filter(
-            (gasto) =>
-              gasto.pagado_por_user_id === user.id ||
-              gasto.partes?.some((parte) => parte.user_id === user.id),
-          );
-
-    return [...scopedExpenses].sort((a, b) => {
+    return [...gastos].sort((a, b) => {
       const dateDiff = new Date(b.fecha_gasto).getTime() - new Date(a.fecha_gasto).getTime();
       if (dateDiff !== 0) return dateDiff;
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
-  }, [expenseScope, gastos, user?.id]);
+  }, [gastos]);
+
+  const selectedGasto = useMemo(
+    () => gastos.find((gasto) => gasto.id === selectedGastoId) ?? null,
+    [gastos, selectedGastoId],
+  );
 
   const openInviteModal = async () => {
     setShowInviteModal(true);
@@ -1523,6 +1625,11 @@ export default function PlanDetailPage() {
 
   useEffect(() => { loadGastos(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { loadBalances(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (selectedGastoId && !gastos.some((gasto) => gasto.id === selectedGastoId)) {
+      setSelectedGastoId(null);
+    }
+  }, [gastos, selectedGastoId]);
 
   if (loading || planLoading || !membershipChecked) return <PlanDetailSkeleton />;
   if (!plan) return (
@@ -1532,15 +1639,21 @@ export default function PlanDetailPage() {
   );
 
   return (
-    <div className="min-h-dvh bg-app text-app">
-      <div className="relative min-h-dvh w-full">
+    <div className={`${activeTab === "chat" ? "h-dvh overflow-hidden" : "min-h-dvh"} bg-app text-app`}>
+      <div className={`relative w-full ${activeTab === "chat" ? "h-dvh overflow-hidden" : "min-h-dvh"}`}>
         <AppSidebar hideMobileNav={true} />
-        <main className="pb-[max(var(--space-6),env(safe-area-inset-bottom))] md:py-0 md:pl-[102px]">
-          <div className="md:grid md:grid-cols-[minmax(88px,1fr)_minmax(0,1536px)_minmax(88px,1fr)] xl:grid-cols-[minmax(180px,1fr)_minmax(0,1280px)_minmax(180px,1fr)] 2xl:grid-cols-[minmax(240px,1fr)_minmax(0,1240px)_minmax(240px,1fr)]">
-            <div className="md:col-start-2">
+        <main className={`${activeTab === "chat" ? "h-dvh overflow-hidden" : "pb-[max(var(--space-6),env(safe-area-inset-bottom))]"} md:py-0 md:pl-[102px]`}>
+          <div className={`${activeTab === "chat" ? "h-full" : ""} md:grid md:grid-cols-[minmax(88px,1fr)_minmax(0,1536px)_minmax(88px,1fr)] xl:grid-cols-[minmax(180px,1fr)_minmax(0,1280px)_minmax(180px,1fr)] 2xl:grid-cols-[minmax(240px,1fr)_minmax(0,1240px)_minmax(240px,1fr)]`}>
+            <div className={`${activeTab === "chat" ? "flex h-full min-h-0 flex-col" : ""} md:col-start-2`}>
 
           {/* ─── Hero ─── */}
-          <div className="relative w-full overflow-hidden md:ml-0 md:[border-bottom-left-radius:var(--radius-card)] md:[border-bottom-right-radius:var(--radius-card)]" style={{ height: "clamp(260px, 40vh, 380px)" }}>
+          <div
+            className={`relative w-full overflow-hidden transition-[height] duration-300 md:ml-0 md:[border-bottom-left-radius:var(--radius-card)] md:[border-bottom-right-radius:var(--radius-card)] ${
+              activeTab === "chat"
+                ? "h-[clamp(150px,21vh,190px)] md:h-[clamp(260px,40vh,380px)]"
+                : "h-[clamp(220px,34vh,320px)] md:h-[clamp(260px,40vh,380px)]"
+            }`}
+          >
             {plan.foto_portada ? (
               <Image
                 src={plan.foto_portada}
@@ -1617,7 +1730,7 @@ export default function PlanDetailPage() {
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
-                    className={`relative py-[var(--space-4)] text-body-sm font-[var(--fw-medium)] capitalize transition-colors ${
+                    className={`relative py-[var(--space-3)] text-body-sm font-[var(--fw-medium)] capitalize transition-colors ${
                       activeTab === tab
                         ? "text-app"
                         : "text-muted hover:text-app"
@@ -1665,7 +1778,7 @@ export default function PlanDetailPage() {
 
           {/* ─── Chat tab ─── */}
           {activeTab === "chat" && (
-            <div>
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
               {planChat && user ? (
                 <ChatConversation
                   chat={planChat}
@@ -1686,7 +1799,7 @@ export default function PlanDetailPage() {
                   }}
                   inCall={callState.status !== "idle"}
                   registerCallReload={(fn) => { reloadCallMessagesRef.current = fn; }}
-                  containerClassName="flex flex-col h-[650px]"
+                  containerClassName="flex min-h-0 flex-1 flex-col"
                   embedded
                   planInfo={plan ? { titulo: plan.titulo, inicio_at: plan.inicio_at, fin_at: plan.fin_at, ubicacion_nombre: plan.ubicacion_nombre } : undefined}
                   planId={plan?.id}
@@ -1714,7 +1827,7 @@ export default function PlanDetailPage() {
           )}
 
           {/* ─── Content ─── */}
-          {activeTab !== "chat" && <div className="px-[var(--page-margin-x)] pt-[var(--space-8)] pb-[var(--space-3)] md:pb-[var(--space-16)]">
+          {activeTab !== "chat" && <div className="px-[var(--page-margin-x)] pt-[var(--space-6)] pb-[var(--space-3)] md:pb-[var(--space-16)]">
 
             {activeTab === "itinerario" && (
               <div
@@ -1737,7 +1850,7 @@ export default function PlanDetailPage() {
                           setAddSheetInitialDate(undefined);
                           setShowAddSheet(true);
                         }}
-                        className="mt-[var(--space-5)] flex items-center gap-[var(--space-2)] rounded-chip border border-primary-token px-[var(--space-4)] py-[var(--space-2)] text-body-sm font-[var(--fw-medium)] text-primary-token transition-colors hover:bg-primary-token/10"
+                        className="mt-[var(--space-5)] hidden items-center gap-[var(--space-2)] rounded-chip border border-primary-token px-[var(--space-4)] py-[var(--space-2)] text-body-sm font-[var(--fw-medium)] text-primary-token transition-colors hover:bg-primary-token/10 md:flex"
                       >
                         <span className="text-lg leading-none">+</span> Añadir actividad
                       </button>
@@ -2223,98 +2336,87 @@ export default function PlanDetailPage() {
 
             {activeTab === "gastos" && (
               <div className="mx-auto max-w-[760px]" style={{ fontFamily: "var(--font-inter), sans-serif" }}>
-                <div className="mb-[var(--space-6)] flex items-center justify-between gap-[var(--space-4)]">
+                <div className="mb-[var(--space-6)] flex items-start justify-between gap-[var(--space-4)]">
                   <div>
-                    <h3
-                      className="text-[28px] font-[var(--fw-bold)] leading-[1.1] text-app"
+                    <p className="text-[11px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
+                      Total gastado en el plan
+                    </p>
+                    <p
+                      className="mt-[4px] text-[26px] font-[var(--fw-bold)] leading-none text-app"
                       style={{ fontFamily: "var(--font-inter), sans-serif" }}
                     >
-                      Gastos
-                    </h3>
-                    <p className="mt-[4px] text-body-sm text-muted">
-                      {expenseScope === "group"
-                        ? "Todos los movimientos y balances del grupo."
-                        : "Lo que has pagado tú o te afecta directamente."}
+                      {formatMoney(expenseSummary.total, expenseSummary.currency)}
                     </p>
                   </div>
+                  {!isPast && (
                   <button
                     onClick={() => setShowAddGastoSheet(true)}
-                    className="flex items-center gap-[var(--space-2)] rounded-chip bg-primary-token px-[var(--space-4)] py-[var(--space-2)] text-body-sm font-[var(--fw-semibold)] text-contrast-token"
+                    aria-label="Añadir gasto"
+                    className="hidden size-10 items-center justify-center rounded-full bg-primary-token text-contrast-token md:flex"
                   >
                     <svg viewBox="0 0 24 24" fill="none" className="size-4" stroke="currentColor" strokeWidth="2.5">
                       <path d="M12 5v14M5 12h14" strokeLinecap="round" />
                     </svg>
-                    Añadir gasto
                   </button>
-                </div>
-
-                <div className="mb-[var(--space-5)] inline-flex rounded-full border border-app bg-surface p-[4px]">
-                  <button
-                    type="button"
-                    onClick={() => setExpenseScope("group")}
-                    className={`rounded-full px-[var(--space-4)] py-[8px] text-body-sm font-[var(--fw-semibold)] transition-colors ${
-                      expenseScope === "group" ? "bg-app text-app shadow-sm" : "text-muted hover:text-app"
-                    }`}
-                  >
-                    Grupo
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setExpenseScope("mine")}
-                    className={`rounded-full px-[var(--space-4)] py-[8px] text-body-sm font-[var(--fw-semibold)] transition-colors ${
-                      expenseScope === "mine" ? "bg-app text-app shadow-sm" : "text-muted hover:text-app"
-                    }`}
-                  >
-                    Para ti
-                  </button>
+                  )}
                 </div>
 
                 <div className="space-y-[var(--space-6)]">
                   <section>
                     <div className="mb-[var(--space-3)] flex items-center justify-between gap-[var(--space-3)]">
-                      <h4 className="text-caption font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted" style={{ fontFamily: "var(--font-inter), sans-serif" }}>
-                        Balances
-                      </h4>
+                      <div>
+                        <h4 className="text-caption font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted" style={{ fontFamily: "var(--font-inter), sans-serif" }}>
+                          Deudas pendientes
+                        </h4>
+                      </div>
                       <span className="text-caption text-muted">
-                        {visibleBalances.length} movimiento{visibleBalances.length === 1 ? "" : "s"}
+                        {visibleBalances.length} deuda{visibleBalances.length === 1 ? "" : "s"}
                       </span>
                     </div>
 
                     {visibleBalances.length === 0 ? (
-                      <div className="rounded-[12px] border border-app bg-surface px-[var(--space-4)] py-[var(--space-4)] text-body-sm text-muted">
-                        {expenseScope === "group"
-                          ? "No hay balances pendientes en este plan."
-                          : "Ahora mismo no tienes balances pendientes en este plan."}
-                      </div>
+                      <p className="px-[var(--space-4)] py-[var(--space-2)] text-body-sm text-muted">
+                        No hay deudas pendientes en este plan.
+                      </p>
                     ) : (
-                      <div className="space-y-[var(--space-3)]">
+                      <div className="divide-y divide-app">
                         {visibleBalances.map((balance) => {
                           const isMineOutgoing = balance.from_user_id === user?.id;
                           const isMineIncoming = balance.to_user_id === user?.id;
                           const senderName = isMineOutgoing ? "Tú" : (balance.from_nombre ?? "Usuario");
                           const receiverName = isMineIncoming ? "Tú" : (balance.to_nombre ?? "Usuario");
-                          const balanceLabel =
-                            expenseScope === "mine"
-                              ? isMineOutgoing
-                                ? `Debes a ${receiverName}`
-                                : `Te debe ${senderName}`
-                              : `${senderName} → ${receiverName}`;
 
                           return (
                             <article
                               key={`${balance.from_user_id}-${balance.to_user_id}-${balance.importe}`}
-                              className="flex items-center gap-3 rounded-[10px] border border-app bg-app px-[var(--space-4)] py-[var(--space-3)]"
+                              className="flex items-center gap-3 px-[var(--space-4)] py-[var(--space-3)]"
                             >
                               <PlanExpenseAvatar
                                 name={senderName}
                                 image={isMineOutgoing ? null : (balance.from_foto ?? null)}
                               />
                               <div className="min-w-0 flex-1">
-                                <p className="truncate text-body-sm font-[var(--fw-semibold)] text-app">
-                                  {balanceLabel}
+                                <p className="truncate text-body-sm text-app">
+                                  {isMineOutgoing ? (
+                                    <>
+                                      <span className="font-light">Debes a </span>
+                                      <span className="font-bold">{receiverName}</span>
+                                    </>
+                                  ) : isMineIncoming ? (
+                                    <>
+                                      <span className="font-bold">{senderName}</span>
+                                      <span className="font-light"> te debe</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <span className="font-bold">{senderName}</span>
+                                      <span className="font-light"> debe a </span>
+                                      <span className="font-bold">{receiverName}</span>
+                                    </>
+                                  )}
                                 </p>
                                 <p className="truncate text-caption text-muted">
-                                  Pendiente de liquidar
+                                  Deuda pendiente
                                 </p>
                               </div>
                               <div className="text-right">
@@ -2328,7 +2430,7 @@ export default function PlanDetailPage() {
                                   {formatMoney(balance.importe, expenseSummary.currency)}
                                 </p>
                                 <p className="mt-[2px] text-[11px] font-[var(--fw-semibold)] uppercase tracking-[0.06em] text-muted">
-                                  {isMineOutgoing ? "Debes" : isMineIncoming ? "Te deben" : "Grupo"}
+                                  Pendiente
                                 </p>
                               </div>
                             </article>
@@ -2340,57 +2442,69 @@ export default function PlanDetailPage() {
 
                   <section>
                     <div className="mb-[var(--space-3)] flex items-center justify-between gap-[var(--space-3)]">
-                      <h4 className="text-caption font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted" style={{ fontFamily: "var(--font-inter), sans-serif" }}>
-                        Movimientos
-                      </h4>
+                      <div>
+                        <h4 className="text-caption font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted" style={{ fontFamily: "var(--font-inter), sans-serif" }}>
+                          Historial de gastos
+                        </h4>
+                      </div>
                       <span className="text-caption text-muted">
                         {visiblePlanGastos.length} gasto{visiblePlanGastos.length === 1 ? "" : "s"}
                       </span>
                     </div>
 
                     {visiblePlanGastos.length === 0 ? (
-                      <div className="rounded-[12px] border border-app bg-surface px-[var(--space-4)] py-[var(--space-4)] text-body-sm text-muted">
-                        {expenseScope === "group"
-                          ? "Aún no hay gastos registrados en este plan."
-                          : "Aún no tienes movimientos personales en este plan."}
-                      </div>
+                      <p className="px-[var(--space-4)] py-[var(--space-2)] text-body-sm text-muted">
+                        Aún no hay gastos registrados en este plan.
+                      </p>
                     ) : (
-                      <div className="space-y-[var(--space-3)]">
+                      <div className="divide-y divide-app">
                         {visiblePlanGastos.map((gasto) => {
-                          const statusMeta = getMovementStatusMeta(gasto.estado);
                           const payerName = gasto.pagado_por_nombre ?? "Usuario";
                           const categoryLine = gasto.subplan_titulo ?? gasto.categoria_nombre ?? gasto.descripcion?.trim() ?? "Sin detalle";
                           const recipientsSummary = summarizeRecipients(gasto.partes, gasto.pagado_por_user_id);
+                          const isPaidByYou = gasto.pagado_por_user_id === user?.id;
                           const yourShare = user?.id
                             ? gasto.partes?.find((parte) => parte.user_id === user.id)?.importe ?? null
                             : null;
-                          const isPaidByYou = gasto.pagado_por_user_id === user?.id;
-                          const involvesYou = Boolean(user?.id && (isPaidByYou || gasto.partes?.some((parte) => parte.user_id === user.id)));
 
                           return (
                             <article
                               key={gasto.id}
-                              className="flex items-center gap-3 rounded-[10px] border border-app bg-app px-[var(--space-4)] py-[var(--space-3)]"
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => setSelectedGastoId(gasto.id)}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter" || event.key === " ") {
+                                  event.preventDefault();
+                                  setSelectedGastoId(gasto.id);
+                                }
+                              }}
+                              className="flex cursor-pointer items-center gap-3 px-[var(--space-4)] py-[var(--space-3)] transition-colors hover:bg-surface focus:outline-none"
                             >
                               <PlanExpenseAvatar name={payerName} image={gasto.pagado_por_foto ?? null} />
 
                               <div className="min-w-0 flex-1">
                                 <div className="flex min-w-0 items-center gap-[var(--space-2)]">
-                                  <p className="truncate text-body-sm font-[var(--fw-semibold)] text-app">
-                                    {isPaidByYou ? `Pagaste ${gasto.titulo}` : `${payerName} pagó ${gasto.titulo}`}
+                                  <p className="truncate text-body-sm text-app">
+                                    {isPaidByYou ? (
+                                      <>
+                                        <span className="font-bold">Tú</span>
+                                        <span className="font-light"> pagaste </span>
+                                        <span className="font-bold">{gasto.titulo}</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <span className="font-bold">{payerName}</span>
+                                        <span className="font-light"> pagó </span>
+                                        <span className="font-bold">{gasto.titulo}</span>
+                                      </>
+                                    )}
                                   </p>
-                                  <span className={`inline-flex shrink-0 rounded-full border px-[var(--space-2)] py-[3px] text-[10px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] ${statusMeta.pillClass}`}>
-                                    {statusMeta.label}
-                                  </span>
                                 </div>
                                 <p className="truncate text-caption text-muted">
-                                  {expenseScope === "group"
-                                    ? `Para ${recipientsSummary}`
-                                    : isPaidByYou
-                                      ? `Pagado por ti${gasto.partes?.length ? ` · ${gasto.partes.length} personas` : ""}`
-                                      : yourShare != null
-                                        ? `Tu parte: ${formatMoney(yourShare, gasto.moneda)}`
-                                        : `Pagado por ${payerName}`}
+                                  {yourShare != null
+                                    ? `Tu parte: ${formatMoney(yourShare, gasto.moneda)}`
+                                    : `Repartido entre ${recipientsSummary}`}
                                 </p>
                                 <p className="truncate text-caption text-muted">
                                   {categoryLine} · {formatExpenseDateTime(gasto.fecha_gasto)}
@@ -2398,30 +2512,13 @@ export default function PlanDetailPage() {
                               </div>
 
                               <div className="shrink-0 text-right">
-                                <p className={`text-body-sm font-[var(--fw-semibold)] ${statusMeta.amountClass}`}>
+                                <p className="text-body-sm font-[var(--fw-semibold)] text-app">
                                   {formatMoney(gasto.total, gasto.moneda)}
-                                </p>
-                                <p className="mt-[2px] text-[11px] font-[var(--fw-semibold)] uppercase tracking-[0.06em] text-muted">
-                                  {expenseScope === "mine" && involvesYou
-                                    ? isPaidByYou
-                                      ? "Tú pagaste"
-                                      : "Te afecta"
-                                    : "Grupo"}
                                 </p>
                               </div>
                             </article>
                           );
                         })}
-
-                        <div className="mt-[var(--space-2)] flex items-center justify-between rounded-[12px] border border-app bg-surface px-[var(--space-4)] py-[var(--space-3)]">
-                          <p className="text-body-sm font-[var(--fw-semibold)]">Total visible</p>
-                          <p className="text-body font-[var(--fw-bold)]">
-                            {formatMoney(
-                              visiblePlanGastos.reduce((sum, gasto) => sum + gasto.total, 0),
-                              visiblePlanGastos[0]?.moneda ?? expenseSummary.currency,
-                            )}
-                          </p>
-                        </div>
                       </div>
                     )}
                   </section>
@@ -2511,7 +2608,7 @@ export default function PlanDetailPage() {
         </div>
       )}
 
-      {!isPast && isAdmin && activeTab === "itinerario" && subplanes.length > 0 && !routeSectionVisible && (
+      {!isPast && isAdmin && activeTab === "itinerario" && !routeSectionVisible && !showAddSheet && (
         <button
           type="button"
           onClick={() => {
@@ -2523,6 +2620,18 @@ export default function PlanDetailPage() {
           className="fixed bottom-[calc(var(--space-6)+env(safe-area-inset-bottom))] right-[var(--page-margin-x)] z-[65] flex h-[54px] w-[54px] items-center justify-center rounded-full bg-primary-token text-contrast-token shadow-[0_16px_32px_rgba(0,0,0,0.24)] transition-transform hover:scale-[1.03] hover:opacity-90 md:hidden"
           aria-label="Añadir actividad"
           title="Añadir actividad"
+        >
+          <PlusIcon className="size-[18px]" />
+        </button>
+      )}
+
+      {!isPast && activeTab === "gastos" && !showAddGastoSheet && (
+        <button
+          type="button"
+          onClick={() => setShowAddGastoSheet(true)}
+          className="fixed bottom-[calc(var(--space-6)+env(safe-area-inset-bottom))] right-[var(--page-margin-x)] z-[65] flex h-[54px] w-[54px] items-center justify-center rounded-full bg-primary-token text-contrast-token shadow-[0_16px_32px_rgba(0,0,0,0.24)] transition-transform hover:scale-[1.03] hover:opacity-90 md:hidden"
+          aria-label="Añadir gasto"
+          title="Añadir gasto"
         >
           <PlusIcon className="size-[18px]" />
         </button>
@@ -2551,7 +2660,6 @@ export default function PlanDetailPage() {
         <AddGastoSheet
           planId={plan.id}
           userId={user.id}
-          subplanes={subplanes}
           onClose={() => setShowAddGastoSheet(false)}
           onCreated={() => {
             loadGastos();
@@ -2559,6 +2667,13 @@ export default function PlanDetailPage() {
           }}
         />
       )}
+
+      <PlanGastoDetailModal
+        gasto={selectedGasto}
+        planName={plan.titulo}
+        currentUserId={user?.id ?? null}
+        onClose={() => setSelectedGastoId(null)}
+      />
 
       {/* Invite modal */}
       {showInviteModal && (
