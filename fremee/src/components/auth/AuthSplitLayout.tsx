@@ -15,13 +15,13 @@ export function AuthSplitLayout({ children }: { children: ReactNode }) {
             <div className="absolute inset-x-0 bottom-0 h-[34%] bg-gradient-to-t from-[#0a1510]/22 to-transparent" />
           </div>
 
-          <div className="relative z-20 flex h-full flex-col px-[clamp(28px,4vw,56px)] pb-[var(--space-24)] pt-[var(--space-10)] md:px-[clamp(40px,5vw,72px)] md:pt-[var(--space-12)] lg:px-[clamp(52px,5.5vw,88px)] lg:pt-[var(--space-14)]">
+          <div className="relative z-20 flex h-full flex-col px-[clamp(28px,4vw,56px)] pb-[var(--space-24)] pt-[var(--space-6)] md:px-[clamp(40px,5vw,72px)] md:pt-[var(--space-8)] lg:px-[clamp(52px,5.5vw,88px)]">
             <div className="shrink-0 pb-[var(--space-6)]">
               <div className="invisible w-full max-w-[420px] text-center text-[1.5rem] leading-none">Frimee</div>
             </div>
-            <div className="flex flex-1 items-center">
+            <div className="flex flex-1 items-start">
               <div className="w-full px-[clamp(36px,7vw,88px)]">
-                <div className="mx-auto -mt-[calc(var(--space-16)+20px)] flex min-h-[320px] max-w-[430px] flex-col justify-start md:-mt-[calc(var(--space-16)+32px)] md:min-h-[360px] lg:-mt-[140px] lg:min-h-[400px]">
+                <div className="mx-auto flex min-h-[320px] max-w-[430px] flex-col justify-start md:min-h-[360px] lg:min-h-[400px]">
                   <div className="relative left-1/2 w-[min(540px,calc(100%+112px))] -translate-x-1/2">
                     <h1 className="[font-family:var(--font-display-face)] text-[clamp(2.3rem,4vw,4rem)] leading-[1.02] tracking-[-0.015em] text-white dark:text-[#102018]">
                       Organiza mejor.
