@@ -1466,6 +1466,14 @@ export default function PlanDetailPage() {
       setIsAdmin(rol === "ADMIN");
       setMembershipChecked(true);
     }).catch(() => router.push("/calendar"));
+
+    // Polling del rol cada 15s para detectar cambios hechos por otros (ej: /admin)
+    const interval = setInterval(() => {
+      void fetchPlanUserRol(planId, user.id).then((rol) => {
+        if (rol !== null) setIsAdmin(rol === "ADMIN");
+      });
+    }, 5000);
+    return () => clearInterval(interval);
   }, [id, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Recargar lista de miembros cuando alguien entra o sale del chat del plan
