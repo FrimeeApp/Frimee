@@ -1467,13 +1467,6 @@ export default function PlanDetailPage() {
       setMembershipChecked(true);
     }).catch(() => router.push("/calendar"));
 
-    // Polling del rol cada 15s para detectar cambios hechos por otros (ej: /admin)
-    const interval = setInterval(() => {
-      void fetchPlanUserRol(planId, user.id).then((rol) => {
-        if (rol !== null) setIsAdmin(rol === "ADMIN");
-      });
-    }, 5000);
-    return () => clearInterval(interval);
   }, [id, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Recargar lista de miembros cuando alguien entra o sale del chat del plan
@@ -1493,7 +1486,20 @@ export default function PlanDetailPage() {
         });
       })
       .subscribe();
-    return () => { void supabase.removeChannel(channel); };
+
+    // Escuchar broadcast de cambio de rol emitido desde el chat
+    const rolChannel = supabase
+      .channel(`msg:${planChat.chat_id}`)
+      .on("broadcast", { event: "rol_change" }, ({ payload }) => {
+        const { user_id, rol } = payload as { user_id: string; rol: string };
+        if (user_id === user.id) setIsAdmin(rol === "ADMIN");
+      })
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+      void supabase.removeChannel(rolChannel);
+    };
   }, [planChat?.chat_id, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
 
