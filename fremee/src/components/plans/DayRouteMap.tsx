@@ -127,17 +127,22 @@ export default function DayRouteMap({
       if (coord) {
         map.setCenter(coord);
         map.setZoom(points.length > 0 ? 11 : 5);
-        // Show subplane markers if any (< 2 but could be 1)
-        points.forEach((p, i) => {
-          const c = p.coords;
+        // Show subplane markers — geocode if no stored coords
+        const resolvedCoords = await Promise.all(
+          points.map((p) => p.coords ? Promise.resolve(p.coords) : geocode(p.name))
+        );
+        if (gen !== renderGenRef.current || !fallbackMapRef.current) return;
+        resolvedCoords.forEach((c, i) => {
           if (!c) return;
           new google.maps.Marker({
             position: c, map,
             label: { text: String(i + 1), color: "#000", fontWeight: "bold", fontSize: "11px" },
             icon: { path: google.maps.SymbolPath.CIRCLE, fillColor: "#00C9A7", fillOpacity: 1, strokeColor: "#fff", strokeWeight: 2, scale: 12 },
-            title: p.label,
+            title: points[i].label,
           });
         });
+        // Re-center on first subplan marker if available
+        if (resolvedCoords[0]) { map.setCenter(resolvedCoords[0]); map.setZoom(13); }
       }
     } catch { /* ignore */ }
     finally { if (gen === renderGenRef.current) setLoading(false); }

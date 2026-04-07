@@ -1447,6 +1447,15 @@ export default function PlanDetailPage() {
     const planId = Number(id);
     if (!planId) return;
     fetchSubplanes(planId).then(setSubplanes).catch(console.error);
+
+    const supabase = createBrowserSupabaseClient();
+    const channel = supabase
+      .channel(`subplan-changes-${planId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "subplan", filter: `plan_id=eq.${planId}` }, () => {
+        fetchSubplanes(planId).then(setSubplanes).catch(console.error);
+      })
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
   }, [id]);
 
   useEffect(() => {
@@ -1931,6 +1940,15 @@ export default function PlanDetailPage() {
                                               title="Abrir en Google Maps"
                                             >
                                               <Image src="/brands/google-maps.svg" alt="Google Maps" width={14} height={14} className="size-[14px]" />
+                                            </a>
+                                            <a
+                                              href={`https://waze.com/ul?q=${encodeURIComponent(items[idx + 1].ubicacion_nombre ?? "")}&navigate=yes`}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="inline-flex items-center text-caption text-muted transition-colors hover:text-primary-token"
+                                              title="Abrir en Waze"
+                                            >
+                                              <Image src="/brands/waze-icon.svg" alt="Waze" width={14} height={14} className="size-[14px]" />
                                             </a>
                                           </div>
                                         ) : !isPast ? (
