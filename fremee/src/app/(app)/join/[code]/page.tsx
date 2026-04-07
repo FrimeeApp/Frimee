@@ -1,6 +1,8 @@
 import JoinPageClient from "./JoinPageClient";
 
-export const dynamic = "force-dynamic";
+export async function generateStaticParams() {
+  return [{ code: "static" }];
+}
 
 export default function JoinPage() {
   return <JoinPageClient />;

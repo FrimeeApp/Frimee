@@ -14,6 +14,7 @@ import { syncGoogleCalendarBidirectional } from "@/services/api/repositories/eve
 import { createPlan, listPlansByIdsInOrder, listUserRelatedPlans } from "@/services/api/repositories/plans.repository";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { insertNotificacion } from "@/services/api/repositories/notifications.repository";
+import { syncPlanWidget } from "@/services/widget/planWidget";
 
 type PlanTab = "active" | "done";
 type CalendarViewMode = "month" | "day";
@@ -248,6 +249,8 @@ function CalendarPageInner() {
         );
       }
 
+      await syncPlanWidget(user.id);
+
       setSavingPlan(false);
       navigateToPlan(created.id);
     } catch (err) {
@@ -312,7 +315,7 @@ function CalendarPageInner() {
 
   const runGoogleSync = useCallback(async () => {
     if (!user?.id || syncingGoogle) return;
-    const providerToken = await resolveGoogleProviderToken({
+    let providerToken = await resolveGoogleProviderToken({
       supabase,
       session,
       userId: user.id,
