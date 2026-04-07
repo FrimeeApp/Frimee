@@ -45,7 +45,7 @@ export async function listChatsEndpoint(): Promise<ChatListItem[]> {
 
 export async function fetchPlanChatItem(planId: number): Promise<ChatListItem | null> {
   const supabase = createBrowserSupabaseClient();
-  const { data: chatId } = await supabase.rpc("fn_get_plan_chat_id", { p_plan_id: planId });
+  const { data: chatId } = await supabase.rpc("fn_get_or_create_plan_chat", { p_plan_id: planId });
   if (!chatId) return null;
   const { data } = await supabase.rpc("fn_chats_list");
   if (!data) return null;
