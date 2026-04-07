@@ -783,6 +783,7 @@ export function ChatConversation({
         if (result === "not_admin") return "Solo los admins pueden promover a otros admins.";
         if (result === "target_not_member") return `${target.nombre} no está en este plan.`;
         if (result === "already_admin") return `${target.nombre} ya es admin.`;
+        void channelRef.current?.send({ type: "broadcast", event: "rol_change", payload: { user_id: target.id, rol: "ADMIN" } });
         onMembersChanged?.();
         return `${target.nombre} ahora es admin del plan.`;
       } catch {
@@ -813,6 +814,7 @@ export function ChatConversation({
         if (result === "cannot_demote_owner") return "No puedes quitar el rol de admin al creador del plan.";
         if (result === "target_not_member") return `${target.nombre} no está en este plan.`;
         if (result === "not_admin_target") return `${target.nombre} no es admin.`;
+        void channelRef.current?.send({ type: "broadcast", event: "rol_change", payload: { user_id: target.id, rol: "PARTICIPANTE" } });
         onMembersChanged?.();
         return `${target.nombre} ya no es admin del plan.`;
       } catch {
