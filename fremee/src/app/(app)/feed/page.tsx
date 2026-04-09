@@ -383,12 +383,12 @@ export default function FeedPage() {
         <AppSidebar />
 
         <main
-          className={`px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-4)] transition-[padding] duration-[var(--duration-slow)] [transition-timing-function:var(--ease-standard)] md:py-[var(--space-8)] md:pr-[var(--space-14)]`}
+          className={`pt-0 pb-0 md:px-safe md:pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] md:py-[var(--space-8)] md:pr-[var(--space-14)] transition-[padding] duration-[var(--duration-slow)] [transition-timing-function:var(--ease-standard)]`}
         >
           <div className="mx-auto max-w-[1160px]">
             <div className="md:border-b md:border-[#262626]">
               <div className="mx-auto w-full max-w-[760px] xl:mx-0">
-              <div className="relative flex items-center gap-[var(--space-3)] md:hidden">
+              <div className="sticky top-0 z-[100] bg-app flex items-center gap-[var(--space-3)] py-[var(--space-2)] pl-[max(var(--page-margin-x),env(safe-area-inset-left))] pr-[max(var(--page-margin-x),env(safe-area-inset-right))] md:hidden">
                 <button
                   type="button"
                   onClick={() => setActiveFeedTab((prev) => (prev === "explore" ? "following" : "explore"))}
@@ -666,7 +666,7 @@ export default function FeedPage() {
               </div>
             </div>
 
-            <div className="mt-[var(--space-5)] grid grid-cols-1 gap-[var(--space-8)] xl:grid-cols-[minmax(0,1fr)_300px] xl:gap-[var(--space-10)]">
+            <div className="md:mt-[var(--space-5)] grid grid-cols-1 gap-[var(--space-8)] xl:grid-cols-[minmax(0,1fr)_300px] xl:gap-[var(--space-10)]">
             <section className="mx-auto w-full max-w-[760px] xl:mx-0">
               <div className="md:ml-[72px] md:max-w-[536px] xl:ml-[72px] xl:max-w-[536px]">
                 {loadingFeed || !firstImageReady ? (
@@ -691,9 +691,11 @@ export default function FeedPage() {
                         : "Aun no hay publicaciones para mostrar."}
                     </div>
                   ) : (
-                    <div className="space-y-[var(--space-3)] md:space-y-[var(--space-6)]">
+                    <div className="overflow-y-scroll snap-y snap-mandatory scrollbar-hide h-[calc(100svh-60px)] md:overflow-visible md:snap-none md:h-auto md:space-y-[var(--space-6)]">
                       {visiblePosts.map((post, idx) => (
-                        <FeedCard key={post.id} post={post} currentUserId={currentUserId} currentUserName={profile?.nombre ?? null} currentUserProfileImage={profile?.profile_image ?? null} nextPostHasImage={visiblePosts[idx + 1]?.hasImage ?? true} initialFollowing={followedIds.has(post.plan.ownerUserId ?? "")} initialSaved={savedPlanIds.has(post.plan.id)} />
+                        <div key={post.id} className="snap-start h-full md:h-auto">
+                          <FeedCard post={post} currentUserId={currentUserId} currentUserName={profile?.nombre ?? null} currentUserProfileImage={profile?.profile_image ?? null} nextPostHasImage={visiblePosts[idx + 1]?.hasImage ?? true} initialFollowing={followedIds.has(post.plan.ownerUserId ?? "")} initialSaved={savedPlanIds.has(post.plan.id)} />
+                        </div>
                       ))}
                     </div>
                   );
@@ -1522,7 +1524,140 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
   };
 
   return (
-    <article className={post.hasImage && !nextPostHasImage ? "" : "pb-[var(--space-5)]"}>
+    <article className={`relative h-full overflow-hidden md:overflow-visible md:h-auto ${post.hasImage && !nextPostHasImage ? "" : "md:pb-[var(--space-5)]"}`}>
+
+      {/* ── MOBILE: full-screen snap card ── */}
+      <div className="absolute inset-0 md:hidden">
+        {/* Background */}
+        {post.hasImage && post.coverImage ? (
+          <div className="absolute inset-0">
+            {!imgLoaded && <div className="skeleton-shimmer absolute inset-0" aria-hidden="true" />}
+            <NextImage
+              src={post.coverImage}
+              alt="Imagen del plan"
+              fill
+              className="object-cover transition-opacity duration-300"
+              style={{ opacity: imgLoaded ? 1 : 0 }}
+              unoptimized
+              onLoad={() => setImgLoaded(true)}
+              onError={() => setImgLoaded(true)}
+            />
+          </div>
+        ) : (
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#1c2b3a_0%,#0d1520_60%,#060b12_100%)]" />
+        )}
+
+        {/* Top fade */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/50 to-transparent" />
+
+        {/* Tappable area → plan detail */}
+        <Link href={`/plan/${post.plan.id}`} className="absolute inset-0 z-10" aria-label={`Ver plan de ${post.userName}`} />
+
+        {/* Right side actions */}
+        <div
+          className="absolute right-4 z-20 flex flex-col items-center gap-5"
+          style={{ bottom: `max(110px, calc(110px + env(safe-area-inset-bottom)))` }}
+        >
+          <button
+            type="button"
+            className="flex flex-col items-center gap-1 text-white disabled:opacity-40"
+            onClick={onLikeToggle}
+            disabled={!currentUserId || likeLoading}
+            aria-label={liked ? "Quitar like" : "Dar like"}
+          >
+            <div className="flex size-[46px] items-center justify-center rounded-full bg-black/35 backdrop-blur-sm">
+              <PlaneIcon liked={liked} animating={likeAnimating} size={24} />
+            </div>
+            {likeCount > 0 && <span className="text-[12px] font-[700] text-white drop-shadow">{likeCount}</span>}
+          </button>
+
+          <button
+            type="button"
+            className="flex flex-col items-center gap-1 text-white"
+            onClick={openCommentsModal}
+            aria-label="Comentarios"
+          >
+            <div className="flex size-[46px] items-center justify-center rounded-full bg-black/35 backdrop-blur-sm">
+              <svg viewBox="0 0 24 24" fill="none" className="size-[22px]" aria-hidden="true">
+                <path d="M12 4C7.582 4 4 6.91 4 10.5C4 12.31 4.913 13.947 6.39 15.109C6.272 16.213 5.79 17.343 4.98 18.316C4.787 18.549 5.02 18.88 5.315 18.785C7.005 18.243 8.357 17.471 9.235 16.86C10.115 17.113 11.04 17.25 12 17.25C16.418 17.25 20 14.34 20 10.75C20 7.16 16.418 4 12 4Z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+            {commentsSection.length > 0 && <span className="text-[12px] font-[700] text-white drop-shadow">{commentsSection.length}</span>}
+          </button>
+
+          {!isOwnPost && (
+            <button
+              type="button"
+              className="flex flex-col items-center gap-1 text-white"
+              onClick={handleToggleSave}
+              aria-label={saved ? "Quitar guardado" : "Guardar"}
+            >
+              <div className="flex size-[46px] items-center justify-center rounded-full bg-black/35 backdrop-blur-sm">
+                <BookmarkIcon saved={saved} />
+              </div>
+            </button>
+          )}
+        </div>
+
+        {/* Bottom info overlay */}
+        <div
+          className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/90 via-black/55 to-transparent px-5 pt-24"
+          style={{ paddingBottom: `max(88px, calc(88px + env(safe-area-inset-bottom)))` }}
+        >
+          <div className="mb-3 flex items-center gap-2">
+            <Link
+              href={`/profile/${post.plan.ownerUserId}`}
+              onClick={(e) => e.stopPropagation()}
+              className="flex items-center gap-2"
+            >
+              <div className="flex size-[34px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/35 bg-white/10">
+                {post.avatarImage ? (
+                  <NextImage src={post.avatarImage} alt={post.avatarLabel} width={34} height={34} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
+                ) : (
+                  <span className="text-[12px] font-[700] text-white">{post.avatarLabel}</span>
+                )}
+              </div>
+              <span className="text-[15px] font-[800] text-white drop-shadow-sm">{post.userName}</span>
+            </Link>
+            {!isOwnPost && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onFollowPress(); }}
+                className={`text-[13px] font-[700] transition-opacity ${following ? "text-white/55" : "text-white/90"}`}
+              >
+                {following ? "· Siguiendo" : "· Seguir"}
+              </button>
+            )}
+          </div>
+
+          {post.plan.locationName && (
+            <p className="text-[18px] font-[800] leading-tight text-white drop-shadow-sm">{post.plan.locationName}</p>
+          )}
+          <p className="mt-[3px] text-[13px] font-[600] text-white/65">
+            {formatDate(post.plan.startsAt) === formatDate(post.plan.endsAt)
+              ? formatDate(post.plan.startsAt)
+              : `${formatDate(post.plan.startsAt)} – ${formatDate(post.plan.endsAt)}`}
+          </p>
+          {post.text && (
+            <p className="mt-2 line-clamp-2 text-[14px] leading-[1.4] text-white/80">{post.text}</p>
+          )}
+
+          <Link
+            href={`/plan/${post.plan.id}`}
+            onClick={(e) => e.stopPropagation()}
+            className="mt-3 inline-flex items-center gap-1 text-[13px] font-[700] text-white/85"
+          >
+            Ver plan
+            <svg viewBox="0 0 24 24" fill="none" className="size-[13px]" aria-hidden="true">
+              <path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </Link>
+        </div>
+      </div>
+
+      {/* ── DESKTOP: original layout ── */}
+      <div className="hidden md:block">
+
       {/* Image with overlays */}
       {post.hasImage && (
         <div
@@ -1645,6 +1780,8 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
       {post.hasImage && !nextPostHasImage && (
         <div className="feed-divider mt-[var(--space-5)] border-t border-app" />
       )}
+
+      </div>{/* end desktop wrapper */}
 
       {commentsModalOpen && (
         <div className="comments-modal-overlay fixed inset-0 z-[1100] flex items-end justify-center bg-black/65 md:items-center md:p-[var(--space-6)]" onClick={() => { setCommentsModalOpen(false); setEmojiPickerOpen(false); }}>

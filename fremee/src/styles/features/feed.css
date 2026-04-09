@@ -32,6 +32,15 @@
   }
 }
 
+/* Snap feed scroll container — hide scrollbar on mobile */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
 @layer components {
   .feed-image-container,
   .feed-divider {
