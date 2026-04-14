@@ -309,6 +309,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
         participantes,
         descripcion: descripcion.trim() || undefined,
         items: metodo === "POR_ITEMS" ? buildItems() : undefined,
+        receipt_url: receiptUrl ?? undefined,
       });
       onCreated();
       onClose();

@@ -26,6 +26,7 @@ import {
   type MensajeRow,
 } from "@/services/api/repositories/chat.repository";
 import { fetchActiveFriends, type PublicUserProfileRow } from "@/services/api/endpoints/users.endpoint";
+import { closePollEndpoint } from "@/services/api/endpoints/chat.endpoint";
 import { uploadPlanCoverFile, uploadAudioBlob, uploadAudioFile, uploadDocumentFile, uploadMediaFile } from "@/services/firebase/upload";
 import AudioPlayer from "@/components/common/AudioPlayer";
 import { crearTareaEndpoint, misTareasEndpoint, todasTareasEndpoint, updateEstadoTareaEndpoint, recordarEndpoint, type TareaRow } from "@/services/api/endpoints/tareas.endpoint";
@@ -83,6 +84,8 @@ export function ChatConversation({
   const pendingGastoRef = useRef<PendingGasto | null>(null);
   type PendingPollWinner = { planId: number; winnerOption: string; question: string };
   const pendingPollWinnerRef = useRef<PendingPollWinner | null>(null);
+  type PendingAiVotar = { pollTexto: string; botReply: string };
+  const pendingAiVotarRef = useRef<PendingAiVotar | null>(null);
   const [sending, setSending] = useState(false);
   const [text, setText] = useState("");
   const [showInfo, setShowInfo] = useState(false);
@@ -113,6 +116,7 @@ export function ChatConversation({
   const audioFileInputRef = useRef<HTMLInputElement | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const sentMsgIdsRef = useRef<Set<number>>(new Set());
   const supabaseRef = useRef(createBrowserSupabaseClient());
   const channelRef = useRef<ReturnType<typeof supabaseRef.current.channel> | null>(null);
   const onNewMessageRef = useRef(onNewMessage);
@@ -199,6 +203,10 @@ export function ChatConversation({
       .channel(`msg:${chat.chat_id}`)
       .on("broadcast", { event: "new_message" }, ({ payload }) => {
         const msg = payload as MensajeRow;
+        if (sentMsgIdsRef.current.has(msg.id)) {
+          sentMsgIdsRef.current.delete(msg.id);
+          return;
+        }
         setMessages((prev) => {
           if (prev.some((m) => m.id === msg.id)) return prev;
           return [...prev, msg];
@@ -603,25 +611,29 @@ export function ChatConversation({
       ];
       if (esPlan) {
         lines.push(
-          "/tarea [título] @usuario [categoría] — crear una tarea",
           "/tareas — tus tareas pendientes",
           "/tareas todas — todas las tareas del plan",
           "/hecho [n] · /pendiente [n] · /en_progreso [n] — cambiar estado de tarea",
-          "/gasto [concepto] [importe]€ — registrar un gasto equitativo",
           "/saldo — tu balance en el plan",
           "/deudas — todas las deudas del plan",
           "/simplificar — calcular las mínimas transferencias para saldar todo",
-          "/pagar @usuario [importe]€ — registrar un pago",
-          "/presupuesto — ver o establecer el presupuesto",
           "/votar [pregunta] [op1] [op2]... — crear una votación",
           "/voto [n] — votar en la encuesta activa",
-          "/recordar @usuario — recordar deudas o tareas pendientes",
           "/cerrar [n] — cerrar una votación activa",
-          "/admin @usuario — promover a admin",
-          "/deadmin @usuario — quitar rol de admin",
-          "/expulsar @usuario — expulsar a un miembro",
           "/salir — abandonar el plan",
         );
+        if (isAdmin) {
+          lines.push(
+            "/tarea [título] @usuario [categoría] — crear una tarea",
+            "/gasto [concepto] [importe]€ — registrar un gasto equitativo",
+            "/pagar @usuario [importe]€ — registrar un pago",
+            "/presupuesto — ver o establecer el presupuesto",
+            "/recordar @usuario — recordar deudas o tareas pendientes",
+            "/admin @usuario — promover a admin",
+            "/deadmin @usuario — quitar rol de admin",
+            "/expulsar @usuario — expulsar a un miembro",
+          );
+        }
       }
       return lines.join("\n");
     }
@@ -895,7 +907,8 @@ export function ChatConversation({
 
       const { msg: pollMsg, poll } = targetPoll;
 
-      if (pollMsg.sender_id !== currentUserId && !isAdmin)
+      const isBotPoll = pollMsg.sender_id === "frimee" || pollMsg.sender_id === null;
+      if (!isBotPoll && pollMsg.sender_id !== currentUserId && !isAdmin)
         return "Solo el creador de la votación o un admin puede cerrarla.";
 
       let votesData: Awaited<ReturnType<typeof pollGetVotes>> = [];
@@ -911,10 +924,11 @@ export function ChatConversation({
 
       const closedTexto = JSON.stringify({ ...poll, closed: true });
       try {
-        await editMensaje(pollMsg.id, closedTexto);
+        await closePollEndpoint(pollMsg.id);
         setMessages((prev) => prev.map((m) => m.id === pollMsg.id ? { ...m, texto: closedTexto } : m));
         void channelRef.current?.send({ type: "broadcast", event: "edit_message", payload: { id: pollMsg.id, texto: closedTexto } });
-      } catch {
+      } catch (err) {
+        console.error("[cerrar] fn_poll_close error:", err);
         return "No pude cerrar la votación, inténtalo de nuevo.";
       }
 
@@ -962,14 +976,40 @@ export function ChatConversation({
     return "Comando no reconocido. Usa /ayuda para ver los disponibles.";
   };
 
+  const isConfirm = (t: string) => /^(@frimee\s+)?(s[ií]?|yes|ok|dale|venga|crea(la)?|adelante)\b/i.test(t.trim());
+  const isCancel  = (t: string) => /^(@frimee\s+)?(no?|cancelar?)\b/i.test(t.trim());
+
   const onSend = async () => {
     const trimmed = text.trim();
     if (!trimmed || sending) return;
 
-    if (pendingGastoRef.current && (trimmed === "s" || trimmed === "n")) {
+    if (pendingAiVotarRef.current && (isConfirm(trimmed) || isCancel(trimmed))) {
+      const pending = pendingAiVotarRef.current;
+      pendingAiVotarRef.current = null;
+      setText("");
+      if (isCancel(trimmed)) {
+        const botMsg: LocalMsg = { id: -Date.now(), _key: -Date.now(), sender_id: "frimee", sender_nombre: "Frimee", sender_profile_image: null, texto: "Vale, no creo la encuesta.", created_at: new Date().toISOString(), tipo: "bot" };
+        setMessages((prev) => [...prev, botMsg]);
+        return;
+      }
+      try {
+        // La encuesta la envía la IA (bot), no el usuario
+        const newId = await sendBotMensaje(chat.chat_id, pending.pollTexto);
+        const pollMsg: LocalMsg = { id: newId, _key: newId, sender_id: "frimee", sender_nombre: "Frimee", sender_profile_image: null, texto: pending.pollTexto, created_at: new Date().toISOString(), tipo: "bot" };
+        void channelRef.current?.send({ type: "broadcast", event: "new_message", payload: pollMsg });
+        setMessages((prev) => prev.some((m) => m.id === newId) ? prev : [...prev, pollMsg]);
+        onNewMessageRef.current(pollMsg);
+      } catch {
+        const botMsg: LocalMsg = { id: -Date.now(), _key: -Date.now(), sender_id: "frimee", sender_nombre: "Frimee", sender_profile_image: null, texto: "No pude crear la encuesta, inténtalo de nuevo.", created_at: new Date().toISOString(), tipo: "bot" };
+        setMessages((prev) => [...prev, botMsg]);
+      }
+      return;
+    }
+
+    if (pendingGastoRef.current && (isConfirm(trimmed) || isCancel(trimmed))) {
       const pending = pendingGastoRef.current;
       pendingGastoRef.current = null;
-      if (trimmed === "n") {
+      if (isCancel(trimmed)) {
         const botMsg: LocalMsg = { id: -Date.now(), _key: -Date.now(), sender_id: "frimee", sender_nombre: "Frimee", sender_profile_image: null, texto: "Gasto cancelado.", created_at: new Date().toISOString(), tipo: "bot" };
         setMessages((prev) => [...prev, botMsg]);
         setText("");
@@ -1003,7 +1043,8 @@ export function ChatConversation({
     if (/\@frimee\b/i.test(trimmed) && !trimmed.startsWith("/")) {
       setText("");
       const me = chat.miembros.find((m) => m.id === currentUserId);
-      const thinkingKey = -Date.now();
+      const now = Date.now();
+      const thinkingKey = -(now + 1);
       const thinkingMsg: LocalMsg = {
         id: thinkingKey, _key: thinkingKey,
         sender_id: "frimee", sender_nombre: "Frimee", sender_profile_image: null,
@@ -1026,35 +1067,37 @@ export function ChatConversation({
           content: m.texto!,
         }));
 
-      // Try to get GPS location (uses cached position if available, non-blocking)
-      let userLocation: { lat: number; lng: number } | undefined;
-      if (typeof navigator !== "undefined" && navigator.geolocation) {
-        userLocation = await new Promise<{ lat: number; lng: number } | undefined>((resolve) => {
-          const timer = setTimeout(() => resolve(undefined), 3500);
-          navigator.geolocation.getCurrentPosition(
-            (pos) => { clearTimeout(timer); resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }); },
-            () => { clearTimeout(timer); resolve(undefined); },
-            { maximumAge: 300_000, timeout: 3000 }
-          );
-        });
-      }
-
-      // Save user message to DB → visible to all group members via Realtime
-      const userMsgId = await sendMensaje({ chatId: chat.chat_id, texto: trimmed });
-      const userMsg: LocalMsg = {
-        id: userMsgId, _key: userMsgId,
+      // Mostrar mensaje del usuario al instante con ID temporal
+      const tempUserKey = -now;
+      const userMsgOptimistic: LocalMsg = {
+        id: tempUserKey, _key: tempUserKey,
         sender_id: currentUserId,
         sender_nombre: me?.nombre ?? "",
         sender_profile_image: me?.profile_image ?? null,
         texto: trimmed,
         created_at: new Date().toISOString(),
       };
+      setMessages((prev) => [...prev, userMsgOptimistic, thinkingMsg]);
+
+      // GPS y guardado en DB en paralelo, sin bloquear la UI
+      const [userMsgId, userLocation] = await Promise.all([
+        sendMensaje({ chatId: chat.chat_id, texto: trimmed }),
+        typeof navigator !== "undefined" && navigator.geolocation
+          ? new Promise<{ lat: number; lng: number } | undefined>((resolve) => {
+              const timer = setTimeout(() => resolve(undefined), 3500);
+              navigator.geolocation.getCurrentPosition(
+                (pos) => { clearTimeout(timer); resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }); },
+                () => { clearTimeout(timer); resolve(undefined); },
+                { maximumAge: 300_000, timeout: 3000 }
+              );
+            })
+          : Promise.resolve(undefined),
+      ]);
+
+      const userMsg: LocalMsg = { ...userMsgOptimistic, id: userMsgId, _key: userMsgId };
+      sentMsgIdsRef.current.add(userMsgId);
       void channelRef.current?.send({ type: "broadcast", event: "new_message", payload: userMsg });
-      // Add user message if Realtime hasn't added it yet, then add thinking indicator
-      setMessages((prev) => {
-        const withUser = prev.some((m) => m.id === userMsgId) ? prev : [...prev, userMsg];
-        return [...withUser, thinkingMsg];
-      });
+      setMessages((prev) => prev.map((m) => m.id === tempUserKey ? userMsg : m));
       onNewMessageRef.current(userMsg);
 
       try {
@@ -1070,7 +1113,41 @@ export function ChatConversation({
         });
 
         let replyText = result.reply;
-        if (result.command) {
+
+        // Si la IA quiere crear una encuesta:
+        // - Si el usuario la pidió explícitamente → crear directamente
+        // - Si la IA la propone por su cuenta (ej: tras recomendaciones) → pedir confirmación
+        const userAskedForPoll = /votar|encuesta|votaci[oó]n|vota(mos|d|r)|decidid|que vote/i.test(trimmed);
+
+        if (result.command?.startsWith("/votar")) {
+          const rawText = result.command.slice("/votar".length + 1).trim();
+          const qIdx = rawText.indexOf("?");
+          if (qIdx !== -1) {
+            const question = rawText.slice(0, qIdx + 1).trim();
+            const restRaw = rawText.slice(qIdx + 1).trim();
+            const quotedParts = [...restRaw.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+            const options = quotedParts.length >= 2 ? quotedParts : restRaw.split(/\s+/).filter(Boolean);
+            const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+            const pollTexto = JSON.stringify({ type: "poll", question, options, expires_at: expiresAt });
+
+            if (userAskedForPoll) {
+              // Crear directamente sin confirmación
+              try {
+                const newId = await sendBotMensaje(chat.chat_id, pollTexto);
+                const pollMsg: LocalMsg = { id: newId, _key: newId, sender_id: "frimee", sender_nombre: "Frimee", sender_profile_image: null, texto: pollTexto, created_at: new Date().toISOString(), tipo: "bot" };
+                void channelRef.current?.send({ type: "broadcast", event: "new_message", payload: pollMsg });
+                setMessages((prev) => prev.some((m) => m.id === newId) ? prev : [...prev, pollMsg]);
+                onNewMessageRef.current(pollMsg);
+              } catch {
+                replyText = "No pude crear la encuesta, inténtalo de nuevo.";
+              }
+            } else {
+              // IA propone → pedir confirmación
+              pendingAiVotarRef.current = { pollTexto, botReply: replyText };
+              replyText = `${replyText}\n\n¿Creo la encuesta? Responde "s" para confirmar o "n" para cancelar.`;
+            }
+          }
+        } else if (result.command) {
           const cmdResult = await handleCommand(result.command);
           if (cmdResult) replyText = cmdResult;
 
@@ -1086,7 +1163,7 @@ export function ChatConversation({
           }
         }
 
-        // Save Frimee's reply to DB → visible to all group members via Realtime
+        // Primero el reply de la IA, luego (si aplica) la encuesta
         const botMsgId = await sendBotMensaje(chat.chat_id, replyText || "…");
         setMessages((prev) => prev.map((m) =>
           m.id === thinkingKey ? { ...m, id: botMsgId, _key: botMsgId, texto: replyText || "…" } : m
@@ -1099,11 +1176,11 @@ export function ChatConversation({
       return;
     }
 
-    if (pendingPollWinnerRef.current && (trimmed === "s" || trimmed === "n")) {
+    if (pendingPollWinnerRef.current && (isConfirm(trimmed) || isCancel(trimmed))) {
       const pending = pendingPollWinnerRef.current;
       pendingPollWinnerRef.current = null;
       setText("");
-      if (trimmed === "n") {
+      if (isCancel(trimmed)) {
         const botMsg: LocalMsg = { id: -Date.now(), _key: -Date.now(), sender_id: "frimee", sender_nombre: "Frimee", sender_profile_image: null, texto: "Actividad descartada.", created_at: new Date().toISOString(), tipo: "bot" };
         setMessages((prev) => [...prev, botMsg]);
         return;
@@ -1649,7 +1726,7 @@ export function ChatConversation({
                         <div className="absolute -left-[5px] top-[8px] h-0 w-0 border-y-[5px] border-r-[5px] border-y-transparent" style={{ borderRightColor: isBot ? "var(--surface)" : "var(--surface-inset)" }} />
                       )
                     )}
-                    <div className={`break-all ${isMediaMessage ? "bg-transparent p-0" : "rounded-card px-3 py-2"} ${!isMediaMessage ? (isMe ? "bg-[var(--text-primary)] text-contrast-token" : isBot ? "bg-surface" : "bg-surface-inset") : ""} ${contextMenu?.msg.id === msg.id ? "opacity-75" : ""}`}>
+                    <div className={`break-words ${isMediaMessage ? "bg-transparent p-0" : "rounded-card px-3 py-2"} ${!isMediaMessage ? (isMe ? "bg-[var(--text-primary)] text-contrast-token" : isBot ? "bg-surface" : "bg-surface-inset") : ""} ${contextMenu?.msg.id === msg.id ? "opacity-75" : ""}`}>
                       {!isMe && (chat.tipo === "GRUPO" || isBot) && isFirstInGroup && (
                         <p className={`mb-[2px] text-[12px] font-[var(--fw-semibold)] ${isBot ? "text-primary-token" : "text-muted"}`}>{isBot ? "Frimee" : msg.sender_nombre}</p>
                       )}

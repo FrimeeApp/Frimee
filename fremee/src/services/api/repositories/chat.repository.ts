@@ -12,6 +12,7 @@ import {
   updateChatFotoEndpoint,
   addChatMemberEndpoint,
   editMensajeEndpoint,
+  closePollEndpoint,
   deleteMensajeEndpoint,
   reactMensajeEndpoint,
   getMyReaccionesEndpoint,
@@ -91,6 +92,10 @@ export async function addChatMember(chatId: string, userId: string): Promise<voi
 
 export async function editMensaje(mensajeId: number, texto: string): Promise<void> {
   return editMensajeEndpoint(mensajeId, texto);
+}
+
+export async function closePoll(mensajeId: number): Promise<void> {
+  return closePollEndpoint(mensajeId);
 }
 
 export async function deleteMensaje(mensajeId: number): Promise<void> {

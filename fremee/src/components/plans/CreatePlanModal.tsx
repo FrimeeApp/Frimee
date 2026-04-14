@@ -6,6 +6,7 @@ import { es } from "date-fns/locale";
 import { Globe, Lock, Plane, User, Users } from "lucide-react";
 import LocationAutocomplete from "@/components/plans/LocationAutocomplete";
 import { fetchActiveFriends, type PublicUserProfileRow } from "@/services/api/endpoints/users.endpoint";
+import { listChats, type ChatListItem } from "@/services/api/repositories/chat.repository";
 
 export type CreatePlanPayload = {
   title: string;
@@ -27,6 +28,7 @@ type CreatePlanModalProps = {
   open: boolean;
   onClose: () => void;
   onCreate: (payload: CreatePlanPayload) => void | Promise<void>;
+  currentUserId?: string;
 };
 
 const DEFAULT_VISIBILITY: CreatePlanPayload["visibility"] = "SOLO_GRUPO";
@@ -249,7 +251,7 @@ function InlineRangeCalendar({
 
 // ─── Main modal ───────────────────────────────────────────────────────────────
 
-export default function CreatePlanModal({ open, onClose, onCreate }: CreatePlanModalProps) {
+export default function CreatePlanModal({ open, onClose, onCreate, currentUserId }: CreatePlanModalProps) {
   const wasOpenRef = useRef(false);
   const coverInputRef = useRef<HTMLInputElement | null>(null);
   const handleNextRef = useRef<() => void>(() => {});
@@ -270,6 +272,10 @@ export default function CreatePlanModal({ open, onClose, onCreate }: CreatePlanM
   const [friends, setFriends] = useState<PublicUserProfileRow[]>([]);
   const [loadingFriends, setLoadingFriends] = useState(false);
   const [invitedFriendIds, setInvitedFriendIds] = useState<Set<string>>(new Set());
+  const [groups, setGroups] = useState<ChatListItem[]>([]);
+  const [loadingGroups, setLoadingGroups] = useState(false);
+  const [selectedGroupIds, setSelectedGroupIds] = useState<Set<string>>(new Set());
+  const [inviteTab, setInviteTab] = useState<"friends" | "groups">("friends");
 
   const canSubmit = useMemo(() => {
     if (!title.trim()) return false;
@@ -300,6 +306,8 @@ export default function CreatePlanModal({ open, onClose, onCreate }: CreatePlanM
     setSaving(false);
     setErrorMsg(null);
     setInvitedFriendIds(new Set());
+    setSelectedGroupIds(new Set());
+    setInviteTab("friends");
   };
 
   useEffect(() => {
@@ -359,33 +367,39 @@ export default function CreatePlanModal({ open, onClose, onCreate }: CreatePlanM
 
   useEffect(() => {
     if (inviteMode !== "now" || friends.length > 0) return;
-
     let cancelled = false;
-
-    const loadFriends = async () => {
+    const load = async () => {
       setLoadingFriends(true);
       try {
         const activeFriends = await fetchActiveFriends();
-        if (!cancelled) {
-          setFriends(activeFriends);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          console.error(error);
-        }
+        if (!cancelled) setFriends(activeFriends);
+      } catch (e) {
+        if (!cancelled) console.error(e);
       } finally {
-        if (!cancelled) {
-          setLoadingFriends(false);
-        }
+        if (!cancelled) setLoadingFriends(false);
       }
     };
-
-    void loadFriends();
-
-    return () => {
-      cancelled = true;
-    };
+    void load();
+    return () => { cancelled = true; };
   }, [inviteMode, friends.length]);
+
+  useEffect(() => {
+    if (inviteMode !== "now" || groups.length > 0) return;
+    let cancelled = false;
+    const load = async () => {
+      setLoadingGroups(true);
+      try {
+        const all = await listChats();
+        if (!cancelled) setGroups(all.filter((c) => c.tipo === "GRUPO"));
+      } catch (e) {
+        if (!cancelled) console.error(e);
+      } finally {
+        if (!cancelled) setLoadingGroups(false);
+      }
+    };
+    void load();
+    return () => { cancelled = true; };
+  }, [inviteMode, groups.length]);
 
   useEffect(() => {
     return () => { if (coverImageUrl && isBlobUrl(coverImageUrl)) URL.revokeObjectURL(coverImageUrl); };
@@ -433,7 +447,7 @@ export default function CreatePlanModal({ open, onClose, onCreate }: CreatePlanM
         coverFile,
         visibility,
         inviteMode,
-        invitedFriendIds: [...invitedFriendIds],
+        invitedFriendIds: [...invitedFriendIds].filter((id) => id !== currentUserId),
       });
     } catch (err) {
       const message =
@@ -496,7 +510,7 @@ export default function CreatePlanModal({ open, onClose, onCreate }: CreatePlanM
         </div>
 
         {/* ── Content ── */}
-        <div className={`flex-1 min-h-0 px-[var(--space-6)] pt-[var(--space-2)] ${step === 2 ? "flex flex-col overflow-hidden pb-[var(--space-6)]" : "overflow-y-auto pb-[var(--space-8)]"}`}>
+        <div className={`flex-1 min-h-0 px-[var(--space-6)] pt-[var(--space-2)] ${step === 2 ? "flex flex-col overflow-hidden pb-[var(--space-6)]" : "overflow-y-scroll [scrollbar-gutter:stable] pb-[var(--space-8)]"}`}>
           <div className={`shrink-0 ${step === 2 ? "mb-[var(--space-5)] md:mb-[var(--space-6)]" : "mb-[var(--space-8)]"}`}>
             <h2 className="font-[var(--fw-bold)] leading-tight text-app" style={{ fontSize: "clamp(22px, 5vw, 28px)" }}>
               {meta.title}
@@ -661,52 +675,159 @@ export default function CreatePlanModal({ open, onClose, onCreate }: CreatePlanM
                 style={{ gridTemplateRows: inviteMode === "now" ? "1fr" : "0fr", opacity: inviteMode === "now" ? 1 : 0 }}
               >
                 <div className="overflow-hidden">
-                  <p className="mb-[var(--space-3)] text-body-sm font-[var(--fw-semibold)] text-app">Invitar amigos</p>
-                  {loadingFriends ? (
-                    <div className="flex justify-center py-4">
-                      <div className="size-[18px] animate-spin rounded-full border-2 border-[var(--text-primary)] border-t-transparent" />
-                    </div>
-                  ) : friends.length === 0 ? (
-                    <p className="text-body-sm text-muted">No tienes amigos para invitar.</p>
-                  ) : (
-                    <div className="max-h-[calc(3*52px)] overflow-y-auto">
-                      {friends.map((friend) => {
-                        const selected = invitedFriendIds.has(friend.id);
-                        const avatarLabel = (friend.nombre.trim()[0] || "?").toUpperCase();
-                        return (
-                          <button
-                            key={friend.id}
-                            type="button"
-                            onClick={() => {
-                              setInvitedFriendIds((prev) => {
-                                const next = new Set(prev);
-                                if (next.has(friend.id)) next.delete(friend.id);
-                                else next.add(friend.id);
-                                return next;
-                              });
-                            }}
-                            className={`flex h-[52px] w-full items-center gap-[var(--space-3)] rounded-[8px] px-2 transition-colors hover:bg-surface ${selected ? "bg-surface" : ""}`}
-                          >
-                            {friend.profile_image ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img src={friend.profile_image} alt={friend.nombre} className="size-[32px] rounded-full object-cover" referrerPolicy="no-referrer" />
-                            ) : (
-                              <div className="flex size-[32px] items-center justify-center rounded-full bg-[var(--text-primary)] text-[13px] font-[var(--fw-semibold)] text-contrast-token">
-                                {avatarLabel}
-                              </div>
-                            )}
-                            <span className="flex-1 text-left text-body-sm font-[var(--fw-medium)]">{friend.nombre}</span>
-                            <div className={`flex size-[20px] items-center justify-center rounded-full border-2 transition-colors ${selected ? "border-[var(--text-primary)] bg-[var(--text-primary)]" : "border-app"}`}>
-                              {selected && (
-                                <svg viewBox="0 0 24 24" fill="none" className="size-[12px]" aria-hidden="true">
-                                  <path d="M5 13l4 4L19 7" stroke="var(--bg)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                                </svg>
+                  {/* ── Tabs ── */}
+                  <div className="mb-[var(--space-3)] flex gap-[2px] rounded-[12px] bg-[var(--surface-2)] p-[3px]">
+                    {(["friends", "groups"] as const).map((tab) => (
+                      <button
+                        key={tab}
+                        type="button"
+                        onClick={() => setInviteTab(tab)}
+                        className={`flex-1 rounded-[9px] py-[6px] text-caption font-[var(--fw-semibold)] transition-colors ${
+                          inviteTab === tab
+                            ? "bg-[var(--bg)] text-app shadow-elev-1"
+                            : "text-muted hover:text-app"
+                        }`}
+                      >
+                        {tab === "friends" ? "Amigos" : "Grupos"}
+                        {tab === "friends" && invitedFriendIds.size > 0 && (
+                          <span className="ml-[5px] inline-flex size-[16px] items-center justify-center rounded-full bg-[var(--text-primary)] text-[10px] text-contrast-token">
+                            {invitedFriendIds.size}
+                          </span>
+                        )}
+                        {tab === "groups" && selectedGroupIds.size > 0 && (
+                          <span className="ml-[5px] inline-flex size-[16px] items-center justify-center rounded-full bg-[var(--text-primary)] text-[10px] text-contrast-token">
+                            {selectedGroupIds.size}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* ── Friends list ── */}
+                  {inviteTab === "friends" && (
+                    loadingFriends ? (
+                      <div className="flex justify-center py-4">
+                        <div className="size-[18px] animate-spin rounded-full border-2 border-[var(--text-primary)] border-t-transparent" />
+                      </div>
+                    ) : friends.length === 0 ? (
+                      <p className="text-body-sm text-muted">No tienes amigos para invitar.</p>
+                    ) : (
+                      <div className="max-h-[calc(3*52px)] overflow-y-auto [scrollbar-gutter:stable]">
+                        {friends.map((friend) => {
+                          const selected = invitedFriendIds.has(friend.id);
+                          const avatarLabel = (friend.nombre.trim()[0] || "?").toUpperCase();
+                          return (
+                            <button
+                              key={friend.id}
+                              type="button"
+                              onClick={() => {
+                                setInvitedFriendIds((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(friend.id)) next.delete(friend.id);
+                                  else next.add(friend.id);
+                                  return next;
+                                });
+                              }}
+                              className={`flex h-[52px] w-full items-center gap-[var(--space-3)] rounded-[8px] px-2 transition-colors hover:bg-surface ${selected ? "bg-surface" : ""}`}
+                            >
+                              {friend.profile_image ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={friend.profile_image} alt={friend.nombre} className="size-[32px] rounded-full object-cover" referrerPolicy="no-referrer" />
+                              ) : (
+                                <div className="flex size-[32px] items-center justify-center rounded-full bg-[var(--text-primary)] text-[13px] font-[var(--fw-semibold)] text-contrast-token">
+                                  {avatarLabel}
+                                </div>
                               )}
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
+                              <span className="flex-1 text-left text-body-sm font-[var(--fw-medium)]">{friend.nombre}</span>
+<div className={`flex size-[20px] items-center justify-center rounded-full border-2 transition-colors ${selected ? "border-[var(--text-primary)] bg-[var(--text-primary)]" : "border-app"}`}>
+                                {selected && (
+                                  <svg viewBox="0 0 24 24" fill="none" className="size-[12px]" aria-hidden="true">
+                                    <path d="M5 13l4 4L19 7" stroke="var(--bg)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                                  </svg>
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )
+                  )}
+
+                  {/* ── Groups list ── */}
+                  {inviteTab === "groups" && (
+                    loadingGroups ? (
+                      <div className="flex justify-center py-4">
+                        <div className="size-[18px] animate-spin rounded-full border-2 border-[var(--text-primary)] border-t-transparent" />
+                      </div>
+                    ) : groups.length === 0 ? (
+                      <p className="text-body-sm text-muted">No perteneces a ningún grupo.</p>
+                    ) : (
+                      <div className="max-h-[calc(3*52px)] overflow-y-auto [scrollbar-gutter:stable]">
+                        {groups.map((group) => {
+                          const selected = selectedGroupIds.has(group.chat_id);
+                          const avatarLabel = (group.nombre?.trim()[0] || "G").toUpperCase();
+                          const memberCount = group.miembros.length;
+                          return (
+                            <button
+                              key={group.chat_id}
+                              type="button"
+                              onClick={() => {
+                                const groupMemberIds = group.miembros
+                                  .map((m) => m.id)
+                                  .filter((id) => id !== currentUserId);
+                                const isSelecting = !selectedGroupIds.has(group.chat_id);
+                                setSelectedGroupIds((prev) => {
+                                  const next = new Set(prev);
+                                  if (isSelecting) next.add(group.chat_id);
+                                  else next.delete(group.chat_id);
+                                  return next;
+                                });
+                                setInvitedFriendIds((prev) => {
+                                  const next = new Set(prev);
+                                  if (isSelecting) {
+                                    groupMemberIds.forEach((id) => next.add(id));
+                                  } else {
+                                    // only remove members not in any other selected group
+                                    const otherGroupIds = new Set(
+                                      [...selectedGroupIds].filter((gid) => gid !== group.chat_id)
+                                    );
+                                    const keptByOtherGroup = new Set(
+                                      [...otherGroupIds].flatMap((gid) => {
+                                        const g = groups.find((gr) => gr.chat_id === gid);
+                                        return (g?.miembros ?? []).map((m) => m.id);
+                                      })
+                                    );
+                                    groupMemberIds.forEach((id) => {
+                                      if (!keptByOtherGroup.has(id)) next.delete(id);
+                                    });
+                                  }
+                                  return next;
+                                });
+                              }}
+                              className={`flex h-[52px] w-full items-center gap-[var(--space-3)] rounded-[8px] px-2 transition-colors hover:bg-surface ${selected ? "bg-surface" : ""}`}
+                            >
+                              {group.foto ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={group.foto} alt={group.nombre ?? "Grupo"} className="size-[32px] rounded-full object-cover" referrerPolicy="no-referrer" />
+                              ) : (
+                                <div className="flex size-[32px] items-center justify-center rounded-full bg-[var(--surface-2)] text-[13px] font-[var(--fw-semibold)] text-app">
+                                  {avatarLabel}
+                                </div>
+                              )}
+                              <span className="flex-1 text-left text-body-sm font-[var(--fw-medium)]">{group.nombre ?? "Grupo"}</span>
+                              <span className="text-caption text-muted">{memberCount} miembros</span>
+                              <div className={`flex size-[20px] items-center justify-center rounded-full border-2 transition-colors ${selected ? "border-[var(--text-primary)] bg-[var(--text-primary)]" : "border-app"}`}>
+                                {selected && (
+                                  <svg viewBox="0 0 24 24" fill="none" className="size-[12px]" aria-hidden="true">
+                                    <path d="M5 13l4 4L19 7" stroke="var(--bg)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                                  </svg>
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )
                   )}
                 </div>
               </div>

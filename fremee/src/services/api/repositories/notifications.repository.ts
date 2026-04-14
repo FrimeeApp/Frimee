@@ -93,6 +93,18 @@ export async function rejectPlanInvite(notifId: number): Promise<void> {
   await supabase.from("notificaciones").delete().eq("id", notifId);
 }
 
+export async function fetchPendingPlanInviteUserIds(planId: number): Promise<string[]> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_get_pending_plan_invite_user_ids", {
+    p_plan_id: planId,
+  });
+  if (error) {
+    console.error("[fetchPendingPlanInviteUserIds]", error);
+    return [];
+  }
+  return (data ?? []) as string[];
+}
+
 export async function countNotificacionesNoLeidas(): Promise<number> {
   const supabase = createBrowserSupabaseClient();
   const { count, error } = await supabase

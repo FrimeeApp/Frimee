@@ -55,7 +55,7 @@ export default function PlanFotosTab({ planId, currentUserId, isMember }: Props)
       .then((data) => {
         if (!cancelled) setFotos(data);
       })
-      .catch(console.error)
+      .catch((e) => console.error("[PlanFotosTab]", e?.code, e?.message, e?.details, e?.hint))
       .finally(() => {
         if (!cancelled) setLoading(false);
       });

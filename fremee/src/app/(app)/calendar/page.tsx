@@ -861,7 +861,7 @@ function CalendarPageInner() {
         </main>
       </div>
 
-      <CreatePlanModal open={createModalOpen} onClose={closeCreateModal} onCreate={handleCreatePlan} />
+      <CreatePlanModal open={createModalOpen} onClose={closeCreateModal} onCreate={handleCreatePlan} currentUserId={user?.id} />
     </div>
   );
 }

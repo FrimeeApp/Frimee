@@ -30,6 +30,7 @@ export type GastoRow = {
   pagado_por_nombre: string | null;
   pagado_por_foto: string | null;
   partes: GastoParte[] | null;
+  receipt_url: string | null;
   created_at: string;
 };
 
@@ -73,6 +74,7 @@ export type GastoInput = {
   categoria_id?: number;
   moneda?: string;
   items?: GastoItemInput[];   // solo para POR_ITEMS
+  receipt_url?: string | null;
 };
 
 export type PlanMiembro = {
@@ -117,6 +119,7 @@ export async function createGastoEndpoint(input: GastoInput): Promise<number> {
     p_categoria_id:       input.categoria_id ?? null,
     p_moneda:             input.moneda ?? "EUR",
     p_items:              input.items ?? null,
+    p_receipt_url:        input.receipt_url ?? null,
   });
   if (error) throw error;
   return data as number;
@@ -141,6 +144,7 @@ export async function updateGastoEndpoint(
     p_categoria_id:       input.categoria_id ?? null,
     p_moneda:             input.moneda ?? "EUR",
     p_items:              input.items ?? null,
+    p_receipt_url:        input.receipt_url ?? null,
   });
   if (error) throw error;
 }
