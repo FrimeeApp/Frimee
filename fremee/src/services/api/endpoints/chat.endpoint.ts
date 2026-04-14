@@ -163,6 +163,12 @@ export async function addChatMemberEndpoint(chatId: string, userId: string): Pro
   if (error) throw error;
 }
 
+export async function closePollEndpoint(mensajeId: number): Promise<void> {
+  const supabase = createBrowserSupabaseClient();
+  const { error } = await supabase.rpc("fn_poll_close", { p_mensaje_id: mensajeId });
+  if (error) throw error;
+}
+
 export async function editMensajeEndpoint(mensajeId: number, texto: string): Promise<void> {
   const supabase = createBrowserSupabaseClient();
   const { error } = await supabase.rpc("fn_mensaje_edit", {

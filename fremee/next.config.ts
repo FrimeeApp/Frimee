@@ -12,6 +12,14 @@ const nextConfig: NextConfig = {
   }),
   reactStrictMode: false,
   reactCompiler: true,
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "firebasestorage.googleapis.com",
+      },
+    ],
+  },
 };
 
 export default nextConfig;

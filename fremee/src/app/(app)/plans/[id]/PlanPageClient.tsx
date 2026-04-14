@@ -18,7 +18,7 @@ import DayRouteMap from "@/components/plans/DayRouteMap";
 import LocationAutocomplete, { type Coords } from "@/components/plans/LocationAutocomplete";
 import AddGastoSheet from "@/components/plans/AddGastoSheet";
 import { fetchActiveFriends, type PublicUserProfileRow } from "@/services/api/endpoints/users.endpoint";
-import { insertNotificacion } from "@/services/api/repositories/notifications.repository";
+import { insertNotificacion, fetchPendingPlanInviteUserIds } from "@/services/api/repositories/notifications.repository";
 import { syncPlanWidget } from "@/services/widget/planWidget";
 import { QRCodeSVG } from "qrcode.react";
 import AppSidebar from "@/components/common/AppSidebar";
@@ -1402,12 +1402,14 @@ export default function PlanDetailPage() {
     setShowQr(false);
     setInviteFriendsLoading(true);
     try {
-      const [friends, memberIds] = await Promise.all([
+      const [friends, memberIds, pendingIds] = await Promise.all([
         fetchActiveFriends(),
         fetchPlanMemberIds(Number(id)),
+        fetchPendingPlanInviteUserIds(Number(id)),
       ]);
       const memberSet = new Set(memberIds);
       setInviteFriends(friends.filter((f) => !memberSet.has(f.id)));
+      setInviteSentIds(new Set(pendingIds));
     } catch (e) {
       console.error(e);
     } finally {
@@ -2750,7 +2752,7 @@ export default function PlanDetailPage() {
                           onClick={() => void handleInviteFriend(friend.id)}
                           className={`rounded-full px-4 py-1.5 text-[12px] font-[var(--fw-semibold)] transition-all ${sent ? "bg-surface text-muted cursor-default" : "bg-[var(--text-primary)] text-contrast-token hover:opacity-80 disabled:opacity-50"}`}
                         >
-                          {sending ? "..." : sent ? "Enviado" : "Invitar"}
+                          {sending ? "..." : sent ? "Pendiente" : "Invitar"}
                         </button>
                       </div>
                     );

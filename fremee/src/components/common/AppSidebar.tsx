@@ -431,6 +431,7 @@ export default function AppSidebar({ onCreatePlan, hideMobileNav }: AppSidebarPr
         open={createModalOpen}
         onClose={() => setCreateModalOpen(false)}
         onCreate={handleCreatePlan}
+        currentUserId={user?.id}
       />
       <NotificationsPanel
         open={notifPanelOpen}
