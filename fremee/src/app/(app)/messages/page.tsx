@@ -336,7 +336,7 @@ export default function MessagesPage() {
 
       {/* Search bar */}
       <div className="px-[var(--space-4)] pb-[var(--space-3)]">
-        <div className="flex h-[44px] w-full items-center gap-[10px] rounded-[12px] border border-app bg-surface-inset px-[14px] text-muted">
+        <div className="flex h-[44px] w-full items-center gap-[10px] rounded-[12px] border border-app bg-[var(--search-field-bg)] px-[14px] text-muted">
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[20px] shrink-0">
             <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.8" />
             <path d="M16 16L20.5 20.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
@@ -357,7 +357,7 @@ export default function MessagesPage() {
       </div>
 
       {/* Chat list */}
-      <div className="flex-1 overflow-y-auto overscroll-contain px-[var(--space-3)]">
+      <div className="flex-1 overflow-y-auto overscroll-contain">
         {chatsLoading ? (
           <div className="flex justify-center py-[var(--space-12)]">
             <div className="size-5 animate-spin rounded-full border-2 border-current border-t-transparent opacity-40" />
@@ -373,39 +373,30 @@ export default function MessagesPage() {
             </p>
           </div>
         ) : (
-          <div className="space-y-[1px]">
+          <div className="divide-y divide-app">
             {filteredChats.map((chat) => {
               const name = resolveChatName(chat, user?.id ?? "");
               const avatar = resolveChatAvatar(chat, user?.id ?? "");
               const hasUnread = chat.unread_count > 0;
-              const isSelected = chat.chat_id === selectedChatId;
               return (
                 <button
                   key={chat.chat_id}
                   type="button"
                   onClick={() => setSelectedChatId(chat.chat_id)}
-                  className={`flex w-full items-center gap-[var(--space-3)] rounded-[10px] px-[10px] py-[10px] text-left transition-colors hover:bg-surface ${isSelected ? "bg-surface" : ""}`}
+                  className="flex w-full items-center gap-3 px-[var(--space-4)] py-[var(--space-3)] text-left transition-colors hover:bg-surface focus:outline-none"
                 >
                   <div className="relative shrink-0">
-                    <div className="avatar-md flex items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">
-                      {avatar ? (
-                        <Image src={avatar} alt={name} width={34} height={34} className="h-full w-full object-cover" referrerPolicy="no-referrer" unoptimized />
-                      ) : chat.tipo === "GRUPO" ? (
-                        <GroupIcon className="size-[16px] text-muted" />
-                      ) : (
-                        (name[0] ?? "?").toUpperCase()
-                      )}
-                    </div>
+                    <ChatPreviewAvatar name={name} image={avatar} isGroup={chat.tipo === "GRUPO"} />
                     {hasUnread && (
                       <span className="absolute -right-[2px] -top-[2px] size-[10px] rounded-full border-2 border-[var(--bg)] bg-[#ff6a3d]" />
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline justify-between gap-[var(--space-2)]">
-                      <p className={`truncate text-body-sm ${hasUnread ? "font-[var(--fw-semibold)]" : ""} text-app`}>{name}</p>
-                      <span className="shrink-0 text-[11px] text-muted">{formatChatTime(chat.last_message_at)}</span>
+                      <p className="truncate text-body-sm font-[var(--fw-semibold)] text-app">{name}</p>
+                      <span className="shrink-0 text-[13px] text-muted">{formatChatTime(chat.last_message_at)}</span>
                     </div>
-                    <p className={`truncate text-[12px] leading-[16px] ${hasUnread ? "font-[var(--fw-medium)] text-app" : "text-muted"}`}>
+                    <p className={`truncate text-caption ${hasUnread ? "font-[var(--fw-medium)] text-app" : "text-muted"}`}>
                       {(() => { const m = chat.last_message ?? ""; try { return JSON.parse(m)?.type === "poll" ? "📊 Encuesta" : m; } catch { return m; } })()}
                     </p>
                   </div>
@@ -486,6 +477,22 @@ export default function MessagesPage() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ChatPreviewAvatar({ name, image, isGroup }: { name: string; image: string | null; isGroup: boolean }) {
+  if (image) {
+    return (
+      <div className="relative mt-0.5 size-11 shrink-0 overflow-hidden rounded-full border border-app">
+        <Image src={image} alt={name} fill sizes="44px" className="object-cover" unoptimized referrerPolicy="no-referrer" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-0.5 flex size-11 shrink-0 items-center justify-center rounded-full border border-app bg-surface-2 text-body-sm font-[var(--fw-semibold)] text-muted">
+      {isGroup ? <GroupIcon className="size-[18px] text-muted" /> : (name.trim()[0] || "U").toUpperCase()}
     </div>
   );
 }

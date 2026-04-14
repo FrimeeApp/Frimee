@@ -14,6 +14,7 @@ type FeedPostDoc = {
   visibility?: string;
   coverImage?: string | null;
   ownerUserId?: string;
+  caption?: string | null;
   // campos legacy (dentro de plan)
   plan?: {
     title?: string;
@@ -45,6 +46,7 @@ export type FeedPostEntry = {
   visibility: string;
   coverImage: string | null;
   ownerUserId: string;
+  caption: string | null;
   creator: { id: string; name: string; profileImage: string | null } | null;
 };
 
@@ -82,6 +84,7 @@ export async function listPublishedPostPlanIdsRoute(params: { limit: number }): 
       visibility: doc.visibility ?? p?.visibility ?? "PÚBLICO",
       coverImage: doc.coverImage ?? p?.coverImage ?? null,
       ownerUserId: doc.ownerUserId ?? p?.ownerUserId ?? "",
+      caption: doc.caption ?? null,
       creator: c?.id && c?.name ? { id: c.id, name: c.name, profileImage: c.profileImage ?? null } : null,
     });
   }

@@ -62,6 +62,17 @@ export async function uploadAudioFile(params: { file: File; userId: string }) {
   return { filePath, downloadUrl };
 }
 
+export async function uploadPlanAlbumFile(params: { file: File; planId: number }) {
+  const ext = params.file.name.split(".").pop()?.toLowerCase() ?? "jpg";
+  const filePath = `plan-albums/${params.planId}/${Date.now()}.${ext}`;
+  const fileRef = ref(storage, filePath);
+
+  await uploadBytes(fileRef, params.file, { contentType: params.file.type || undefined });
+
+  const downloadUrl = await getDownloadURL(fileRef);
+  return { filePath, downloadUrl };
+}
+
 export async function uploadAudioBlob(params: { blob: Blob; userId: string }) {
   const ext = params.blob.type.includes("ogg") ? "ogg" : "webm";
   const filePath = `audio/${params.userId}/${Date.now()}.${ext}`;

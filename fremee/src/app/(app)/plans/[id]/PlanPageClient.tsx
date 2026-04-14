@@ -22,8 +22,10 @@ import { insertNotificacion } from "@/services/api/repositories/notifications.re
 import { syncPlanWidget } from "@/services/widget/planWidget";
 import { QRCodeSVG } from "qrcode.react";
 import AppSidebar from "@/components/common/AppSidebar";
+import PublishPlanModal from "@/components/plans/PublishPlanModal";
+import PlanFotosTab from "@/components/plans/PlanFotosTab";
 
-type Tab = "itinerario" | "gastos" | "chat";
+type Tab = "itinerario" | "gastos" | "chat" | "fotos";
 
 /* ───────────── icons ───────────── */
 
@@ -1216,6 +1218,7 @@ export default function PlanDetailPage() {
   const [balances, setBalances] = useState<BalanceRow[]>([]);
   const [editingTransporteId, setEditingTransporteId] = useState<number | null>(null);
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [showPublishModal, setShowPublishModal] = useState(false);
   const [inviteFriends, setInviteFriends] = useState<PublicUserProfileRow[]>([]);
   const [inviteFriendsLoading, setInviteFriendsLoading] = useState(false);
   const [inviteSentIds, setInviteSentIds] = useState<Set<string>>(new Set());
@@ -1712,6 +1715,15 @@ export default function PlanDetailPage() {
               {/* Action buttons */}
               <div className="absolute bottom-[var(--space-6)] right-[var(--page-margin-x)] flex gap-[var(--space-2)]">
                 {!isPast && isAdmin && (
+                  <button
+                    onClick={() => setShowPublishModal(true)}
+                    className="flex h-9 items-center gap-1.5 rounded-full bg-white/20 px-3.5 text-[13px] font-[600] text-white backdrop-blur-sm transition-colors hover:bg-white/30"
+                  >
+                    <svg viewBox="0 0 20 20" fill="none" className="size-[15px]"><path d="M10 2.5L17 10H12.5V17H7.5V10H3L10 2.5Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" /></svg>
+                    Publicar
+                  </button>
+                )}
+                {!isPast && isAdmin && (
                   <button onClick={() => void openInviteModal()} className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-sm transition-colors hover:bg-white/30">
                     <InviteIcon className="size-[18px]" />
                   </button>
@@ -1732,7 +1744,7 @@ export default function PlanDetailPage() {
           <div className="border-b border-app px-[var(--page-margin-x)]">
             <div className="flex items-center justify-between">
               <div className="flex gap-[var(--space-8)]">
-                {(["itinerario", "gastos", "chat"] as Tab[]).map((tab) => (
+                {(["itinerario", "gastos", "fotos", "chat"] as Tab[]).map((tab) => (
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
@@ -1832,8 +1844,17 @@ export default function PlanDetailPage() {
             </div>
           )}
 
+          {/* ─── Fotos tab ─── */}
+          {activeTab === "fotos" && plan && user && (
+            <PlanFotosTab
+              planId={plan.id}
+              currentUserId={user.id}
+              isMember={membershipChecked}
+            />
+          )}
+
           {/* ─── Content ─── */}
-          {activeTab !== "chat" && <div className="px-[var(--page-margin-x)] pt-[var(--space-6)] pb-[var(--space-3)] md:pb-[var(--space-16)]">
+          {activeTab !== "chat" && activeTab !== "fotos" && <div className="px-[var(--page-margin-x)] pt-[var(--space-6)] pb-[var(--space-3)] md:pb-[var(--space-16)]">
 
             {activeTab === "itinerario" && (
               <div
@@ -2342,8 +2363,8 @@ export default function PlanDetailPage() {
 
             {activeTab === "gastos" && (
               <div className="mx-auto max-w-[760px]" style={{ fontFamily: "var(--font-inter), sans-serif" }}>
-                <div className="mb-[var(--space-6)] flex items-start justify-between gap-[var(--space-4)]">
-                  <div>
+                <div className="relative mb-[var(--space-6)] flex min-h-10 items-start justify-center py-[var(--space-2)]">
+                  <div className="text-center">
                     <p className="text-[11px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
                       Total gastado en el plan
                     </p>
@@ -2358,7 +2379,7 @@ export default function PlanDetailPage() {
                   <button
                     onClick={() => setShowAddGastoSheet(true)}
                     aria-label="Añadir gasto"
-                    className="hidden size-10 items-center justify-center rounded-full bg-primary-token text-contrast-token md:flex"
+                    className="absolute right-0 top-0 hidden size-10 items-center justify-center rounded-full bg-primary-token text-contrast-token md:flex"
                   >
                     <svg viewBox="0 0 24 24" fill="none" className="size-4" stroke="currentColor" strokeWidth="2.5">
                       <path d="M12 5v14M5 12h14" strokeLinecap="round" />
@@ -2371,7 +2392,7 @@ export default function PlanDetailPage() {
                   <section>
                     <div className="mb-[var(--space-3)] flex items-center justify-between gap-[var(--space-3)]">
                       <div>
-                        <h4 className="text-caption font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted" style={{ fontFamily: "var(--font-inter), sans-serif" }}>
+                        <h4 className="text-caption font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-app" style={{ fontFamily: "var(--font-inter), sans-serif" }}>
                           Deudas pendientes
                         </h4>
                       </div>
@@ -2449,7 +2470,7 @@ export default function PlanDetailPage() {
                   <section>
                     <div className="mb-[var(--space-3)] flex items-center justify-between gap-[var(--space-3)]">
                       <div>
-                        <h4 className="text-caption font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted" style={{ fontFamily: "var(--font-inter), sans-serif" }}>
+                        <h4 className="text-caption font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-app" style={{ fontFamily: "var(--font-inter), sans-serif" }}>
                           Historial de gastos
                         </h4>
                       </div>
@@ -2682,6 +2703,13 @@ export default function PlanDetailPage() {
       />
 
       {/* Invite modal */}
+      {showPublishModal && plan && (
+        <PublishPlanModal
+          plan={plan}
+          onClose={() => setShowPublishModal(false)}
+        />
+      )}
+
       {showInviteModal && (
         <div className="fixed inset-0 z-[80] flex items-end justify-center sm:items-center bg-black/50 px-4 pb-[max(var(--space-4),env(safe-area-inset-bottom))]" onClick={() => setShowInviteModal(false)}>
           <div className="w-full max-w-[440px] rounded-modal bg-[var(--bg)] shadow-elev-4" onClick={(e) => e.stopPropagation()}>

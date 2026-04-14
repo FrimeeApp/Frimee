@@ -91,7 +91,7 @@
 
   --font-body: 16px;
   --font-body-sm: 14px;
-  --font-caption: 12px;
+  --font-caption: 13px;
   --font-button-lg: 16px;
   --font-button-md: 14px;
 
@@ -140,6 +140,7 @@
   --input-border-focus: color-mix(in srgb, var(--border) 28%, var(--text-primary) 72%);
   --input-border-error: color-mix(in srgb, var(--error) 70%, var(--border) 30%);
   --input-placeholder: var(--text-secondary);
+  --search-field-bg: color-mix(in srgb, var(--surface-inset) 94%, var(--text-primary) 6%);
 
   --auth-solid-bg: #111111;
   --auth-solid-bg-hover: #000000;
@@ -199,6 +200,7 @@
   --input-border-focus: color-mix(in srgb, var(--border) 18%, var(--text-primary) 82%);
   --input-border-error: color-mix(in srgb, var(--error) 72%, var(--border) 28%);
   --input-placeholder: var(--text-secondary);
+  --search-field-bg: #25292E;
 
   --auth-solid-bg: #f5f5f5;
   --auth-solid-bg-hover: #ffffff;
@@ -240,4 +242,3 @@
     --font-h6: 16px;
   }
 }
-

@@ -9,6 +9,7 @@ export type PublishablePlan = {
   visibility: string;
   coverImage: string | null;
   ownerUserId: string;
+  caption?: string | null;
   creator?: { id: string; name: string; profileImage: string | null } | null;
 };
 

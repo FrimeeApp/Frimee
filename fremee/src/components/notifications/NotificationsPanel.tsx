@@ -26,15 +26,42 @@ const TIPO_LABELS: Record<string, string> = {
   mention: "te mencionó en un comentario.",
 };
 
+const N_TILDE_WORDS: Record<string, string> = {
+  companera: "compañera",
+  companeras: "compañeras",
+  companero: "compañero",
+  companeros: "compañeros",
+  duena: "dueña",
+  duenas: "dueñas",
+  dueno: "dueño",
+  duenos: "dueños",
+  cumpleanos: "cumpleaños",
+};
+
+function preserveWordCase(source: string, replacement: string): string {
+  if (source === source.toUpperCase()) return replacement.toUpperCase();
+  if (source[0] === source[0].toUpperCase()) return replacement[0].toUpperCase() + replacement.slice(1);
+  return replacement;
+}
+
+function normalizeNotificationText(text: string): string {
+  return text
+    .normalize("NFC")
+    .replace(/\b(companera|companeras|companero|companeros|duena|duenas|dueno|duenos|cumpleanos)\b/gi, (match) => {
+      const normalized = N_TILDE_WORDS[match.toLowerCase()];
+      return normalized ? preserveWordCase(match, normalized) : match;
+    });
+}
+
 function recordatorioLabel(entityId: string | null): string {
   try {
     const meta = JSON.parse(entityId ?? "") as { plan_titulo?: string; importe?: number; has_tasks?: boolean };
     const plan = meta.plan_titulo ? ` en ${meta.plan_titulo}` : "";
     const deuda = (meta.importe ?? 0) > 0.01;
     const tareas = meta.has_tasks;
-    if (deuda && tareas) return `te recuerda que le debes ${meta.importe!.toFixed(2)}€ y tienes tareas pendientes${plan}.`;
-    if (deuda) return `te recuerda que todavía le debes ${meta.importe!.toFixed(2)}€${plan}.`;
-    return `te recuerda que tienes tareas pendientes${plan}.`;
+    if (deuda && tareas) return normalizeNotificationText(`te recuerda que le debes ${meta.importe!.toFixed(2)}€ y tienes tareas pendientes${plan}.`);
+    if (deuda) return normalizeNotificationText(`te recuerda que todavía le debes ${meta.importe!.toFixed(2)}€${plan}.`);
+    return normalizeNotificationText(`te recuerda que tienes tareas pendientes${plan}.`);
   } catch {
     return "te ha enviado un recordatorio.";
   }
@@ -43,7 +70,7 @@ function recordatorioLabel(entityId: string | null): string {
 function recordatorioDeudaLabel(entityId: string | null): string {
   try {
     const meta = JSON.parse(entityId ?? "") as { mensaje?: string };
-    return meta.mensaje ?? "Tienes deudas pendientes de un viaje pasado.";
+    return normalizeNotificationText(meta.mensaje ?? "Tienes deudas pendientes de un viaje pasado.");
   } catch {
     return "Tienes deudas pendientes de un viaje pasado.";
   }
@@ -152,46 +179,50 @@ function NotifItem({
           <span className="absolute bottom-0 right-0 size-2.5 rounded-full bg-blue-500 border-2 border-[var(--bg)]" />
         )}
       </div>
-      <div className="flex-1 min-w-0 pt-0.5">
-        <p className="text-body-sm leading-snug">
-          {n.tipo === "recordatorio_deuda" ? (
-            <>
-              <span className="font-[var(--fw-semibold)] text-[var(--primary)]">Frimee</span>
-              {" "}
-              <span className="text-muted">{recordatorioDeudaLabel(n.entity_id)}</span>
-            </>
-          ) : (
-            <>
-              <span className="font-[var(--fw-semibold)]">{n.actor_nombre ?? "Alguien"}</span>
-              {" "}
-              <span className="text-muted">
-                {n.tipo === "recordatorio" ? recordatorioLabel(n.entity_id) : (TIPO_LABELS[n.tipo] ?? n.tipo)}
-              </span>
-            </>
-          )}
-        </p>
-        <p className="text-caption text-muted mt-0.5">{timeAgo(n.created_at)}</p>
-
-        {(isFriendRequest || isPlanInvite) && (
-          <div className="mt-2 flex gap-2">
-            <button
-              type="button"
-              disabled={acting}
-              onClick={() => void (isFriendRequest ? handleFriend(true) : handlePlanInvite(true))}
-              className="rounded-full bg-[var(--primary)] px-4 py-1.5 text-body-sm font-[var(--fw-semibold)] text-white transition-opacity hover:opacity-80 disabled:opacity-50"
-            >
-              Aceptar
-            </button>
-            <button
-              type="button"
-              disabled={acting}
-              onClick={() => void (isFriendRequest ? handleFriend(false) : handlePlanInvite(false))}
-              className="rounded-full border border-[var(--border)] px-4 py-1.5 text-body-sm font-[var(--fw-semibold)] transition-colors hover:bg-[var(--surface)] disabled:opacity-50"
-            >
-              Rechazar
-            </button>
+      <div className="min-w-0 flex-1 pt-0.5">
+        <div className="flex min-w-0 flex-col gap-2 md:flex-row md:items-start md:justify-between md:gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-body-sm leading-snug">
+              {n.tipo === "recordatorio_deuda" ? (
+                <>
+                  <span className="font-[var(--fw-semibold)] text-[var(--primary)]">Frimee</span>
+                  {" "}
+                  <span className="text-muted">{recordatorioDeudaLabel(n.entity_id)}</span>
+                </>
+              ) : (
+                <>
+                  <span className="font-[var(--fw-semibold)]">{n.actor_nombre ?? "Alguien"}</span>
+                  {" "}
+                  <span className="text-muted">
+                    {normalizeNotificationText(n.tipo === "recordatorio" ? recordatorioLabel(n.entity_id) : (TIPO_LABELS[n.tipo] ?? n.tipo))}
+                  </span>
+                </>
+              )}
+            </p>
+            <p className="mt-0.5 text-caption text-muted">{timeAgo(n.created_at)}</p>
           </div>
-        )}
+
+          {(isFriendRequest || isPlanInvite) && (
+            <div className="flex shrink-0 items-center gap-1.5 md:pt-0.5">
+              <button
+                type="button"
+                disabled={acting}
+                onClick={() => void (isFriendRequest ? handleFriend(true) : handlePlanInvite(true))}
+                className="rounded-full bg-[var(--primary)] px-3 py-1 text-[13px] font-[var(--fw-semibold)] text-[var(--contrast)] transition-opacity hover:opacity-80 disabled:opacity-50"
+              >
+                Aceptar
+              </button>
+              <button
+                type="button"
+                disabled={acting}
+                onClick={() => void (isFriendRequest ? handleFriend(false) : handlePlanInvite(false))}
+                className="rounded-full border border-[var(--border)] px-3 py-1 text-[13px] font-[var(--fw-semibold)] transition-colors hover:bg-[var(--surface)] disabled:opacity-50"
+              >
+                Rechazar
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </li>
   );
@@ -309,7 +340,7 @@ export default function NotificationsPanel({ open, onClose, onRead, desktopPosit
         ref={panelRef}
         role="dialog"
         aria-label="Notificaciones"
-        className={`fixed inset-0 z-50 flex h-dvh w-full flex-col bg-[var(--bg)] transition-transform duration-300 [transition-timing-function:var(--ease-standard)] md:inset-auto md:top-0 md:max-w-[360px] md:shadow-elev-3 ${
+        className={`fixed inset-0 z-50 flex h-dvh w-full flex-col bg-[var(--bg)] transition-transform duration-300 [transition-timing-function:var(--ease-standard)] md:inset-auto md:top-0 md:max-w-[408px] md:shadow-elev-3 ${
           open ? "translate-x-0" : "translate-x-full"
         } ${
           desktopPosition === "left"
