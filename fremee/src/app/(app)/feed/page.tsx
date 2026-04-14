@@ -404,7 +404,7 @@ export default function FeedPage() {
                   type="button"
                   onClick={() => setMobileSearchOpen(true)}
                   aria-label="Buscar"
-                  className="flex h-[44px] min-w-0 flex-1 items-center gap-[10px] rounded-[8px] bg-surface-inset px-[14px] text-muted transition-opacity hover:opacity-80"
+                  className="flex h-[44px] min-w-0 flex-1 items-center gap-[10px] rounded-[8px] bg-[var(--search-field-bg)] px-[14px] text-muted transition-opacity hover:opacity-80"
                 >
                   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[22px] shrink-0">
                     <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.8" />
@@ -470,7 +470,7 @@ export default function FeedPage() {
                       <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                   </button>
-                  <div className="flex h-[44px] min-w-0 flex-1 items-center gap-[10px] rounded-[8px] bg-surface-inset px-[14px]">
+                  <div className="flex h-[44px] min-w-0 flex-1 items-center gap-[10px] rounded-[8px] bg-[var(--search-field-bg)] px-[14px]">
                     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[20px] shrink-0 text-muted">
                       <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.8" />
                       <path d="M16 16L20.5 20.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
@@ -666,9 +666,9 @@ export default function FeedPage() {
               </div>
             </div>
 
-            <div className="md:mt-[var(--space-5)] grid grid-cols-1 gap-[var(--space-8)] xl:grid-cols-[minmax(0,1fr)_300px] xl:gap-[var(--space-10)]">
-            <section className="mx-auto w-full max-w-[760px] xl:mx-0">
-              <div className="md:ml-[72px] md:max-w-[536px] xl:ml-[72px] xl:max-w-[536px]">
+            <div className="md:mt-[var(--space-5)] grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] xl:gap-[var(--space-6)]">
+            <section className="w-full">
+              <div className="md:ml-[72px] xl:ml-[72px]">
                 {loadingFeed || !firstImageReady ? (
                   <>
                     <FeedSkeleton />
@@ -691,9 +691,9 @@ export default function FeedPage() {
                         : "Aun no hay publicaciones para mostrar."}
                     </div>
                   ) : (
-                    <div className="overflow-y-scroll snap-y snap-mandatory scrollbar-hide h-[calc(100svh-60px)] md:overflow-visible md:snap-none md:h-auto md:space-y-[var(--space-6)]">
+                    <div className="overflow-y-scroll snap-y snap-mandatory scrollbar-hide h-[calc(100svh-60px)] md:h-[calc(100dvh-100px)]">
                       {visiblePosts.map((post, idx) => (
-                        <div key={post.id} className="snap-start h-full md:h-auto">
+                        <div key={post.id} className="snap-start h-full">
                           <FeedCard post={post} currentUserId={currentUserId} currentUserName={profile?.nombre ?? null} currentUserProfileImage={profile?.profile_image ?? null} nextPostHasImage={visiblePosts[idx + 1]?.hasImage ?? true} initialFollowing={followedIds.has(post.plan.ownerUserId ?? "")} initialSaved={savedPlanIds.has(post.plan.id)} />
                         </div>
                       ))}
@@ -703,8 +703,8 @@ export default function FeedPage() {
               </div>
             </section>
 
-            <aside className="hidden xl:block xl:-ml-[120px]">
-              <div className="sticky top-[var(--space-8)] xl:w-[320px]">
+            <aside className="hidden xl:block">
+              <div className="sticky top-[var(--space-8)]">
                 <FeedChatPanel currentUserId={currentUserId} />
               </div>
             </aside>
@@ -1524,19 +1524,19 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
   };
 
   return (
-    <article className={`relative h-full overflow-hidden md:overflow-visible md:h-auto ${post.hasImage && !nextPostHasImage ? "" : "md:pb-[var(--space-5)]"}`}>
+    <article className={`relative h-full overflow-hidden md:overflow-visible ${post.hasImage && !nextPostHasImage ? "" : ""}`}>
 
       {/* ── MOBILE: full-screen snap card ── */}
       <div className="absolute inset-0 md:hidden">
         {/* Background */}
         {post.hasImage && post.coverImage ? (
-          <div className="absolute inset-0">
+          <div className="absolute inset-0 bg-app">
             {!imgLoaded && <div className="skeleton-shimmer absolute inset-0" aria-hidden="true" />}
             <NextImage
               src={post.coverImage}
               alt="Imagen del plan"
               fill
-              className="object-cover transition-opacity duration-300"
+              className="object-contain transition-opacity duration-300"
               style={{ opacity: imgLoaded ? 1 : 0 }}
               unoptimized
               onLoad={() => setImgLoaded(true)}
@@ -1544,243 +1544,390 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
             />
           </div>
         ) : (
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#1c2b3a_0%,#0d1520_60%,#060b12_100%)]" />
+          <div className="absolute inset-0 bg-app" />
         )}
 
-        {/* Top fade */}
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/50 to-transparent" />
-
-        {/* Tappable area → plan detail */}
-        <Link href={`/plan/${post.plan.id}`} className="absolute inset-0 z-10" aria-label={`Ver plan de ${post.userName}`} />
-
-        {/* Right side actions */}
-        <div
-          className="absolute right-4 z-20 flex flex-col items-center gap-5"
-          style={{ bottom: `max(110px, calc(110px + env(safe-area-inset-bottom)))` }}
-        >
-          <button
-            type="button"
-            className="flex flex-col items-center gap-1 text-white disabled:opacity-40"
-            onClick={onLikeToggle}
-            disabled={!currentUserId || likeLoading}
-            aria-label={liked ? "Quitar like" : "Dar like"}
-          >
-            <div className="flex size-[46px] items-center justify-center rounded-full bg-black/35 backdrop-blur-sm">
-              <PlaneIcon liked={liked} animating={likeAnimating} size={24} />
+        {/* Text content (only for text-only posts) — same layout as desktop */}
+        {!post.hasImage && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center px-[max(var(--page-margin-x),env(safe-area-inset-left))]">
+            <div className="w-full max-w-[420px] rounded-2xl border border-[var(--border)] p-6">
+              <div className="flex items-center gap-3 mb-5">
+                <Link href={`/profile/${post.plan.ownerUserId}`} onClick={(e) => e.stopPropagation()}>
+                  <div className="flex size-[40px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-raised)]">
+                    {post.avatarImage ? (
+                      <NextImage src={post.avatarImage} alt={post.avatarLabel} width={40} height={40} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
+                    ) : (
+                      <span className="text-[14px] font-[700] text-[var(--text-primary)]">{post.avatarLabel}</span>
+                    )}
+                  </div>
+                </Link>
+                <div className="min-w-0 flex-1">
+                  <Link href={`/profile/${post.plan.ownerUserId}`} onClick={(e) => e.stopPropagation()} className="text-[15px] font-[800] text-[var(--text-primary)]">{post.userName}</Link>
+                  {post.plan.locationName && (
+                    <p className="text-[12px] text-[var(--text-tertiary)] mt-[1px]">{post.plan.locationName}</p>
+                  )}
+                </div>
+                {!isOwnPost && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); onFollowPress(); }}
+                    className={`shrink-0 text-[12px] font-[700] transition-opacity hover:opacity-70 ${following ? "text-[var(--text-tertiary)]" : "text-[var(--text-secondary)]"}`}
+                  >
+                    {following ? "Siguiendo" : "Seguir"}
+                  </button>
+                )}
+              </div>
+              {post.plan.title && (
+                <p className="text-[20px] font-[800] leading-tight text-[var(--text-primary)]">{post.plan.title}</p>
+              )}
+              {post.text && (
+                <p className="mt-3 text-[17px] leading-[1.55] text-[var(--text-primary)]">{post.text}</p>
+              )}
+              <p className="mt-3 text-[12px] font-[600] text-[var(--text-tertiary)]">
+                {formatDate(post.plan.startsAt) === formatDate(post.plan.endsAt)
+                  ? formatDate(post.plan.startsAt)
+                  : `${formatDate(post.plan.startsAt)} – ${formatDate(post.plan.endsAt)}`}
+              </p>
+              <div className="mt-4 flex items-center gap-3">
+                <button
+                  type="button"
+                  className="flex items-center gap-1.5 text-[var(--text-secondary)] disabled:opacity-40 transition-opacity hover:opacity-70"
+                  onClick={(e) => { e.stopPropagation(); onLikeToggle(); }}
+                  disabled={!currentUserId || likeLoading}
+                  aria-label={liked ? "Quitar like" : "Dar like"}
+                >
+                  <PlaneIcon liked={liked} animating={likeAnimating} size={18} />
+                  {likeCount > 0 && <span className="text-[12px] font-[700]">{likeCount}</span>}
+                </button>
+                <button
+                  type="button"
+                  className="flex items-center gap-1.5 text-[var(--text-secondary)] transition-opacity hover:opacity-70"
+                  onClick={(e) => { e.stopPropagation(); openCommentsModal(); }}
+                  aria-label="Comentarios"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" className="size-[18px]" aria-hidden="true">
+                    <path d="M12 4C7.582 4 4 6.91 4 10.5C4 12.31 4.913 13.947 6.39 15.109C6.272 16.213 5.79 17.343 4.98 18.316C4.787 18.549 5.02 18.88 5.315 18.785C7.005 18.243 8.357 17.471 9.235 16.86C10.115 17.113 11.04 17.25 12 17.25C16.418 17.25 20 14.34 20 10.75C20 7.16 16.418 4 12 4Z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  {commentsSection.length > 0 && <span className="text-[12px] font-[700]">{commentsSection.length}</span>}
+                </button>
+                {!isOwnPost && (
+                  <button
+                    type="button"
+                    className="text-[var(--text-secondary)] transition-opacity hover:opacity-70"
+                    onClick={(e) => { e.stopPropagation(); handleToggleSave(); }}
+                    aria-label={saved ? "Quitar guardado" : "Guardar"}
+                  >
+                    <BookmarkIcon saved={saved} />
+                  </button>
+                )}
+                <Link
+                  href={`/plan/${post.plan.id}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="ml-auto flex items-center gap-1 text-[13px] font-[700] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
+                >
+                  Ver plan
+                  <svg viewBox="0 0 24 24" fill="none" className="size-[12px]" aria-hidden="true">
+                    <path d="M13 3L21 12M21 12L13 21M21 12H3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </Link>
+              </div>
             </div>
-            {likeCount > 0 && <span className="text-[12px] font-[700] text-white drop-shadow">{likeCount}</span>}
-          </button>
+          </div>
+        )}
 
-          <button
-            type="button"
-            className="flex flex-col items-center gap-1 text-white"
-            onClick={openCommentsModal}
-            aria-label="Comentarios"
+        {/* Top: avatar + name + follow (image posts only) */}
+        {post.hasImage && <div className="absolute inset-x-0 top-0 z-20 flex items-center gap-2.5 px-4 pt-4">
+          <Link
+            href={`/profile/${post.plan.ownerUserId}`}
+            onClick={(e) => e.stopPropagation()}
+            className="flex items-center gap-2 min-w-0"
           >
-            <div className="flex size-[46px] items-center justify-center rounded-full bg-black/35 backdrop-blur-sm">
-              <svg viewBox="0 0 24 24" fill="none" className="size-[22px]" aria-hidden="true">
-                <path d="M12 4C7.582 4 4 6.91 4 10.5C4 12.31 4.913 13.947 6.39 15.109C6.272 16.213 5.79 17.343 4.98 18.316C4.787 18.549 5.02 18.88 5.315 18.785C7.005 18.243 8.357 17.471 9.235 16.86C10.115 17.113 11.04 17.25 12 17.25C16.418 17.25 20 14.34 20 10.75C20 7.16 16.418 4 12 4Z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
+            <div className="flex size-[34px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-raised)]">
+              {post.avatarImage ? (
+                <NextImage src={post.avatarImage} alt={post.avatarLabel} width={34} height={34} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
+              ) : (
+                <span className="text-[12px] font-[700] text-app">{post.avatarLabel}</span>
+              )}
             </div>
-            {commentsSection.length > 0 && <span className="text-[12px] font-[700] text-white drop-shadow">{commentsSection.length}</span>}
-          </button>
-
+            <span className="text-[15px] font-[800] text-app truncate">{post.userName}</span>
+          </Link>
           {!isOwnPost && (
             <button
               type="button"
-              className="flex flex-col items-center gap-1 text-white"
-              onClick={handleToggleSave}
-              aria-label={saved ? "Quitar guardado" : "Guardar"}
+              onClick={(e) => { e.stopPropagation(); onFollowPress(); }}
+              className={`ml-1 shrink-0 text-[13px] font-[700] transition-opacity ${following ? "text-muted" : "text-app"}`}
             >
-              <div className="flex size-[46px] items-center justify-center rounded-full bg-black/35 backdrop-blur-sm">
-                <BookmarkIcon saved={saved} />
-              </div>
+              {following ? "· Siguiendo" : "· Seguir"}
             </button>
           )}
-        </div>
-
-        {/* Bottom info overlay */}
-        <div
-          className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/90 via-black/55 to-transparent px-5 pt-24"
-          style={{ paddingBottom: `max(88px, calc(88px + env(safe-area-inset-bottom)))` }}
-        >
-          <div className="mb-3 flex items-center gap-2">
-            <Link
-              href={`/profile/${post.plan.ownerUserId}`}
-              onClick={(e) => e.stopPropagation()}
-              className="flex items-center gap-2"
-            >
-              <div className="flex size-[34px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/35 bg-white/10">
-                {post.avatarImage ? (
-                  <NextImage src={post.avatarImage} alt={post.avatarLabel} width={34} height={34} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
-                ) : (
-                  <span className="text-[12px] font-[700] text-white">{post.avatarLabel}</span>
-                )}
-              </div>
-              <span className="text-[15px] font-[800] text-white drop-shadow-sm">{post.userName}</span>
-            </Link>
-            {!isOwnPost && (
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); onFollowPress(); }}
-                className={`text-[13px] font-[700] transition-opacity ${following ? "text-white/55" : "text-white/90"}`}
-              >
-                {following ? "· Siguiendo" : "· Seguir"}
-              </button>
-            )}
-          </div>
-
-          {post.plan.locationName && (
-            <p className="text-[18px] font-[800] leading-tight text-white drop-shadow-sm">{post.plan.locationName}</p>
-          )}
-          <p className="mt-[3px] text-[13px] font-[600] text-white/65">
-            {formatDate(post.plan.startsAt) === formatDate(post.plan.endsAt)
-              ? formatDate(post.plan.startsAt)
-              : `${formatDate(post.plan.startsAt)} – ${formatDate(post.plan.endsAt)}`}
-          </p>
-          {post.text && (
-            <p className="mt-2 line-clamp-2 text-[14px] leading-[1.4] text-white/80">{post.text}</p>
-          )}
-
           <Link
             href={`/plan/${post.plan.id}`}
             onClick={(e) => e.stopPropagation()}
-            className="mt-3 inline-flex items-center gap-1 text-[13px] font-[700] text-white/85"
+            className="ml-auto shrink-0 flex items-center gap-1 rounded-full bg-black/50 px-3 py-1.5 text-[12px] font-[700] text-white transition-opacity hover:opacity-80"
           >
             Ver plan
-            <svg viewBox="0 0 24 24" fill="none" className="size-[13px]" aria-hidden="true">
-              <path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+            <svg viewBox="0 0 24 24" fill="none" className="size-[11px]" aria-hidden="true">
+              <path d="M13 3L21 12M21 12L13 21M21 12H3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </Link>
-        </div>
+        </div>}
+
+        {/* Right: actions (image posts only) */}
+        {post.hasImage && <div className="absolute right-4 top-1/2 z-20 flex -translate-y-1/2 flex-col items-center gap-2">
+          <button
+            type="button"
+            className="flex flex-col items-center gap-0.5 rounded-full bg-black/50 px-2.5 py-2 text-white disabled:opacity-40"
+            onClick={(e) => { e.stopPropagation(); onLikeToggle(); }}
+            disabled={!currentUserId || likeLoading}
+            aria-label={liked ? "Quitar like" : "Dar like"}
+          >
+            <PlaneIcon liked={liked} animating={likeAnimating} size={22} className="text-white" />
+            {likeCount > 0 && <span className="text-[11px] font-[700]">{likeCount}</span>}
+          </button>
+          <button
+            type="button"
+            className="flex flex-col items-center gap-0.5 rounded-full bg-black/50 px-2.5 py-2 text-white"
+            onClick={(e) => { e.stopPropagation(); openCommentsModal(); }}
+            aria-label="Comentarios"
+          >
+            <svg viewBox="0 0 24 24" fill="none" className="size-[22px]" aria-hidden="true">
+              <path d="M12 4C7.582 4 4 6.91 4 10.5C4 12.31 4.913 13.947 6.39 15.109C6.272 16.213 5.79 17.343 4.98 18.316C4.787 18.549 5.02 18.88 5.315 18.785C7.005 18.243 8.357 17.471 9.235 16.86C10.115 17.113 11.04 17.25 12 17.25C16.418 17.25 20 14.34 20 10.75C20 7.16 16.418 4 12 4Z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            {commentsSection.length > 0 && <span className="text-[11px] font-[700]">{commentsSection.length}</span>}
+          </button>
+          {!isOwnPost && (
+            <button
+              type="button"
+              className="flex items-center justify-center rounded-full bg-black/50 px-2.5 py-2 text-white"
+              onClick={(e) => { e.stopPropagation(); handleToggleSave(); }}
+              aria-label={saved ? "Quitar guardado" : "Guardar"}
+            >
+              <BookmarkIcon saved={saved} size={22} />
+            </button>
+          )}
+        </div>}
+
+        {/* Bottom: info left (image posts only) */}
+        {post.hasImage && <div
+          className="absolute inset-x-0 bottom-0 z-20 flex items-end px-4 pr-[76px]"
+          style={{ paddingBottom: `max(88px, calc(88px + env(safe-area-inset-bottom)))` }}
+        >
+          {/* Left: location / date / text / ver plan */}
+          <div className="min-w-0">
+            {post.plan.title && (
+              <p className="text-[18px] font-[800] leading-tight text-app">{post.plan.title}</p>
+            )}
+            <p className="mt-[2px] text-[12px] font-[600] text-[var(--text-secondary)]">
+              {[
+                post.plan.locationName,
+                formatDate(post.plan.startsAt) === formatDate(post.plan.endsAt)
+                  ? formatDate(post.plan.startsAt)
+                  : `${formatDate(post.plan.startsAt)} – ${formatDate(post.plan.endsAt)}`
+              ].filter(Boolean).join(" · ")}
+            </p>
+          </div>
+        </div>}
       </div>
 
-      {/* ── DESKTOP: original layout ── */}
-      <div className="hidden md:block">
+      {/* ── DESKTOP: TikTok-style full-screen ── */}
+      <div className="hidden md:flex h-full items-center justify-center overflow-hidden">
 
-      {/* Image with overlays */}
-      {post.hasImage && (
-        <div
-          className="feed-image-container relative overflow-hidden"
-          style={!imgLoaded ? { aspectRatio: "4/3" } : undefined}
-        >
-          {/* Shimmer mientras la imagen carga */}
-          {!imgLoaded && (
-            <div className="skeleton-shimmer absolute inset-0" aria-hidden="true" />
-          )}
-          <NextImage
-            src={post.coverImage!}
-            alt="Imagen del plan"
-            width={1200}
-            height={900}
-            className="feed-image-responsive transition-opacity duration-300"
-            style={{ opacity: imgLoaded ? 1 : 0 }}
-            unoptimized
-            onLoad={() => setImgLoaded(true)}
-            onError={() => setImgLoaded(true)}
-          />
+        {/* Content: image centered, no side column */}
+        <div className="flex h-full w-full items-center justify-center px-8 py-8">
 
-          {/* Top overlay — avatar + username */}
-          <div className="absolute inset-x-0 top-0 flex items-center gap-[var(--space-2)] bg-gradient-to-b from-black/50 to-transparent px-[var(--space-4)] pb-[var(--space-8)] pt-[var(--space-3)]">
-            <div className="flex size-[32px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/30 bg-white/20">
-              {post.avatarImage ? (
-                <NextImage src={post.avatarImage} alt={post.avatarLabel} width={32} height={32} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
-              ) : (
-                <span className="text-[13px] font-[var(--fw-semibold)] text-[#F5F5F5]">{post.avatarLabel}</span>
+          {post.hasImage && post.coverImage ? (
+            <div
+              className="relative overflow-hidden rounded-2xl"
+              style={{ maxHeight: "calc(100dvh - 160px)" }}
+            >
+              {!imgLoaded && <div className="skeleton-shimmer absolute inset-0 rounded-2xl" aria-hidden="true" />}
+              <NextImage
+                src={post.coverImage}
+                alt="Imagen del plan"
+                width={1200}
+                height={900}
+                className="block h-auto w-auto rounded-2xl transition-opacity duration-300"
+                style={{
+                  opacity: imgLoaded ? 1 : 0,
+                  maxHeight: "calc(100dvh - 160px)",
+                  maxWidth: "min(62dvw, 760px)",
+                }}
+                unoptimized
+                onLoad={() => setImgLoaded(true)}
+                onError={() => setImgLoaded(true)}
+              />
+
+              {/* Top overlay: avatar + name + follow */}
+              <div className="absolute inset-x-0 top-0 px-4 pb-8 pt-4">
+                <div className="flex items-center gap-2.5">
+                  <Link href={`/profile/${post.plan.ownerUserId}`} className="flex items-center gap-2.5 min-w-0">
+                    <div className="flex size-[34px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/30 bg-white/10">
+                      {post.avatarImage ? (
+                        <NextImage src={post.avatarImage} alt={post.avatarLabel} width={34} height={34} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
+                      ) : (
+                        <span className="text-[12px] font-[700] text-white">{post.avatarLabel}</span>
+                      )}
+                    </div>
+                    <span className="text-[14px] font-[800] text-white drop-shadow-sm truncate">{post.userName}</span>
+                  </Link>
+                  {!isOwnPost && (
+                    <button
+                      type="button"
+                      onClick={onFollowPress}
+                      className={`ml-1 shrink-0 text-[11px] font-[700] transition-opacity hover:opacity-70 ${following ? "text-white/45" : "text-white/80"}`}
+                    >
+                      {following ? "Siguiendo" : "· Seguir"}
+                    </button>
+                  )}
+                  <Link
+                    href={`/plan/${post.plan.id}`}
+                    className="ml-auto shrink-0 flex items-center gap-1 rounded-full bg-black/30 backdrop-blur-sm px-3 py-1.5 text-[12px] font-[700] text-white transition-opacity hover:opacity-80"
+                  >
+                    Ver plan
+                    <svg viewBox="0 0 24 24" fill="none" className="size-[11px]" aria-hidden="true">
+                      <path d="M13 3L21 12M21 12L13 21M21 12H3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </Link>
+                </div>
+              </div>
+
+              {/* Bottom overlay: info left + actions right */}
+              <div className="absolute inset-x-0 bottom-0 px-4 pb-4 pt-16">
+                <div className="flex items-end justify-between gap-4">
+                  {/* Left: location / date / text / ver plan */}
+                  <div className="min-w-0">
+                    {post.plan.title && (
+                      <p className="text-[16px] font-[800] leading-tight text-white">{post.plan.title}</p>
+                    )}
+                    <p className="mt-[2px] text-[12px] font-[600] text-white/70">
+                      {[
+                        post.plan.locationName,
+                        formatDate(post.plan.startsAt) === formatDate(post.plan.endsAt)
+                          ? formatDate(post.plan.startsAt)
+                          : `${formatDate(post.plan.startsAt)} – ${formatDate(post.plan.endsAt)}`
+                      ].filter(Boolean).join(" · ")}
+                    </p>
+                  </div>
+                  {/* Right: like / comment / save / ver plan */}
+                  <div className="flex shrink-0 items-center gap-2">
+                    <button
+                      type="button"
+                      className="flex items-center gap-2 rounded-full bg-black/50 px-4 py-2 text-white disabled:opacity-40 transition-colors hover:bg-black/65"
+                      onClick={onLikeToggle}
+                      disabled={!currentUserId || likeLoading}
+                      aria-label={liked ? "Quitar like" : "Dar like"}
+                    >
+                      <PlaneIcon liked={liked} animating={likeAnimating} size={20} className="text-white" />
+                      {likeCount > 0 && <span className="text-[13px] font-[700]">{likeCount}</span>}
+                    </button>
+                    <button
+                      type="button"
+                      className="flex items-center gap-2 rounded-full bg-black/50 px-4 py-2 text-white transition-colors hover:bg-black/65"
+                      onClick={openCommentsModal}
+                      aria-label="Comentarios"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" className="size-[20px]" aria-hidden="true">
+                        <path d="M12 4C7.582 4 4 6.91 4 10.5C4 12.31 4.913 13.947 6.39 15.109C6.272 16.213 5.79 17.343 4.98 18.316C4.787 18.549 5.02 18.88 5.315 18.785C7.005 18.243 8.357 17.471 9.235 16.86C10.115 17.113 11.04 17.25 12 17.25C16.418 17.25 20 14.34 20 10.75C20 7.16 16.418 4 12 4Z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                      {commentsSection.length > 0 && <span className="text-[13px] font-[700]">{commentsSection.length}</span>}
+                    </button>
+                    {!isOwnPost && (
+                      <button
+                        type="button"
+                        className="flex items-center justify-center rounded-full bg-black/50 px-4 py-2 text-white transition-colors hover:bg-black/65"
+                        onClick={handleToggleSave}
+                        aria-label={saved ? "Quitar guardado" : "Guardar"}
+                      >
+                        <BookmarkIcon saved={saved} size={20} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* Text-only post */
+            <div className="w-full max-w-[500px] rounded-2xl border border-[var(--border)] p-8">
+              <div className="flex items-center gap-3 mb-5">
+                <Link href={`/profile/${post.plan.ownerUserId}`}>
+                  <div className="flex size-[40px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-raised)] transition-opacity hover:opacity-80">
+                    {post.avatarImage ? (
+                      <NextImage src={post.avatarImage} alt={post.avatarLabel} width={40} height={40} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
+                    ) : (
+                      <span className="text-[14px] font-[700] text-[var(--text-primary)]">{post.avatarLabel}</span>
+                    )}
+                  </div>
+                </Link>
+                <div className="min-w-0 flex-1">
+                  <Link href={`/profile/${post.plan.ownerUserId}`} className="text-[15px] font-[800] text-[var(--text-primary)]">{post.userName}</Link>
+                  {post.plan.locationName && (
+                    <p className="text-[12px] text-[var(--text-tertiary)] mt-[1px]">{post.plan.locationName}</p>
+                  )}
+                </div>
+                {!isOwnPost && (
+                  <button
+                    type="button"
+                    onClick={onFollowPress}
+                    className={`shrink-0 text-[12px] font-[700] transition-opacity hover:opacity-70 ${following ? "text-[var(--text-tertiary)]" : "text-[var(--text-secondary)]"}`}
+                  >
+                    {following ? "Siguiendo" : "Seguir"}
+                  </button>
+                )}
+              </div>
+              {post.text && (
+                <p className="text-[17px] leading-[1.55] text-[var(--text-primary)]">{post.text}</p>
               )}
-            </div>
-            <Link href={`/profile/${post.plan.ownerUserId}`} className="text-body-sm font-[800] tracking-[0.01em] text-[#F5F5F5] drop-shadow-sm">{post.userName}</Link>
-          </div>
-
-          {/* Bottom overlay — location + dates */}
-          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-[var(--space-4)] pb-[var(--space-3)] pt-[var(--space-10)]">
-            {post.plan.locationName && (
-              <p className="text-body font-[var(--fw-semibold)] leading-tight text-[#F5F5F5] drop-shadow-sm">
-                {post.plan.locationName}
+              <p className="mt-4 text-[12px] font-[600] text-[var(--text-tertiary)]">
+                {formatDate(post.plan.startsAt) === formatDate(post.plan.endsAt)
+                  ? formatDate(post.plan.startsAt)
+                  : `${formatDate(post.plan.startsAt)} – ${formatDate(post.plan.endsAt)}`}
               </p>
-            )}
-            <p className="mt-[2px] text-body-sm text-[#F5F5F5]/75">
-              {formatDate(post.plan.startsAt) === formatDate(post.plan.endsAt)
-                ? formatDate(post.plan.startsAt)
-                : `${formatDate(post.plan.startsAt)} - ${formatDate(post.plan.endsAt)}`}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* No-image layout: avatar left, content right (Twitter style) */}
-      {!post.hasImage && (
-        <div className="flex gap-[var(--space-2)] px-[var(--space-1)]">
-          <div className="flex size-[32px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset">
-            {post.avatarImage ? (
-              <NextImage src={post.avatarImage} alt={post.avatarLabel} width={32} height={32} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
-            ) : (
-              <span className="text-[13px] font-[var(--fw-semibold)] text-app">{post.avatarLabel}</span>
-            )}
-          </div>
-          <div className="min-w-0 flex-1">
-            <Link href={`/profile/${post.plan.ownerUserId}`} className="text-body-sm font-[800] tracking-[0.01em]">{post.userName}</Link>
-            {post.text && (
-              <p className="mt-[2px] text-[15px] leading-[1.45]">{post.text}</p>
-            )}
-            {/* Actions */}
-            <div className="mt-[var(--space-3)] flex items-center gap-[var(--space-4)]">
-              <button type="button" className="flex items-center gap-[4px] disabled:opacity-50" aria-label={liked ? "Quitar like" : "Dar like"} onClick={onLikeToggle} disabled={!currentUserId}>
-                <PlaneIcon liked={liked} animating={likeAnimating} />
-                {likeCount > 0 && <span className="text-[15px] font-[700]">{likeCount}</span>}
-              </button>
-              <button type="button" className="flex items-center gap-[4px]" onClick={openCommentsModal}>
-                <CommentIcon />
-                {commentsSection.length > 0 && <span className="text-[15px] font-[700]">{commentsSection.length}</span>}
-              </button>
-              <button type="button" className="disabled:opacity-50" aria-label="Compartir" onClick={onPublish} disabled={publishing}>
-                <ShareIcon />
-              </button>
-              <button type="button" className="ml-auto mr-[calc(var(--space-4)-2px)] pr-[var(--space-1)] text-body-sm font-[var(--fw-semibold)] text-[var(--primary)] transition-opacity hover:opacity-70">
-                Ver plan
-              </button>
+              <div className="mt-4 flex items-center gap-3">
+                <button
+                  type="button"
+                  className="flex items-center gap-1.5 text-[var(--text-secondary)] disabled:opacity-40 transition-opacity hover:opacity-70"
+                  onClick={onLikeToggle}
+                  disabled={!currentUserId || likeLoading}
+                  aria-label={liked ? "Quitar like" : "Dar like"}
+                >
+                  <PlaneIcon liked={liked} animating={likeAnimating} size={18} />
+                  {likeCount > 0 && <span className="text-[12px] font-[700]">{likeCount}</span>}
+                </button>
+                <button
+                  type="button"
+                  className="flex items-center gap-1.5 text-[var(--text-secondary)] transition-opacity hover:opacity-70"
+                  onClick={openCommentsModal}
+                  aria-label="Comentarios"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" className="size-[18px]" aria-hidden="true">
+                    <path d="M12 4C7.582 4 4 6.91 4 10.5C4 12.31 4.913 13.947 6.39 15.109C6.272 16.213 5.79 17.343 4.98 18.316C4.787 18.549 5.02 18.88 5.315 18.785C7.005 18.243 8.357 17.471 9.235 16.86C10.115 17.113 11.04 17.25 12 17.25C16.418 17.25 20 14.34 20 10.75C20 7.16 16.418 4 12 4Z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  {commentsSection.length > 0 && <span className="text-[12px] font-[700]">{commentsSection.length}</span>}
+                </button>
+                {!isOwnPost && (
+                  <button
+                    type="button"
+                    className="text-[var(--text-secondary)] transition-opacity hover:opacity-70"
+                    onClick={handleToggleSave}
+                    aria-label={saved ? "Quitar guardado" : "Guardar"}
+                  >
+                    <BookmarkIcon saved={saved} />
+                  </button>
+                )}
+                <Link
+                  href={`/plan/${post.plan.id}`}
+                  className="ml-auto flex items-center gap-1 text-[13px] font-[700] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
+                >
+                  Ver plan
+                  <svg viewBox="0 0 24 24" fill="none" className="size-[12px]" aria-hidden="true">
+                    <path d="M13 3L21 12M21 12L13 21M21 12H3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </Link>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Image layout: actions + comments below image */}
-      {post.hasImage && (
-        <>
-          {/* Actions row */}
-          <div className="mt-[var(--space-3)] flex items-center gap-[10px] px-[2px] text-app md:px-[var(--space-4)]">
-            <button type="button" className="flex items-center gap-[4px] disabled:opacity-50" aria-label={liked ? "Quitar like" : "Dar like"} onClick={onLikeToggle} disabled={!currentUserId}>
-              <PlaneIcon liked={liked} animating={likeAnimating} />
-              {likeCount > 0 && <span className="text-[15px] font-[700] text-app">{likeCount}</span>}
-            </button>
-            <button type="button" className="flex items-center gap-[4px]" onClick={openCommentsModal}>
-              <CommentIcon />
-              {commentsSection.length > 0 && <span className="text-[15px] font-[700] text-app">{commentsSection.length}</span>}
-            </button>
-            <button type="button" className="disabled:opacity-50" aria-label="Compartir" onClick={onPublish} disabled={publishing}>
-              <ShareIcon />
-            </button>
-            <button type="button" className="ml-auto pr-0 text-body-sm font-[var(--fw-semibold)] text-[var(--primary)] transition-opacity hover:opacity-70 md:pr-[var(--space-1)]">
-              Ver plan
-            </button>
-          </div>
-
-          {/* Username + description */}
-          {post.text && (
-            <p className="mt-[var(--space-3)] px-[2px] text-[15px] leading-[1.45] text-app md:px-[var(--space-4)]">
-              <Link href={`/profile/${post.plan.ownerUserId}`} className="font-[800] tracking-[0.01em] text-app">{post.userName}</Link>{" "}
-              {post.text}
-            </p>
           )}
 
-        </>
-      )}
-
-      {/* Divider — only between image post followed by no-image post */}
-      {post.hasImage && !nextPostHasImage && (
-        <div className="feed-divider mt-[var(--space-5)] border-t border-app" />
-      )}
-
+        </div>
       </div>{/* end desktop wrapper */}
 
       {commentsModalOpen && (
@@ -1984,9 +2131,9 @@ function ShareIcon() {
 }
 
 
-function BookmarkIcon({ saved = false }: { saved?: boolean }) {
+function BookmarkIcon({ saved = false, size = 24 }: { saved?: boolean; size?: number }) {
   return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill={saved ? "currentColor" : "none"} aria-hidden="true">
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={saved ? "currentColor" : "none"} aria-hidden="true">
       <path d="M7 4.5H17C17.55 4.5 18 4.95 18 5.5V20L12 16.2L6 20V5.5C6 4.95 6.45 4.5 7 4.5Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
     </svg>
   );

@@ -481,7 +481,7 @@ function CalendarPageInner() {
             </div>
 
             <div className="mt-[var(--space-4)]">
-              <div className="flex h-[44px] w-full items-center gap-[10px] rounded-[12px] border border-app bg-surface-inset px-[14px] text-muted md:max-w-[240px]">
+              <div className="flex h-[44px] w-full items-center gap-[10px] rounded-[12px] border border-app bg-[var(--search-field-bg)] px-[14px] text-muted md:max-w-[240px]">
                 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[22px] shrink-0">
                   <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.8" />
                   <path d="M16 16L20.5 20.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
@@ -564,7 +564,7 @@ function CalendarPageInner() {
 
                         <div className="grid grid-cols-7 gap-x-1 gap-y-2 border-b border-app pb-3 text-center">
                           {WEEK_DAYS.map((weekDay) => (
-                            <div key={weekDay} className="text-[10px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
+                            <div key={weekDay} className="text-[11px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
                               {weekDay}
                             </div>
                           ))}
@@ -719,7 +719,7 @@ function CalendarPageInner() {
                           <div className="relative">
                             {Array.from({ length: 24 }).map((_, hour) => (
                               <div key={`hour-${hour}`} className="grid h-16 grid-cols-[52px_minmax(0,1fr)]">
-                                <div className="pr-2 pt-1 text-right text-[11px] text-muted">
+                                <div className="pr-2 pt-1 text-right text-[12px] text-muted">
                                   {String(hour).padStart(2, "0")}:00
                                 </div>
                                 <div className="border-t border-app/60" />
@@ -744,7 +744,7 @@ function CalendarPageInner() {
                                     onClick={() => navigateToPlan(plan.id)}
                                   >
                                     <p className="truncate text-body-sm font-[var(--fw-semibold)]">{plan.title}</p>
-                                    <p className="mt-0.5 truncate text-[11px] text-muted">
+                                    <p className="mt-0.5 truncate text-[12px] text-muted">
                                       {formatTimeRange(
                                         clampDateTimeToDay(plan.startsAt, selectedDayValue).toISOString(),
                                         clampDateTimeToDay(plan.endsAt, selectedDayValue, true).toISOString(),
@@ -799,7 +799,7 @@ function CalendarPageInner() {
                               }}
                             >
                               <span
-                                className={`absolute right-3 top-3 hidden rounded-chip border px-2.5 py-1 text-[11px] font-[var(--fw-medium)] leading-none lg:inline-flex ${heroStatusClass}`}
+                                className={`absolute right-3 top-3 hidden rounded-chip border px-2.5 py-1 text-[12px] font-[var(--fw-medium)] leading-none lg:inline-flex ${heroStatusClass}`}
                               >
                                 {statusLabel}
                               </span>
@@ -841,7 +841,7 @@ function CalendarPageInner() {
                                     {creatorLabel}
                                   </p>
                                   <span
-                                    className={`shrink-0 rounded-chip border px-2 py-1 text-[10px] font-[var(--fw-medium)] leading-none lg:hidden ${statusClass}`}
+                                    className={`shrink-0 rounded-chip border px-2 py-1 text-[12px] font-[var(--fw-medium)] leading-none lg:hidden ${statusClass}`}
                                     style={{ fontFamily: "var(--font-inter), sans-serif" }}
                                   >
                                     {statusLabel}

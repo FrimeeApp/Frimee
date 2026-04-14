@@ -7,6 +7,7 @@ export type FeedItemDto = {
   avatarImage: string | null;
   subtitle: string;
   text: string;
+  caption?: string | null;
   hasImage: boolean;
   coverImage: string | null;
   plan: FeedPlanItemDto;

@@ -102,7 +102,7 @@ export default function AudioPlayer({ src, sending }: { src: string; sending?: b
             />
           ))}
         </svg>
-        <span className="text-[10px] leading-none opacity-60">
+        <span className="text-[12px] leading-none opacity-60">
           {fmt(currentTime > 0 ? currentTime : duration)}
         </span>
       </div>

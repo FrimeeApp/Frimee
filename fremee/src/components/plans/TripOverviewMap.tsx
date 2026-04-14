@@ -386,7 +386,7 @@ export default function TripOverviewMap({ subplanes }: Props) {
               return (
                 <div key={date} className="flex items-center gap-2">
                   <span className="size-[10px] shrink-0 rounded-full" style={{ backgroundColor: DAY_COLORS[i % DAY_COLORS.length] }} />
-                  <span className="text-[11px] text-white/80">{label}</span>
+                  <span className="text-[12px] text-white/80">{label}</span>
                 </div>
               );
             })}

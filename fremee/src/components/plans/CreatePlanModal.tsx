@@ -176,7 +176,7 @@ function InlineRangeCalendar({
         </p>
         <div className="mb-[var(--space-1)] grid grid-cols-7 text-center">
           {["L", "M", "X", "J", "V", "S", "D"].map((d) => (
-            <span key={d} className="py-1 text-[11px] font-[var(--fw-semibold)] text-muted">{d}</span>
+            <span key={d} className="py-1 text-[12px] font-[var(--fw-semibold)] text-muted">{d}</span>
           ))}
         </div>
         <div className="grid grid-cols-7">{cells}</div>

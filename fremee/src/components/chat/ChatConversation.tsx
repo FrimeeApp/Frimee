@@ -1554,7 +1554,7 @@ export function ChatConversation({
             </div>
             <div className="min-w-0">
               <p className="truncate text-body-sm font-[var(--fw-semibold)] text-app">{name}</p>
-              {chat.tipo === "GRUPO" && <p className="text-[11px] text-muted">{chat.miembros.length} miembros</p>}
+              {chat.tipo === "GRUPO" && <p className="text-[13px] text-muted">{chat.miembros.length} miembros</p>}
             </div>
           </button>
           <button type="button" onClick={() => onStartCall?.("audio")} className="flex size-[32px] items-center justify-center rounded-full transition-colors hover:bg-surface text-muted hover:text-app" aria-label="Llamada de voz">
@@ -1574,7 +1574,7 @@ export function ChatConversation({
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-body-sm font-[var(--fw-semibold)] text-app">Llamada en curso</p>
-            <p className="text-[11px] text-muted">{ongoingCall.tipo === "video" ? "Videollamada" : "Llamada de voz"}</p>
+            <p className="text-[13px] text-muted">{ongoingCall.tipo === "video" ? "Videollamada" : "Llamada de voz"}</p>
           </div>
           <button
             type="button"
@@ -1594,7 +1594,7 @@ export function ChatConversation({
           className="flex items-center gap-[var(--space-2)] border-b border-app bg-surface px-[var(--space-3)] py-[8px] text-left"
         >
           <PinIcon className="size-[13px] shrink-0 text-muted" />
-          <p className="min-w-0 flex-1 truncate text-[12px] text-muted">{pinnedMsg.texto}</p>
+          <p className="min-w-0 flex-1 truncate text-[13px] text-muted">{pinnedMsg.texto}</p>
           <svg viewBox="0 0 24 24" fill="none" className="size-[14px] shrink-0 text-muted"><path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
         </button>
       )}
@@ -1651,7 +1651,7 @@ export function ChatConversation({
                     )}
                     <div className={`break-all ${isMediaMessage ? "bg-transparent p-0" : "rounded-card px-3 py-2"} ${!isMediaMessage ? (isMe ? "bg-[var(--text-primary)] text-contrast-token" : isBot ? "bg-surface" : "bg-surface-inset") : ""} ${contextMenu?.msg.id === msg.id ? "opacity-75" : ""}`}>
                       {!isMe && (chat.tipo === "GRUPO" || isBot) && isFirstInGroup && (
-                        <p className={`mb-[2px] text-[11px] font-[var(--fw-semibold)] ${isBot ? "text-primary-token" : "text-muted"}`}>{isBot ? "Frimee" : msg.sender_nombre}</p>
+                        <p className={`mb-[2px] text-[12px] font-[var(--fw-semibold)] ${isBot ? "text-primary-token" : "text-muted"}`}>{isBot ? "Frimee" : msg.sender_nombre}</p>
                       )}
                       {msg.reply_texto && msg.reply_to_id && (
                         <button
@@ -1659,10 +1659,10 @@ export function ChatConversation({
                           onClick={(e) => { e.stopPropagation(); scrollToMessage(msg.reply_to_id!); }}
                           className={`mb-[6px] w-full rounded-card border-l-[3px] px-2 py-[4px] text-left transition-opacity hover:opacity-80 ${isMe ? "border-contrast-token/50 bg-black/20" : "border-[var(--text-primary)] bg-black/8"}`}
                         >
-                          <p className={`truncate text-[11px] font-[var(--fw-semibold)] ${isMe ? "text-contrast-token/80" : "text-[var(--text-primary)]"}`}>
+                          <p className={`truncate text-[12px] font-[var(--fw-semibold)] ${isMe ? "text-contrast-token/80" : "text-[var(--text-primary)]"}`}>
                             {msg.reply_sender_nombre ?? "Usuario"}
                           </p>
-                          <p className={`truncate text-[12px] ${isMe ? "text-contrast-token/70" : "text-muted"}`}>
+                          <p className={`truncate text-[13px] ${isMe ? "text-contrast-token/70" : "text-muted"}`}>
                             {msg.reply_texto && isPollMessage(msg.reply_texto)
                               ? `📊 ${(JSON.parse(msg.reply_texto) as { question: string }).question}`
                               : msg.reply_texto}
@@ -1687,7 +1687,7 @@ export function ChatConversation({
                       ) : (
                         <p className={`text-body-sm${isBot ? " whitespace-pre-line" : ""}`}>{msg.texto}</p>
                       )}
-                      {!isMediaMessage && <div className={`mt-[2px] flex items-center justify-end gap-[4px] text-[10px] ${isMe ? "text-contrast-token/60" : "text-muted"}`}>
+                      {!isMediaMessage && <div className={`mt-[2px] flex items-center justify-end gap-[4px] text-[11px] ${isMe ? "text-contrast-token/60" : "text-muted"}`}>
                         {isStarred && <span>★</span>}
                         <span>{time}</span>
                         {!isBot && <button
@@ -1719,8 +1719,8 @@ export function ChatConversation({
         {replyingTo && (
           <div className="mb-[var(--space-2)] flex items-center gap-[var(--space-2)] rounded-[10px] border-l-2 border-[var(--text-primary)] bg-surface px-3 py-[8px]">
             <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-[var(--fw-semibold)] text-[var(--text-primary)]">{replyingTo.sender_nombre || "Tú"}</p>
-              <p className="truncate text-[12px] text-muted">
+              <p className="text-[13px] font-[var(--fw-semibold)] text-[var(--text-primary)]">{replyingTo.sender_nombre || "Tú"}</p>
+              <p className="truncate text-[13px] text-muted">
                 {replyingTo.texto && isPollMessage(replyingTo.texto)
                   ? `📊 ${(JSON.parse(replyingTo.texto) as { question: string }).question}`
                   : replyingTo.texto}
@@ -1734,8 +1734,8 @@ export function ChatConversation({
         {editingMsg && (
           <div className="mb-[var(--space-2)] flex items-center gap-[var(--space-2)] rounded-[10px] border-l-2 border-blue-500 bg-surface px-3 py-[8px]">
             <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-[var(--fw-semibold)] text-blue-400">Editando mensaje</p>
-              <p className="truncate text-[12px] text-muted">{editingMsg.texto}</p>
+              <p className="text-[13px] font-[var(--fw-semibold)] text-blue-400">Editando mensaje</p>
+              <p className="truncate text-[13px] text-muted">{editingMsg.texto}</p>
             </div>
             <button type="button" onClick={cancelEdit} className="shrink-0 text-muted transition-colors hover:text-app">
               <svg viewBox="0 0 24 24" fill="none" className="size-[16px]"><path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
@@ -2085,9 +2085,9 @@ function ChatInfoPanel({
                       </div>
                       <p className="min-w-0 flex-1 truncate text-body-sm font-[var(--fw-medium)] text-app">{f.nombre}</p>
                       {isAdding ? (
-                        <span className="shrink-0 text-[11px] text-muted">...</span>
+                        <span className="shrink-0 text-[13px] text-muted">...</span>
                       ) : (
-                        <span className="shrink-0 rounded-full border border-app px-[10px] py-[4px] text-[12px] text-app">Añadir</span>
+                        <span className="shrink-0 rounded-full border border-app px-[10px] py-[4px] text-[13px] text-app">Añadir</span>
                       )}
                     </button>
                   );
@@ -2132,7 +2132,7 @@ function ChatInfoPanel({
           </div>
           <div className="text-center">
             <p className="text-[var(--font-h4)] font-[var(--fw-semibold)] text-app">{name}</p>
-            <p className="mt-[3px] text-[12px] text-muted">
+            <p className="mt-[3px] text-[13px] text-muted">
               {isGrupo ? `Grupo · ${localMembers.length} miembros` : "Contacto"}
             </p>
           </div>
@@ -2142,7 +2142,7 @@ function ChatInfoPanel({
         {isGrupo && (
           <>
             <div className="flex items-center justify-between px-[var(--space-4)] pb-[var(--space-2)]">
-              <p className="text-[11px] font-[var(--fw-semibold)] uppercase tracking-wide text-muted">
+              <p className="text-[12px] font-[var(--fw-semibold)] uppercase tracking-wide text-muted">
                 {localMembers.length} miembros
               </p>
             </div>
@@ -2170,7 +2170,7 @@ function ChatInfoPanel({
                     </div>
                     <p className="min-w-0 flex-1 truncate text-body-sm text-app">{m.nombre}</p>
                     {isMe && (
-                      <span className="shrink-0 rounded-full bg-surface px-[8px] py-[3px] text-[11px] text-muted">Tú</span>
+                      <span className="shrink-0 rounded-full bg-surface px-[8px] py-[3px] text-[12px] text-muted">Tú</span>
                     )}
                   </div>
                 );
@@ -2640,7 +2640,7 @@ function MediaBubble({ url, type, sending, time, isMe, onOpenLightbox }: { url: 
           />
         </button>
       )}
-      <div className={`pointer-events-none absolute bottom-2 right-2 rounded-chip bg-black/58 px-2 py-1 text-[10px] leading-none text-white backdrop-blur-sm ${isMe ? "border border-white/10" : "border border-black/10"}`}>
+      <div className={`pointer-events-none absolute bottom-2 right-2 rounded-chip bg-black/58 px-2 py-1 text-[11px] leading-none text-white backdrop-blur-sm ${isMe ? "border border-white/10" : "border border-black/10"}`}>
         {time}
       </div>
       {sending && (
@@ -2692,7 +2692,7 @@ function ResumenViajeBubble({ texto }: { texto: string }) {
         <span className="text-[22px]">✈️</span>
         <div>
           <p className="text-[13px] font-[var(--fw-semibold)] text-primary-token leading-tight">¡El viaje ha terminado!</p>
-          <p className="text-[11px] text-primary-token/70">Aquí va el resumen</p>
+          <p className="text-[12px] text-primary-token/70">Aquí va el resumen</p>
         </div>
       </div>
 
@@ -2700,15 +2700,15 @@ function ResumenViajeBubble({ texto }: { texto: string }) {
       <div className="px-4 py-3 space-y-[10px]">
         {data.total > 0 ? (
           <div>
-            <p className="text-[11px] text-muted uppercase tracking-wide">Total gastado</p>
+            <p className="text-[12px] text-muted uppercase tracking-wide">Total gastado</p>
             <p className="text-[18px] font-[var(--fw-semibold)] text-app leading-tight">{fmtEur(data.total)}</p>
             {data.num_miembros > 1 && (
-              <p className="text-[12px] text-muted">{fmtEur(data.por_persona)} por persona</p>
+              <p className="text-[13px] text-muted">{fmtEur(data.por_persona)} por persona</p>
             )}
           </div>
         ) : (
           <div>
-            <p className="text-[11px] text-muted uppercase tracking-wide">Total gastado</p>
+            <p className="text-[12px] text-muted uppercase tracking-wide">Total gastado</p>
             <p className="text-[13px] text-muted">Sin gastos registrados</p>
           </div>
         )}

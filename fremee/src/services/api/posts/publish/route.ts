@@ -23,6 +23,7 @@ export async function publishPostRoute(payload: PublishPostPayload): Promise<Pub
         visibility: payload.plan.visibility,
         coverImage: payload.plan.coverImage ?? null,
         ownerUserId: payload.plan.ownerUserId,
+        caption: payload.plan.caption ?? null,
         ...(payload.plan.creator ? { creator: payload.plan.creator } : {}),
         likeCount: existing.exists() ? existing.data().likeCount ?? 0 : 0,
         published: true,

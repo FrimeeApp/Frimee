@@ -518,7 +518,7 @@ function MisGastosContent() {
                             >
                               {incoming ? "+" : "-"}{formatAmount(item.amount)}
                             </p>
-                            <p className="mt-[2px] text-[11px] font-[var(--fw-semibold)] uppercase tracking-[0.06em] text-muted">
+                            <p className="mt-[2px] text-[12px] font-[var(--fw-semibold)] uppercase tracking-[0.06em] text-muted">
                               Ver detalle
                             </p>
                           </div>
@@ -632,7 +632,7 @@ function KpiCard({
     <div className="flex items-end justify-center gap-[var(--space-2)] px-[var(--space-2)] pb-[var(--space-4)] pt-[var(--space-3)] sm:px-[var(--space-4)] sm:gap-[var(--space-3)]">
       <span className="mb-[2px] shrink-0" style={{ color }}>{icon}</span>
       <div className="min-w-0">
-        <p className="truncate text-[10px] font-[var(--fw-semibold)] uppercase tracking-[0.06em] text-muted sm:text-caption">
+        <p className="truncate text-[12px] font-[var(--fw-semibold)] uppercase tracking-[0.06em] text-muted sm:text-caption">
           {label}
         </p>
         <p
@@ -669,7 +669,7 @@ function PlanFilterOption({
         {label}
       </span>
       <div className="ml-[var(--space-3)] flex shrink-0 items-center">
-        <span className={`inline-flex min-w-[22px] items-center justify-center rounded-full px-1.5 py-[2px] text-[11px] font-[var(--fw-semibold)] ${
+        <span className={`inline-flex min-w-[22px] items-center justify-center rounded-full px-1.5 py-[2px] text-[12px] font-[var(--fw-semibold)] ${
           active ? "bg-[var(--primary)] text-[var(--contrast)]" : "bg-app text-muted"
         }`}>
           {count}
