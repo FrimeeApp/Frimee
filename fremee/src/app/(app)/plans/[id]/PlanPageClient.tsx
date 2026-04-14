@@ -543,7 +543,7 @@ function PlanInlineCalendar({
         <p className="mb-[var(--space-4)] text-center text-[15px] font-[var(--fw-bold)] capitalize text-app">{monthLabel}</p>
         <div className="mb-[var(--space-1)] grid grid-cols-7 text-center">
           {["L","M","X","J","V","S","D"].map((d) => (
-            <span key={d} className="py-1 text-[11px] font-[var(--fw-semibold)] text-muted">{d}</span>
+            <span key={d} className="py-1 text-[14px] font-[var(--fw-semibold)] text-muted">{d}</span>
           ))}
         </div>
         <div className="grid grid-cols-7">{cells}</div>
@@ -1005,14 +1005,14 @@ function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClos
                       }`}
                     >
                       <t.Icon className={`size-5 shrink-0 ${tipo === t.value ? "text-primary-token" : "text-muted"}`} strokeWidth={1.5} />
-                      <span className="text-[13px] leading-[1.15] font-[var(--fw-semibold)] text-app sm:text-body-sm">{t.label}</span>
+                      <span className="text-[14px] leading-[1.15] font-[var(--fw-semibold)] text-app sm:text-body-sm">{t.label}</span>
                     </button>
                   ))}
                 </div>
 
                 {/* Ubicación */}
                 <div>
-                  <p className="mb-[var(--space-2)] text-[11px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
+                  <p className="mb-[var(--space-2)] text-[14px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
                     {esTransporte ? "Origen" : "Ubicación"} <span className="normal-case font-[var(--fw-normal)]">(opcional)</span>
                   </p>
                   <div className="group flex items-center gap-[var(--space-3)] border-b-2 border-app pb-[var(--space-2)] transition-colors focus-within:border-primary-token">
@@ -1035,7 +1035,7 @@ function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClos
                 {/* Destino (transport only) */}
                 {esTransporte && (
                   <div>
-                    <p className="mb-[var(--space-2)] text-[11px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Destino</p>
+                    <p className="mb-[var(--space-2)] text-[14px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Destino</p>
                     <div className="group flex items-center gap-[var(--space-3)] border-b-2 border-app pb-[var(--space-2)] transition-colors focus-within:border-primary-token">
                       <MapPinIcon className="size-[16px] shrink-0 text-primary-token" />
                       <LocationAutocomplete
@@ -1065,7 +1065,7 @@ function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClos
                 {/* Time pickers */}
                 <div className="grid grid-cols-2 gap-[var(--space-5)]">
                   <div>
-                    <p className="mb-[var(--space-2)] text-[11px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Hora inicio</p>
+                    <p className="mb-[var(--space-2)] text-[14px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Hora inicio</p>
                     <div className="border-b-2 border-app pb-[var(--space-1)] transition-colors focus-within:border-primary-token">
                       <TimeWheelInput
                         value={horaInicio}
@@ -1076,7 +1076,7 @@ function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClos
                     </div>
                   </div>
                   <div>
-                    <p className="mb-[var(--space-2)] text-[11px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Hora fin</p>
+                    <p className="mb-[var(--space-2)] text-[14px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Hora fin</p>
                     <div className="border-b-2 border-app pb-[var(--space-1)] transition-colors focus-within:border-primary-token">
                       <TimeWheelInput
                         value={horaFin}
@@ -1121,7 +1121,7 @@ function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClos
                 {/* ¿Cómo llegas? */}
                 {hayActividadEseDia && (
                   <div>
-                    <p className="mb-[var(--space-3)] text-[11px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">¿Cómo llegas?</p>
+                    <p className="mb-[var(--space-3)] text-[14px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">¿Cómo llegas?</p>
                     <div className="grid grid-cols-3 gap-[var(--space-2)]">
                       {TRANSPORT_LLEGADA.map((t) => (
                         <button
@@ -1135,7 +1135,7 @@ function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClos
                           }`}
                         >
                           <t.Icon className={`size-[18px] shrink-0 ${transporteLlegada === t.value ? "text-primary-token" : "text-muted"}`} strokeWidth={1.5} />
-                          <span className={`text-[11px] font-[var(--fw-semibold)] ${transporteLlegada === t.value ? "text-primary-token" : "text-app"}`}>{t.label}</span>
+                          <span className={`text-[14px] font-[var(--fw-semibold)] ${transporteLlegada === t.value ? "text-primary-token" : "text-app"}`}>{t.label}</span>
                         </button>
                       ))}
                     </div>
@@ -1704,7 +1704,7 @@ export default function PlanDetailPage() {
                   {formatDateRange(plan.inicio_at, plan.fin_at)}
                 </span>
                 {isPast && (
-                  <span className="rounded-chip border border-white/30 bg-white/10 px-[var(--space-2)] py-[2px] text-[11px] font-[var(--fw-medium)] text-white/70">
+                  <span className="rounded-chip border border-white/30 bg-white/10 px-[var(--space-2)] py-[2px] text-[14px] font-[var(--fw-medium)] text-white/70">
                     Finalizado
                   </span>
                 )}
@@ -1719,7 +1719,7 @@ export default function PlanDetailPage() {
                 {!isPast && isAdmin && (
                   <button
                     onClick={() => setShowPublishModal(true)}
-                    className="flex h-9 items-center gap-1.5 rounded-full bg-white/20 px-3.5 text-[13px] font-[600] text-white backdrop-blur-sm transition-colors hover:bg-white/30"
+                    className="flex h-9 items-center gap-1.5 rounded-full bg-white/20 px-3.5 text-[14px] font-[600] text-white backdrop-blur-sm transition-colors hover:bg-white/30"
                   >
                     <svg viewBox="0 0 20 20" fill="none" className="size-[15px]"><path d="M10 2.5L17 10H12.5V17H7.5V10H3L10 2.5Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" /></svg>
                     Publicar
@@ -1950,7 +1950,7 @@ export default function PlanDetailPage() {
                                     <div className="relative flex gap-0 pb-[var(--space-2)]">
                                       <div className="w-[82px] shrink-0 pr-[var(--space-2)] pt-[2px] text-right">
                                         {s.all_day ? (
-                                          <span className="block text-[11px] font-[var(--fw-medium)] leading-[1.1] tracking-[0.01em] text-muted">
+                                          <span className="block text-[14px] font-[var(--fw-medium)] leading-[1.1] tracking-[0.01em] text-muted">
                                             Todo el día
                                           </span>
                                         ) : (
@@ -2016,7 +2016,7 @@ export default function PlanDetailPage() {
                                               <MapPinIcon className="size-[13px] shrink-0" />
                                               {s.ubicacion_nombre}
                                             </p>
-                                            <div className="pl-[18px] text-[11px] leading-none text-primary-token">↓</div>
+                                            <div className="pl-[18px] text-[14px] leading-none text-primary-token">↓</div>
                                             <p className="flex items-center gap-[4px]">
                                               <MapPinIcon className="size-[13px] shrink-0" />
                                               {s.ubicacion_fin_nombre}
@@ -2273,7 +2273,7 @@ export default function PlanDetailPage() {
 
                         <div className="mt-[var(--space-4)] grid grid-cols-2 gap-[var(--space-3)]">
                           <div className="rounded-[12px] border border-app bg-app px-[var(--space-3)] py-[var(--space-3)]">
-                            <p className="text-[11px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
+                            <p className="text-[14px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
                               Pagado por ti
                             </p>
                             <p className="mt-[6px] text-body font-[var(--fw-semibold)] text-app">
@@ -2281,7 +2281,7 @@ export default function PlanDetailPage() {
                             </p>
                           </div>
                           <div className="rounded-[12px] border border-app bg-app px-[var(--space-3)] py-[var(--space-3)]">
-                            <p className="text-[11px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
+                            <p className="text-[14px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
                               Tu parte
                             </p>
                             <p className="mt-[6px] text-body font-[var(--fw-semibold)] text-app">
@@ -2293,7 +2293,7 @@ export default function PlanDetailPage() {
                         <div className="mt-[var(--space-3)] rounded-[12px] border border-app bg-app px-[var(--space-3)] py-[var(--space-3)]">
                           <div className="flex items-center justify-between gap-[var(--space-3)]">
                             <div>
-                              <p className="text-[11px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
+                              <p className="text-[14px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
                                 Balance del plan
                               </p>
                               <p className={`mt-[6px] text-body font-[var(--fw-semibold)] ${
@@ -2307,7 +2307,7 @@ export default function PlanDetailPage() {
                                 {formatMoney(expenseSummary.net, expenseSummary.currency)}
                               </p>
                             </div>
-                            <span className={`rounded-full px-[var(--space-3)] py-[6px] text-[11px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] ${
+                            <span className={`rounded-full px-[var(--space-3)] py-[6px] text-[14px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] ${
                               expenseSummary.net > 0
                                 ? "bg-[var(--success)]/12 text-[var(--success)]"
                                 : expenseSummary.net < 0
@@ -2325,7 +2325,7 @@ export default function PlanDetailPage() {
 
                         {expenseSummary.topCategories.length > 0 ? (
                           <div className="mt-[var(--space-4)]">
-                            <p className="mb-[var(--space-3)] text-[11px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
+                            <p className="mb-[var(--space-3)] text-[14px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
                               Categorías principales
                             </p>
                             <div className="space-y-[var(--space-2)]">
@@ -2367,7 +2367,7 @@ export default function PlanDetailPage() {
               <div className="mx-auto max-w-[760px]" style={{ fontFamily: "var(--font-inter), sans-serif" }}>
                 <div className="relative mb-[var(--space-6)] flex min-h-10 items-start justify-center py-[var(--space-2)]">
                   <div className="text-center">
-                    <p className="text-[11px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
+                    <p className="text-[14px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
                       Total gastado en el plan
                     </p>
                     <p
@@ -2458,7 +2458,7 @@ export default function PlanDetailPage() {
                                 }`}>
                                   {formatMoney(balance.importe, expenseSummary.currency)}
                                 </p>
-                                <p className="mt-[2px] text-[11px] font-[var(--fw-semibold)] uppercase tracking-[0.06em] text-muted">
+                                <p className="mt-[2px] text-[14px] font-[var(--fw-semibold)] uppercase tracking-[0.06em] text-muted">
                                   Pendiente
                                 </p>
                               </div>
@@ -2725,7 +2725,7 @@ export default function PlanDetailPage() {
 
             {/* Friends list */}
             <div className="px-2 pt-2 pb-1">
-              <p className="px-3 pb-1.5 text-[11px] font-[var(--fw-semibold)] uppercase tracking-wider text-muted">Amigos</p>
+              <p className="px-3 pb-1.5 text-[14px] font-[var(--fw-semibold)] uppercase tracking-wider text-muted">Amigos</p>
               {inviteFriendsLoading ? (
                 <div className="flex justify-center py-6">
                   <div className="size-[20px] animate-spin rounded-full border-2 border-[var(--text-primary)] border-t-transparent" />
@@ -2743,14 +2743,14 @@ export default function PlanDetailPage() {
                         {friend.profile_image ? (
                           <Image src={friend.profile_image} alt={friend.nombre} width={32} height={32} className="size-[32px] rounded-full object-cover" referrerPolicy="no-referrer" unoptimized />
                         ) : (
-                          <div className="flex size-[32px] items-center justify-center rounded-full bg-[var(--text-primary)] text-[13px] font-[var(--fw-semibold)] text-contrast-token">{avatarLabel}</div>
+                          <div className="flex size-[32px] items-center justify-center rounded-full bg-[var(--text-primary)] text-[14px] font-[var(--fw-semibold)] text-contrast-token">{avatarLabel}</div>
                         )}
                         <span className="flex-1 text-body-sm font-[var(--fw-medium)]">{friend.nombre}</span>
                         <button
                           type="button"
                           disabled={sent || sending}
                           onClick={() => void handleInviteFriend(friend.id)}
-                          className={`rounded-full px-4 py-1.5 text-[12px] font-[var(--fw-semibold)] transition-all ${sent ? "bg-surface text-muted cursor-default" : "bg-[var(--text-primary)] text-contrast-token hover:opacity-80 disabled:opacity-50"}`}
+                          className={`rounded-full px-4 py-1.5 text-[14px] font-[var(--fw-semibold)] transition-all ${sent ? "bg-surface text-muted cursor-default" : "bg-[var(--text-primary)] text-contrast-token hover:opacity-80 disabled:opacity-50"}`}
                         >
                           {sending ? "..." : sent ? "Pendiente" : "Invitar"}
                         </button>
@@ -2765,22 +2765,22 @@ export default function PlanDetailPage() {
             {inviteLink && (
               <div className="px-5 py-3 border-t border-app">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-[11px] font-[var(--fw-semibold)] uppercase tracking-wider text-muted">Enlace de invitación</p>
+                  <p className="text-[14px] font-[var(--fw-semibold)] uppercase tracking-wider text-muted">Enlace de invitación</p>
                   <button
                     type="button"
                     onClick={() => setShowQr((v) => !v)}
-                    className="flex items-center gap-1 text-[12px] text-muted hover:text-[var(--text-primary)] transition-colors"
+                    className="flex items-center gap-1 text-[14px] text-muted hover:text-[var(--text-primary)] transition-colors"
                   >
                     <svg viewBox="0 0 24 24" fill="none" className="size-[14px]"><rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="1.8"/><rect x="14" y="3" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="1.8"/><rect x="3" y="14" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="1.8"/><path d="M14 14h3v3M17 17v3h3M14 20h3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
                     QR
                   </button>
                 </div>
                 <div className="flex items-center gap-2 rounded-[8px] bg-surface px-3 py-2">
-                  <span className="flex-1 truncate text-[12px] text-muted">{inviteLink}</span>
+                  <span className="flex-1 truncate text-[14px] text-muted">{inviteLink}</span>
                   <button
                     type="button"
                     onClick={handleCopyInviteLink}
-                    className="shrink-0 rounded-full bg-[var(--text-primary)] px-3 py-1 text-[12px] font-[var(--fw-semibold)] text-contrast-token transition-all hover:opacity-80"
+                    className="shrink-0 rounded-full bg-[var(--text-primary)] px-3 py-1 text-[14px] font-[var(--fw-semibold)] text-contrast-token transition-all hover:opacity-80"
                   >
                     {inviteLinkCopied ? "¡Copiado!" : "Copiar"}
                   </button>

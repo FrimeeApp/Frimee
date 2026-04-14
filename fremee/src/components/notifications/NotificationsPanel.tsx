@@ -208,7 +208,7 @@ function NotifItem({
                 type="button"
                 disabled={acting}
                 onClick={() => void (isFriendRequest ? handleFriend(true) : handlePlanInvite(true))}
-                className="rounded-full bg-[var(--primary)] px-3 py-1 text-[13px] font-[var(--fw-semibold)] text-[var(--contrast)] transition-opacity hover:opacity-80 disabled:opacity-50"
+                className="rounded-full bg-[var(--primary)] px-3 py-1 text-[14px] font-[var(--fw-semibold)] text-[var(--contrast)] transition-opacity hover:opacity-80 disabled:opacity-50"
               >
                 Aceptar
               </button>
@@ -216,7 +216,7 @@ function NotifItem({
                 type="button"
                 disabled={acting}
                 onClick={() => void (isFriendRequest ? handleFriend(false) : handlePlanInvite(false))}
-                className="rounded-full border border-[var(--border)] px-3 py-1 text-[13px] font-[var(--fw-semibold)] transition-colors hover:bg-[var(--surface)] disabled:opacity-50"
+                className="rounded-full border border-[var(--border)] px-3 py-1 text-[14px] font-[var(--fw-semibold)] transition-colors hover:bg-[var(--surface)] disabled:opacity-50"
               >
                 Rechazar
               </button>

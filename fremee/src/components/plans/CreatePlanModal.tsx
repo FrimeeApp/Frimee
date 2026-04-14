@@ -178,7 +178,7 @@ function InlineRangeCalendar({
         </p>
         <div className="mb-[var(--space-1)] grid grid-cols-7 text-center">
           {["L", "M", "X", "J", "V", "S", "D"].map((d) => (
-            <span key={d} className="py-1 text-[12px] font-[var(--fw-semibold)] text-muted">{d}</span>
+            <span key={d} className="py-1 text-[14px] font-[var(--fw-semibold)] text-muted">{d}</span>
           ))}
         </div>
         <div className="grid grid-cols-7">{cells}</div>
@@ -690,12 +690,12 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
                       >
                         {tab === "friends" ? "Amigos" : "Grupos"}
                         {tab === "friends" && invitedFriendIds.size > 0 && (
-                          <span className="ml-[5px] inline-flex size-[16px] items-center justify-center rounded-full bg-[var(--text-primary)] text-[10px] text-contrast-token">
+                          <span className="ml-[5px] inline-flex size-[16px] items-center justify-center rounded-full bg-[var(--text-primary)] text-[14px] text-contrast-token">
                             {invitedFriendIds.size}
                           </span>
                         )}
                         {tab === "groups" && selectedGroupIds.size > 0 && (
-                          <span className="ml-[5px] inline-flex size-[16px] items-center justify-center rounded-full bg-[var(--text-primary)] text-[10px] text-contrast-token">
+                          <span className="ml-[5px] inline-flex size-[16px] items-center justify-center rounded-full bg-[var(--text-primary)] text-[14px] text-contrast-token">
                             {selectedGroupIds.size}
                           </span>
                         )}
@@ -734,7 +734,7 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
                                 // eslint-disable-next-line @next/next/no-img-element
                                 <img src={friend.profile_image} alt={friend.nombre} className="size-[32px] rounded-full object-cover" referrerPolicy="no-referrer" />
                               ) : (
-                                <div className="flex size-[32px] items-center justify-center rounded-full bg-[var(--text-primary)] text-[13px] font-[var(--fw-semibold)] text-contrast-token">
+                                <div className="flex size-[32px] items-center justify-center rounded-full bg-[var(--text-primary)] text-[14px] font-[var(--fw-semibold)] text-contrast-token">
                                   {avatarLabel}
                                 </div>
                               )}
@@ -810,7 +810,7 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
                                 // eslint-disable-next-line @next/next/no-img-element
                                 <img src={group.foto} alt={group.nombre ?? "Grupo"} className="size-[32px] rounded-full object-cover" referrerPolicy="no-referrer" />
                               ) : (
-                                <div className="flex size-[32px] items-center justify-center rounded-full bg-[var(--surface-2)] text-[13px] font-[var(--fw-semibold)] text-app">
+                                <div className="flex size-[32px] items-center justify-center rounded-full bg-[var(--surface-2)] text-[14px] font-[var(--fw-semibold)] text-app">
                                   {avatarLabel}
                                 </div>
                               )}

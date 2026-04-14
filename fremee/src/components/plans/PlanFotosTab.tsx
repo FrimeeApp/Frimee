@@ -125,7 +125,7 @@ export default function PlanFotosTab({ planId, currentUserId, isMember }: Props)
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
-            className="flex items-center gap-2 rounded-full border border-app px-4 h-9 text-[13px] font-[600] text-app transition-colors hover:bg-[var(--surface-raised)] disabled:opacity-50"
+            className="flex items-center gap-2 rounded-full border border-app px-4 h-9 text-[14px] font-[600] text-app transition-colors hover:bg-[var(--surface-raised)] disabled:opacity-50"
           >
             <PlusIcon />
             {uploading ? "Subiendo…" : "Añadir fotos"}
@@ -147,7 +147,7 @@ export default function PlanFotosTab({ planId, currentUserId, isMember }: Props)
           <PlaneEmptyIcon />
           <p className="text-[14px] font-[600] text-muted">Aún no hay fotos</p>
           {isMember && (
-            <p className="text-[13px] text-muted opacity-70">¡Sube la primera foto del plan!</p>
+            <p className="text-[14px] text-muted opacity-70">¡Sube la primera foto del plan!</p>
           )}
         </div>
       ) : (

@@ -136,7 +136,7 @@ export default function DayRouteMap({
           if (!c) return;
           new google.maps.Marker({
             position: c, map,
-            label: { text: String(i + 1), color: "#000", fontWeight: "bold", fontSize: "11px" },
+            label: { text: String(i + 1), color: "#000", fontWeight: "bold", fontSize: "14px" },
             icon: { path: google.maps.SymbolPath.CIRCLE, fillColor: "#00C9A7", fillOpacity: 1, strokeColor: "#fff", strokeWeight: 2, scale: 12 },
             title: points[i].label,
           });
@@ -187,7 +187,7 @@ export default function DayRouteMap({
         new google.maps.Marker({
           position: coord,
           map,
-          label: { text: String(i + 1), color: "#000", fontWeight: "bold", fontSize: "11px" },
+          label: { text: String(i + 1), color: "#000", fontWeight: "bold", fontSize: "14px" },
           icon: {
             path: google.maps.SymbolPath.CIRCLE,
             fillColor: "#00C9A7",

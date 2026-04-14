@@ -79,7 +79,7 @@ function popMarker(marker: any, google: any, map: any, color: string, label: str
         strokeColor: "#fff", strokeWeight: 2,
         scale,
       });
-      marker.setLabel(scale >= target ? { text: label, color: "#000", fontWeight: "bold", fontSize: "11px" } : { text: " " });
+      marker.setLabel(scale >= target ? { text: label, color: "#000", fontWeight: "bold", fontSize: "14px" } : { text: " " });
       if (scale >= target) { clearInterval(interval); resolve(); }
     }, 16);
   });
@@ -386,7 +386,7 @@ export default function TripOverviewMap({ subplanes }: Props) {
               return (
                 <div key={date} className="flex items-center gap-2">
                   <span className="size-[10px] shrink-0 rounded-full" style={{ backgroundColor: DAY_COLORS[i % DAY_COLORS.length] }} />
-                  <span className="text-[12px] text-white/80">{label}</span>
+                  <span className="text-[14px] text-white/80">{label}</span>
                 </div>
               );
             })}

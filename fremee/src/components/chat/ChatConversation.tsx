@@ -1604,7 +1604,7 @@ export function ChatConversation({
                       {cavatar ? <NextImage src={cavatar} alt={cname} width={40} height={40} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" /> : c.tipo === "GRUPO" ? <GroupIcon className="size-[14px] text-muted" /> : (cname[0] ?? "?").toUpperCase()}
                     </div>
                     <p className="min-w-0 flex-1 truncate text-body-sm text-app">{cname}</p>
-                    {forwardSending === c.chat_id && <span className="text-[11px] text-muted">...</span>}
+                    {forwardSending === c.chat_id && <span className="text-[14px] text-muted">...</span>}
                   </button>
                 );
               })}
@@ -1631,7 +1631,7 @@ export function ChatConversation({
             </div>
             <div className="min-w-0">
               <p className="truncate text-body-sm font-[var(--fw-semibold)] text-app">{name}</p>
-              {chat.tipo === "GRUPO" && <p className="text-[13px] text-muted">{chat.miembros.length} miembros</p>}
+              {chat.tipo === "GRUPO" && <p className="text-[14px] text-muted">{chat.miembros.length} miembros</p>}
             </div>
           </button>
           <button type="button" onClick={() => onStartCall?.("audio")} className="flex size-[32px] items-center justify-center rounded-full transition-colors hover:bg-surface text-muted hover:text-app" aria-label="Llamada de voz">
@@ -1651,12 +1651,12 @@ export function ChatConversation({
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-body-sm font-[var(--fw-semibold)] text-app">Llamada en curso</p>
-            <p className="text-[13px] text-muted">{ongoingCall.tipo === "video" ? "Videollamada" : "Llamada de voz"}</p>
+            <p className="text-[14px] text-muted">{ongoingCall.tipo === "video" ? "Videollamada" : "Llamada de voz"}</p>
           </div>
           <button
             type="button"
             onClick={() => onJoinCall?.(ongoingCall.id, ongoingCall.room_name, ongoingCall.tipo)}
-            className="shrink-0 rounded-full bg-green-500 px-4 py-1.5 text-xs font-[var(--fw-semibold)] text-white transition-colors hover:bg-green-600"
+            className="shrink-0 rounded-full bg-green-500 px-4 py-1.5 text-sm font-[var(--fw-semibold)] text-white transition-colors hover:bg-green-600"
           >
             Unirse
           </button>
@@ -1671,7 +1671,7 @@ export function ChatConversation({
           className="flex items-center gap-[var(--space-2)] border-b border-app bg-surface px-[var(--space-3)] py-[8px] text-left"
         >
           <PinIcon className="size-[13px] shrink-0 text-muted" />
-          <p className="min-w-0 flex-1 truncate text-[13px] text-muted">{pinnedMsg.texto}</p>
+          <p className="min-w-0 flex-1 truncate text-[14px] text-muted">{pinnedMsg.texto}</p>
           <svg viewBox="0 0 24 24" fill="none" className="size-[14px] shrink-0 text-muted"><path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
         </button>
       )}
@@ -1712,7 +1712,7 @@ export function ChatConversation({
                   {!isMe && (chat.tipo === "GRUPO" || isBot) && (
                     <div className="mr-[var(--space-2)] w-[24px] shrink-0">
                       {isFirstInGroup && (
-                        <div className={`flex size-[24px] items-center justify-center overflow-hidden rounded-full text-[10px] font-[var(--fw-semibold)] ${isBot ? "bg-primary-token/15 text-primary-token" : "border border-app bg-surface-inset text-app"}`}>
+                        <div className={`flex size-[24px] items-center justify-center overflow-hidden rounded-full text-[14px] font-[var(--fw-semibold)] ${isBot ? "bg-primary-token/15 text-primary-token" : "border border-app bg-surface-inset text-app"}`}>
                           {isBot ? "F" : msg.sender_profile_image ? <NextImage src={msg.sender_profile_image} alt={msg.sender_nombre} width={24} height={24} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" /> : (msg.sender_nombre[0] ?? "?").toUpperCase()}
                         </div>
                       )}
@@ -1728,7 +1728,7 @@ export function ChatConversation({
                     )}
                     <div className={`break-words ${isMediaMessage ? "bg-transparent p-0" : "rounded-card px-3 py-2"} ${!isMediaMessage ? (isMe ? "bg-[var(--text-primary)] text-contrast-token" : isBot ? "bg-surface" : "bg-surface-inset") : ""} ${contextMenu?.msg.id === msg.id ? "opacity-75" : ""}`}>
                       {!isMe && (chat.tipo === "GRUPO" || isBot) && isFirstInGroup && (
-                        <p className={`mb-[2px] text-[12px] font-[var(--fw-semibold)] ${isBot ? "text-primary-token" : "text-muted"}`}>{isBot ? "Frimee" : msg.sender_nombre}</p>
+                        <p className={`mb-[2px] text-[14px] font-[var(--fw-semibold)] ${isBot ? "text-primary-token" : "text-muted"}`}>{isBot ? "Frimee" : msg.sender_nombre}</p>
                       )}
                       {msg.reply_texto && msg.reply_to_id && (
                         <button
@@ -1736,10 +1736,10 @@ export function ChatConversation({
                           onClick={(e) => { e.stopPropagation(); scrollToMessage(msg.reply_to_id!); }}
                           className={`mb-[6px] w-full rounded-card border-l-[3px] px-2 py-[4px] text-left transition-opacity hover:opacity-80 ${isMe ? "border-contrast-token/50 bg-black/20" : "border-[var(--text-primary)] bg-black/8"}`}
                         >
-                          <p className={`truncate text-[12px] font-[var(--fw-semibold)] ${isMe ? "text-contrast-token/80" : "text-[var(--text-primary)]"}`}>
+                          <p className={`truncate text-[14px] font-[var(--fw-semibold)] ${isMe ? "text-contrast-token/80" : "text-[var(--text-primary)]"}`}>
                             {msg.reply_sender_nombre ?? "Usuario"}
                           </p>
-                          <p className={`truncate text-[13px] ${isMe ? "text-contrast-token/70" : "text-muted"}`}>
+                          <p className={`truncate text-[14px] ${isMe ? "text-contrast-token/70" : "text-muted"}`}>
                             {msg.reply_texto && isPollMessage(msg.reply_texto)
                               ? `📊 ${(JSON.parse(msg.reply_texto) as { question: string }).question}`
                               : msg.reply_texto}
@@ -1764,7 +1764,7 @@ export function ChatConversation({
                       ) : (
                         <p className={`text-body-sm${isBot ? " whitespace-pre-line" : ""}`}>{msg.texto}</p>
                       )}
-                      {!isMediaMessage && <div className={`mt-[2px] flex items-center justify-end gap-[4px] text-[11px] ${isMe ? "text-contrast-token/60" : "text-muted"}`}>
+                      {!isMediaMessage && <div className={`mt-[2px] flex items-center justify-end gap-[4px] text-[14px] ${isMe ? "text-contrast-token/60" : "text-muted"}`}>
                         {isStarred && <span>★</span>}
                         <span>{time}</span>
                         {!isBot && <button
@@ -1796,8 +1796,8 @@ export function ChatConversation({
         {replyingTo && (
           <div className="mb-[var(--space-2)] flex items-center gap-[var(--space-2)] rounded-[10px] border-l-2 border-[var(--text-primary)] bg-surface px-3 py-[8px]">
             <div className="min-w-0 flex-1">
-              <p className="text-[13px] font-[var(--fw-semibold)] text-[var(--text-primary)]">{replyingTo.sender_nombre || "Tú"}</p>
-              <p className="truncate text-[13px] text-muted">
+              <p className="text-[14px] font-[var(--fw-semibold)] text-[var(--text-primary)]">{replyingTo.sender_nombre || "Tú"}</p>
+              <p className="truncate text-[14px] text-muted">
                 {replyingTo.texto && isPollMessage(replyingTo.texto)
                   ? `📊 ${(JSON.parse(replyingTo.texto) as { question: string }).question}`
                   : replyingTo.texto}
@@ -1811,8 +1811,8 @@ export function ChatConversation({
         {editingMsg && (
           <div className="mb-[var(--space-2)] flex items-center gap-[var(--space-2)] rounded-[10px] border-l-2 border-blue-500 bg-surface px-3 py-[8px]">
             <div className="min-w-0 flex-1">
-              <p className="text-[13px] font-[var(--fw-semibold)] text-blue-400">Editando mensaje</p>
-              <p className="truncate text-[13px] text-muted">{editingMsg.texto}</p>
+              <p className="text-[14px] font-[var(--fw-semibold)] text-blue-400">Editando mensaje</p>
+              <p className="truncate text-[14px] text-muted">{editingMsg.texto}</p>
             </div>
             <button type="button" onClick={cancelEdit} className="shrink-0 text-muted transition-colors hover:text-app">
               <svg viewBox="0 0 24 24" fill="none" className="size-[16px]"><path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
@@ -2162,9 +2162,9 @@ function ChatInfoPanel({
                       </div>
                       <p className="min-w-0 flex-1 truncate text-body-sm font-[var(--fw-medium)] text-app">{f.nombre}</p>
                       {isAdding ? (
-                        <span className="shrink-0 text-[13px] text-muted">...</span>
+                        <span className="shrink-0 text-[14px] text-muted">...</span>
                       ) : (
-                        <span className="shrink-0 rounded-full border border-app px-[10px] py-[4px] text-[13px] text-app">Añadir</span>
+                        <span className="shrink-0 rounded-full border border-app px-[10px] py-[4px] text-[14px] text-app">Añadir</span>
                       )}
                     </button>
                   );
@@ -2209,7 +2209,7 @@ function ChatInfoPanel({
           </div>
           <div className="text-center">
             <p className="text-[var(--font-h4)] font-[var(--fw-semibold)] text-app">{name}</p>
-            <p className="mt-[3px] text-[13px] text-muted">
+            <p className="mt-[3px] text-[14px] text-muted">
               {isGrupo ? `Grupo · ${localMembers.length} miembros` : "Contacto"}
             </p>
           </div>
@@ -2219,7 +2219,7 @@ function ChatInfoPanel({
         {isGrupo && (
           <>
             <div className="flex items-center justify-between px-[var(--space-4)] pb-[var(--space-2)]">
-              <p className="text-[12px] font-[var(--fw-semibold)] uppercase tracking-wide text-muted">
+              <p className="text-[14px] font-[var(--fw-semibold)] uppercase tracking-wide text-muted">
                 {localMembers.length} miembros
               </p>
             </div>
@@ -2247,7 +2247,7 @@ function ChatInfoPanel({
                     </div>
                     <p className="min-w-0 flex-1 truncate text-body-sm text-app">{m.nombre}</p>
                     {isMe && (
-                      <span className="shrink-0 rounded-full bg-surface px-[8px] py-[3px] text-[12px] text-muted">Tú</span>
+                      <span className="shrink-0 rounded-full bg-surface px-[8px] py-[3px] text-[14px] text-muted">Tú</span>
                     )}
                   </div>
                 );
@@ -2626,7 +2626,7 @@ function CameraModal({ onCapture, onClose }: { onCapture: (file: File) => void; 
             {recording && (
               <div className="absolute left-[16px] top-[16px] flex items-center gap-[6px] rounded-full bg-black/50 px-[12px] py-[4px]">
                 <span className="size-[8px] animate-pulse rounded-full bg-red-500" />
-                <span className="text-[13px] text-white">{fmt(recSeconds)}</span>
+                <span className="text-[14px] text-white">{fmt(recSeconds)}</span>
               </div>
             )}
           </div>
@@ -2636,10 +2636,10 @@ function CameraModal({ onCapture, onClose }: { onCapture: (file: File) => void; 
           <div className="flex items-center justify-center gap-[40px] py-[28px]">
             {/* Switch foto/video */}
             <div className="flex rounded-full bg-white/15 p-[3px]">
-              <button type="button" onClick={() => setMode("photo")} className={`rounded-full px-[14px] py-[6px] text-[13px] font-medium transition-colors ${mode === "photo" ? "bg-white text-black" : "text-white"}`}>
+              <button type="button" onClick={() => setMode("photo")} className={`rounded-full px-[14px] py-[6px] text-[14px] font-medium transition-colors ${mode === "photo" ? "bg-white text-black" : "text-white"}`}>
                 Foto
               </button>
-              <button type="button" onClick={() => setMode("video")} className={`rounded-full px-[14px] py-[6px] text-[13px] font-medium transition-colors ${mode === "video" ? "bg-white text-black" : "text-white"}`}>
+              <button type="button" onClick={() => setMode("video")} className={`rounded-full px-[14px] py-[6px] text-[14px] font-medium transition-colors ${mode === "video" ? "bg-white text-black" : "text-white"}`}>
                 Vídeo
               </button>
             </div>
@@ -2686,7 +2686,7 @@ function CallBubble({ tipo, duracion }: { tipo: string; duracion: number }) {
       <div className="flex flex-col">
         <span className={`text-body-sm font-[var(--fw-medium)] ${missed ? "opacity-70" : ""}`}>{label}</span>
         {!missed && duracion > 0 && (
-          <span className="text-[11px] opacity-60">{formatDur(duracion)}</span>
+          <span className="text-[14px] opacity-60">{formatDur(duracion)}</span>
         )}
       </div>
     </div>
@@ -2717,7 +2717,7 @@ function MediaBubble({ url, type, sending, time, isMe, onOpenLightbox }: { url: 
           />
         </button>
       )}
-      <div className={`pointer-events-none absolute bottom-2 right-2 rounded-chip bg-black/58 px-2 py-1 text-[11px] leading-none text-white backdrop-blur-sm ${isMe ? "border border-white/10" : "border border-black/10"}`}>
+      <div className={`pointer-events-none absolute bottom-2 right-2 rounded-chip bg-black/58 px-2 py-1 text-[14px] leading-none text-white backdrop-blur-sm ${isMe ? "border border-white/10" : "border border-black/10"}`}>
         {time}
       </div>
       {sending && (
@@ -2768,8 +2768,8 @@ function ResumenViajeBubble({ texto }: { texto: string }) {
       <div className="flex items-center gap-[10px] bg-primary-token/10 px-4 py-3">
         <span className="text-[22px]">✈️</span>
         <div>
-          <p className="text-[13px] font-[var(--fw-semibold)] text-primary-token leading-tight">¡El viaje ha terminado!</p>
-          <p className="text-[12px] text-primary-token/70">Aquí va el resumen</p>
+          <p className="text-[14px] font-[var(--fw-semibold)] text-primary-token leading-tight">¡El viaje ha terminado!</p>
+          <p className="text-[14px] text-primary-token/70">Aquí va el resumen</p>
         </div>
       </div>
 
@@ -2777,23 +2777,23 @@ function ResumenViajeBubble({ texto }: { texto: string }) {
       <div className="px-4 py-3 space-y-[10px]">
         {data.total > 0 ? (
           <div>
-            <p className="text-[12px] text-muted uppercase tracking-wide">Total gastado</p>
+            <p className="text-[14px] text-muted uppercase tracking-wide">Total gastado</p>
             <p className="text-[18px] font-[var(--fw-semibold)] text-app leading-tight">{fmtEur(data.total)}</p>
             {data.num_miembros > 1 && (
-              <p className="text-[13px] text-muted">{fmtEur(data.por_persona)} por persona</p>
+              <p className="text-[14px] text-muted">{fmtEur(data.por_persona)} por persona</p>
             )}
           </div>
         ) : (
           <div>
-            <p className="text-[12px] text-muted uppercase tracking-wide">Total gastado</p>
-            <p className="text-[13px] text-muted">Sin gastos registrados</p>
+            <p className="text-[14px] text-muted uppercase tracking-wide">Total gastado</p>
+            <p className="text-[14px] text-muted">Sin gastos registrados</p>
           </div>
         )}
 
         {data.top_pagador && (
           <div>
-            <p className="text-[11px] text-muted uppercase tracking-wide">Pagó más</p>
-            <p className="text-[13px] font-[var(--fw-medium)] text-app">
+            <p className="text-[14px] text-muted uppercase tracking-wide">Pagó más</p>
+            <p className="text-[14px] font-[var(--fw-medium)] text-app">
               {data.top_pagador}
               <span className="ml-1 text-muted font-normal">{fmtEur(data.top_pagador_importe ?? 0)}</span>
             </p>
@@ -2804,11 +2804,11 @@ function ResumenViajeBubble({ texto }: { texto: string }) {
         <div className="flex gap-[8px] pt-[2px]">
           <div className="flex-1 rounded-[10px] bg-[var(--surface-inset)] px-3 py-2 text-center">
             <p className="text-[18px] font-[var(--fw-semibold)] text-app">{data.actividades}</p>
-            <p className="text-[10px] text-muted">actividad{data.actividades !== 1 ? "es" : ""}</p>
+            <p className="text-[14px] text-muted">actividad{data.actividades !== 1 ? "es" : ""}</p>
           </div>
           <div className="flex-1 rounded-[10px] bg-[var(--surface-inset)] px-3 py-2 text-center">
             <p className="text-[18px] font-[var(--fw-semibold)] text-app">{data.deudas_pendientes}</p>
-            <p className="text-[10px] text-muted">deuda{data.deudas_pendientes !== 1 ? "s" : ""} pend.</p>
+            <p className="text-[14px] text-muted">deuda{data.deudas_pendientes !== 1 ? "s" : ""} pend.</p>
           </div>
         </div>
       </div>
@@ -2916,13 +2916,13 @@ function PollBubble({ msg, isMe, onVote }: { msg: MensajeRow; isMe: boolean; onV
                   )}
                   <span className="text-body-sm">{opt}</span>
                 </div>
-                <span className={`text-[11px] ${isMe ? "text-contrast-token/60" : "text-muted"}`}>{pct}%</span>
+                <span className={`text-[14px] ${isMe ? "text-contrast-token/60" : "text-muted"}`}>{pct}%</span>
               </div>
             </button>
           );
         })}
       </div>
-      <p className={`mt-[8px] text-[11px] ${isMe ? "text-contrast-token/60" : "text-muted"}`}>
+      <p className={`mt-[8px] text-[14px] ${isMe ? "text-contrast-token/60" : "text-muted"}`}>
         {poll.closed ? `Cerrada · ${total} ${total === 1 ? "voto" : "votos"}` : `${total} ${total === 1 ? "voto" : "votos"}`}
       </p>
     </div>
@@ -3010,8 +3010,8 @@ function DocumentBubble({ url, name, sending }: { url: string; name: string; sen
       </div>
       {/* Nombre */}
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[13px] font-medium leading-tight">{name}</p>
-        <p className="text-[11px] opacity-60">{sending ? "Subiendo..." : "Toca para abrir"}</p>
+        <p className="truncate text-[14px] font-medium leading-tight">{name}</p>
+        <p className="text-[14px] opacity-60">{sending ? "Subiendo..." : "Toca para abrir"}</p>
       </div>
       {/* Flecha descarga */}
       {!sending && (
