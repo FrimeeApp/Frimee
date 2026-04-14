@@ -579,7 +579,7 @@ function PlanGrid({ plans, onPlanClick }: { plans: FeedPlanItemDto[]; onPlanClic
             )}
             {!plan.coverImage && <div className="aspect-[4/3] w-full bg-black" />}
             {new Date(plan.endsAt) < new Date() && (
-              <div className="absolute right-2 top-2 rounded-full bg-black/50 px-2 py-[3px] text-[10px] font-[var(--fw-medium)] leading-tight text-white/90 backdrop-blur-sm">
+              <div className="absolute right-2 top-2 rounded-full bg-black/50 px-2 py-[3px] text-[14px] font-[var(--fw-medium)] leading-tight text-white/90 backdrop-blur-sm">
                 Finalizado
               </div>
             )}
@@ -588,7 +588,7 @@ function PlanGrid({ plans, onPlanClick }: { plans: FeedPlanItemDto[]; onPlanClic
                 {plan.title}
               </p>
               {plan.locationName && (
-                <p className="mt-[2px] text-[11px] leading-tight text-white/70">
+                <p className="mt-[2px] text-[14px] leading-tight text-white/70">
                   {plan.locationName}
                 </p>
               )}

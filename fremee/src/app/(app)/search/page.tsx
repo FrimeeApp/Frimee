@@ -662,7 +662,7 @@ function RecentActivityGlobe() {
                   tooltip.style.borderRadius = "999px";
                   tooltip.style.background = "rgba(15, 23, 20, 0.92)";
                   tooltip.style.color = "#ffffff";
-                  tooltip.style.fontSize = "12px";
+                  tooltip.style.fontSize = "14px";
                   tooltip.style.fontWeight = "600";
                   tooltip.style.lineHeight = "1";
                   tooltip.style.whiteSpace = "nowrap";

@@ -92,7 +92,7 @@ export default function JoinPageClient() {
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
           <div className="absolute bottom-0 left-0 p-4">
-            <p className="text-[11px] font-[var(--fw-semibold)] uppercase tracking-wider text-white/70">
+            <p className="text-[14px] font-[var(--fw-semibold)] uppercase tracking-wider text-white/70">
               Te han invitado a
             </p>
             <h1 className="text-[20px] font-[var(--fw-bold)] text-white leading-tight">{plan.titulo}</h1>

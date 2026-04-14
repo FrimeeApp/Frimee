@@ -863,7 +863,7 @@ function FeedChatPanel({ currentUserId }: { currentUserId: string | null }) {
               <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
-          <div className="flex size-[32px] items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-[11px] font-[var(--fw-semibold)] text-app">
+          <div className="flex size-[32px] items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-[14px] font-[var(--fw-semibold)] text-app">
             {chatAvatar ? <NextImage src={chatAvatar} alt={chatName} width={32} height={32} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" /> : (chatName[0] ?? "?").toUpperCase()}
           </div>
           <span className="min-w-0 truncate text-body-sm font-[var(--fw-semibold)]">{chatName}</span>
@@ -893,14 +893,14 @@ function FeedChatPanel({ currentUserId }: { currentUserId: string | null }) {
                     )}
                     <div className={`max-w-[85%] rounded-[14px] px-3 py-[6px] ${isMe ? "bg-[var(--text-primary)] text-contrast-token" : "bg-surface-inset"}`}>
                       {!isMe && openChat.tipo === "GRUPO" && isFirstInGroup && (
-                        <p className="mb-[2px] text-[10px] font-[var(--fw-semibold)] text-muted">{msg.sender_nombre}</p>
+                        <p className="mb-[2px] text-[14px] font-[var(--fw-semibold)] text-muted">{msg.sender_nombre}</p>
                       )}
                       {msg.audio_url ? (
                         <AudioPlayer src={msg.audio_url} />
                       ) : msg.document_url ? (
                         <div className="flex items-center gap-[8px] py-[2px] opacity-80">
                           <span className="text-[18px]">📄</span>
-                          <span className="truncate text-[13px]">{msg.document_name ?? "Documento"}</span>
+                          <span className="truncate text-[14px]">{msg.document_name ?? "Documento"}</span>
                         </div>
                       ) : msg.image_url ? (
                         msg.image_type?.startsWith("video/") ? (
@@ -922,14 +922,14 @@ function FeedChatPanel({ currentUserId }: { currentUserId: string | null }) {
                             <div className={`flex items-center gap-[8px] py-[2px] ${missed ? "opacity-60" : ""}`}>
                               <span className="text-[18px]">{missed ? "📵" : (isVideo ? "📹" : "📞")}</span>
                               <div>
-                                <p className="text-[13px] font-[var(--fw-medium)]">{label}</p>
-                                {!missed && duracion > 0 && <p className="text-[11px] opacity-70">{mins}:{String(secs).padStart(2, "0")}</p>}
+                                <p className="text-[14px] font-[var(--fw-medium)]">{label}</p>
+                                {!missed && duracion > 0 && <p className="text-[14px] opacity-70">{mins}:{String(secs).padStart(2, "0")}</p>}
                               </div>
                             </div>
                           );
                         })()
-                      : (() => { try { const p = JSON.parse(msg.texto); if (p?.type === "poll") return <div className="flex items-center gap-[6px] py-[2px] opacity-80"><span className="text-[16px]">📊</span><span className="text-[13px]">{p.question as string}</span></div>; } catch { /* noop */ } return <p className="break-all text-body-sm">{msg.texto}</p>; })()}
-                      <p className={`mt-[2px] text-right text-[10px] ${isMe ? "text-contrast-token/60" : "text-muted"}`}>{formatChatTime(msg.created_at)}</p>
+                      : (() => { try { const p = JSON.parse(msg.texto); if (p?.type === "poll") return <div className="flex items-center gap-[6px] py-[2px] opacity-80"><span className="text-[16px]">📊</span><span className="text-[14px]">{p.question as string}</span></div>; } catch { /* noop */ } return <p className="break-all text-body-sm">{msg.texto}</p>; })()}
+                      <p className={`mt-[2px] text-right text-[14px] ${isMe ? "text-contrast-token/60" : "text-muted"}`}>{formatChatTime(msg.created_at)}</p>
                     </div>
                   </div>
                 );
@@ -960,7 +960,7 @@ function FeedChatPanel({ currentUserId }: { currentUserId: string | null }) {
     <div className="pt-[var(--space-10)]">
       <div className="flex items-center justify-between">
         <h3 className="text-[20px] font-[var(--fw-medium)] tracking-[0.03em] leading-[1.3]">Chats recientes</h3>
-        <Link href="/messages" className="text-[13px] text-muted transition-opacity hover:opacity-70">Ver todos</Link>
+        <Link href="/messages" className="text-[14px] text-muted transition-opacity hover:opacity-70">Ver todos</Link>
       </div>
       <div className="mt-[var(--space-4)] space-y-[2px]">
         {chats.length === 0 ? (
@@ -983,9 +983,9 @@ function FeedChatPanel({ currentUserId }: { currentUserId: string | null }) {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className={`truncate text-body-sm ${hasUnread ? "font-[var(--fw-semibold)]" : ""} text-app`}>{name}</p>
-                  <p className={`truncate text-[12px] leading-[16px] ${hasUnread ? "font-[var(--fw-medium)] text-app" : "text-muted"}`}>{(() => { const m = chat.last_message ?? ""; try { return JSON.parse(m)?.type === "poll" ? "📊 Encuesta" : m; } catch { return m; } })()}</p>
+                  <p className={`truncate text-[14px] leading-[16px] ${hasUnread ? "font-[var(--fw-medium)] text-app" : "text-muted"}`}>{(() => { const m = chat.last_message ?? ""; try { return JSON.parse(m)?.type === "poll" ? "📊 Encuesta" : m; } catch { return m; } })()}</p>
                 </div>
-                <span className="shrink-0 text-[11px] text-muted">{formatChatTime(chat.last_message_at)}</span>
+                <span className="shrink-0 text-[14px] text-muted">{formatChatTime(chat.last_message_at)}</span>
               </button>
             );
           })
@@ -1422,7 +1422,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
           {avatarImg ? (
             <NextImage src={avatarImg} alt="" width={36} height={36} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
           ) : (
-            <span className={`font-[var(--fw-semibold)] text-app ${isReply ? "text-[11px]" : "text-[13px]"}`}>{initial}</span>
+            <span className={`font-[var(--fw-semibold)] text-app ${isReply ? "text-[14px]" : "text-[14px]"}`}>{initial}</span>
           )}
         </div>
         <div className="min-w-0 flex-1">
@@ -1440,7 +1440,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
               <PlaneIcon liked={comment.likedByMe} size={18} />
             </button>
           </div>
-          <div className="mt-2 flex items-center gap-4 text-[13px] font-[var(--fw-semibold)] text-muted">
+          <div className="mt-2 flex items-center gap-4 text-[14px] font-[var(--fw-semibold)] text-muted">
             <span>{formatRelativeTime(comment.createdAt)}</span>
             {comment.likeCount > 0 ? <span>{comment.likeCount} Me gusta</span> : null}
             {!isReply && (
@@ -1507,7 +1507,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                   {hiddenCount > 0 && (
                     <button
                       type="button"
-                      className="flex items-center gap-2 text-[13px] font-[var(--fw-semibold)] text-muted"
+                      className="flex items-center gap-2 text-[14px] font-[var(--fw-semibold)] text-muted"
                       onClick={() => setExpandedReplies((prev) => ({ ...prev, [comment.commentId]: (prev[comment.commentId] ?? 0) + 2 }))}
                     >
                       <span className="h-px w-6 bg-muted/40" />
@@ -1564,14 +1564,14 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                 <div className="min-w-0 flex-1">
                   <Link href={`/profile/${post.plan.ownerUserId}`} onClick={(e) => e.stopPropagation()} className="text-[15px] font-[800] text-[var(--text-primary)]">{post.userName}</Link>
                   {post.plan.locationName && (
-                    <p className="text-[12px] text-[var(--text-tertiary)] mt-[1px]">{post.plan.locationName}</p>
+                    <p className="text-[14px] text-[var(--text-tertiary)] mt-[1px]">{post.plan.locationName}</p>
                   )}
                 </div>
                 {!isOwnPost && (
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); onFollowPress(); }}
-                    className={`shrink-0 text-[12px] font-[700] transition-opacity hover:opacity-70 ${following ? "text-[var(--text-tertiary)]" : "text-[var(--text-secondary)]"}`}
+                    className={`shrink-0 text-[14px] font-[700] transition-opacity hover:opacity-70 ${following ? "text-[var(--text-tertiary)]" : "text-[var(--text-secondary)]"}`}
                   >
                     {following ? "Siguiendo" : "Seguir"}
                   </button>
@@ -1583,7 +1583,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
               {post.text && (
                 <p className="mt-3 text-[17px] leading-[1.55] text-[var(--text-primary)]">{post.text}</p>
               )}
-              <p className="mt-3 text-[12px] font-[600] text-[var(--text-tertiary)]">
+              <p className="mt-3 text-[14px] font-[600] text-[var(--text-tertiary)]">
                 {formatDate(post.plan.startsAt) === formatDate(post.plan.endsAt)
                   ? formatDate(post.plan.startsAt)
                   : `${formatDate(post.plan.startsAt)} – ${formatDate(post.plan.endsAt)}`}
@@ -1597,7 +1597,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                   aria-label={liked ? "Quitar like" : "Dar like"}
                 >
                   <PlaneIcon liked={liked} animating={likeAnimating} size={18} />
-                  {likeCount > 0 && <span className="text-[12px] font-[700]">{likeCount}</span>}
+                  {likeCount > 0 && <span className="text-[14px] font-[700]">{likeCount}</span>}
                 </button>
                 <button
                   type="button"
@@ -1608,7 +1608,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                   <svg viewBox="0 0 24 24" fill="none" className="size-[18px]" aria-hidden="true">
                     <path d="M12 4C7.582 4 4 6.91 4 10.5C4 12.31 4.913 13.947 6.39 15.109C6.272 16.213 5.79 17.343 4.98 18.316C4.787 18.549 5.02 18.88 5.315 18.785C7.005 18.243 8.357 17.471 9.235 16.86C10.115 17.113 11.04 17.25 12 17.25C16.418 17.25 20 14.34 20 10.75C20 7.16 16.418 4 12 4Z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
-                  {commentsSection.length > 0 && <span className="text-[12px] font-[700]">{commentsSection.length}</span>}
+                  {commentsSection.length > 0 && <span className="text-[14px] font-[700]">{commentsSection.length}</span>}
                 </button>
                 {!isOwnPost && (
                   <button
@@ -1623,7 +1623,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                 <Link
                   href={`/plan/${post.plan.id}`}
                   onClick={(e) => e.stopPropagation()}
-                  className="ml-auto flex items-center gap-1 text-[13px] font-[700] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
+                  className="ml-auto flex items-center gap-1 text-[14px] font-[700] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
                 >
                   Ver plan
                   <svg viewBox="0 0 24 24" fill="none" className="size-[12px]" aria-hidden="true">
@@ -1646,7 +1646,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
               {post.avatarImage ? (
                 <NextImage src={post.avatarImage} alt={post.avatarLabel} width={34} height={34} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
               ) : (
-                <span className="text-[12px] font-[700] text-app">{post.avatarLabel}</span>
+                <span className="text-[14px] font-[700] text-app">{post.avatarLabel}</span>
               )}
             </div>
             <span className="text-[15px] font-[800] text-app truncate">{post.userName}</span>
@@ -1655,7 +1655,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); onFollowPress(); }}
-              className={`ml-1 shrink-0 text-[13px] font-[700] transition-opacity ${following ? "text-muted" : "text-app"}`}
+              className={`ml-1 shrink-0 text-[14px] font-[700] transition-opacity ${following ? "text-muted" : "text-app"}`}
             >
               {following ? "· Siguiendo" : "· Seguir"}
             </button>
@@ -1663,7 +1663,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
           <Link
             href={`/plan/${post.plan.id}`}
             onClick={(e) => e.stopPropagation()}
-            className="ml-auto shrink-0 flex items-center gap-1 rounded-full bg-black/50 px-3 py-1.5 text-[12px] font-[700] text-white transition-opacity hover:opacity-80"
+            className="ml-auto shrink-0 flex items-center gap-1 rounded-full bg-black/50 px-3 py-1.5 text-[14px] font-[700] text-white transition-opacity hover:opacity-80"
           >
             Ver plan
             <svg viewBox="0 0 24 24" fill="none" className="size-[11px]" aria-hidden="true">
@@ -1682,7 +1682,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
             aria-label={liked ? "Quitar like" : "Dar like"}
           >
             <PlaneIcon liked={liked} animating={likeAnimating} size={22} className="text-white" />
-            {likeCount > 0 && <span className="text-[11px] font-[700]">{likeCount}</span>}
+            {likeCount > 0 && <span className="text-[14px] font-[700]">{likeCount}</span>}
           </button>
           <button
             type="button"
@@ -1693,7 +1693,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
             <svg viewBox="0 0 24 24" fill="none" className="size-[22px]" aria-hidden="true">
               <path d="M12 4C7.582 4 4 6.91 4 10.5C4 12.31 4.913 13.947 6.39 15.109C6.272 16.213 5.79 17.343 4.98 18.316C4.787 18.549 5.02 18.88 5.315 18.785C7.005 18.243 8.357 17.471 9.235 16.86C10.115 17.113 11.04 17.25 12 17.25C16.418 17.25 20 14.34 20 10.75C20 7.16 16.418 4 12 4Z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
-            {commentsSection.length > 0 && <span className="text-[11px] font-[700]">{commentsSection.length}</span>}
+            {commentsSection.length > 0 && <span className="text-[14px] font-[700]">{commentsSection.length}</span>}
           </button>
           {!isOwnPost && (
             <button
@@ -1717,7 +1717,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
             {post.plan.title && (
               <p className="text-[18px] font-[800] leading-tight text-app">{post.plan.title}</p>
             )}
-            <p className="mt-[2px] text-[12px] font-[600] text-[var(--text-secondary)]">
+            <p className="mt-[2px] text-[14px] font-[600] text-[var(--text-secondary)]">
               {[
                 post.plan.locationName,
                 formatDate(post.plan.startsAt) === formatDate(post.plan.endsAt)
@@ -1765,7 +1765,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                       {post.avatarImage ? (
                         <NextImage src={post.avatarImage} alt={post.avatarLabel} width={34} height={34} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
                       ) : (
-                        <span className="text-[12px] font-[700] text-white">{post.avatarLabel}</span>
+                        <span className="text-[14px] font-[700] text-white">{post.avatarLabel}</span>
                       )}
                     </div>
                     <span className="text-[14px] font-[800] text-white drop-shadow-sm truncate">{post.userName}</span>
@@ -1774,14 +1774,14 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                     <button
                       type="button"
                       onClick={onFollowPress}
-                      className={`ml-1 shrink-0 text-[11px] font-[700] transition-opacity hover:opacity-70 ${following ? "text-white/45" : "text-white/80"}`}
+                      className={`ml-1 shrink-0 text-[14px] font-[700] transition-opacity hover:opacity-70 ${following ? "text-white/45" : "text-white/80"}`}
                     >
                       {following ? "Siguiendo" : "· Seguir"}
                     </button>
                   )}
                   <Link
                     href={`/plan/${post.plan.id}`}
-                    className="ml-auto shrink-0 flex items-center gap-1 rounded-full bg-black/30 backdrop-blur-sm px-3 py-1.5 text-[12px] font-[700] text-white transition-opacity hover:opacity-80"
+                    className="ml-auto shrink-0 flex items-center gap-1 rounded-full bg-black/30 backdrop-blur-sm px-3 py-1.5 text-[14px] font-[700] text-white transition-opacity hover:opacity-80"
                   >
                     Ver plan
                     <svg viewBox="0 0 24 24" fill="none" className="size-[11px]" aria-hidden="true">
@@ -1799,7 +1799,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                     {post.plan.title && (
                       <p className="text-[16px] font-[800] leading-tight text-white">{post.plan.title}</p>
                     )}
-                    <p className="mt-[2px] text-[12px] font-[600] text-white/70">
+                    <p className="mt-[2px] text-[14px] font-[600] text-white/70">
                       {[
                         post.plan.locationName,
                         formatDate(post.plan.startsAt) === formatDate(post.plan.endsAt)
@@ -1818,7 +1818,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                       aria-label={liked ? "Quitar like" : "Dar like"}
                     >
                       <PlaneIcon liked={liked} animating={likeAnimating} size={20} className="text-white" />
-                      {likeCount > 0 && <span className="text-[13px] font-[700]">{likeCount}</span>}
+                      {likeCount > 0 && <span className="text-[14px] font-[700]">{likeCount}</span>}
                     </button>
                     <button
                       type="button"
@@ -1829,7 +1829,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                       <svg viewBox="0 0 24 24" fill="none" className="size-[20px]" aria-hidden="true">
                         <path d="M12 4C7.582 4 4 6.91 4 10.5C4 12.31 4.913 13.947 6.39 15.109C6.272 16.213 5.79 17.343 4.98 18.316C4.787 18.549 5.02 18.88 5.315 18.785C7.005 18.243 8.357 17.471 9.235 16.86C10.115 17.113 11.04 17.25 12 17.25C16.418 17.25 20 14.34 20 10.75C20 7.16 16.418 4 12 4Z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
                       </svg>
-                      {commentsSection.length > 0 && <span className="text-[13px] font-[700]">{commentsSection.length}</span>}
+                      {commentsSection.length > 0 && <span className="text-[14px] font-[700]">{commentsSection.length}</span>}
                     </button>
                     {!isOwnPost && (
                       <button
@@ -1861,14 +1861,14 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                 <div className="min-w-0 flex-1">
                   <Link href={`/profile/${post.plan.ownerUserId}`} className="text-[15px] font-[800] text-[var(--text-primary)]">{post.userName}</Link>
                   {post.plan.locationName && (
-                    <p className="text-[12px] text-[var(--text-tertiary)] mt-[1px]">{post.plan.locationName}</p>
+                    <p className="text-[14px] text-[var(--text-tertiary)] mt-[1px]">{post.plan.locationName}</p>
                   )}
                 </div>
                 {!isOwnPost && (
                   <button
                     type="button"
                     onClick={onFollowPress}
-                    className={`shrink-0 text-[12px] font-[700] transition-opacity hover:opacity-70 ${following ? "text-[var(--text-tertiary)]" : "text-[var(--text-secondary)]"}`}
+                    className={`shrink-0 text-[14px] font-[700] transition-opacity hover:opacity-70 ${following ? "text-[var(--text-tertiary)]" : "text-[var(--text-secondary)]"}`}
                   >
                     {following ? "Siguiendo" : "Seguir"}
                   </button>
@@ -1877,7 +1877,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
               {post.text && (
                 <p className="text-[17px] leading-[1.55] text-[var(--text-primary)]">{post.text}</p>
               )}
-              <p className="mt-4 text-[12px] font-[600] text-[var(--text-tertiary)]">
+              <p className="mt-4 text-[14px] font-[600] text-[var(--text-tertiary)]">
                 {formatDate(post.plan.startsAt) === formatDate(post.plan.endsAt)
                   ? formatDate(post.plan.startsAt)
                   : `${formatDate(post.plan.startsAt)} – ${formatDate(post.plan.endsAt)}`}
@@ -1891,7 +1891,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                   aria-label={liked ? "Quitar like" : "Dar like"}
                 >
                   <PlaneIcon liked={liked} animating={likeAnimating} size={18} />
-                  {likeCount > 0 && <span className="text-[12px] font-[700]">{likeCount}</span>}
+                  {likeCount > 0 && <span className="text-[14px] font-[700]">{likeCount}</span>}
                 </button>
                 <button
                   type="button"
@@ -1902,7 +1902,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                   <svg viewBox="0 0 24 24" fill="none" className="size-[18px]" aria-hidden="true">
                     <path d="M12 4C7.582 4 4 6.91 4 10.5C4 12.31 4.913 13.947 6.39 15.109C6.272 16.213 5.79 17.343 4.98 18.316C4.787 18.549 5.02 18.88 5.315 18.785C7.005 18.243 8.357 17.471 9.235 16.86C10.115 17.113 11.04 17.25 12 17.25C16.418 17.25 20 14.34 20 10.75C20 7.16 16.418 4 12 4Z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
-                  {commentsSection.length > 0 && <span className="text-[12px] font-[700]">{commentsSection.length}</span>}
+                  {commentsSection.length > 0 && <span className="text-[14px] font-[700]">{commentsSection.length}</span>}
                 </button>
                 {!isOwnPost && (
                   <button
@@ -1916,7 +1916,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                 )}
                 <Link
                   href={`/plan/${post.plan.id}`}
-                  className="ml-auto flex items-center gap-1 text-[13px] font-[700] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
+                  className="ml-auto flex items-center gap-1 text-[14px] font-[700] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
                 >
                   Ver plan
                   <svg viewBox="0 0 24 24" fill="none" className="size-[12px]" aria-hidden="true">
@@ -1981,14 +1981,14 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                       {!isOwnPost && (
                         <>
                           <span className="px-2 text-muted">•</span>
-                          <button type="button" onClick={onFollowPress} className={`text-[13px] font-[700] transition-opacity hover:opacity-80 ${following ? "text-muted" : "text-primary-token"}`}>
+                          <button type="button" onClick={onFollowPress} className={`text-[14px] font-[700] transition-opacity hover:opacity-80 ${following ? "text-muted" : "text-primary-token"}`}>
                             {following ? "Siguiendo" : "Seguir"}
                           </button>
                         </>
                       )}
                       {post.text ? <> {post.text}</> : null}
                     </p>
-                    <p className="mt-1 text-[13px] text-muted">
+                    <p className="mt-1 text-[14px] text-muted">
                       {post.plan.createdAt ? formatRelativeTime(post.plan.createdAt) : formatDate(post.plan.startsAt)}
                     </p>
                   </div>
@@ -2037,7 +2037,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                 )}
 
                 {replyingTo && (
-                  <div className="flex items-center justify-between px-[2px] pb-[4px] text-[13px] text-muted">
+                  <div className="flex items-center justify-between px-[2px] pb-[4px] text-[14px] text-muted">
                     <span>Respondiendo a <span className="font-[700] text-app">@{replyingTo.userName}</span></span>
                     <button type="button" onClick={() => { setReplyingTo(null); setCommentText(""); }} className="text-muted hover:opacity-70">✕</button>
                   </div>

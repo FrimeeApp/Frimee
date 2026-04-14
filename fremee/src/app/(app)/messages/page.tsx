@@ -188,7 +188,7 @@ export default function MessagesPage() {
           /* ── Creador de grupo ── */
           <div className="space-y-[var(--space-4)]">
             <div>
-              <label className="mb-[var(--space-2)] block text-[12px] font-[var(--fw-semibold)] uppercase tracking-wide text-muted">Nombre del grupo</label>
+              <label className="mb-[var(--space-2)] block text-[14px] font-[var(--fw-semibold)] uppercase tracking-wide text-muted">Nombre del grupo</label>
               <input
                 type="text"
                 value={groupName}
@@ -208,7 +208,7 @@ export default function MessagesPage() {
                       key={friend.id}
                       type="button"
                       onClick={() => toggleMember(friend.id)}
-                      className="flex items-center gap-[6px] rounded-full border border-app bg-surface px-[10px] py-[5px] text-[12px] font-[var(--fw-medium)] text-app transition-colors hover:bg-surface-inset"
+                      className="flex items-center gap-[6px] rounded-full border border-app bg-surface px-[10px] py-[5px] text-[14px] font-[var(--fw-medium)] text-app transition-colors hover:bg-surface-inset"
                     >
                       <span>{friend.nombre.split(" ")[0]}</span>
                       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[12px] text-muted">
@@ -220,7 +220,7 @@ export default function MessagesPage() {
             )}
 
             <div>
-              <p className="mb-[var(--space-2)] text-[12px] font-[var(--fw-semibold)] uppercase tracking-wide text-muted">Añadir miembros</p>
+              <p className="mb-[var(--space-2)] text-[14px] font-[var(--fw-semibold)] uppercase tracking-wide text-muted">Añadir miembros</p>
               {friends.length === 0 ? (
                 <p className="py-[var(--space-6)] text-center text-body-sm text-muted">No tienes amigos aún</p>
               ) : (
@@ -280,13 +280,13 @@ export default function MessagesPage() {
               </div>
               <div>
                 <p className="text-body-sm font-[var(--fw-semibold)] text-app">Nuevo grupo</p>
-                <p className="text-[12px] leading-[16px] text-muted">Crea un chat con varios amigos</p>
+                <p className="text-[14px] leading-[16px] text-muted">Crea un chat con varios amigos</p>
               </div>
             </button>
 
             <div className="my-[var(--space-2)] border-t border-app" />
 
-            <p className="mb-[var(--space-1)] px-[10px] pt-[var(--space-1)] text-[12px] font-[var(--fw-semibold)] uppercase tracking-wide text-muted">Amigos</p>
+            <p className="mb-[var(--space-1)] px-[10px] pt-[var(--space-1)] text-[14px] font-[var(--fw-semibold)] uppercase tracking-wide text-muted">Amigos</p>
 
             <div className="space-y-[1px]">
               {friends.map((friend) => {
@@ -394,7 +394,7 @@ export default function MessagesPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline justify-between gap-[var(--space-2)]">
                       <p className="truncate text-body-sm font-[var(--fw-semibold)] text-app">{name}</p>
-                      <span className="shrink-0 text-[13px] text-muted">{formatChatTime(chat.last_message_at)}</span>
+                      <span className="shrink-0 text-[14px] text-muted">{formatChatTime(chat.last_message_at)}</span>
                     </div>
                     <p className={`truncate text-caption ${hasUnread ? "font-[var(--fw-medium)] text-app" : "text-muted"}`}>
                       {(() => { const m = chat.last_message ?? ""; try { return JSON.parse(m)?.type === "poll" ? "📊 Encuesta" : m; } catch { return m; } })()}

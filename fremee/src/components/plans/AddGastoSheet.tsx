@@ -322,7 +322,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
 
   // ── render ────────────────────────────────────────────────────────────────
 
-  const labelCls = "text-[12px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted md:text-muted [color:color-mix(in_oklab,var(--text-primary)_72%,transparent)] dark:text-muted";
+  const labelCls = "text-[14px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted md:text-muted [color:color-mix(in_oklab,var(--text-primary)_72%,transparent)] dark:text-muted";
   const fieldLineCls = "border-b-2 border-app pb-[var(--space-2)] transition-colors focus-within:border-primary-token";
   const activeMetodo = METODOS.find((m) => m.value === metodo);
 
@@ -375,7 +375,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
 
                 <div className="grid gap-[var(--space-5)] sm:grid-cols-2">
                   <div>
-                    <p className="mb-[var(--space-2)] text-[12px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted [color:color-mix(in_oklab,var(--text-primary)_72%,transparent)] dark:text-muted">Importe</p>
+                    <p className="mb-[var(--space-2)] text-[14px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted [color:color-mix(in_oklab,var(--text-primary)_72%,transparent)] dark:text-muted">Importe</p>
                     <div className={`${fieldLineCls} flex items-center gap-[var(--space-3)]`}>
                       <input
                         type="number"
@@ -397,7 +397,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                   </div>
 
                   <div>
-                    <p className="mb-[var(--space-2)] text-[12px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted [color:color-mix(in_oklab,var(--text-primary)_72%,transparent)] dark:text-muted">Fecha</p>
+                    <p className="mb-[var(--space-2)] text-[14px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted [color:color-mix(in_oklab,var(--text-primary)_72%,transparent)] dark:text-muted">Fecha</p>
                     <div className={fieldLineCls}>
                       <input
                         type="date"

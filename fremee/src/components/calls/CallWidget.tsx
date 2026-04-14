@@ -36,8 +36,8 @@ export default function CallWidget({ participanteNombre, participanteFoto, durat
         onClick={onExpand}
         className="flex flex-col items-start leading-none text-left"
       >
-        <span className="text-[13px] font-semibold text-white truncate max-w-[120px]">{participanteNombre}</span>
-        <span className="text-[12px] text-white/50 mt-[2px]">
+        <span className="text-[14px] font-semibold text-white truncate max-w-[120px]">{participanteNombre}</span>
+        <span className="text-[14px] text-white/50 mt-[2px]">
           {isActive ? formatDuration(duration) : "Llamando..."}
         </span>
       </button>

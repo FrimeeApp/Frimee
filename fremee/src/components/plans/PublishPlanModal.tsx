@@ -156,24 +156,24 @@ export default function PublishPlanModal({ plan, onClose }: Props) {
                   {/* subtle gradient for text legibility */}
                   <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/60 to-transparent" />
                   <div className="absolute bottom-3 left-3 right-3">
-                    <p className="text-[13px] font-[700] text-white leading-tight line-clamp-1">{plan.titulo}</p>
+                    <p className="text-[14px] font-[700] text-white leading-tight line-clamp-1">{plan.titulo}</p>
                     {infoLine && (
-                      <p className="mt-0.5 text-[11px] text-white/80 leading-tight line-clamp-1">{infoLine}</p>
+                      <p className="mt-0.5 text-[14px] text-white/80 leading-tight line-clamp-1">{infoLine}</p>
                     )}
                   </div>
                 </div>
               ) : (
                 <div className="px-4 py-3.5 bg-[var(--surface-raised)]">
-                  <p className="text-[13px] font-[700] text-app leading-tight line-clamp-2">{plan.titulo}</p>
+                  <p className="text-[14px] font-[700] text-app leading-tight line-clamp-2">{plan.titulo}</p>
                   {infoLine && (
                     <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
                       {plan.ubicacion_nombre && (
-                        <span className="flex items-center gap-1 text-[11px] text-muted">
+                        <span className="flex items-center gap-1 text-[14px] text-muted">
                           <MapPinSmall /> {plan.ubicacion_nombre}
                         </span>
                       )}
                       {dateLabel && (
-                        <span className="flex items-center gap-1 text-[11px] text-muted">
+                        <span className="flex items-center gap-1 text-[14px] text-muted">
                           <CalSmall /> {dateLabel}
                         </span>
                       )}
@@ -194,7 +194,7 @@ export default function PublishPlanModal({ plan, onClose }: Props) {
                 className="w-full resize-none rounded-[12px] bg-[var(--surface-raised)] px-4 py-3 text-[14px] text-app placeholder:text-muted outline-none focus:ring-1 focus:ring-[var(--border-focus,var(--border))] transition-shadow"
               />
               {caption.length > 200 && (
-                <span className={`absolute bottom-3 right-3 text-[11px] tabular-nums ${caption.length >= MAX_CAPTION ? "text-red-500" : "text-muted"}`}>
+                <span className={`absolute bottom-3 right-3 text-[14px] tabular-nums ${caption.length >= MAX_CAPTION ? "text-red-500" : "text-muted"}`}>
                   {MAX_CAPTION - caption.length}
                 </span>
               )}
@@ -202,7 +202,7 @@ export default function PublishPlanModal({ plan, onClose }: Props) {
 
             {/* Error */}
             {error && (
-              <p className="mx-5 mt-1 text-[12px] text-red-500">{error}</p>
+              <p className="mx-5 mt-1 text-[14px] text-red-500">{error}</p>
             )}
 
             {/* Footer */}
@@ -224,11 +224,11 @@ export default function PublishPlanModal({ plan, onClose }: Props) {
             </div>
             <div className="text-center">
               <p className="text-[18px] font-[800] text-app tracking-[-0.02em]">¡Plan publicado!</p>
-              <p className="mt-1 text-[13px] text-muted">Ya aparece en el feed para todos.</p>
+              <p className="mt-1 text-[14px] text-muted">Ya aparece en el feed para todos.</p>
             </div>
             <button
               onClick={() => router.push("/feed")}
-              className="mt-2 h-10 px-6 rounded-full bg-primary-token text-white text-[13px] font-[700] transition-opacity hover:opacity-90"
+              className="mt-2 h-10 px-6 rounded-full bg-primary-token text-white text-[14px] font-[700] transition-opacity hover:opacity-90"
             >
               Ver en el feed
             </button>

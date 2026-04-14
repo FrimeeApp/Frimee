@@ -549,7 +549,7 @@ function CalendarPageInner() {
                             onClick={() => setMonthDate((prev) => addMonths(prev, -1))}
                             className="flex h-9 w-9 items-center justify-center text-app transition-colors hover:text-[var(--primary)]"
                           >
-                            <span className="inline-block rotate-180 text-[13px] leading-none">✈</span>
+                            <span className="inline-block rotate-180 text-[14px] leading-none">✈</span>
                           </button>
                           <div className="px-1 text-body-sm font-[var(--fw-semibold)] text-app">{monthLabel}</div>
                           <button
@@ -558,13 +558,13 @@ function CalendarPageInner() {
                             onClick={() => setMonthDate((prev) => addMonths(prev, 1))}
                             className="flex h-9 w-9 items-center justify-center text-app transition-colors hover:text-[var(--primary)]"
                           >
-                            <span className="inline-block text-[13px] leading-none">✈</span>
+                            <span className="inline-block text-[14px] leading-none">✈</span>
                           </button>
                         </div>
 
                         <div className="grid grid-cols-7 gap-x-1 gap-y-2 border-b border-app pb-3 text-center">
                           {WEEK_DAYS.map((weekDay) => (
-                            <div key={weekDay} className="text-[11px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
+                            <div key={weekDay} className="text-[14px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
                               {weekDay}
                             </div>
                           ))}
@@ -719,7 +719,7 @@ function CalendarPageInner() {
                           <div className="relative">
                             {Array.from({ length: 24 }).map((_, hour) => (
                               <div key={`hour-${hour}`} className="grid h-16 grid-cols-[52px_minmax(0,1fr)]">
-                                <div className="pr-2 pt-1 text-right text-[12px] text-muted">
+                                <div className="pr-2 pt-1 text-right text-[14px] text-muted">
                                   {String(hour).padStart(2, "0")}:00
                                 </div>
                                 <div className="border-t border-app/60" />
@@ -744,7 +744,7 @@ function CalendarPageInner() {
                                     onClick={() => navigateToPlan(plan.id)}
                                   >
                                     <p className="truncate text-body-sm font-[var(--fw-semibold)]">{plan.title}</p>
-                                    <p className="mt-0.5 truncate text-[12px] text-muted">
+                                    <p className="mt-0.5 truncate text-[14px] text-muted">
                                       {formatTimeRange(
                                         clampDateTimeToDay(plan.startsAt, selectedDayValue).toISOString(),
                                         clampDateTimeToDay(plan.endsAt, selectedDayValue, true).toISOString(),
@@ -799,7 +799,7 @@ function CalendarPageInner() {
                               }}
                             >
                               <span
-                                className={`absolute right-3 top-3 hidden rounded-chip border px-2.5 py-1 text-[12px] font-[var(--fw-medium)] leading-none lg:inline-flex ${heroStatusClass}`}
+                                className={`absolute right-3 top-3 hidden rounded-chip border px-2.5 py-1 text-[14px] font-[var(--fw-medium)] leading-none lg:inline-flex ${heroStatusClass}`}
                               >
                                 {statusLabel}
                               </span>
@@ -807,7 +807,7 @@ function CalendarPageInner() {
                                 type="button"
                                 onClick={(e) => { e.stopPropagation(); togglePin(plan.id); }}
                                 aria-label={pinnedPlanIds.includes(plan.id) ? "Desanclar" : "Anclar"}
-                                className={`absolute left-3 top-3 flex h-7 w-7 items-center justify-center rounded-full text-[13px] shadow-sm transition-opacity ${
+                                className={`absolute left-3 top-3 flex h-7 w-7 items-center justify-center rounded-full text-[14px] shadow-sm transition-opacity ${
                                   pinnedPlanIds.includes(plan.id)
                                     ? "bg-[color-mix(in_srgb,var(--primary)_18%,var(--surface)_82%)] text-app opacity-100"
                                     : "bg-surface/80 text-app opacity-100"
@@ -841,7 +841,7 @@ function CalendarPageInner() {
                                     {creatorLabel}
                                   </p>
                                   <span
-                                    className={`shrink-0 rounded-chip border px-2 py-1 text-[12px] font-[var(--fw-medium)] leading-none lg:hidden ${statusClass}`}
+                                    className={`shrink-0 rounded-chip border px-2 py-1 text-[14px] font-[var(--fw-medium)] leading-none lg:hidden ${statusClass}`}
                                     style={{ fontFamily: "var(--font-inter), sans-serif" }}
                                   >
                                     {statusLabel}
