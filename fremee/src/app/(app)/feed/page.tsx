@@ -4,15 +4,14 @@ import NextImage from "next/image";
 import Link from "next/link";
 import PlaneIcon from "@/components/ui/PlaneIcon";
 import { useFollow } from "@/hooks/useFollow";
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
 import AppSidebar from "@/components/common/AppSidebar";
 import LoadingScreen from "@/components/common/LoadingScreen";
 import { useAuth } from "@/providers/AuthProvider";
-import { getFeedPostsOnly, getFeedLikes, type FeedCursor } from "@/services/api/repositories/feed.repository";
+import { getFeedPostsOnly, getFeedLikes } from "@/services/api/repositories/feed.repository";
 import { countNotificacionesNoLeidas, insertNotificacion, deleteNotificacionLike } from "@/services/api/repositories/notifications.repository";
 import NotificationsPanel from "@/components/notifications/NotificationsPanel";
 import type { FeedItemDto } from "@/services/api/dtos/feed.dto";
-import { publishPlanAsPost } from "@/services/api/repositories/post.repository";
 import { togglePlanLike } from "@/services/api/repositories/likes.repository";
 import {
   createComment,
@@ -132,13 +131,9 @@ export default function FeedPage() {
   const currentUserId = user?.id ?? null;
   const [activeFeedTab, setActiveFeedTab] = useState<"following" | "explore">("explore");
   const [loadingFeed, setLoadingFeed] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [firstImageReady, setFirstImageReady] = useState(false);
   const [uiPosts, setUiPosts] = useState<FeedItemDto[]>([]);
   const [reloadNonce, setReloadNonce] = useState(0);
-  const feedCursorRef = useRef<FeedCursor>(null);
-  const hasMoreRef = useRef(true);
-  const sentinelRef = useRef<HTMLDivElement | null>(null);
   const lastProfileUpdatedAtRef = useRef<string | null>(null);
   const tabRowRef = useRef<HTMLDivElement | null>(null);
   const followingTabRef = useRef<HTMLButtonElement | null>(null);
@@ -173,11 +168,6 @@ export default function FeedPage() {
 
     let cancelled = false;
 
-    // Reset paginación y estado de imagen al recargar
-    feedCursorRef.current = null;
-    hasMoreRef.current = true;
-    setFirstImageReady(false);
-
     const load = async () => {
       // 1. Mostrar caché inmediatamente — sin skeleton si hay datos previos
       const cached = readFeedCache(currentUserId);
@@ -191,30 +181,25 @@ export default function FeedPage() {
 
       try {
         // 2. Posts + amigos en paralelo — ninguno bloquea al otro
-        const [feedResult, friends] = await Promise.all([
+        const [posts, friends] = await Promise.all([
           getFeedPostsOnly({ limit: 20 }),
           fetchActiveFriends(),
         ]);
         if (cancelled) return;
-
-        const { posts, cursor } = feedResult;
-        feedCursorRef.current = cursor;
-        hasMoreRef.current = cursor !== null;
 
         const newFriendIds = new Set(friends.map((f) => f.id));
         setFriendIds(newFriendIds);
         setSuggestedProfiles(friends.slice(0, 12));
         writeFriendsCache(currentUserId, [...newFriendIds]);
 
-        // Si el primer post no tiene imagen, no hay nada que esperar
-        const firstPost = posts[0];
-        if (!firstPost || !firstPost.coverImage) setFirstImageReady(true);
+        const firstWithImage = posts.find((p) => p.coverImage);
+        if (!firstWithImage) setFirstImageReady(true);
         setUiPosts(posts);
         setLoadingFeed(false);
         writeFeedCache(currentUserId, posts);
 
-        // 3. Precargar solo las primeras 3 imágenes
-        const imageUrls = posts.slice(0, 3).flatMap((p) =>
+        // 3. Precargar imágenes en background — no bloquea nada
+        const imageUrls = posts.flatMap((p) =>
           [p.coverImage, p.avatarImage].filter((u): u is string => Boolean(u))
         );
         preloadImagesBackground(imageUrls);
@@ -254,57 +239,6 @@ export default function FeedPage() {
 
     return () => { cancelled = true; };
   }, [currentUserId, reloadNonce]);
-
-  // ── Infinite scroll — cargar siguiente página cuando el sentinel es visible ──
-  useEffect(() => {
-    if (!currentUserId) return;
-    const sentinel = sentinelRef.current;
-    if (!sentinel) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (!entries[0]?.isIntersecting) return;
-        if (!hasMoreRef.current || loadingMore) return;
-
-        const loadNextPage = async () => {
-          setLoadingMore(true);
-          try {
-            const { posts: newPosts, cursor } = await getFeedPostsOnly({
-              limit: 20,
-              cursor: feedCursorRef.current,
-            });
-            feedCursorRef.current = cursor;
-            hasMoreRef.current = cursor !== null;
-
-            if (newPosts.length === 0) return;
-            setUiPosts((prev) => [...prev, ...newPosts]);
-
-            // Likes en background para los nuevos posts
-            const planIds = newPosts.map((p) => p.plan.id);
-            getFeedLikes({ userId: currentUserId, planIds }).then(({ likedSet, counts }) => {
-              setUiPosts((prev) =>
-                prev.map((p) =>
-                  planIds.includes(p.plan.id)
-                    ? { ...p, initiallyLiked: likedSet.has(p.plan.id), initialLikeCount: counts[p.plan.id] ?? 0 }
-                    : p
-                )
-              );
-            }).catch(() => {});
-          } catch (e) {
-            console.error("[feed] loadMore error", e);
-          } finally {
-            setLoadingMore(false);
-          }
-        };
-
-        void loadNextPage();
-      },
-      { rootMargin: "300px" }
-    );
-
-    observer.observe(sentinel);
-    return () => observer.disconnect();
-  }, [currentUserId, loadingMore]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -443,14 +377,14 @@ export default function FeedPage() {
   if (loading) return <LoadingScreen />;
 
   return (
-    <div className="h-dvh overflow-hidden bg-app text-app">
-      <div className="relative mx-auto h-dvh overflow-hidden max-w-[1440px]">
+    <div className="min-h-dvh bg-app text-app">
+      <div className="relative mx-auto min-h-dvh max-w-[1440px]">
         <AppSidebar />
 
         <main
-          className={`h-dvh overflow-hidden pt-0 pb-0 md:px-safe md:pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] md:py-[var(--space-8)] md:pr-[var(--space-14)] transition-[padding] duration-[var(--duration-slow)] [transition-timing-function:var(--ease-standard)]`}
+          className={`pt-0 pb-0 md:px-safe md:pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] md:py-[var(--space-8)] md:pr-[var(--space-14)] transition-[padding] duration-[var(--duration-slow)] [transition-timing-function:var(--ease-standard)]`}
         >
-          <div className="mx-auto max-w-[1160px] h-full overflow-hidden">
+          <div className="mx-auto max-w-[1160px]">
             <div className="md:border-b md:border-[#262626]">
               <div className="mx-auto w-full max-w-[760px] xl:mx-0">
               <div className="sticky top-0 z-[100] bg-app flex items-center gap-[var(--space-3)] py-[var(--space-2)] pl-[max(var(--page-margin-x),env(safe-area-inset-left))] pr-[max(var(--page-margin-x),env(safe-area-inset-right))] md:hidden">
@@ -734,15 +668,21 @@ export default function FeedPage() {
             <div className="md:mt-[var(--space-5)] grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] xl:gap-[var(--space-6)]">
             <section className="w-full">
               <div className="md:ml-[72px] xl:ml-[72px]">
-                {(() => {
+                {loadingFeed || !firstImageReady ? (
+                  <>
+                    <FeedSkeleton />
+                    {!loadingFeed && uiPosts.length > 0 && (
+                      <div className="sr-only" aria-hidden="true">
+                        {uiPosts.filter((p) => p.coverImage).slice(0, 1).map((post) => (
+                          <NextImage key={post.id} src={post.coverImage!} alt="" width={1200} height={900} className="h-auto w-full" unoptimized onLoad={() => setFirstImageReady(true)} onError={() => setFirstImageReady(true)} />
+                        ))}
+                      </div>
+                    )}
+                  </>
+                ) : (() => {
                   const visiblePosts = activeFeedTab === "following"
                     ? uiPosts.filter((p) => p.plan.ownerUserId && friendIds.has(p.plan.ownerUserId))
                     : uiPosts;
-
-                  const showSkeleton = loadingFeed || !firstImageReady;
-
-                  if (showSkeleton && visiblePosts.length === 0) return <FeedSkeleton />;
-
                   return visiblePosts.length === 0 ? (
                     <div className="rounded-modal border border-app bg-surface p-[var(--space-5)] text-body text-muted shadow-elev-1">
                       {activeFeedTab === "following"
@@ -750,38 +690,13 @@ export default function FeedPage() {
                         : "Aun no hay publicaciones para mostrar."}
                     </div>
                   ) : (
-                    <>
-                      {/* Skeleton encima mientras la primera imagen no está lista */}
-                      {showSkeleton && (
-                        <div className="absolute inset-0 z-10">
-                          <FeedSkeleton />
-                        </div>
-                      )}
                     <div className="overflow-y-scroll snap-y snap-mandatory scrollbar-hide h-[calc(100svh-60px)] md:h-[calc(100dvh-100px)]">
                       {visiblePosts.map((post, idx) => (
                         <div key={post.id} className="snap-start h-full">
-                          <FeedCard
-                            post={post}
-                            currentUserId={currentUserId}
-                            currentUserName={profile?.nombre ?? null}
-                            currentUserProfileImage={profile?.profile_image ?? null}
-                            nextPostHasImage={visiblePosts[idx + 1]?.hasImage ?? true}
-                            initialFollowing={followedIds.has(post.plan.ownerUserId ?? "")}
-                            initialSaved={savedPlanIds.has(post.plan.id)}
-                            onImageReady={idx === 0 ? () => setFirstImageReady(true) : undefined}
-                          />
+                          <FeedCard post={post} currentUserId={currentUserId} currentUserName={profile?.nombre ?? null} currentUserProfileImage={profile?.profile_image ?? null} nextPostHasImage={visiblePosts[idx + 1]?.hasImage ?? true} initialFollowing={followedIds.has(post.plan.ownerUserId ?? "")} initialSaved={savedPlanIds.has(post.plan.id)} />
                         </div>
                       ))}
-                      {/* Sentinel — dispara carga de la siguiente página */}
-                      {hasMoreRef.current && (
-                        <div ref={sentinelRef} className="snap-start h-full flex items-center justify-center">
-                          {loadingMore && (
-                            <div className="size-[28px] animate-spin rounded-full border-2 border-[var(--text-primary)] border-t-transparent" />
-                          )}
-                        </div>
-                      )}
                     </div>
-                    </>
                   );
                 })()}
               </div>
@@ -1082,58 +997,50 @@ function FeedChatPanel({ currentUserId }: { currentUserId: string | null }) {
 function FeedSkeleton() {
   return (
     <div className="space-y-[var(--space-3)]" aria-label="Cargando publicaciones" role="status">
+      {/* Image post skeleton */}
       {[0, 1].map((i) => (
-        <article key={i} className="pb-[var(--space-1)]">
-          {/* Image — same aspect ratio as real card */}
-          <div className="feed-image-container relative overflow-hidden rounded-[var(--radius-card,0px)]">
-            <div
-              className="skeleton-shimmer w-full"
-              style={{ aspectRatio: i === 0 ? "4/3" : "16/9" }}
-            />
-            {/* Top: avatar + name + "Siguiendo" badge */}
-            <div className="absolute inset-x-0 top-0 flex items-center gap-[10px] px-4 pt-[14px]">
-              <div className="size-[34px] shrink-0 rounded-full bg-white/25" />
-              <div className="flex flex-col gap-[5px]">
-                <div className="h-[11px] w-[90px] rounded-full bg-white/25" />
-                <div className="h-[9px] w-[55px] rounded-full bg-white/15" />
-              </div>
-              {/* "Ver plan" pill */}
-              <div className="ml-auto h-[26px] w-[72px] rounded-full bg-white/20" />
+        <article key={`img-${i}`} className="pb-[var(--space-2)]">
+          <div className="feed-image-container relative overflow-hidden">
+            <div className="skeleton-shimmer aspect-[4/3] w-full" />
+            {/* Top overlay shimmer — avatar + name */}
+            <div className="absolute inset-x-0 top-0 flex items-center gap-[var(--space-2)] px-[var(--space-4)] pt-[var(--space-3)]">
+              <div className="size-[32px] rounded-full bg-white/20" />
+              <div className="h-3 w-[80px] rounded-full bg-white/20" />
             </div>
-            {/* Bottom: title + location + dates */}
-            <div className="absolute inset-x-0 bottom-0 px-4 pb-[14px]">
-              <div className="h-[15px] w-[55%] rounded-full bg-white/30" />
-              <div className="mt-[7px] flex items-center gap-2">
-                <div className="h-[10px] w-[30%] rounded-full bg-white/20" />
-                <div className="size-[3px] rounded-full bg-white/20" />
-                <div className="h-[10px] w-[22%] rounded-full bg-white/20" />
-              </div>
+            {/* Bottom overlay shimmer — location + date */}
+            <div className="absolute inset-x-0 bottom-0 px-[var(--space-4)] pb-[var(--space-3)]">
+              <div className="h-4 w-[140px] rounded-full bg-white/20" />
+              <div className="mt-[6px] h-3 w-[100px] rounded-full bg-white/20" />
             </div>
           </div>
-
-          {/* Actions row: like · comment · share + bookmark */}
-          <div className="mt-[10px] flex items-center gap-[var(--space-1)] px-1">
-            <div className="skeleton-shimmer size-[32px] rounded-full" />
-            <div className="skeleton-shimmer h-[10px] w-[28px] rounded-full" />
-            <div className="skeleton-shimmer ml-[6px] size-[32px] rounded-full" />
-            <div className="skeleton-shimmer h-[10px] w-[28px] rounded-full" />
-            <div className="skeleton-shimmer ml-[6px] size-[32px] rounded-full" />
-            <div className="skeleton-shimmer ml-auto size-[32px] rounded-full" />
-          </div>
-
-          {/* Caption line */}
-          <div className="mt-[8px] px-1">
-            <div className="skeleton-shimmer h-[11px] w-[75%] rounded-full" />
-            {i === 0 && <div className="skeleton-shimmer mt-[5px] h-[11px] w-[50%] rounded-full" />}
+          {/* Actions + text shimmer */}
+          <div className="mt-[var(--space-2)] flex items-center gap-[var(--space-2)] px-[var(--space-1)]">
+            <div className="skeleton-shimmer h-[24px] w-[24px] rounded-full" />
+            <div className="skeleton-shimmer h-3 w-[120px] rounded-full" />
           </div>
         </article>
       ))}
+      {/* Text-only post skeleton (Twitter style) */}
+      <article className="pb-[var(--space-2)]">
+        <div className="flex gap-[var(--space-2)] px-[var(--space-1)]">
+          <div className="skeleton-shimmer size-[32px] shrink-0 rounded-full" />
+          <div className="min-w-0 flex-1">
+            <div className="skeleton-shimmer h-3 w-[90px] rounded-full" />
+            <div className="skeleton-shimmer mt-[6px] h-3 w-[85%] rounded-full" />
+            <div className="skeleton-shimmer mt-[4px] h-3 w-[60%] rounded-full" />
+            <div className="mt-[var(--space-3)] flex items-center gap-[10px]">
+              <div className="skeleton-shimmer h-[24px] w-[24px] rounded-full" />
+              <div className="skeleton-shimmer h-[24px] w-[24px] rounded-full" />
+              <div className="skeleton-shimmer h-[24px] w-[24px] rounded-full" />
+            </div>
+          </div>
+        </div>
+      </article>
     </div>
   );
 }
 
-function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImage, nextPostHasImage, initialFollowing, initialSaved, onImageReady }: { post: FeedItemDto; currentUserId: string | null; currentUserName: string | null; currentUserProfileImage: string | null; nextPostHasImage: boolean; initialFollowing: boolean; initialSaved: boolean; onImageReady?: () => void }) {
-  const [publishing, setPublishing] = useState(false);
+function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImage, nextPostHasImage, initialFollowing, initialSaved }: { post: FeedItemDto; currentUserId: string | null; currentUserName: string | null; currentUserProfileImage: string | null; nextPostHasImage: boolean; initialFollowing: boolean; initialSaved: boolean }) {
   const [liked, setLiked] = useState(post.initiallyLiked);
   const [likeCount, setLikeCount] = useState(post.initialLikeCount);
   const [likeLoading, setLikeLoading] = useState(false);
@@ -1150,6 +1057,76 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
   const [replyingTo, setReplyingTo] = useState<{ commentId: string; userName: string } | null>(null);
   const [saved, setSaved] = useState(initialSaved);
   const isOwnPost = post.plan.ownerUserId === currentUserId;
+
+  // ── Slides (swipeable stories) ────────────────────────────────────────────
+  const [slideIndex, setSlideIndex] = useState(0);
+  const slideContainerRef = useRef<HTMLDivElement>(null);
+  const touchStartX = useRef<number>(0);
+  const touchStartY = useRef<number>(0);
+  const swipeActive = useRef<boolean>(false);
+
+  type SlideData = { type: "cover" } | { type: "photo"; url: string } | { type: "summary" };
+  const slides: SlideData[] = [{ type: "cover" }];
+  if (post.photosSnapshot?.length) {
+    post.photosSnapshot.forEach((p) => slides.push({ type: "photo", url: p.url }));
+  }
+  if (post.itinerarySnapshot?.length || post.expensesSnapshot) {
+    slides.push({ type: "summary" });
+  }
+  const slidesLen = slides.length;
+  const clampedIndex = Math.min(slideIndex, slidesLen - 1);
+  const currentSlide = slides[clampedIndex];
+
+  const goNext = useCallback(() => setSlideIndex((p) => Math.min(p + 1, slidesLen - 1)), [slidesLen]);
+  const goPrev = useCallback(() => setSlideIndex((p) => Math.max(p - 1, 0)), []);
+
+  // Imperative touch listeners so we can call preventDefault on horizontal swipes
+  useEffect(() => {
+    const el = slideContainerRef.current;
+    if (!el || slidesLen <= 1) return;
+
+    function onStart(e: TouchEvent) {
+      touchStartX.current = e.touches[0].clientX;
+      touchStartY.current = e.touches[0].clientY;
+      swipeActive.current = false;
+    }
+
+    function onMove(e: TouchEvent) {
+      const dx = Math.abs(e.touches[0].clientX - touchStartX.current);
+      const dy = Math.abs(e.touches[0].clientY - touchStartY.current);
+      if (!swipeActive.current && (dx > 6 || dy > 6)) {
+        swipeActive.current = dx > dy;
+      }
+      if (swipeActive.current) e.preventDefault();
+    }
+
+    function onEnd(e: TouchEvent) {
+      if (!swipeActive.current) return;
+      const dx = e.changedTouches[0].clientX - touchStartX.current;
+      if (Math.abs(dx) < 35) return;
+      if (dx < 0) setSlideIndex((p) => Math.min(p + 1, slidesLen - 1));
+      else setSlideIndex((p) => Math.max(p - 1, 0));
+    }
+
+    el.addEventListener("touchstart", onStart, { passive: true });
+    el.addEventListener("touchmove", onMove, { passive: false });
+    el.addEventListener("touchend", onEnd, { passive: true });
+    return () => {
+      el.removeEventListener("touchstart", onStart);
+      el.removeEventListener("touchmove", onMove);
+      el.removeEventListener("touchend", onEnd);
+    };
+  }, [slidesLen]);
+
+  function getSlideActivityEmoji(tipo: string): string {
+    const m: Record<string, string> = { VUELO: "✈️", BARCO: "🚢", TREN: "🚆", BUS: "🚌", COCHE: "🚗", HOTEL: "🏨", RESTAURANTE: "🍽️", ACTIVIDAD: "🎯", OTRO: "📌" };
+    return m[tipo] ?? "📌";
+  }
+
+  function fmtSlideTime(iso: string): string {
+    return new Date(iso).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 
   useEffect(() => { setSaved(initialSaved); }, [initialSaved]);
 
@@ -1302,18 +1279,6 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
     setEmojiPickerOpen(false);
   };
 
-  const onPublish = async () => {
-    if (publishing) return;
-    setPublishing(true);
-    try {
-      await publishPlanAsPost({ ...post.plan, allDay: post.plan.allDay ?? false, ownerUserId: post.plan.ownerUserId ?? "" });
-      console.log("Publicado en Firebase:", post.plan.id);
-    } catch (e) {
-      console.error("Error publicando:", e);
-    } finally {
-      setPublishing(false);
-    }
-  };
 
   const onLikeToggle = async () => {
     if (!currentUserId || likeLoading) return;
@@ -1618,25 +1583,77 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
     <article className={`relative h-full overflow-hidden md:overflow-visible ${post.hasImage && !nextPostHasImage ? "" : ""}`}>
 
       {/* ── MOBILE: full-screen snap card ── */}
-      <div className="absolute inset-0 md:hidden">
-        {/* Background */}
-        {post.hasImage && post.coverImage ? (
-          <div className="absolute inset-0 bg-app">
-            {!imgLoaded && <div className="skeleton-shimmer absolute inset-0" aria-hidden="true" />}
-            <NextImage
-              src={post.coverImage}
-              alt="Imagen del plan"
-              fill
-              className="object-contain transition-opacity duration-300"
-              style={{ opacity: imgLoaded ? 1 : 0 }}
-              unoptimized
-              onLoad={() => { setImgLoaded(true); onImageReady?.(); }}
-              onError={() => { setImgLoaded(true); onImageReady?.(); }}
-            />
+      <div
+        ref={slideContainerRef}
+        className="absolute inset-0 md:hidden"
+        onClick={(e) => {
+          if (slidesLen <= 1) return;
+          if ((e.target as HTMLElement).closest("button, a")) return;
+          const rect = e.currentTarget.getBoundingClientRect();
+          const x = e.clientX - rect.left;
+          const third = rect.width / 3;
+          if (x < third) goPrev();
+          else if (x > third * 2) goNext();
+        }}
+      >
+        {/* Progress bars */}
+        {slides.length > 1 && (
+          <div className="absolute inset-x-0 top-0 z-30 flex items-center gap-[3px] px-3 pt-[max(8px,env(safe-area-inset-top))]">
+            {slides.map((_, i) => (
+              <div
+                key={i}
+                className="h-[2.5px] rounded-full transition-all duration-300"
+                style={{
+                  flex: 1,
+                  background: i === clampedIndex ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.28)",
+                }}
+              />
+            ))}
           </div>
-        ) : (
-          <div className="absolute inset-0 bg-app" />
         )}
+
+        {/* Backgrounds — all rendered at once so images preload in parallel */}
+        {slides.map((slide, i) => {
+          const active = i === clampedIndex;
+          const base = "absolute inset-0 transition-opacity duration-150 " + (active ? "opacity-100 z-[1]" : "opacity-0 z-0");
+          if (slide.type === "cover") {
+            return post.hasImage && post.coverImage ? (
+              <div key="cover" className={`${base} bg-app`}>
+                {!imgLoaded && active && <div className="skeleton-shimmer absolute inset-0" aria-hidden="true" />}
+                <NextImage
+                  src={post.coverImage}
+                  alt="Imagen del plan"
+                  fill
+                  className="object-contain"
+                  style={{ opacity: imgLoaded ? 1 : 0, transition: "opacity 0.2s" }}
+                  unoptimized
+                  onLoad={() => setImgLoaded(true)}
+                  onError={() => setImgLoaded(true)}
+                />
+              </div>
+            ) : (
+              <div key="cover" className={`${base} bg-app`} />
+            );
+          }
+          if (slide.type === "photo") {
+            return (
+              <div key={`photo-${i}`} className={`${base} bg-[#0a0a0a]`}>
+                <NextImage src={slide.url} alt="" fill className="object-contain" unoptimized />
+              </div>
+            );
+          }
+          if (slide.type === "summary") {
+            return (
+              <div key="summary" className={`${base} bg-[#0d0e12]`}>
+                {post.coverImage && (
+                  <NextImage src={post.coverImage} alt="" fill className="object-cover opacity-15 scale-110 blur-xl" unoptimized />
+                )}
+                <div className="absolute inset-0 bg-black/50" />
+              </div>
+            );
+          }
+          return null;
+        })}
 
         {/* Text content (only for text-only posts) — same layout as desktop */}
         {!post.hasImage && (
@@ -1687,8 +1704,8 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                   disabled={!currentUserId || likeLoading}
                   aria-label={liked ? "Quitar like" : "Dar like"}
                 >
-                  <PlaneIcon liked={liked} animating={likeAnimating} size={18} />
-                  {likeCount > 0 && <span className="text-[14px] font-[700]">{likeCount}</span>}
+                  <PlaneIcon liked={liked} animating={likeAnimating} size={24} className={liked ? "text-primary-token" : ""} />
+                  <span className={`text-[14px] font-[700] ${likeCount > 0 ? "" : "invisible"}`}>{likeCount || 0}</span>
                 </button>
                 <button
                   type="button"
@@ -1696,21 +1713,19 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                   onClick={(e) => { e.stopPropagation(); openCommentsModal(); }}
                   aria-label="Comentarios"
                 >
-                  <svg viewBox="0 0 24 24" fill="none" className="size-[18px]" aria-hidden="true">
-                    <path d="M12 4C7.582 4 4 6.91 4 10.5C4 12.31 4.913 13.947 6.39 15.109C6.272 16.213 5.79 17.343 4.98 18.316C4.787 18.549 5.02 18.88 5.315 18.785C7.005 18.243 8.357 17.471 9.235 16.86C10.115 17.113 11.04 17.25 12 17.25C16.418 17.25 20 14.34 20 10.75C20 7.16 16.418 4 12 4Z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                  <svg viewBox="0 0 24 24" fill="currentColor" className="size-[24px]" aria-hidden="true">
+                    <path d="M12 4C7.582 4 4 6.91 4 10.5C4 12.31 4.913 13.947 6.39 15.109C6.272 16.213 5.79 17.343 4.98 18.316C4.787 18.549 5.02 18.88 5.315 18.785C7.005 18.243 8.357 17.471 9.235 16.86C10.115 17.113 11.04 17.25 12 17.25C16.418 17.25 20 14.34 20 10.75C20 7.16 16.418 4 12 4Z" />
                   </svg>
-                  {commentsSection.length > 0 && <span className="text-[14px] font-[700]">{commentsSection.length}</span>}
+                  <span className={`text-[14px] font-[700] ${commentsSection.length > 0 ? "" : "invisible"}`}>{commentsSection.length || 0}</span>
                 </button>
-                {!isOwnPost && (
-                  <button
-                    type="button"
-                    className="text-[var(--text-secondary)] transition-opacity hover:opacity-70"
-                    onClick={(e) => { e.stopPropagation(); handleToggleSave(); }}
-                    aria-label={saved ? "Quitar guardado" : "Guardar"}
-                  >
-                    <BookmarkIcon saved={saved} />
-                  </button>
-                )}
+                <button
+                  type="button"
+                  className={`transition-opacity hover:opacity-70 ${saved ? "text-primary-token" : "text-[var(--text-secondary)]"}`}
+                  onClick={(e) => { e.stopPropagation(); handleToggleSave(); }}
+                  aria-label={saved ? "Quitar guardado" : "Guardar"}
+                >
+                  <BookmarkIcon size={24} />
+                </button>
                 <Link
                   href={`/plan/${post.plan.id}`}
                   onClick={(e) => e.stopPropagation()}
@@ -1727,7 +1742,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
         )}
 
         {/* Top: avatar + name + follow (image posts only) */}
-        {post.hasImage && <div className="absolute inset-x-0 top-0 z-20 flex items-center gap-2.5 px-4 pt-4">
+        {post.hasImage && <div className={`absolute inset-x-0 top-0 z-20 flex items-center gap-2.5 px-4 ${slides.length > 1 ? "pt-7" : "pt-4"}`} style={{ filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.45))" }}>
           <Link
             href={`/profile/${post.plan.ownerUserId}`}
             onClick={(e) => e.stopPropagation()}
@@ -1737,16 +1752,16 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
               {post.avatarImage ? (
                 <NextImage src={post.avatarImage} alt={post.avatarLabel} width={34} height={34} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
               ) : (
-                <span className="text-[14px] font-[700] text-app">{post.avatarLabel}</span>
+                <span className="text-[14px] font-[700] text-white">{post.avatarLabel}</span>
               )}
             </div>
-            <span className="text-[15px] font-[800] text-app truncate">{post.userName}</span>
+            <span className="text-[15px] font-[800] text-white truncate">{post.userName}</span>
           </Link>
           {!isOwnPost && (
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); onFollowPress(); }}
-              className={`ml-1 shrink-0 text-[14px] font-[700] transition-opacity ${following ? "text-muted" : "text-app"}`}
+              className={`ml-1 shrink-0 text-[14px] font-[700] transition-opacity ${following ? "text-white/50" : "text-white"}`}
             >
               {following ? "· Siguiendo" : "· Seguir"}
             </button>
@@ -1754,7 +1769,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
           <Link
             href={`/plan/${post.plan.id}`}
             onClick={(e) => e.stopPropagation()}
-            className="ml-auto shrink-0 flex items-center gap-1 rounded-full bg-black/50 px-3 py-1.5 text-[14px] font-[700] text-white transition-opacity hover:opacity-80"
+            className="ml-auto shrink-0 flex items-center gap-1 text-[14px] font-[700] text-white transition-opacity hover:opacity-70"
           >
             Ver plan
             <svg viewBox="0 0 24 24" fill="none" className="size-[11px]" aria-hidden="true">
@@ -1764,59 +1779,126 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
         </div>}
 
         {/* Right: actions (image posts only) */}
-        {post.hasImage && <div className="absolute right-4 top-1/2 z-20 flex -translate-y-1/2 flex-col items-center gap-2">
+        {post.hasImage && <div
+          className="absolute right-4 bottom-0 z-20 flex flex-col items-center gap-6"
+          style={{ paddingBottom: `max(96px, calc(96px + env(safe-area-inset-bottom)))`, filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.4))" }}
+        >
           <button
             type="button"
-            className="flex flex-col items-center gap-0.5 rounded-full bg-black/50 size-[42px] justify-center text-white disabled:opacity-40"
+            className="flex flex-col items-center gap-1 text-white disabled:opacity-40 active:scale-90 transition-transform"
             onClick={(e) => { e.stopPropagation(); onLikeToggle(); }}
             disabled={!currentUserId || likeLoading}
             aria-label={liked ? "Quitar like" : "Dar like"}
           >
-            <PlaneIcon liked={liked} animating={likeAnimating} size={22} className="text-white" />
-            {likeCount > 0 && <span className="text-[14px] font-[700]">{likeCount}</span>}
+            <PlaneIcon liked={liked} animating={likeAnimating} size={34} className={liked ? "text-primary-token" : "text-white"} />
+            <span className={`text-[13px] font-[700] leading-none ${likeCount > 0 ? "text-white" : "invisible"}`}>{likeCount || 0}</span>
           </button>
           <button
             type="button"
-            className="flex flex-col items-center gap-0.5 rounded-full bg-black/50 size-[42px] justify-center text-white"
+            className="flex flex-col items-center gap-1 text-white active:scale-90 transition-transform"
             onClick={(e) => { e.stopPropagation(); openCommentsModal(); }}
             aria-label="Comentarios"
           >
-            <svg viewBox="0 0 24 24" fill="none" className="size-[22px]" aria-hidden="true">
-              <path d="M12 4C7.582 4 4 6.91 4 10.5C4 12.31 4.913 13.947 6.39 15.109C6.272 16.213 5.79 17.343 4.98 18.316C4.787 18.549 5.02 18.88 5.315 18.785C7.005 18.243 8.357 17.471 9.235 16.86C10.115 17.113 11.04 17.25 12 17.25C16.418 17.25 20 14.34 20 10.75C20 7.16 16.418 4 12 4Z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+            <svg viewBox="0 0 24 24" fill="currentColor" className="size-[34px]" aria-hidden="true">
+              <path d="M12 4C7.582 4 4 6.91 4 10.5C4 12.31 4.913 13.947 6.39 15.109C6.272 16.213 5.79 17.343 4.98 18.316C4.787 18.549 5.02 18.88 5.315 18.785C7.005 18.243 8.357 17.471 9.235 16.86C10.115 17.113 11.04 17.25 12 17.25C16.418 17.25 20 14.34 20 10.75C20 7.16 16.418 4 12 4Z" />
             </svg>
-            {commentsSection.length > 0 && <span className="text-[14px] font-[700]">{commentsSection.length}</span>}
+            <span className={`text-[13px] font-[700] leading-none ${commentsSection.length > 0 ? "text-white" : "invisible"}`}>{commentsSection.length || 0}</span>
           </button>
           {!isOwnPost && (
             <button
               type="button"
-              className="flex size-[42px] items-center justify-center rounded-full bg-black/50 text-white"
+              className="flex flex-col items-center gap-1 text-white active:scale-90 transition-transform"
               onClick={(e) => { e.stopPropagation(); handleToggleSave(); }}
               aria-label={saved ? "Quitar guardado" : "Guardar"}
             >
-              <BookmarkIcon saved={saved} size={22} />
+              <svg width={34} height={34} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className={saved ? "text-primary-token" : "text-white"}>
+                <path d="M7 4.5H17C17.55 4.5 18 4.95 18 5.5V20L12 16.2L6 20V5.5C6 4.95 6.45 4.5 7 4.5Z" />
+              </svg>
+              <span className="invisible text-[13px] font-[700] leading-none">0</span>
             </button>
           )}
         </div>}
 
-        {/* Bottom: info left (image posts only) */}
+        {/* Bottom: info (image posts only) */}
         {post.hasImage && <div
-          className="absolute inset-x-0 bottom-0 z-20 flex items-end px-4 pr-[76px]"
-          style={{ paddingBottom: `max(88px, calc(88px + env(safe-area-inset-bottom)))` }}
+          className="absolute inset-x-0 bottom-0 z-20 px-4 pr-[76px]"
+          style={{ paddingBottom: `max(88px, calc(88px + env(safe-area-inset-bottom)))`, filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.45))" }}
         >
-          {/* Left: location / date / text / ver plan */}
-          <div className="min-w-0">
-            {post.plan.title && (
-              <p className="text-[18px] font-[800] leading-tight text-app">{post.plan.title}</p>
-            )}
-            <p className="mt-[2px] text-[14px] font-[600] text-[var(--text-secondary)]">
-              {[
-                post.plan.locationName,
-                formatDate(post.plan.startsAt) === formatDate(post.plan.endsAt)
-                  ? formatDate(post.plan.startsAt)
-                  : `${formatDate(post.plan.startsAt)} – ${formatDate(post.plan.endsAt)}`
-              ].filter(Boolean).join(" · ")}
-            </p>
-          </div>
+          {currentSlide.type === "summary" ? (
+            /* Summary slide: mini itinerary + expenses (sombra en contenedor padre) */
+            <div className="space-y-4">
+              {post.itinerarySnapshot && post.itinerarySnapshot.length > 0 && (() => {
+                const items = post.itinerarySnapshot.slice(0, 4);
+                const hasMore = post.itinerarySnapshot.length > 4;
+                return (
+                  <div>
+                    <p className="text-[10px] font-[700] text-white/45 uppercase tracking-[0.14em] mb-2.5">
+                      {post.itinerarySnapshot.length} {post.itinerarySnapshot.length === 1 ? "actividad" : "actividades"}
+                    </p>
+                    <div className="relative pl-6">
+                      {/* vertical line */}
+                      <div className="absolute left-[8px] top-1 bottom-1 w-px bg-white/15" />
+                      <div className="space-y-2.5">
+                        {items.map((item, i) => (
+                          <div key={i} className="relative flex items-start gap-2.5">
+                            {/* node */}
+                            <div
+                              className="absolute -left-6 top-[3px] size-[17px] rounded-full flex items-center justify-center text-[9px] leading-none border border-white/15"
+                              style={{ background: "rgba(255,255,255,0.08)" }}
+                            >
+                              {getSlideActivityEmoji(item.tipo)}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[13px] font-[700] text-white leading-snug truncate">{item.titulo}</p>
+                              {item.ubicacion_nombre && (
+                                <p className="text-[11px] text-white/45 truncate mt-0.5">{item.ubicacion_nombre}</p>
+                              )}
+                            </div>
+                            <span className="text-[11px] text-white/40 shrink-0 tabular-nums mt-0.5 font-[500]">{fmtSlideTime(item.inicio_at)}</span>
+                          </div>
+                        ))}
+                        {hasMore && (
+                          <div className="relative flex items-center gap-2">
+                            <div className="absolute -left-6 size-[17px] flex items-center justify-center">
+                              <div className="flex flex-col gap-[3px] items-center">
+                                <div className="size-[3px] rounded-full bg-white/25" />
+                                <div className="size-[3px] rounded-full bg-white/25" />
+                                <div className="size-[3px] rounded-full bg-white/25" />
+                              </div>
+                            </div>
+                            <p className="text-[12px] text-white/35 font-[500]">+{post.itinerarySnapshot.length - 4} más</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+              {post.expensesSnapshot && (
+                <div className="flex items-baseline gap-2">
+                  <p className="text-[11px] font-[600] text-white/45 uppercase tracking-[0.1em]">Total</p>
+                  <p className="text-[22px] font-[800] text-white tracking-tight leading-none">
+                    {post.expensesSnapshot.currency} {Math.round(post.expensesSnapshot.total).toLocaleString("es-ES")}
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : (
+            /* Cover / photo slides: title + location */
+            <div className="min-w-0">
+              {post.plan.title && (
+                <p className="text-[18px] font-[800] leading-tight text-white">{post.plan.title}</p>
+              )}
+              <p className="mt-[2px] text-[14px] font-[600] text-white/80">
+                {[
+                  post.plan.locationName,
+                  formatDate(post.plan.startsAt) === formatDate(post.plan.endsAt)
+                    ? formatDate(post.plan.startsAt)
+                    : `${formatDate(post.plan.startsAt)} – ${formatDate(post.plan.endsAt)}`
+                ].filter(Boolean).join(" · ")}
+              </p>
+            </div>
+          )}
         </div>}
       </div>
 
@@ -1827,70 +1909,71 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
         <div className="flex h-full w-full items-center justify-center px-8 py-8">
 
           {post.hasImage && post.coverImage ? (
-            <div
-              className="relative overflow-hidden rounded-2xl"
-              style={{ maxHeight: "calc(100dvh - 160px)" }}
-            >
-              {!imgLoaded && <div className="skeleton-shimmer absolute inset-0 rounded-2xl" aria-hidden="true" />}
-              <NextImage
-                src={post.coverImage}
-                alt="Imagen del plan"
-                width={1200}
-                height={900}
-                className="block h-auto w-auto rounded-2xl transition-opacity duration-300"
+            <div className="flex items-center gap-5">
+              {/* Image */}
+              <div
+                className="relative flex shrink-0 items-center justify-center overflow-hidden rounded-2xl"
                 style={{
-                  opacity: imgLoaded ? 1 : 0,
-                  maxHeight: "calc(100dvh - 160px)",
-                  maxWidth: "min(62dvw, 760px)",
+                  width: "min(50dvw, 620px)",
+                  height: "min(calc(100dvh - 160px), 820px)",
+                  minWidth: "340px",
+                  minHeight: "420px",
                 }}
-                unoptimized
-                onLoad={() => setImgLoaded(true)}
-                onError={() => setImgLoaded(true)}
-              />
+              >
+                {!imgLoaded && <div className="skeleton-shimmer absolute inset-0 rounded-2xl" aria-hidden="true" />}
+                <NextImage
+                  src={post.coverImage}
+                  alt="Imagen del plan"
+                  width={1600}
+                  height={1600}
+                  className="block max-h-full max-w-full rounded-2xl object-contain transition-opacity duration-300"
+                  style={{ opacity: imgLoaded ? 1 : 0 }}
+                  unoptimized
+                  onLoad={() => setImgLoaded(true)}
+                  onError={() => setImgLoaded(true)}
+                />
 
-              {/* Top overlay: avatar + name + follow */}
-              <div className="absolute inset-x-0 top-0 px-4 pb-8 pt-4">
-                <div className="flex items-center gap-2.5">
-                  <Link href={`/profile/${post.plan.ownerUserId}`} className="flex items-center gap-2.5 min-w-0">
-                    <div className="flex size-[34px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/30 bg-white/10">
-                      {post.avatarImage ? (
-                        <NextImage src={post.avatarImage} alt={post.avatarLabel} width={34} height={34} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
-                      ) : (
-                        <span className="text-[14px] font-[700] text-white">{post.avatarLabel}</span>
-                      )}
-                    </div>
-                    <span className="text-[14px] font-[800] text-white drop-shadow-sm truncate">{post.userName}</span>
-                  </Link>
-                  {!isOwnPost && (
-                    <button
-                      type="button"
-                      onClick={onFollowPress}
-                      className={`ml-1 shrink-0 text-[14px] font-[700] transition-opacity hover:opacity-70 ${following ? "text-white/45" : "text-white/80"}`}
+                {/* Top overlay: avatar + name + follow */}
+                <div className="absolute inset-x-0 top-0 px-4 pb-8 pt-4" style={{ filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.45))" }}>
+                  <div className="flex items-center gap-2.5">
+                    <Link href={`/profile/${post.plan.ownerUserId}`} className="flex items-center gap-2.5 min-w-0">
+                      <div className="flex size-[34px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/30 bg-white/10">
+                        {post.avatarImage ? (
+                          <NextImage src={post.avatarImage} alt={post.avatarLabel} width={34} height={34} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
+                        ) : (
+                          <span className="text-[14px] font-[700] text-white">{post.avatarLabel}</span>
+                        )}
+                      </div>
+                      <span className="text-[14px] font-[800] text-white truncate">{post.userName}</span>
+                    </Link>
+                    {!isOwnPost && (
+                      <button
+                        type="button"
+                        onClick={onFollowPress}
+                        className={`ml-1 shrink-0 text-[14px] font-[700] transition-opacity hover:opacity-70 ${following ? "text-white/45" : "text-white/80"}`}
+                      >
+                        {following ? "Siguiendo" : "· Seguir"}
+                      </button>
+                    )}
+                    <Link
+                      href={`/plan/${post.plan.id}`}
+                      className="ml-auto shrink-0 flex items-center gap-1 text-[14px] font-[700] text-white transition-opacity hover:opacity-70"
                     >
-                      {following ? "Siguiendo" : "· Seguir"}
-                    </button>
-                  )}
-                  <Link
-                    href={`/plan/${post.plan.id}`}
-                    className="ml-auto shrink-0 flex items-center gap-1 rounded-full bg-black/30 backdrop-blur-sm px-3 py-1.5 text-[14px] font-[700] text-white transition-opacity hover:opacity-80"
-                  >
-                    Ver plan
-                    <svg viewBox="0 0 24 24" fill="none" className="size-[11px]" aria-hidden="true">
-                      <path d="M13 3L21 12M21 12L13 21M21 12H3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  </Link>
+                      Ver plan
+                      <svg viewBox="0 0 24 24" fill="none" className="size-[11px]" aria-hidden="true">
+                        <path d="M13 3L21 12M21 12L13 21M21 12H3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </Link>
+                  </div>
                 </div>
-              </div>
 
-              {/* Bottom overlay: info left + actions right */}
-              <div className="absolute inset-x-0 bottom-0 px-4 pb-4 pt-16">
-                <div className="flex items-end justify-between gap-4">
-                  {/* Left: location / date / text / ver plan */}
+                {/* Bottom: title + location */}
+                <div className="absolute inset-x-0 bottom-0 z-20 px-4 pb-6" style={{ filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.45))" }}>
                   <div className="min-w-0">
                     {post.plan.title && (
                       <p className="text-[16px] font-[800] leading-tight text-white">{post.plan.title}</p>
                     )}
-                    <p className="mt-[2px] text-[14px] font-[600] text-white/70">
+                    <p className="mt-[2px] text-[14px] font-[600] text-white/85">
                       {[
                         post.plan.locationName,
                         formatDate(post.plan.startsAt) === formatDate(post.plan.endsAt)
@@ -1899,41 +1982,45 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                       ].filter(Boolean).join(" · ")}
                     </p>
                   </div>
-                  {/* Right: like / comment / save / ver plan */}
-                  <div className="flex shrink-0 items-center gap-2">
-                    <button
-                      type="button"
-                      className="flex items-center gap-2 rounded-full bg-black/50 px-4 py-2 text-white disabled:opacity-40 transition-colors hover:bg-black/65"
-                      onClick={onLikeToggle}
-                      disabled={!currentUserId || likeLoading}
-                      aria-label={liked ? "Quitar like" : "Dar like"}
-                    >
-                      <PlaneIcon liked={liked} animating={likeAnimating} size={20} className="text-white" />
-                      {likeCount > 0 && <span className="text-[14px] font-[700]">{likeCount}</span>}
-                    </button>
-                    <button
-                      type="button"
-                      className="flex items-center gap-2 rounded-full bg-black/50 px-4 py-2 text-white transition-colors hover:bg-black/65"
-                      onClick={openCommentsModal}
-                      aria-label="Comentarios"
-                    >
-                      <svg viewBox="0 0 24 24" fill="none" className="size-[20px]" aria-hidden="true">
-                        <path d="M12 4C7.582 4 4 6.91 4 10.5C4 12.31 4.913 13.947 6.39 15.109C6.272 16.213 5.79 17.343 4.98 18.316C4.787 18.549 5.02 18.88 5.315 18.785C7.005 18.243 8.357 17.471 9.235 16.86C10.115 17.113 11.04 17.25 12 17.25C16.418 17.25 20 14.34 20 10.75C20 7.16 16.418 4 12 4Z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                      {commentsSection.length > 0 && <span className="text-[14px] font-[700]">{commentsSection.length}</span>}
-                    </button>
-                    {!isOwnPost && (
-                      <button
-                        type="button"
-                        className="flex items-center justify-center rounded-full bg-black/50 px-4 py-2 text-white transition-colors hover:bg-black/65"
-                        onClick={handleToggleSave}
-                        aria-label={saved ? "Quitar guardado" : "Guardar"}
-                      >
-                        <BookmarkIcon saved={saved} size={20} />
-                      </button>
-                    )}
-                  </div>
                 </div>
+              </div>
+
+              {/* Actions column — lateral derecho, centrado verticalmente */}
+              <div className="flex shrink-0 flex-col items-center justify-center gap-6" style={{ filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.35))" }}>
+                <button
+                  type="button"
+                  className="flex flex-col items-center gap-1 disabled:opacity-40 active:scale-90 transition-transform"
+                  onClick={onLikeToggle}
+                  disabled={!currentUserId || likeLoading}
+                  aria-label={liked ? "Quitar like" : "Dar like"}
+                >
+                  <PlaneIcon liked={liked} animating={likeAnimating} size={34} className={liked ? "text-primary-token" : "text-white"} />
+                  <span className={`text-[13px] font-[700] leading-none text-white ${likeCount > 0 ? "" : "invisible"}`}>{likeCount || 0}</span>
+                </button>
+                <button
+                  type="button"
+                  className="flex flex-col items-center gap-1 text-white active:scale-90 transition-transform"
+                  onClick={openCommentsModal}
+                  aria-label="Comentarios"
+                >
+                  <svg viewBox="0 0 24 24" fill="currentColor" className="size-[34px]" aria-hidden="true">
+                    <path d="M12 4C7.582 4 4 6.91 4 10.5C4 12.31 4.913 13.947 6.39 15.109C6.272 16.213 5.79 17.343 4.98 18.316C4.787 18.549 5.02 18.88 5.315 18.785C7.005 18.243 8.357 17.471 9.235 16.86C10.115 17.113 11.04 17.25 12 17.25C16.418 17.25 20 14.34 20 10.75C20 7.16 16.418 4 12 4Z" />
+                  </svg>
+                  <span className={`text-[13px] font-[700] leading-none text-white ${commentsSection.length > 0 ? "" : "invisible"}`}>{commentsSection.length || 0}</span>
+                </button>
+                {!isOwnPost && (
+                  <button
+                    type="button"
+                    className="flex flex-col items-center gap-1 active:scale-90 transition-transform"
+                    onClick={handleToggleSave}
+                    aria-label={saved ? "Quitar guardado" : "Guardar"}
+                  >
+                    <svg width={34} height={34} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className={saved ? "text-primary-token" : "text-white"}>
+                      <path d="M7 4.5H17C17.55 4.5 18 4.95 18 5.5V20L12 16.2L6 20V5.5C6 4.95 6.45 4.5 7 4.5Z" />
+                    </svg>
+                    <span className="invisible text-[13px] font-[700] leading-none">0</span>
+                  </button>
+                )}
               </div>
             </div>
           ) : (
@@ -1981,8 +2068,8 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                   disabled={!currentUserId || likeLoading}
                   aria-label={liked ? "Quitar like" : "Dar like"}
                 >
-                  <PlaneIcon liked={liked} animating={likeAnimating} size={18} />
-                  {likeCount > 0 && <span className="text-[14px] font-[700]">{likeCount}</span>}
+                  <PlaneIcon liked={liked} animating={likeAnimating} size={24} className={liked ? "text-primary-token" : ""} />
+                  <span className={`text-[14px] font-[700] ${likeCount > 0 ? "" : "invisible"}`}>{likeCount || 0}</span>
                 </button>
                 <button
                   type="button"
@@ -1990,21 +2077,19 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                   onClick={openCommentsModal}
                   aria-label="Comentarios"
                 >
-                  <svg viewBox="0 0 24 24" fill="none" className="size-[18px]" aria-hidden="true">
-                    <path d="M12 4C7.582 4 4 6.91 4 10.5C4 12.31 4.913 13.947 6.39 15.109C6.272 16.213 5.79 17.343 4.98 18.316C4.787 18.549 5.02 18.88 5.315 18.785C7.005 18.243 8.357 17.471 9.235 16.86C10.115 17.113 11.04 17.25 12 17.25C16.418 17.25 20 14.34 20 10.75C20 7.16 16.418 4 12 4Z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                  <svg viewBox="0 0 24 24" fill="currentColor" className="size-[24px]" aria-hidden="true">
+                    <path d="M12 4C7.582 4 4 6.91 4 10.5C4 12.31 4.913 13.947 6.39 15.109C6.272 16.213 5.79 17.343 4.98 18.316C4.787 18.549 5.02 18.88 5.315 18.785C7.005 18.243 8.357 17.471 9.235 16.86C10.115 17.113 11.04 17.25 12 17.25C16.418 17.25 20 14.34 20 10.75C20 7.16 16.418 4 12 4Z" />
                   </svg>
-                  {commentsSection.length > 0 && <span className="text-[14px] font-[700]">{commentsSection.length}</span>}
+                  <span className={`text-[14px] font-[700] ${commentsSection.length > 0 ? "" : "invisible"}`}>{commentsSection.length || 0}</span>
                 </button>
-                {!isOwnPost && (
-                  <button
-                    type="button"
-                    className="text-[var(--text-secondary)] transition-opacity hover:opacity-70"
-                    onClick={handleToggleSave}
-                    aria-label={saved ? "Quitar guardado" : "Guardar"}
-                  >
-                    <BookmarkIcon saved={saved} />
-                  </button>
-                )}
+                <button
+                  type="button"
+                  className={`transition-opacity hover:opacity-70 ${saved ? "text-primary-token" : "text-[var(--text-secondary)]"}`}
+                  onClick={handleToggleSave}
+                  aria-label={saved ? "Quitar guardado" : "Guardar"}
+                >
+                  <BookmarkIcon size={24} />
+                </button>
                 <Link
                   href={`/plan/${post.plan.id}`}
                   className="ml-auto flex items-center gap-1 text-[14px] font-[700] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
@@ -2023,7 +2108,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
 
       {commentsModalOpen && (
         <div className="comments-modal-overlay fixed inset-0 z-[1100] flex items-end justify-center bg-black/65 md:items-center md:p-[var(--space-6)]" onClick={() => { setCommentsModalOpen(false); setEmojiPickerOpen(false); }}>
-          <div className="comments-modal-panel grid h-dvh w-full overflow-hidden border border-[#262626] bg-app shadow-elev-4 md:h-[min(88dvh,760px)] md:max-w-[1120px] md:rounded-[6px] md:grid-cols-[minmax(0,1fr)_420px]" onClick={(e) => e.stopPropagation()}>
+          <div className="comments-modal-panel grid h-dvh w-full overflow-hidden bg-app shadow-elev-4 md:h-[min(88dvh,760px)] md:max-w-[1120px] md:rounded-[6px] md:grid-cols-[minmax(0,1fr)_420px]" onClick={(e) => e.stopPropagation()}>
             <div className="relative hidden min-h-0 bg-[#111] md:block">
               {post.hasImage && post.coverImage ? (
                 <NextImage src={post.coverImage} alt="Imagen del plan" width={1200} height={900} className="h-full w-full object-contain" unoptimized referrerPolicy="no-referrer" />
@@ -2056,8 +2141,8 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
               </div>
             </div>
 
-            <div className="flex min-h-0 flex-col bg-[#1f2228]">
-              <div className="flex items-center justify-between border-b border-[#262626] px-[22px] py-[18px]">
+            <div className="flex min-h-0 flex-col bg-app">
+              <div className="flex items-center justify-between border-b px-[22px] py-[18px]">
                 <div className="flex min-w-0 items-center gap-3">
                   <div className="flex size-[42px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset">
                     {post.avatarImage ? (
@@ -2066,22 +2151,28 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                       <span className="text-[15px] font-[var(--fw-semibold)] text-app">{post.avatarLabel}</span>
                     )}
                   </div>
-                  <div className="min-w-0 flex-1 self-center">
-                    <p className="text-[15px] leading-[1.35] text-app">
-                      <Link href={`/profile/${post.plan.ownerUserId}`} className="font-[800]">{post.userName}</Link>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Link href={`/profile/${post.plan.ownerUserId}`} className="truncate text-[15px] font-[800] text-app">{post.userName}</Link>
                       {!isOwnPost && (
-                        <>
-                          <span className="px-2 text-muted">•</span>
-                          <button type="button" onClick={onFollowPress} className={`text-[14px] font-[700] transition-opacity hover:opacity-80 ${following ? "text-muted" : "text-primary-token"}`}>
-                            {following ? "Siguiendo" : "Seguir"}
-                          </button>
-                        </>
+                        <button type="button" onClick={onFollowPress} className={`shrink-0 text-[13px] font-[700] transition-opacity hover:opacity-80 ${following ? "text-muted" : "text-primary-token"}`}>
+                          {following ? "Siguiendo" : "· Seguir"}
+                        </button>
                       )}
-                      {post.text ? <> {post.text}</> : null}
-                    </p>
-                    <p className="mt-1 text-[14px] text-muted">
-                      {post.plan.createdAt ? formatRelativeTime(post.plan.createdAt) : formatDate(post.plan.startsAt)}
-                    </p>
+                    </div>
+                    {(post.plan.title || post.plan.startsAt) && (
+                      <p className="mt-[2px] flex items-center gap-1.5 truncate text-[13px] text-muted">
+                        {post.plan.title && <span className="truncate font-[600]">{post.plan.title}</span>}
+                        {post.plan.title && post.plan.startsAt && <span className="shrink-0">·</span>}
+                        {post.plan.startsAt && (
+                          <span className="shrink-0">
+                            {formatDate(post.plan.startsAt) === formatDate(post.plan.endsAt)
+                              ? formatDate(post.plan.startsAt)
+                              : `${formatDate(post.plan.startsAt)} – ${formatDate(post.plan.endsAt)}`}
+                          </span>
+                        )}
+                      </p>
+                    )}
                   </div>
                 </div>
                 <button type="button" onClick={() => { setCommentsModalOpen(false); setEmojiPickerOpen(false); }} aria-label="Cerrar comentarios" className="text-muted transition-opacity hover:opacity-70">
@@ -2093,7 +2184,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                 {renderCommentsList()}
               </div>
 
-              <div className="border-t border-[#262626] px-[22px] py-[14px]">
+              <div className="px-[22px] py-[14px]">
                 <div className="flex items-center gap-4 text-app">
                   <button type="button" className="flex items-center gap-[6px] transition-opacity hover:opacity-70" aria-label="Me gusta" onClick={onLikeToggle} disabled={!currentUserId}>
                     <PlaneIcon liked={liked} animating={likeAnimating} size={28} />
@@ -2107,19 +2198,19 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                     <ShareIcon />
                   </button>
                   {!isOwnPost && (
-                    <button type="button" onClick={handleToggleSave} className="ml-auto transition-opacity hover:opacity-70" aria-label="Guardar">
-                      <BookmarkIcon saved={saved} />
+                    <button type="button" onClick={handleToggleSave} className={`ml-auto transition-opacity hover:opacity-70 ${saved ? "text-primary-token" : ""}`} aria-label="Guardar">
+                      <BookmarkIcon />
                     </button>
                   )}
                 </div>
               </div>
 
-              <div ref={emojiPickerRef} className="relative border-t border-[#262626] px-[22px] py-[14px]">
+              <div ref={emojiPickerRef} className="relative px-[22px] py-[14px]">
                 {emojiPickerOpen && (
-                  <div className="absolute bottom-[calc(100%+8px)] left-[22px] z-[70] w-[256px] rounded-[10px] bg-[#1a1a1a]/95 p-2 shadow-lg backdrop-blur-md">
+                  <div className="absolute bottom-[calc(100%+8px)] left-[22px] z-[70] w-[256px] rounded-[10px] border border-app bg-[var(--surface-raised)] p-2 shadow-lg backdrop-blur-md">
                     <div className="scrollbar-thin grid max-h-[180px] grid-cols-8 gap-0.5 overflow-x-hidden overflow-y-auto overscroll-contain">
                       {EMOJI_LIST.map((emoji) => (
-                        <button key={emoji} type="button" className="flex size-[30px] items-center justify-center rounded-[6px] text-[18px] transition-colors hover:bg-white/15" onClick={() => insertEmoji(emoji)}>
+                        <button key={emoji} type="button" className="flex size-[30px] items-center justify-center rounded-[6px] text-[18px] transition-colors hover:bg-[var(--interactive-hover-surface)]" onClick={() => insertEmoji(emoji)}>
                           {emoji}
                         </button>
                       ))}
@@ -2222,10 +2313,10 @@ function ShareIcon() {
 }
 
 
-function BookmarkIcon({ saved = false, size = 24 }: { saved?: boolean; size?: number }) {
+function BookmarkIcon({ size = 24 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill={saved ? "currentColor" : "none"} aria-hidden="true">
-      <path d="M7 4.5H17C17.55 4.5 18 4.95 18 5.5V20L12 16.2L6 20V5.5C6 4.95 6.45 4.5 7 4.5Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M7 4.5H17C17.55 4.5 18 4.95 18 5.5V20L12 16.2L6 20V5.5C6 4.95 6.45 4.5 7 4.5Z" />
     </svg>
   );
 }

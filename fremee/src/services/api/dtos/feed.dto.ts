@@ -14,4 +14,7 @@ export type FeedItemDto = {
   plan: FeedPlanItemDto;
   initiallyLiked: boolean;
   initialLikeCount: number;
+  photosSnapshot: { url: string }[] | null;
+  itinerarySnapshot: { titulo: string; tipo: string; inicio_at: string; ubicacion_nombre: string }[] | null;
+  expensesSnapshot: { total: number; currency: string } | null;
 };

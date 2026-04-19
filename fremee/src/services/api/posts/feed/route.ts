@@ -1,19 +1,10 @@
-import {
-  collection,
-  getDocs,
-  limit,
-  orderBy,
-  query,
-  startAfter,
-  where,
-  type QueryDocumentSnapshot,
-  type DocumentData,
-} from "firebase/firestore";
+import { collection, getDocs, limit, orderBy, query, where } from "firebase/firestore";
 import { db } from "@/services/firebase/firestore";
 
 type FeedPostDoc = {
   planId?: number;
   published?: boolean;
+  // campos nuevos (raíz)
   title?: string;
   description?: string;
   locationName?: string;
@@ -24,6 +15,7 @@ type FeedPostDoc = {
   coverImage?: string | null;
   ownerUserId?: string;
   caption?: string | null;
+  // campos legacy (dentro de plan)
   plan?: {
     title?: string;
     description?: string;
@@ -41,6 +33,9 @@ type FeedPostDoc = {
     name?: string;
     profileImage?: string | null;
   };
+  photosSnapshot?: { url: string }[] | null;
+  itinerarySnapshot?: { titulo: string; tipo: string; inicio_at: string; ubicacion_nombre: string }[] | null;
+  expensesSnapshot?: { total: number; currency: string } | null;
 };
 
 export type FeedPostEntry = {
@@ -55,63 +50,53 @@ export type FeedPostEntry = {
   coverImage: string | null;
   ownerUserId: string;
   caption: string | null;
-  creator: { id: string; name: string; username: string | null; profileImage: string | null } | null;
+  creator: { id: string; name: string; profileImage: string | null } | null;
+  photosSnapshot: { url: string }[] | null;
+  itinerarySnapshot: { titulo: string; tipo: string; inicio_at: string; ubicacion_nombre: string }[] | null;
+  expensesSnapshot: { total: number; currency: string } | null;
 };
 
-export type FeedPage = {
-  entries: FeedPostEntry[];
-  cursor: QueryDocumentSnapshot<DocumentData> | null; // null = no hay más
-};
-
-function docToEntry(d: QueryDocumentSnapshot<DocumentData>): FeedPostEntry | null {
-  const doc = d.data() as FeedPostDoc;
-  const planId = doc.planId;
-  if (typeof planId !== "number" || !Number.isInteger(planId) || planId <= 0) return null;
-
-  const p = doc.plan;
-  const c = doc.creator ?? p?.creator;
-  return {
-    planId,
-    title: doc.title ?? p?.title ?? "",
-    description: doc.description ?? p?.description ?? "",
-    locationName: doc.locationName ?? p?.locationName ?? "",
-    startsAt: doc.startsAt ?? p?.startsAt ?? "",
-    endsAt: doc.endsAt ?? p?.endsAt ?? "",
-    allDay: doc.allDay ?? p?.allDay ?? false,
-    visibility: doc.visibility ?? p?.visibility ?? "PÚBLICO",
-    coverImage: doc.coverImage ?? p?.coverImage ?? null,
-    ownerUserId: doc.ownerUserId ?? p?.ownerUserId ?? "",
-    caption: doc.caption ?? null,
-    creator: c?.id && c?.name ? { id: c.id, name: c.name, username: (c as { username?: string | null }).username ?? null, profileImage: c.profileImage ?? null } : null,
-  };
-}
-
-export async function listPublishedPostPlanIdsRoute(params: {
-  limit: number;
-  cursor?: QueryDocumentSnapshot<DocumentData> | null;
-}): Promise<FeedPage> {
+export async function listPublishedPostPlanIdsRoute(params: { limit: number }): Promise<FeedPostEntry[]> {
   const postsRef = collection(db, "posts");
-  const constraints = [
+  const q = query(
+    postsRef,
     where("published", "==", true),
     orderBy("publishedAt", "desc"),
     limit(params.limit),
-    ...(params.cursor ? [startAfter(params.cursor)] : []),
-  ];
-  const snap = await getDocs(query(postsRef, ...constraints));
+  );
+  const snap = await getDocs(q);
 
   const seen = new Set<number>();
   const entries: FeedPostEntry[] = [];
-  let lastDoc: QueryDocumentSnapshot<DocumentData> | null = null;
 
   for (const d of snap.docs) {
-    const entry = docToEntry(d);
-    if (!entry || seen.has(entry.planId)) continue;
-    seen.add(entry.planId);
-    entries.push(entry);
-    lastDoc = d;
+    const doc = d.data() as FeedPostDoc;
+    const planId = doc.planId;
+    if (typeof planId !== "number" || !Number.isInteger(planId) || planId <= 0) continue;
+    if (seen.has(planId)) continue;
+    seen.add(planId);
+
+    // Soporta formato nuevo (raíz) y legacy (dentro de plan)
+    const p = doc.plan;
+    const c = doc.creator ?? p?.creator;
+    entries.push({
+      planId,
+      title: doc.title ?? p?.title ?? "",
+      description: doc.description ?? p?.description ?? "",
+      locationName: doc.locationName ?? p?.locationName ?? "",
+      startsAt: doc.startsAt ?? p?.startsAt ?? "",
+      endsAt: doc.endsAt ?? p?.endsAt ?? "",
+      allDay: doc.allDay ?? p?.allDay ?? false,
+      visibility: doc.visibility ?? p?.visibility ?? "PÚBLICO",
+      coverImage: doc.coverImage ?? p?.coverImage ?? null,
+      ownerUserId: doc.ownerUserId ?? p?.ownerUserId ?? "",
+      caption: doc.caption ?? null,
+      creator: c?.id && c?.name ? { id: c.id, name: c.name, profileImage: c.profileImage ?? null } : null,
+      photosSnapshot: doc.photosSnapshot ?? null,
+      itinerarySnapshot: doc.itinerarySnapshot ?? null,
+      expensesSnapshot: doc.expensesSnapshot ?? null,
+    });
   }
 
-  // Si devuelve menos de lo pedido, no hay más páginas
-  const cursor = snap.docs.length < params.limit ? null : lastDoc;
-  return { entries, cursor };
+  return entries;
 }
