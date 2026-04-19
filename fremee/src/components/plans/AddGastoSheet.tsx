@@ -136,6 +136,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
   // ── OCR state ──
   const [ocrLoading, setOcrLoading] = useState(false);
   const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
+  const [notAReceipt, setNotAReceipt] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ── UI state ──
@@ -174,17 +175,37 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
     if (!file) return;
     setOcrLoading(true);
     setError(null);
+    setNotAReceipt(false);
     try {
+      // Normalise image to JPEG so OpenAI always gets a supported format.
+      // PDFs are left as-is (handled server-side with text extraction).
+      let fileToSend: File | Blob = file;
+      const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+      if (!isPdf && file.type.startsWith("image/")) {
+        const bitmap = await createImageBitmap(file);
+        const canvas = document.createElement("canvas");
+        canvas.width = bitmap.width;
+        canvas.height = bitmap.height;
+        const ctx = canvas.getContext("2d")!;
+        ctx.drawImage(bitmap, 0, 0);
+        bitmap.close();
+        fileToSend = await new Promise<Blob>((res) => canvas.toBlob((b) => res(b!), "image/jpeg", 0.92));
+      }
+
       const fd = new FormData();
-      fd.append("file", file);
+      fd.append("file", fileToSend, isPdf ? file.name : "receipt.jpg");
       fd.append("plan_id", String(planId));
       fd.append("user_id", userId);
       const res = await fetch("/api/receipts/ocr", { method: "POST", body: fd });
       const data = await res.json() as OcrResult;
       if ("error" in data) throw new Error((data as { error: string }).error);
 
-      // Auto-fill fields from OCR
-      if (data.comercio && !titulo) setTitulo(data.comercio);
+      if (!data.is_receipt) {
+        setNotAReceipt(true);
+      }
+
+      // Auto-fill fields from OCR — always overwrite with the new receipt
+      if (data.comercio) setTitulo(data.comercio);
       if (data.total != null) setTotal(String(data.total));
       if (data.moneda) setMoneda(data.moneda);
       if (data.fecha) setFechaGasto(data.fecha);
@@ -247,6 +268,8 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
 
   // ── validation & submit ───────────────────────────────────────────────────
   const totalNum = parseFloat(total) || 0;
+  const itemsSum = items.reduce((acc, item) => acc + item.subtotal, 0);
+  const itemsSumMismatch = metodo === "POR_ITEMS" && totalNum > 0 && items.length > 0 && Math.abs(itemsSum - totalNum) > 0.01;
 
   function buildParticiantes() {
     if (metodo === "IGUAL") {
@@ -288,6 +311,10 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
     e.preventDefault();
     if (!titulo.trim() || totalNum <= 0) {
       setError("Introduce un título y el importe total");
+      return;
+    }
+    if (itemsSumMismatch) {
+      setError(`La suma de los ítems (${itemsSum.toFixed(2)} ${moneda}) no coincide con el total (${totalNum.toFixed(2)} ${moneda})`);
       return;
     }
     const participantes = buildParticiantes();
@@ -384,7 +411,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                         value={total}
                         onChange={(e) => setTotal(e.target.value)}
                         placeholder="0.00"
-                        className="min-w-0 flex-1 bg-transparent text-body text-app outline-none placeholder:text-muted"
+                        className="min-w-0 flex-1 bg-transparent text-body text-app outline-none placeholder:text-muted [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                       />
                       <select
                         value={moneda}
@@ -422,7 +449,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                     onClick={() => fileInputRef.current?.click()}
                     disabled={ocrLoading}
                     className={`inline-flex items-center gap-[var(--space-2)] rounded-[14px] border px-[var(--space-4)] py-[10px] text-body-sm font-[var(--fw-semibold)] transition-colors disabled:opacity-60 ${
-                      receiptUrl
+                      receiptUrl && !notAReceipt
                         ? "border-success-token/30 bg-success-token/10 text-success-token hover:bg-success-token/15"
                         : "border-app bg-surface text-app hover:border-primary-token hover:text-primary-token"
                     }`}
@@ -432,7 +459,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                         <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
                         Analizando...
                       </>
-                    ) : receiptUrl ? (
+                    ) : receiptUrl && !notAReceipt ? (
                       <>
                         <svg viewBox="0 0 24 24" fill="none" className="size-4 text-success-token" stroke="currentColor" strokeWidth="2">
                           <path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
@@ -445,7 +472,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                           <path d="M12 16v-8M8 12l4-4 4 4" strokeLinecap="round" strokeLinejoin="round" />
                           <rect x="3" y="3" width="18" height="18" rx="3" />
                         </svg>
-                        Leer ticket o factura
+                        {notAReceipt ? "Subir otro archivo" : "Leer ticket o factura"}
                       </>
                     )}
                   </button>
@@ -453,6 +480,16 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                     * Rellena los campos automáticamente y detecta los ítems del ticket.
                   </p>
                 </div>
+                {notAReceipt && (
+                  <div className="flex items-start gap-[var(--space-2)] rounded-[12px] border border-[var(--warning,#f59e0b)]/30 bg-[var(--warning,#f59e0b)]/10 px-[var(--space-3)] py-[var(--space-2)]">
+                    <svg viewBox="0 0 24 24" fill="none" className="mt-0.5 size-4 shrink-0 text-[var(--warning,#f59e0b)]" stroke="currentColor" strokeWidth="2">
+                      <path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    <p className="text-caption text-[var(--warning,#f59e0b)]">
+                      La imagen no parece un recibo o factura. Puedes seguir, pero revisa los campos manualmente.
+                    </p>
+                  </div>
+                )}
               </section>
 
               {miembros.length > 0 && (
@@ -645,14 +682,31 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                   <div className="space-y-[var(--space-3)]">
                     <div className="flex items-center justify-between">
                       <p className={labelCls}>Ítems</p>
-                      <button
-                        type="button"
-                        onClick={addItem}
-                        className="text-body-sm text-primary-token font-[var(--fw-medium)]"
-                      >
-                        + Añadir ítem
-                      </button>
+                      <div className="flex items-center gap-[var(--space-3)]">
+                        {items.length > 0 && (
+                          <span className={`text-caption font-[var(--fw-semibold)] ${itemsSumMismatch ? "text-[var(--error)]" : "text-muted"}`}>
+                            {itemsSum.toFixed(2)} {moneda}{totalNum > 0 ? ` / ${totalNum.toFixed(2)} ${moneda}` : ""}
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={addItem}
+                          className="text-body-sm text-primary-token font-[var(--fw-medium)]"
+                        >
+                          + Añadir ítem
+                        </button>
+                      </div>
                     </div>
+                    {itemsSumMismatch && (
+                      <div className="flex items-start gap-[var(--space-2)] rounded-[12px] border border-[var(--error)]/30 bg-[var(--error)]/10 px-[var(--space-3)] py-[var(--space-2)]">
+                        <svg viewBox="0 0 24 24" fill="none" className="mt-0.5 size-4 shrink-0 text-[var(--error)]" stroke="currentColor" strokeWidth="2">
+                          <path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                        <p className="text-caption text-[var(--error)]">
+                          La suma de ítems ({itemsSum.toFixed(2)} {moneda}) no coincide con el total ({totalNum.toFixed(2)} {moneda}). Ajusta los ítems o el total.
+                        </p>
+                      </div>
+                    )}
                     {items.length === 0 ? (
                       <p className="text-body-sm text-muted text-center py-[var(--space-4)]">
                         Sube un ticket para detectar ítems o añádelos manualmente.
@@ -675,27 +729,41 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                               </button>
                             </div>
 
-                            <div className="flex flex-wrap items-center gap-[var(--space-2)] text-caption text-muted">
-                              <span>×</span>
-                              <input
-                                type="number"
-                                min="1"
-                                step="1"
-                                value={item.cantidad}
-                                onChange={(e) => updateItem(idx, { cantidad: parseInt(e.target.value) || 1 })}
-                                className="w-[42px] bg-transparent outline-none text-center"
-                              />
-                              <span>ud ·</span>
-                              <input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                value={item.precio_unitario || ""}
-                                onChange={(e) => updateItem(idx, { precio_unitario: parseFloat(e.target.value) || 0 })}
-                                placeholder="0.00"
-                                className="w-[68px] bg-transparent outline-none text-right"
-                              />
-                              <span>{moneda} · Subtotal: {item.subtotal.toFixed(2)} {moneda}</span>
+                            <div className="flex flex-wrap items-center gap-[var(--space-3)] text-caption text-muted">
+                              <div className="flex items-center gap-1.5">
+                                <span>×</span>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  step="1"
+                                  value={item.cantidad}
+                                  onChange={(e) => updateItem(idx, { cantidad: parseInt(e.target.value) || 1 })}
+                                  className="w-[36px] bg-transparent outline-none text-center [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                />
+                                <StepperButtons
+                                  onIncrement={() => updateItem(idx, { cantidad: item.cantidad + 1 })}
+                                  onDecrement={() => updateItem(idx, { cantidad: Math.max(1, item.cantidad - 1) })}
+                                />
+                                <span>ud</span>
+                              </div>
+                              <span>·</span>
+                              <div className="flex items-center gap-1.5">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={item.precio_unitario || ""}
+                                  onChange={(e) => updateItem(idx, { precio_unitario: parseFloat(e.target.value) || 0 })}
+                                  placeholder="0.00"
+                                  className="w-[64px] bg-transparent outline-none text-right [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                />
+                                <StepperButtons
+                                  onIncrement={() => updateItem(idx, { precio_unitario: parseFloat((item.precio_unitario + 0.01).toFixed(2)) })}
+                                  onDecrement={() => updateItem(idx, { precio_unitario: parseFloat(Math.max(0, item.precio_unitario - 0.01).toFixed(2)) })}
+                                />
+                                <span>{moneda}</span>
+                              </div>
+                              <span>· Subtotal: <strong className="text-app">{item.subtotal.toFixed(2)} {moneda}</strong></span>
                             </div>
 
                             <div>

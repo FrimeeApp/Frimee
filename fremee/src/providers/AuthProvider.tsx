@@ -20,6 +20,7 @@ import type { UserSettingsDto } from "@/services/api/repositories/settings.repos
 type Profile = {
   id: string;
   nombre: string;
+  username: string | null;
   fecha_nac: string | null;
   email: string;
   rol: string;

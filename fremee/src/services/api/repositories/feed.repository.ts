@@ -1,12 +1,15 @@
 import type { FeedItemDto } from "@/services/api/dtos/feed.dto";
 import type { FeedPlanItemDto } from "@/services/api/dtos/plan.dto";
-import type { FeedPostEntry } from "@/services/api/endpoints/feed.endpoint";
+import type { FeedPostEntry, FeedCursor } from "@/services/api/endpoints/feed.endpoint";
 import { listPublishedPostPlanIdsEndpoint } from "@/services/api/endpoints/feed.endpoint";
 import { listUserPlanLikesEndpoint, listPlanLikeCountsEndpoint } from "@/services/api/endpoints/likes.endpoint";
 
-export async function listPublishedPostEntries(params: { limit?: number } = {}): Promise<FeedPostEntry[]> {
-  return listPublishedPostPlanIdsEndpoint({ limit: params.limit ?? 20 });
-}
+export type { FeedCursor };
+
+export type FeedResult = {
+  posts: FeedItemDto[];
+  cursor: FeedCursor; // null = no hay más páginas
+};
 
 function entryToFeedItem(entry: FeedPostEntry): FeedItemDto {
   const creator = entry.creator;
@@ -25,13 +28,14 @@ function entryToFeedItem(entry: FeedPostEntry): FeedItemDto {
     coverImage: entry.coverImage,
     ownerUserId: entry.ownerUserId,
     creator: creator
-      ? { id: creator.id, name: creator.name, profileImage: creator.profileImage }
-      : { id: "", name: "Usuario", profileImage: null },
+      ? { id: creator.id, name: creator.name, username: creator.username ?? null, profileImage: creator.profileImage }
+      : { id: "", name: "Usuario", username: null, profileImage: null },
   };
 
   return {
     id: String(entry.planId),
     userName,
+    userUsername: creator?.username ?? null,
     avatarLabel: (userName.trim()[0] || "U").toUpperCase(),
     avatarImage: creator?.profileImage ?? null,
     subtitle: entry.title,
@@ -45,13 +49,19 @@ function entryToFeedItem(entry: FeedPostEntry): FeedItemDto {
   };
 }
 
-// Devuelve posts sin likes — rápido (1 query a Firebase)
-export async function getFeedPostsOnly(params: { limit?: number }): Promise<FeedItemDto[]> {
-  const entries = await listPublishedPostEntries({ limit: params.limit ?? 20 });
-  return entries.map(entryToFeedItem);
+// Carga una página de posts sin likes (rápido)
+export async function getFeedPostsOnly(params: {
+  limit?: number;
+  cursor?: FeedCursor;
+}): Promise<FeedResult> {
+  const { entries, cursor } = await listPublishedPostPlanIdsEndpoint({
+    limit: params.limit ?? 20,
+    cursor: params.cursor,
+  });
+  return { posts: entries.map(entryToFeedItem), cursor };
 }
 
-// Devuelve likes — se llama en background después de mostrar los posts
+// Likes — se llama en background después de mostrar posts
 export async function getFeedLikes(params: {
   userId: string;
   planIds: number[];
@@ -66,9 +76,9 @@ export async function getFeedLikes(params: {
   };
 }
 
-// Mantener compatibilidad con código existente
+// Compatibilidad con código existente
 export async function getFeedPage(params: { userId: string; limit?: number }): Promise<FeedItemDto[]> {
-  const posts = await getFeedPostsOnly({ limit: params.limit });
+  const { posts } = await getFeedPostsOnly({ limit: params.limit });
   const planIds = posts.map((p) => p.plan.id);
   if (planIds.length === 0) return posts;
   const { likedSet, counts } = await getFeedLikes({ userId: params.userId, planIds });

@@ -8,7 +8,7 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import AppSidebar from "@/components/common/AppSidebar";
 import LoadingScreen from "@/components/common/LoadingScreen";
 import { useAuth } from "@/providers/AuthProvider";
-import { getFeedPostsOnly, getFeedLikes } from "@/services/api/repositories/feed.repository";
+import { getFeedPostsOnly, getFeedLikes, type FeedCursor } from "@/services/api/repositories/feed.repository";
 import { countNotificacionesNoLeidas, insertNotificacion, deleteNotificacionLike } from "@/services/api/repositories/notifications.repository";
 import NotificationsPanel from "@/components/notifications/NotificationsPanel";
 import type { FeedItemDto } from "@/services/api/dtos/feed.dto";
@@ -132,9 +132,13 @@ export default function FeedPage() {
   const currentUserId = user?.id ?? null;
   const [activeFeedTab, setActiveFeedTab] = useState<"following" | "explore">("explore");
   const [loadingFeed, setLoadingFeed] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [firstImageReady, setFirstImageReady] = useState(false);
   const [uiPosts, setUiPosts] = useState<FeedItemDto[]>([]);
   const [reloadNonce, setReloadNonce] = useState(0);
+  const feedCursorRef = useRef<FeedCursor>(null);
+  const hasMoreRef = useRef(true);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
   const lastProfileUpdatedAtRef = useRef<string | null>(null);
   const tabRowRef = useRef<HTMLDivElement | null>(null);
   const followingTabRef = useRef<HTMLButtonElement | null>(null);
@@ -169,6 +173,11 @@ export default function FeedPage() {
 
     let cancelled = false;
 
+    // Reset paginación y estado de imagen al recargar
+    feedCursorRef.current = null;
+    hasMoreRef.current = true;
+    setFirstImageReady(false);
+
     const load = async () => {
       // 1. Mostrar caché inmediatamente — sin skeleton si hay datos previos
       const cached = readFeedCache(currentUserId);
@@ -182,25 +191,30 @@ export default function FeedPage() {
 
       try {
         // 2. Posts + amigos en paralelo — ninguno bloquea al otro
-        const [posts, friends] = await Promise.all([
+        const [feedResult, friends] = await Promise.all([
           getFeedPostsOnly({ limit: 20 }),
           fetchActiveFriends(),
         ]);
         if (cancelled) return;
+
+        const { posts, cursor } = feedResult;
+        feedCursorRef.current = cursor;
+        hasMoreRef.current = cursor !== null;
 
         const newFriendIds = new Set(friends.map((f) => f.id));
         setFriendIds(newFriendIds);
         setSuggestedProfiles(friends.slice(0, 12));
         writeFriendsCache(currentUserId, [...newFriendIds]);
 
-        const firstWithImage = posts.find((p) => p.coverImage);
-        if (!firstWithImage) setFirstImageReady(true);
+        // Si el primer post no tiene imagen, no hay nada que esperar
+        const firstPost = posts[0];
+        if (!firstPost || !firstPost.coverImage) setFirstImageReady(true);
         setUiPosts(posts);
         setLoadingFeed(false);
         writeFeedCache(currentUserId, posts);
 
-        // 3. Precargar imágenes en background — no bloquea nada
-        const imageUrls = posts.flatMap((p) =>
+        // 3. Precargar solo las primeras 3 imágenes
+        const imageUrls = posts.slice(0, 3).flatMap((p) =>
           [p.coverImage, p.avatarImage].filter((u): u is string => Boolean(u))
         );
         preloadImagesBackground(imageUrls);
@@ -240,6 +254,57 @@ export default function FeedPage() {
 
     return () => { cancelled = true; };
   }, [currentUserId, reloadNonce]);
+
+  // ── Infinite scroll — cargar siguiente página cuando el sentinel es visible ──
+  useEffect(() => {
+    if (!currentUserId) return;
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0]?.isIntersecting) return;
+        if (!hasMoreRef.current || loadingMore) return;
+
+        const loadNextPage = async () => {
+          setLoadingMore(true);
+          try {
+            const { posts: newPosts, cursor } = await getFeedPostsOnly({
+              limit: 20,
+              cursor: feedCursorRef.current,
+            });
+            feedCursorRef.current = cursor;
+            hasMoreRef.current = cursor !== null;
+
+            if (newPosts.length === 0) return;
+            setUiPosts((prev) => [...prev, ...newPosts]);
+
+            // Likes en background para los nuevos posts
+            const planIds = newPosts.map((p) => p.plan.id);
+            getFeedLikes({ userId: currentUserId, planIds }).then(({ likedSet, counts }) => {
+              setUiPosts((prev) =>
+                prev.map((p) =>
+                  planIds.includes(p.plan.id)
+                    ? { ...p, initiallyLiked: likedSet.has(p.plan.id), initialLikeCount: counts[p.plan.id] ?? 0 }
+                    : p
+                )
+              );
+            }).catch(() => {});
+          } catch (e) {
+            console.error("[feed] loadMore error", e);
+          } finally {
+            setLoadingMore(false);
+          }
+        };
+
+        void loadNextPage();
+      },
+      { rootMargin: "300px" }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [currentUserId, loadingMore]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -378,14 +443,14 @@ export default function FeedPage() {
   if (loading) return <LoadingScreen />;
 
   return (
-    <div className="min-h-dvh bg-app text-app">
-      <div className="relative mx-auto min-h-dvh max-w-[1440px]">
+    <div className="h-dvh overflow-hidden bg-app text-app">
+      <div className="relative mx-auto h-dvh overflow-hidden max-w-[1440px]">
         <AppSidebar />
 
         <main
-          className={`pt-0 pb-0 md:px-safe md:pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] md:py-[var(--space-8)] md:pr-[var(--space-14)] transition-[padding] duration-[var(--duration-slow)] [transition-timing-function:var(--ease-standard)]`}
+          className={`h-dvh overflow-hidden pt-0 pb-0 md:px-safe md:pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] md:py-[var(--space-8)] md:pr-[var(--space-14)] transition-[padding] duration-[var(--duration-slow)] [transition-timing-function:var(--ease-standard)]`}
         >
-          <div className="mx-auto max-w-[1160px]">
+          <div className="mx-auto max-w-[1160px] h-full overflow-hidden">
             <div className="md:border-b md:border-[#262626]">
               <div className="mx-auto w-full max-w-[760px] xl:mx-0">
               <div className="sticky top-0 z-[100] bg-app flex items-center gap-[var(--space-3)] py-[var(--space-2)] pl-[max(var(--page-margin-x),env(safe-area-inset-left))] pr-[max(var(--page-margin-x),env(safe-area-inset-right))] md:hidden">
@@ -669,21 +734,15 @@ export default function FeedPage() {
             <div className="md:mt-[var(--space-5)] grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] xl:gap-[var(--space-6)]">
             <section className="w-full">
               <div className="md:ml-[72px] xl:ml-[72px]">
-                {loadingFeed || !firstImageReady ? (
-                  <>
-                    <FeedSkeleton />
-                    {!loadingFeed && uiPosts.length > 0 && (
-                      <div className="sr-only" aria-hidden="true">
-                        {uiPosts.filter((p) => p.coverImage).slice(0, 1).map((post) => (
-                          <NextImage key={post.id} src={post.coverImage!} alt="" width={1200} height={900} className="h-auto w-full" unoptimized onLoad={() => setFirstImageReady(true)} onError={() => setFirstImageReady(true)} />
-                        ))}
-                      </div>
-                    )}
-                  </>
-                ) : (() => {
+                {(() => {
                   const visiblePosts = activeFeedTab === "following"
                     ? uiPosts.filter((p) => p.plan.ownerUserId && friendIds.has(p.plan.ownerUserId))
                     : uiPosts;
+
+                  const showSkeleton = loadingFeed || !firstImageReady;
+
+                  if (showSkeleton && visiblePosts.length === 0) return <FeedSkeleton />;
+
                   return visiblePosts.length === 0 ? (
                     <div className="rounded-modal border border-app bg-surface p-[var(--space-5)] text-body text-muted shadow-elev-1">
                       {activeFeedTab === "following"
@@ -691,13 +750,38 @@ export default function FeedPage() {
                         : "Aun no hay publicaciones para mostrar."}
                     </div>
                   ) : (
+                    <>
+                      {/* Skeleton encima mientras la primera imagen no está lista */}
+                      {showSkeleton && (
+                        <div className="absolute inset-0 z-10">
+                          <FeedSkeleton />
+                        </div>
+                      )}
                     <div className="overflow-y-scroll snap-y snap-mandatory scrollbar-hide h-[calc(100svh-60px)] md:h-[calc(100dvh-100px)]">
                       {visiblePosts.map((post, idx) => (
                         <div key={post.id} className="snap-start h-full">
-                          <FeedCard post={post} currentUserId={currentUserId} currentUserName={profile?.nombre ?? null} currentUserProfileImage={profile?.profile_image ?? null} nextPostHasImage={visiblePosts[idx + 1]?.hasImage ?? true} initialFollowing={followedIds.has(post.plan.ownerUserId ?? "")} initialSaved={savedPlanIds.has(post.plan.id)} />
+                          <FeedCard
+                            post={post}
+                            currentUserId={currentUserId}
+                            currentUserName={profile?.nombre ?? null}
+                            currentUserProfileImage={profile?.profile_image ?? null}
+                            nextPostHasImage={visiblePosts[idx + 1]?.hasImage ?? true}
+                            initialFollowing={followedIds.has(post.plan.ownerUserId ?? "")}
+                            initialSaved={savedPlanIds.has(post.plan.id)}
+                            onImageReady={idx === 0 ? () => setFirstImageReady(true) : undefined}
+                          />
                         </div>
                       ))}
+                      {/* Sentinel — dispara carga de la siguiente página */}
+                      {hasMoreRef.current && (
+                        <div ref={sentinelRef} className="snap-start h-full flex items-center justify-center">
+                          {loadingMore && (
+                            <div className="size-[28px] animate-spin rounded-full border-2 border-[var(--text-primary)] border-t-transparent" />
+                          )}
+                        </div>
+                      )}
                     </div>
+                    </>
                   );
                 })()}
               </div>
@@ -998,50 +1082,57 @@ function FeedChatPanel({ currentUserId }: { currentUserId: string | null }) {
 function FeedSkeleton() {
   return (
     <div className="space-y-[var(--space-3)]" aria-label="Cargando publicaciones" role="status">
-      {/* Image post skeleton */}
       {[0, 1].map((i) => (
-        <article key={`img-${i}`} className="pb-[var(--space-2)]">
-          <div className="feed-image-container relative overflow-hidden">
-            <div className="skeleton-shimmer aspect-[4/3] w-full" />
-            {/* Top overlay shimmer — avatar + name */}
-            <div className="absolute inset-x-0 top-0 flex items-center gap-[var(--space-2)] px-[var(--space-4)] pt-[var(--space-3)]">
-              <div className="size-[32px] rounded-full bg-white/20" />
-              <div className="h-3 w-[80px] rounded-full bg-white/20" />
+        <article key={i} className="pb-[var(--space-1)]">
+          {/* Image — same aspect ratio as real card */}
+          <div className="feed-image-container relative overflow-hidden rounded-[var(--radius-card,0px)]">
+            <div
+              className="skeleton-shimmer w-full"
+              style={{ aspectRatio: i === 0 ? "4/3" : "16/9" }}
+            />
+            {/* Top: avatar + name + "Siguiendo" badge */}
+            <div className="absolute inset-x-0 top-0 flex items-center gap-[10px] px-4 pt-[14px]">
+              <div className="size-[34px] shrink-0 rounded-full bg-white/25" />
+              <div className="flex flex-col gap-[5px]">
+                <div className="h-[11px] w-[90px] rounded-full bg-white/25" />
+                <div className="h-[9px] w-[55px] rounded-full bg-white/15" />
+              </div>
+              {/* "Ver plan" pill */}
+              <div className="ml-auto h-[26px] w-[72px] rounded-full bg-white/20" />
             </div>
-            {/* Bottom overlay shimmer — location + date */}
-            <div className="absolute inset-x-0 bottom-0 px-[var(--space-4)] pb-[var(--space-3)]">
-              <div className="h-4 w-[140px] rounded-full bg-white/20" />
-              <div className="mt-[6px] h-3 w-[100px] rounded-full bg-white/20" />
+            {/* Bottom: title + location + dates */}
+            <div className="absolute inset-x-0 bottom-0 px-4 pb-[14px]">
+              <div className="h-[15px] w-[55%] rounded-full bg-white/30" />
+              <div className="mt-[7px] flex items-center gap-2">
+                <div className="h-[10px] w-[30%] rounded-full bg-white/20" />
+                <div className="size-[3px] rounded-full bg-white/20" />
+                <div className="h-[10px] w-[22%] rounded-full bg-white/20" />
+              </div>
             </div>
           </div>
-          {/* Actions + text shimmer */}
-          <div className="mt-[var(--space-2)] flex items-center gap-[var(--space-2)] px-[var(--space-1)]">
-            <div className="skeleton-shimmer h-[24px] w-[24px] rounded-full" />
-            <div className="skeleton-shimmer h-3 w-[120px] rounded-full" />
+
+          {/* Actions row: like · comment · share + bookmark */}
+          <div className="mt-[10px] flex items-center gap-[var(--space-1)] px-1">
+            <div className="skeleton-shimmer size-[32px] rounded-full" />
+            <div className="skeleton-shimmer h-[10px] w-[28px] rounded-full" />
+            <div className="skeleton-shimmer ml-[6px] size-[32px] rounded-full" />
+            <div className="skeleton-shimmer h-[10px] w-[28px] rounded-full" />
+            <div className="skeleton-shimmer ml-[6px] size-[32px] rounded-full" />
+            <div className="skeleton-shimmer ml-auto size-[32px] rounded-full" />
+          </div>
+
+          {/* Caption line */}
+          <div className="mt-[8px] px-1">
+            <div className="skeleton-shimmer h-[11px] w-[75%] rounded-full" />
+            {i === 0 && <div className="skeleton-shimmer mt-[5px] h-[11px] w-[50%] rounded-full" />}
           </div>
         </article>
       ))}
-      {/* Text-only post skeleton (Twitter style) */}
-      <article className="pb-[var(--space-2)]">
-        <div className="flex gap-[var(--space-2)] px-[var(--space-1)]">
-          <div className="skeleton-shimmer size-[32px] shrink-0 rounded-full" />
-          <div className="min-w-0 flex-1">
-            <div className="skeleton-shimmer h-3 w-[90px] rounded-full" />
-            <div className="skeleton-shimmer mt-[6px] h-3 w-[85%] rounded-full" />
-            <div className="skeleton-shimmer mt-[4px] h-3 w-[60%] rounded-full" />
-            <div className="mt-[var(--space-3)] flex items-center gap-[10px]">
-              <div className="skeleton-shimmer h-[24px] w-[24px] rounded-full" />
-              <div className="skeleton-shimmer h-[24px] w-[24px] rounded-full" />
-              <div className="skeleton-shimmer h-[24px] w-[24px] rounded-full" />
-            </div>
-          </div>
-        </div>
-      </article>
     </div>
   );
 }
 
-function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImage, nextPostHasImage, initialFollowing, initialSaved }: { post: FeedItemDto; currentUserId: string | null; currentUserName: string | null; currentUserProfileImage: string | null; nextPostHasImage: boolean; initialFollowing: boolean; initialSaved: boolean }) {
+function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImage, nextPostHasImage, initialFollowing, initialSaved, onImageReady }: { post: FeedItemDto; currentUserId: string | null; currentUserName: string | null; currentUserProfileImage: string | null; nextPostHasImage: boolean; initialFollowing: boolean; initialSaved: boolean; onImageReady?: () => void }) {
   const [publishing, setPublishing] = useState(false);
   const [liked, setLiked] = useState(post.initiallyLiked);
   const [likeCount, setLikeCount] = useState(post.initialLikeCount);
@@ -1539,8 +1630,8 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
               className="object-contain transition-opacity duration-300"
               style={{ opacity: imgLoaded ? 1 : 0 }}
               unoptimized
-              onLoad={() => setImgLoaded(true)}
-              onError={() => setImgLoaded(true)}
+              onLoad={() => { setImgLoaded(true); onImageReady?.(); }}
+              onError={() => { setImgLoaded(true); onImageReady?.(); }}
             />
           </div>
         ) : (
@@ -1676,7 +1767,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
         {post.hasImage && <div className="absolute right-4 top-1/2 z-20 flex -translate-y-1/2 flex-col items-center gap-2">
           <button
             type="button"
-            className="flex flex-col items-center gap-0.5 rounded-full bg-black/50 px-2.5 py-2 text-white disabled:opacity-40"
+            className="flex flex-col items-center gap-0.5 rounded-full bg-black/50 size-[42px] justify-center text-white disabled:opacity-40"
             onClick={(e) => { e.stopPropagation(); onLikeToggle(); }}
             disabled={!currentUserId || likeLoading}
             aria-label={liked ? "Quitar like" : "Dar like"}
@@ -1686,7 +1777,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
           </button>
           <button
             type="button"
-            className="flex flex-col items-center gap-0.5 rounded-full bg-black/50 px-2.5 py-2 text-white"
+            className="flex flex-col items-center gap-0.5 rounded-full bg-black/50 size-[42px] justify-center text-white"
             onClick={(e) => { e.stopPropagation(); openCommentsModal(); }}
             aria-label="Comentarios"
           >
@@ -1698,7 +1789,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
           {!isOwnPost && (
             <button
               type="button"
-              className="flex items-center justify-center rounded-full bg-black/50 px-2.5 py-2 text-white"
+              className="flex size-[42px] items-center justify-center rounded-full bg-black/50 text-white"
               onClick={(e) => { e.stopPropagation(); handleToggleSave(); }}
               aria-label={saved ? "Quitar guardado" : "Guardar"}
             >

@@ -8,6 +8,7 @@ export type GastoParte = {
   user_id: string;
   importe: number;
   nombre: string | null;
+  username: string | null;
   foto: string | null;
 };
 
@@ -28,6 +29,7 @@ export type GastoRow = {
   subplan_titulo: string | null;
   pagado_por_user_id: string;
   pagado_por_nombre: string | null;
+  pagado_por_username: string | null;
   pagado_por_foto: string | null;
   partes: GastoParte[] | null;
   receipt_url: string | null;
@@ -37,9 +39,11 @@ export type GastoRow = {
 export type BalanceRow = {
   from_user_id: string;
   from_nombre: string | null;
+  from_username: string | null;
   from_foto: string | null;
   to_user_id: string;
   to_nombre: string | null;
+  to_username: string | null;
   to_foto: string | null;
   importe: number;
   estado: string;
@@ -80,6 +84,7 @@ export type GastoInput = {
 export type PlanMiembro = {
   user_id: string;
   nombre: string | null;
+  username: string | null;
   foto: string | null;
 };
 

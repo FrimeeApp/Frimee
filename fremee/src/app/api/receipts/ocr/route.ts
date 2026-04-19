@@ -5,6 +5,7 @@ import { randomUUID } from "crypto";
 // Tipos que devuelve el OCR al frontend
 export type OcrResult = {
   url: string;                  // URL firmada del archivo en Supabase Storage
+  is_receipt: boolean;          // true si el archivo parece un recibo/factura/ticket
   total: number | null;         // Total del recibo
   fecha: string | null;         // Fecha en formato YYYY-MM-DD
   moneda: string | null;        // ISO 4217 (EUR, USD...)
@@ -71,9 +72,10 @@ export async function POST(req: NextRequest) {
     // ── 3. Preparar contenido para GPT-4o ─────────────────────────────────
     const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
 
-    const prompt = `Analiza este recibo/factura y extrae la información en formato JSON.
+    const prompt = `Analiza este documento e indica si es un recibo, ticket o factura. Extrae la información en formato JSON.
 Devuelve ÚNICAMENTE el JSON, sin texto adicional, con esta estructura exacta:
 {
+  "is_receipt": true o false,
   "total": número o null,
   "fecha": "YYYY-MM-DD" o null,
   "moneda": "EUR" o código ISO o null,
@@ -82,6 +84,7 @@ Devuelve ÚNICAMENTE el JSON, sin texto adicional, con esta estructura exacta:
     { "nombre": "descripción", "precio_unitario": número, "cantidad": número, "subtotal": número }
   ]
 }
+"is_receipt" debe ser true solo si el documento es claramente un ticket de compra, recibo, factura o albarán con importes. Si es una foto, captura de pantalla, documento sin importes u otro tipo de archivo, ponlo a false.
 Si no puedes extraer algún campo, pon null. Los items pueden ser array vacío si no se distinguen líneas.`;
 
     // PDFs: extract text and send as text message
@@ -117,8 +120,13 @@ Si no puedes extraer algún campo, pon null. Los items pueden ser array vacío s
     });
 
     if (!openaiRes.ok) {
-      const errText = await openaiRes.text();
-      return NextResponse.json({ error: "Error en OCR: " + errText }, { status: 500 });
+      const errJson = await openaiRes.json().catch(() => null) as { error?: { code?: string; message?: string } } | null;
+      const code = errJson?.error?.code;
+      const friendlyMsg =
+        code === "invalid_image_format" ? "Formato de imagen no compatible. Usa JPG, PNG, WebP o PDF." :
+        code === "rate_limit_exceeded"  ? "Demasiadas solicitudes. Inténtalo de nuevo en unos segundos." :
+        "No se pudo analizar el archivo. Inténtalo de nuevo.";
+      return NextResponse.json({ error: friendlyMsg }, { status: 500 });
     }
 
     const openaiData = (await openaiRes.json()) as {
@@ -136,6 +144,7 @@ Si no puedes extraer algún campo, pon null. Los items pueden ser array vacío s
       .trim();
 
     let extracted: Omit<OcrResult, "url"> = {
+      is_receipt: false,
       total: null,
       fecha: null,
       moneda: null,
@@ -151,6 +160,7 @@ Si no puedes extraer algún campo, pon null. Los items pueden ser array vacío s
 
     const result: OcrResult = {
       url: fileUrl,
+      is_receipt: extracted.is_receipt === true,
       total: extracted.total ?? null,
       fecha: extracted.fecha ?? null,
       moneda: extracted.moneda ?? "EUR",
@@ -162,6 +172,6 @@ Si no puedes extraer algún campo, pon null. Los items pueden ser array vacío s
 
   } catch (err) {
     console.error("[OCR]", err);
-    return NextResponse.json({ error: "Error interno" }, { status: 500 });
+    return NextResponse.json({ error: "No se pudo procesar el archivo. Inténtalo de nuevo." }, { status: 500 });
   }
 }

@@ -10,6 +10,7 @@ export type TareaRow = {
 export type TareaConAsignadoRow = TareaRow & {
   asignado_user_id: string | null;
   asignado_nombre: string;
+  asignado_username: string | null;
 };
 
 export async function crearTareaEndpoint(params: {
