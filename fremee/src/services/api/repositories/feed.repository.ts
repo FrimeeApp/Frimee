@@ -28,14 +28,14 @@ function entryToFeedItem(entry: FeedPostEntry): FeedItemDto {
     coverImage: entry.coverImage,
     ownerUserId: entry.ownerUserId,
     creator: creator
-      ? { id: creator.id, name: creator.name, username: creator.username ?? null, profileImage: creator.profileImage }
+      ? { id: creator.id, name: creator.name, username: null, profileImage: creator.profileImage }
       : { id: "", name: "Usuario", username: null, profileImage: null },
   };
 
   return {
     id: String(entry.planId),
     userName,
-    userUsername: creator?.username ?? null,
+    userUsername: null,
     avatarLabel: (userName.trim()[0] || "U").toUpperCase(),
     avatarImage: creator?.profileImage ?? null,
     subtitle: entry.title,
