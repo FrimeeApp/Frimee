@@ -258,12 +258,21 @@ export default function SettingsPage() {
     return () => media.removeListener(onChange);
   }, [form.theme, settingsLoading]);
 
-  const goBack = () => {
+  const navigate = () => {
     if (typeof window !== "undefined" && window.history.length > 1) {
       router.back();
+    } else {
+      router.push("/feed");
+    }
+  };
+
+  const goBack = async () => {
+    if (!hasChanges || busyAction !== null) {
+      navigate();
       return;
     }
-    router.push("/feed");
+    const ok = await onSaveSettings();
+    if (ok) navigate();
   };
 
   const uploadSelectedImage = async (file: File) => {
@@ -276,7 +285,7 @@ export default function SettingsPage() {
       const { publicUrl } = await uploadProfileImage({ userId: user.id, file });
       const cacheBustedUrl = `${publicUrl}${publicUrl.includes("?") ? "&" : "?"}v=${Date.now()}`;
       setForm((prev) => ({ ...prev, profileImage: cacheBustedUrl }));
-      setSaveMsg("Imagen actualizada. Pulsa guardar cambios para confirmar.");
+      setSaveMsg("Imagen actualizada. Pulsa Volver para guardar.");
     } catch (error) {
       const message =
         typeof error === "object" && error && "message" in error
@@ -330,8 +339,8 @@ export default function SettingsPage() {
     await uploadSelectedImage(file);
   };
 
-  const onSaveSettings = async () => {
-    if (!user?.id || !hasChanges || busyAction !== null) return;
+  const onSaveSettings = async (): Promise<boolean> => {
+    if (!user?.id || !hasChanges || busyAction !== null) return false;
 
     setSaveMsg(null);
     setErrorMsg(null);
@@ -395,6 +404,7 @@ export default function SettingsPage() {
       }
       await refreshProfile();
       setSaveMsg("Ajustes guardados.");
+      return true;
     } catch (error) {
       const message =
         typeof error === "object" && error && "message" in error
@@ -402,6 +412,7 @@ export default function SettingsPage() {
           : "No se pudieron guardar los ajustes.";
       console.warn("[settings] save error:", error);
       setErrorMsg(message);
+      return false;
     } finally {
       setBusyAction(null);
     }
@@ -431,73 +442,23 @@ export default function SettingsPage() {
     <div className="min-h-dvh bg-app text-app">
       <div className="container-app pb-[calc(var(--space-12)+env(safe-area-inset-bottom))] pt-[var(--space-4)] lg:pt-[var(--space-8)]">
         <div className="mx-auto max-w-[980px]">
-          <div className="flex flex-wrap items-center justify-between gap-[var(--space-3)]">
+          <div className="flex items-center gap-[var(--space-3)]">
             <button
               type="button"
-              onClick={goBack}
-              className="inline-flex items-center gap-[var(--space-2)] rounded-chip border border-app bg-surface px-[var(--space-3)] py-[var(--space-2)] text-body-sm font-[var(--fw-medium)] transition-colors hover:bg-surface-inset"
+              onClick={() => void goBack()}
+              disabled={busyAction === "save"}
+              aria-label="Volver"
+              className="flex items-center justify-center text-app transition-opacity hover:opacity-60 disabled:opacity-[var(--disabled-opacity)]"
             >
               <ArrowLeftIcon />
-              Volver
             </button>
-
-            <PrimaryButton
-              label={
-                settingsLoading
-                  ? "Cargando ajustes..."
-                  : busyAction === "save"
-                    ? "Guardando..."
-                    : busyAction === "upload-image"
-                      ? "Subiendo imagen..."
-                      : hasChanges
-                        ? "Guardar cambios"
-                        : "Todo guardado"
-              }
-              onClick={onSaveSettings}
-              disabled={settingsLoading || !hasChanges || busyAction !== null}
-              className="w-full sm:w-auto"
-            />
           </div>
 
-          <section className="mt-[var(--space-4)]">
-            <div className="py-[var(--space-5)]">
-              <div className="flex flex-col gap-[var(--space-4)] lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex items-center gap-[var(--space-4)]">
-                  <button
-                    type="button"
-                    onClick={onPickImage}
-                    disabled={disableEditing}
-                    className="relative rounded-full transition-opacity disabled:opacity-[var(--disabled-opacity)]"
-                    aria-label="Cambiar imagen de perfil"
-                    title="Cambiar imagen de perfil"
-                  >
-                    <Avatar profileImage={form.profileImage ?? profile?.profile_image ?? null} fallback={avatarFallback} />
-                    <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 text-white/90 transition-opacity hover:bg-black/50">
-                      <svg viewBox="0 0 24 24" fill="none" className="size-[24px]" aria-hidden="true">
-                        <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                        <circle cx="12" cy="13" r="4" stroke="currentColor" strokeWidth="1.5" />
-                      </svg>
-                    </span>
-                  </button>
+          <h1 className="mt-[var(--space-4)] mb-[var(--space-6)] text-[var(--font-h2)] font-[var(--fw-regular)] leading-[1.15] text-app md:text-[var(--font-h1)]">
+            Configuración y privacidad
+          </h1>
 
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-[var(--space-2)]">
-                      <input
-                        type="text"
-                        value={form.nombre}
-                        disabled={disableEditing}
-                        onChange={(e) => setForm((prev) => ({ ...prev, nombre: e.target.value }))}
-                        className="min-w-0 border-b border-transparent bg-transparent [font-family:var(--font-display-face)] text-[var(--font-h3)] font-normal leading-[var(--lh-h3)] outline-none transition-colors focus:border-app disabled:opacity-[var(--disabled-opacity)] sm:min-w-[240px]"
-                      />
-                      <PencilIcon className="shrink-0 text-tertiary" />
-                    </div>
-                    <p className="mt-[var(--space-1)] truncate text-body-sm text-muted">{profile?.email ?? "sin correo"}</p>
-                  </div>
-                </div>
-
-              </div>
-            </div>
-
+          <section>
             <SettingsSection
               title="Perfil"
             >
@@ -698,20 +659,10 @@ export default function SettingsPage() {
                          >
               <div className="mt-[var(--space-3)] flex flex-col gap-[var(--space-4)] lg:flex-row lg:items-center lg:justify-between">
                 <div className="min-w-0">
-                  <p className="text-body-sm text-muted">
-                    {hasChanges ? "Tienes cambios pendientes de guardar." : "Todos tus ajustes están al día."}
-                  </p>
-                  {saveMsg && <p className="mt-[var(--space-2)] text-body-sm text-success-token">{saveMsg}</p>}
-                  {errorMsg && <p className="mt-[var(--space-2)] text-body-sm text-error-token">{errorMsg}</p>}
+                  {saveMsg && <p className="text-body-sm text-success-token">{saveMsg}</p>}
+                  {errorMsg && <p className="text-body-sm text-error-token">{errorMsg}</p>}
                 </div>
-
                 <div className="flex flex-col gap-[var(--space-2)] sm:flex-row">
-                  <PrimaryButton
-                    label={busyAction === "save" ? "Guardando..." : "Guardar cambios"}
-                    onClick={onSaveSettings}
-                    disabled={settingsLoading || !hasChanges || busyAction !== null}
-                    className="w-full sm:w-auto"
-                  />
                   <SettingsButton
                     icon={<LogOutIcon />}
                     label={busyAction === "signout" ? "Cerrando sesión..." : "Cerrar sesión"}
@@ -748,30 +699,13 @@ function SettingsPageSkeleton() {
     <div className="min-h-dvh bg-app text-app" role="status" aria-label="Cargando ajustes">
       <div className="container-app pb-[calc(var(--space-12)+env(safe-area-inset-bottom))] pt-[var(--space-4)] lg:pt-[var(--space-8)]">
         <div className="mx-auto max-w-[980px]">
-          <div className="flex items-center justify-between gap-[var(--space-3)]">
-            <div className="skeleton-shimmer h-10 w-28 rounded-chip" />
-            <div className="skeleton-shimmer h-11 w-40 rounded-input" />
+          <div className="flex items-center gap-[var(--space-3)]">
+            <div className="skeleton-shimmer h-8 w-8 rounded-full" />
           </div>
 
-          <section className="mt-[var(--space-4)]">
-            <div className="py-[var(--space-5)]">
-              <div className="flex flex-col gap-[var(--space-4)] sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-center gap-[var(--space-4)]">
-                  <div className="skeleton-shimmer h-[var(--space-16)] w-[var(--space-16)] rounded-full" />
-                  <div className="min-w-0 space-y-2">
-                    <div className="skeleton-shimmer h-7 w-44 rounded-full" />
-                    <div className="skeleton-shimmer h-4 w-56 rounded-full" />
-                    <div className="skeleton-shimmer h-4 w-24 rounded-full" />
-                  </div>
-                </div>
+          <div className="mt-[var(--space-4)] mb-[var(--space-6)] skeleton-shimmer h-9 w-64 rounded-full" />
 
-                <div className="flex gap-[var(--space-2)]">
-                  <div className="skeleton-shimmer h-9 w-28 rounded-chip" />
-                  <div className="skeleton-shimmer h-9 w-36 rounded-chip" />
-                </div>
-              </div>
-            </div>
-
+          <section>
             {Array.from({ length: 6 }).map((_, index) => (
               <section key={index} className={index === 0 ? "" : "border-t border-strong"}>
                 <div className="px-[var(--space-4)] py-[var(--space-5)] lg:px-[var(--space-7)]">

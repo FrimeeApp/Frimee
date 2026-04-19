@@ -448,22 +448,22 @@ export default function AppSidebar({ onCreatePlan, hideMobileNav }: AppSidebarPr
         }`}
       >
         <div className="px-5 pb-3 pt-5">
-          <div className="relative flex items-center">
-            <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-[18px] -translate-y-1/2 text-muted" />
+          <div className="flex h-[44px] items-center gap-[10px] rounded-[8px] bg-[var(--search-field-bg)] px-[14px]">
+            <SearchIcon className="size-[18px] shrink-0 text-muted" />
             <input
               ref={searchInputRef}
               type="search"
               value={searchValue}
               onChange={(e) => setSearchValue(e.target.value)}
               placeholder="Buscar usuarios"
-              className="min-w-0 flex-1 rounded-[10px] border-none bg-surface-inset py-2.5 pl-10 pr-10 text-body text-app shadow-none outline-none ring-0 focus:border-none focus:shadow-none focus:outline-none focus:ring-0 placeholder:text-muted [&::-webkit-search-cancel-button]:hidden"
+              className="min-w-0 flex-1 border-none bg-transparent text-body text-app shadow-none outline-none ring-0 focus:border-none focus:shadow-none focus:outline-none focus:ring-0 placeholder:text-muted [&::-webkit-search-cancel-button]:hidden"
             />
             {searchValue ? (
               <button
                 type="button"
                 aria-label="Limpiar búsqueda"
                 onClick={() => setSearchValue("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted transition-opacity hover:opacity-70"
+                className="shrink-0 text-muted transition-opacity hover:opacity-70"
               >
                 <CloseIcon className="size-[18px]" />
               </button>
@@ -472,15 +472,13 @@ export default function AppSidebar({ onCreatePlan, hideMobileNav }: AppSidebarPr
                 type="button"
                 onClick={() => setSearchPopoverOpen(false)}
                 aria-label="Cerrar"
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted transition-colors hover:text-app"
+                className="shrink-0 text-muted transition-colors hover:text-app"
               >
                 <CloseIcon className="size-[16px]" />
               </button>
             )}
           </div>
         </div>
-
-        <div className="border-b border-app" />
 
         <div className="flex-1 overflow-y-auto overscroll-contain">
           {searchValue.trim().length < 2 ? (

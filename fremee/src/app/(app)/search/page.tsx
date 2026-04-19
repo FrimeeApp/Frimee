@@ -87,8 +87,8 @@ export default function SearchPage() {
         >
           <div className="mx-auto w-full max-w-[760px]">
 
-            <div className="relative">
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="pointer-events-none absolute left-4 top-1/2 z-10 size-[18px] -translate-y-1/2 text-muted">
+            <div className="flex h-[44px] items-center gap-[10px] rounded-[8px] bg-[var(--search-field-bg)] px-[14px]">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[18px] shrink-0 text-muted">
                 <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.8" />
                 <path d="M16 16L20.5 20.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
               </svg>
@@ -98,16 +98,16 @@ export default function SearchPage() {
                 value={searchValue}
                 onChange={(e) => setSearchValue(e.target.value)}
                 placeholder="Buscar usuarios"
-                className="w-full rounded-card border border-app bg-surface py-3 pl-11 pr-10 text-body text-app outline-none transition-colors focus:border-[var(--border-strong)] [&::-webkit-search-cancel-button]:hidden"
+                className="min-w-0 flex-1 border-none bg-transparent text-body text-app shadow-none outline-none ring-0 focus:border-none focus:shadow-none focus:outline-none focus:ring-0 placeholder:text-muted [&::-webkit-search-cancel-button]:hidden"
               />
               {searchValue && (
                 <button
                   type="button"
                   onClick={() => setSearchValue("")}
-                  className="absolute right-4 top-1/2 z-10 -translate-y-1/2 text-app opacity-50 transition-opacity hover:opacity-80"
+                  className="shrink-0 text-muted transition-opacity hover:opacity-70"
                 >
                   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[18px]">
-                    <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
                   </svg>
                 </button>
               )}
