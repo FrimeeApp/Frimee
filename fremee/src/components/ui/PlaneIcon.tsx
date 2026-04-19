@@ -11,7 +11,7 @@ export default function PlaneIcon({ liked, animating = false, size = 28, classNa
       width={size}
       height={size}
       viewBox="0 0 24 24"
-      fill={liked ? "currentColor" : "none"}
+      fill="currentColor"
       aria-hidden="true"
       className={`transition-all duration-150 ${className ?? (liked ? "text-primary-token" : "text-app")} ${animating ? "scale-[1.2]" : "scale-100"}`}
     >

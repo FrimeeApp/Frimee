@@ -18,11 +18,11 @@ export async function listNotificaciones(
   cursor?: number
 ): Promise<NotificacionDto[]> {
   const supabase = createBrowserSupabaseClient();
-  const { data, error } = await supabase.rpc("fn_notificaciones_list", {
-    p_limit: limit,
-    ...(cursor ? { p_cursor: cursor } : {}),
-  });
-  if (error) throw error;
+  const rpcParams = cursor != null
+    ? { p_limit: limit, p_cursor: cursor }
+    : { p_limit: limit };
+  const { data, error } = await supabase.rpc("fn_notificaciones_list", rpcParams as { p_limit: number; p_cursor?: number });
+  if (error) throw new Error(error.message || error.code || "Error cargando notificaciones");
   return (data ?? []) as NotificacionDto[];
 }
 
@@ -31,7 +31,7 @@ export async function marcarNotificacionesLeidas(ids?: number[]): Promise<void> 
   const { error } = await supabase.rpc("fn_notificaciones_marcar_leidas", {
     p_ids: ids ?? null,
   });
-  if (error) throw error;
+  if (error) throw new Error(error.message || error.code || "Error marcando notificaciones");
 }
 
 export async function insertNotificacion(params: {
@@ -49,7 +49,7 @@ export async function insertNotificacion(params: {
     entity_id: params.entityId ?? null,
     entity_type: params.entityType ?? null,
   });
-  if (error) throw error;
+  if (error) throw new Error(error.message || error.code || "Error insertando notificación");
 }
 
 export async function deleteNotificacionLike(params: {
@@ -70,13 +70,13 @@ export async function deleteNotificacionLike(params: {
 export async function acceptFriendRequest(requesterId: string): Promise<void> {
   const supabase = createBrowserSupabaseClient();
   const { error } = await supabase.rpc("fn_friend_request_accept", { p_requester_user_id: requesterId });
-  if (error) throw error;
+  if (error) throw new Error(error.message || error.code || "Error aceptando solicitud");
 }
 
 export async function rejectFriendRequest(requesterId: string): Promise<void> {
   const supabase = createBrowserSupabaseClient();
   const { error } = await supabase.rpc("fn_friend_request_reject", { p_requester_user_id: requesterId });
-  if (error) throw error;
+  if (error) throw new Error(error.message || error.code || "Error rechazando solicitud");
 }
 
 export async function acceptPlanInvite(planId: number, notifId: number): Promise<void> {
@@ -84,7 +84,7 @@ export async function acceptPlanInvite(planId: number, notifId: number): Promise
   const { error } = await supabase.rpc("fn_accept_plan_invite", { p_plan_id: planId });
   if (error) {
     console.error("[acceptPlanInvite] error:", error.code, error.message, error.details);
-    throw error;
+    throw new Error(error.message || error.code || "Error aceptando invitación");
   }
   await supabase.from("notificaciones").delete().eq("id", notifId);
 }
@@ -112,6 +112,6 @@ export async function countNotificacionesNoLeidas(): Promise<number> {
     .from("notificaciones")
     .select("id", { count: "exact", head: true })
     .eq("leida", false);
-  if (error) throw error;
+  if (error) throw new Error(error.message || error.code || "Error contando notificaciones");
   return count ?? 0;
 }

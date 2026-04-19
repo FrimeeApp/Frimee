@@ -249,10 +249,14 @@ export default function NotificationsPanel({ open, onClose, onRead, desktopPosit
 
   const load = useCallback(async (cur?: number) => {
     if (!user) return;
-    const data = await listNotificaciones(30, cur);
-    setNotifs((prev) => (cur ? [...prev, ...data] : data));
-    setHasMore(data.length === 30);
-    if (data.length > 0) setCursor(data[data.length - 1].id);
+    try {
+      const data = await listNotificaciones(30, cur);
+      setNotifs((prev) => (cur ? [...prev, ...data] : data));
+      setHasMore(data.length === 30);
+      if (data.length > 0) setCursor(data[data.length - 1].id);
+    } catch (e) {
+      console.error("[NotificationsPanel] load error:", e);
+    }
   }, [user]);
 
   // Load when panel opens
@@ -273,12 +277,15 @@ export default function NotificationsPanel({ open, onClose, onRead, desktopPosit
   // Mark as read after brief delay
   useEffect(() => {
     if (!open) return;
-    const t = setTimeout(async () => {
+    const t = setTimeout(() => {
       if (markedRef.current) return;
       markedRef.current = true;
-      await marcarNotificacionesLeidas();
-      setNotifs((prev) => prev.map((n) => ({ ...n, leida: true })));
-      onRead();
+      marcarNotificacionesLeidas()
+        .then(() => {
+          setNotifs((prev) => prev.map((n) => ({ ...n, leida: true })));
+          onRead();
+        })
+        .catch((e) => console.error("[NotificationsPanel] marcar leidas error:", e));
     }, 1200);
     return () => clearTimeout(t);
   }, [open, onRead]);
@@ -329,9 +336,10 @@ export default function NotificationsPanel({ open, onClose, onRead, desktopPosit
     <>
       {/* Backdrop — only on desktop */}
       <div
-        className={`fixed inset-0 z-40 bg-black/40 transition-opacity duration-200 hidden md:block ${
+        className={`fixed inset-0 bg-black/40 transition-opacity duration-200 hidden md:block ${
           open ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
         }`}
+        style={{ zIndex: "var(--z-modal)" }}
         aria-hidden="true"
       />
 
@@ -340,13 +348,14 @@ export default function NotificationsPanel({ open, onClose, onRead, desktopPosit
         ref={panelRef}
         role="dialog"
         aria-label="Notificaciones"
-        className={`fixed inset-0 z-50 flex h-dvh w-full flex-col bg-[var(--bg)] transition-transform duration-300 [transition-timing-function:var(--ease-standard)] md:inset-auto md:top-0 md:max-w-[408px] md:shadow-elev-3 ${
+        className={`fixed inset-0 flex h-dvh w-full flex-col bg-[var(--bg)] transition-transform duration-300 [transition-timing-function:var(--ease-standard)] md:inset-auto md:top-0 md:max-w-[408px] md:shadow-elev-3 ${
           open ? "translate-x-0" : "translate-x-full"
         } ${
           desktopPosition === "left"
             ? `md:left-0 md:border-r md:border-[var(--border)] ${open ? "md:translate-x-0" : "md:-translate-x-full"}`
             : `md:right-0 md:border-l md:border-[var(--border)] ${open ? "md:translate-x-0" : "md:translate-x-full"}`
         }`}
+        style={{ zIndex: "calc(var(--z-modal) + 1)" }}
       >
         {/* Header */}
         <div className="flex items-center gap-[var(--space-3)] px-[var(--space-4)] py-[var(--space-3)] border-b border-[var(--border)]">
@@ -360,7 +369,7 @@ export default function NotificationsPanel({ open, onClose, onRead, desktopPosit
               <path d="M15 19l-7-7 7-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
-          <h2 className="flex-1 text-[var(--font-h4)] font-[var(--fw-medium)] text-app">Notificaciones</h2>
+          <h1 className="flex-1 text-[var(--font-h2)] font-[var(--fw-regular)] leading-[1.15] text-app">Notificaciones</h1>
           <button
             type="button"
             onClick={onClose}

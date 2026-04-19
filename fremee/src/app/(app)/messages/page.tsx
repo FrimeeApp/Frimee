@@ -321,7 +321,7 @@ export default function MessagesPage() {
     <div className="flex h-full flex-col">
       {/* Header + compose */}
       <div className="flex items-center justify-between px-[var(--space-4)] py-[var(--space-3)]">
-        <h2 className="text-[var(--font-h4)] font-[var(--fw-medium)] text-app">Mensajes</h2>
+        <h1 className="text-[var(--font-h2)] font-[var(--fw-regular)] leading-[1.15] text-app md:text-[var(--font-h1)]">Mensajes</h1>
         <button
           type="button"
           onClick={() => void openFriendPicker()}
@@ -336,21 +336,21 @@ export default function MessagesPage() {
 
       {/* Search bar */}
       <div className="px-[var(--space-4)] pb-[var(--space-3)]">
-        <div className="flex h-[44px] w-full items-center gap-[10px] rounded-[12px] border border-app bg-[var(--search-field-bg)] px-[14px] text-muted">
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[20px] shrink-0">
+        <div className="flex h-[44px] w-full items-center gap-[10px] rounded-[8px] bg-[var(--search-field-bg)] px-[14px]">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[20px] shrink-0 text-muted">
             <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.8" />
             <path d="M16 16L20.5 20.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
           </svg>
           <input
-            type="text"
+            type="search"
             value={searchValue}
             onChange={(e) => setSearchValue(e.target.value)}
             placeholder="Buscar"
             className="min-w-0 flex-1 border-none bg-transparent text-[15px] text-app shadow-none outline-none ring-0 focus:border-none focus:shadow-none focus:outline-none focus:ring-0 placeholder:text-muted [&::-webkit-search-cancel-button]:hidden"
           />
           {searchValue && (
-            <button type="button" onClick={() => setSearchValue("")} className="text-muted transition-opacity hover:opacity-70">
-              <svg viewBox="0 0 24 24" fill="none" className="size-[14px]" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
+            <button type="button" onClick={() => setSearchValue("")} className="shrink-0 text-muted transition-opacity hover:opacity-70">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[18px]"><path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
             </button>
           )}
         </div>
@@ -373,30 +373,31 @@ export default function MessagesPage() {
             </p>
           </div>
         ) : (
-          <div className="divide-y divide-app">
-            {filteredChats.map((chat) => {
+          <div className="flex flex-col">
+            {filteredChats.map((chat, index) => {
               const name = resolveChatName(chat, user?.id ?? "");
               const avatar = resolveChatAvatar(chat, user?.id ?? "");
               const hasUnread = chat.unread_count > 0;
+              const isLast = index === filteredChats.length - 1;
               return (
                 <button
                   key={chat.chat_id}
                   type="button"
                   onClick={() => setSelectedChatId(chat.chat_id)}
-                  className="flex w-full items-center gap-3 px-[var(--space-4)] py-[var(--space-3)] text-left transition-colors hover:bg-surface focus:outline-none"
+                  className="flex w-full items-center gap-3 px-[var(--space-4)] pt-[var(--space-3)] text-left transition-colors hover:bg-surface focus:outline-none"
                 >
-                  <div className="relative shrink-0">
+                  <div className="relative shrink-0 self-start">
                     <ChatPreviewAvatar name={name} image={avatar} isGroup={chat.tipo === "GRUPO"} />
                     {hasUnread && (
                       <span className="absolute -right-[2px] -top-[2px] size-[10px] rounded-full border-2 border-[var(--bg)] bg-[#ff6a3d]" />
                     )}
                   </div>
-                  <div className="min-w-0 flex-1">
+                  <div className={`min-w-0 flex-1 pb-[var(--space-3)] ${!isLast ? "border-b border-app" : ""}`}>
                     <div className="flex items-baseline justify-between gap-[var(--space-2)]">
                       <p className="truncate text-body-sm font-[var(--fw-semibold)] text-app">{name}</p>
                       <span className="shrink-0 text-[14px] text-muted">{formatChatTime(chat.last_message_at)}</span>
                     </div>
-                    <p className={`truncate text-caption ${hasUnread ? "font-[var(--fw-medium)] text-app" : "text-muted"}`}>
+                    <p className={`truncate text-caption leading-[1.4] min-h-[1.4em] ${hasUnread ? "font-[var(--fw-medium)] text-app" : "text-muted"}`}>
                       {(() => { const m = chat.last_message ?? ""; try { return JSON.parse(m)?.type === "poll" ? "📊 Encuesta" : m; } catch { return m; } })()}
                     </p>
                   </div>

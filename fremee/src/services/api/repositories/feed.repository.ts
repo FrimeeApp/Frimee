@@ -46,6 +46,9 @@ function entryToFeedItem(entry: FeedPostEntry): FeedItemDto {
     plan,
     initiallyLiked: false,
     initialLikeCount: 0,
+    photosSnapshot: entry.photosSnapshot ?? null,
+    itinerarySnapshot: entry.itinerarySnapshot ?? null,
+    expensesSnapshot: entry.expensesSnapshot ?? null,
   };
 }
 

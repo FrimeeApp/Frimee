@@ -83,12 +83,10 @@ export async function listMensajesEndpoint(params: {
   cursorId?: number | null;
 }): Promise<MensajeRow[]> {
   const supabase = createBrowserSupabaseClient();
-  const { data, error } = await supabase.rpc("fn_mensajes_list", {
-    p_chat_id: params.chatId,
-    p_limit: params.limit ?? 30,
-    p_cursor_id: params.cursorId ?? null,
-  });
-  if (error) throw error;
+  const base = { p_chat_id: params.chatId, p_limit: params.limit ?? 30 };
+  const rpcParams = params.cursorId != null ? { ...base, p_cursor_id: params.cursorId } : base;
+  const { data, error } = await supabase.rpc("fn_mensajes_list", rpcParams);
+  if (error) throw new Error(error.message || error.code || "Error cargando mensajes");
   return (data ?? []) as MensajeRow[];
 }
 

@@ -1,3 +1,13 @@
+import type {
+  PublicationConfig,
+  ItinerarySnapshotItem,
+  PhotoSnapshot,
+  ExpensesSnapshot,
+  ParticipantsSnapshot,
+} from "@/services/api/dtos/plan.dto";
+
+export type { PublicationConfig, ItinerarySnapshotItem, PhotoSnapshot, ExpensesSnapshot, ParticipantsSnapshot };
+
 export type PublishablePlan = {
   id: number;
   title: string;
@@ -10,7 +20,12 @@ export type PublishablePlan = {
   coverImage: string | null;
   ownerUserId: string;
   caption?: string | null;
-  creator?: { id: string; name: string; username?: string | null; profileImage: string | null } | null;
+  creator?: { id: string; name: string; profileImage: string | null } | null;
+  publicationConfig?: PublicationConfig | null;
+  itinerarySnapshot?: ItinerarySnapshotItem[] | null;
+  photosSnapshot?: PhotoSnapshot[] | null;
+  expensesSnapshot?: ExpensesSnapshot | null;
+  participantsSnapshot?: ParticipantsSnapshot | null;
 };
 
 export type PublishPostPayload = {
