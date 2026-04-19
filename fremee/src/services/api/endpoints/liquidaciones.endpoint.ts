@@ -12,6 +12,7 @@ export type LiquidacionRow = {
   estado: "PENDIENTE" | "EN_REVISION" | "CONFIRMADA" | "ANULADA";
   counterparty_id: string;
   counterparty_nombre: string | null;
+  counterparty_username: string | null;
   counterparty_profile_image: string | null;
 };
 

@@ -4,6 +4,7 @@ import type { UserSettingsRow } from "@/services/api/endpoints/settings.endpoint
 export type UserProfileRow = {
   id: string;
   nombre: string;
+  username: string | null;
   fecha_nac: string | null;
   email: string;
   rol: string;
@@ -16,6 +17,7 @@ export type UserProfileRow = {
 export type PublicUserProfileRow = {
   id: string;
   nombre: string;
+  username: string | null;
   profile_image: string | null;
 };
 
@@ -46,6 +48,7 @@ export type UserAuthSnapshotRow = {
 type UserAuthSnapshotRpcRow = {
   id: string;
   nombre: string;
+  username: string | null;
   fecha_nac: string | null;
   email: string;
   rol: string;
@@ -194,6 +197,7 @@ export async function fetchUserAuthSnapshotById(userId: string): Promise<UserAut
     profile: {
       id: row.id,
       nombre: row.nombre,
+      username: row.username ?? null,
       fecha_nac: row.fecha_nac,
       email: row.email,
       rol: row.rol,

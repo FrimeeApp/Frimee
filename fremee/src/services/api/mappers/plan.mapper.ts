@@ -15,6 +15,7 @@ export function mapExploreRowToDto(r: FeedExploreRow): FeedPlanItemDto {
     creator: {
       id: r.creador_id,
       name: r.creador_nombre,
+      username: r.creador_username ?? null,
       profileImage: r.creador_profile_image,
     },
   };

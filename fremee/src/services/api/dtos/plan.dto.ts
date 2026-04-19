@@ -13,6 +13,7 @@ export type FeedPlanItemDto = {
   creator: {
     id: string;
     name: string;
+    username: string | null;
     profileImage: string | null;
   };
 };

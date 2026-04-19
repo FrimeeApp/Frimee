@@ -34,6 +34,7 @@ export type UpsertUserSettingsParams = {
 export type UpsertUserProfileAndSettingsParams = {
   userId: string;
   nombre?: string | null;
+  username?: string | null;
   fechaNac?: string | null;
   profileImage?: string | null;
   theme?: ThemePreference | null;
@@ -51,6 +52,7 @@ export type UpsertUserProfileAndSettingsParams = {
 export type UserProfileAndSettingsRow = {
   user_id: string;
   nombre: string;
+  username: string | null;
   fecha_nac: string | null;
   profile_image: string | null;
   theme: ThemePreference;
@@ -107,6 +109,7 @@ export async function upsertUserProfileAndSettingsRpc(
   const { data, error } = await supabase.rpc("fn_user_profile_and_settings_upsert", {
     p_user_id: params.userId,
     p_nombre: params.nombre ?? null,
+    p_username: params.username ?? null,
     p_fecha_nac: params.fechaNac ?? null,
     p_profile_image: params.profileImage ?? null,
     p_theme: params.theme ?? null,

@@ -12,6 +12,7 @@ export type FeedExploreRow = {
   foto_portada: string | null;
   creador_id: string;
   creador_nombre: string;
+  creador_username: string | null;
   creador_profile_image: string | null;
 };
 
@@ -29,6 +30,7 @@ export type PlanByIdRow = {
   owner_user_id: string;
   creado_por_user_id: string;
   creador_nombre: string | null;
+  creador_username: string | null;
   creador_profile_image: string | null;
   join_code: string | null;
 };

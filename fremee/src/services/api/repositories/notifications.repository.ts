@@ -5,6 +5,7 @@ export type NotificacionDto = {
   tipo: string;
   actor_id: string | null;
   actor_nombre: string | null;
+  actor_username: string | null;
   actor_foto: string | null;
   entity_id: string | null;
   entity_type: string | null;

@@ -8,7 +8,7 @@ export type ChatListItem = {
   last_message: string | null;
   last_message_at: string | null;
   unread_count: number;
-  miembros: Array<{ id: string; nombre: string; profile_image: string | null }>;
+  miembros: Array<{ id: string; nombre: string; username: string | null; profile_image: string | null }>;
 };
 
 export type MensajeRow = {
@@ -32,6 +32,7 @@ export type MensajeRow = {
 export type ChatMiembro = {
   user_id: string;
   nombre: string;
+  username: string | null;
   profile_image: string | null;
   joined_at: string;
 };

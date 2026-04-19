@@ -359,7 +359,9 @@ export default function ProfilePage() {
 
               {/* Description */}
               <p className="mt-[var(--space-1)] text-body-sm text-muted">
-                {isOwnProfile ? "Tu perfil" : `Perfil de ${profileData.nombre}`}
+                {isOwnProfile
+                  ? (myProfile?.username ? `@${myProfile.username}` : "Tu perfil")
+                  : `Perfil de ${profileData.nombre}`}
               </p>
 
               {/* Follow + Add friend buttons - other profiles only */}
