@@ -81,11 +81,12 @@ export default function ProfilePage() {
   };
 
   // Edit state
-  const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState("");
+  const [nameError, setNameError] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!id || authLoading) return;
@@ -106,6 +107,7 @@ export default function ProfilePage() {
         }
 
         setProfileData(profileResult);
+        if (isOwnProfile && profileResult) setEditName(profileResult.nombre);
 
         if (!isOwnProfile) {
           const [friendStatuses, followStatuses] = await Promise.all([
@@ -152,19 +154,11 @@ export default function ProfilePage() {
     }
   };
 
-  const handleEditClick = () => {
-    if (!profileData) return;
-    setEditName(profileData.nombre);
-    setEditing(true);
-  };
-
   const handleSaveName = async () => {
     if (!user?.id || !settings || !profileData) return;
     const trimmed = editName.trim();
-    if (!trimmed || trimmed === profileData.nombre) {
-      setEditing(false);
-      return;
-    }
+    if (!trimmed) { setNameError(true); nameInputRef.current?.focus(); return; }
+    if (trimmed === profileData.nombre) return;
 
     setSaving(true);
     try {
@@ -185,8 +179,8 @@ export default function ProfilePage() {
         googleSyncExportPlans: settings.google_sync_export_plans ?? true,
       });
       setProfileData((prev) => prev ? { ...prev, nombre: trimmed } : prev);
+      setEditName(trimmed);
       await refreshProfile();
-      setEditing(false);
     } catch (err) {
       console.error("[profile] Error saving name:", err);
     } finally {
@@ -327,34 +321,49 @@ export default function ProfilePage() {
               </div>
 
               {/* Name - editable on own profile */}
-              {editing ? (
-                <div className="mt-[var(--space-3)] flex items-center gap-2">
+              {isOwnProfile ? (
+                <div className="mt-[var(--space-3)] flex items-center justify-center">
+                  <div className="w-[22px] flex-shrink-0" />
                   <input
+                    ref={nameInputRef}
                     type="text"
                     value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter") handleSaveName(); if (e.key === "Escape") setEditing(false); }}
-                    autoFocus
-                    className="border-b border-app bg-transparent text-center [font-family:var(--font-display-face)] text-[24px] leading-[1.1] font-normal outline-none md:text-[28px]"
+                    size={Math.max(1, editName.length)}
+                    onChange={(e) => { setEditName(e.target.value); if (nameError) setNameError(false); }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") void handleSaveName();
+                      if (e.key === "Escape") { setEditName(profileData.nombre); setNameError(false); }
+                    }}
+                    className={`min-w-0 border-b bg-transparent text-center [font-family:var(--font-display-face)] text-[24px] leading-[1.1] font-normal outline-none transition-colors md:text-[28px] ${nameError ? "border-red-500" : "border-transparent focus:border-app"}`}
                   />
                   <button
                     type="button"
-                    onClick={handleSaveName}
+                    onClick={() => {
+                      if (editName.trim() !== profileData.nombre) void handleSaveName();
+                      else nameInputRef.current?.focus();
+                    }}
                     disabled={saving}
-                    className="text-body-sm font-[var(--fw-medium)] text-[var(--primary)] transition-opacity hover:opacity-70 disabled:opacity-50"
+                    aria-label={editName.trim() !== profileData.nombre ? "Guardar nombre" : "Editar nombre"}
+                    className="ml-1.5 w-[22px] flex-shrink-0 flex items-center justify-center text-muted transition-opacity hover:opacity-70 disabled:opacity-50"
                   >
-                    {saving ? "..." : "Guardar"}
+                    {saving ? (
+                      <div className="size-[16px] animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    ) : editName.trim() !== profileData.nombre ? (
+                      <svg viewBox="0 0 24 24" fill="none" className="size-[16px]" aria-hidden="true">
+                        <path d="M4.5 12.5L9.5 17.5L19.5 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    ) : (
+                      <svg viewBox="0 0 24 24" fill="none" className="size-[16px]" aria-hidden="true">
+                        <path d="M4 20H8L18.6 9.4L14.6 5.4L4 16V20Z" stroke="currentColor" strokeWidth="1.7" />
+                        <path d="M12.8 7.2L16.8 11.2" stroke="currentColor" strokeWidth="1.7" />
+                      </svg>
+                    )}
                   </button>
                 </div>
               ) : (
-                <button
-                  type="button"
-                  onClick={isOwnProfile ? handleEditClick : undefined}
-                  className={`mt-[var(--space-3)] [font-family:var(--font-display-face)] text-[24px] leading-[1.1] font-normal md:text-[28px] ${isOwnProfile ? "cursor-pointer transition-opacity hover:opacity-70" : ""}`}
-                  disabled={!isOwnProfile}
-                >
+                <p className="mt-[var(--space-3)] [font-family:var(--font-display-face)] text-[24px] leading-[1.1] font-normal md:text-[28px]">
                   {profileData.nombre}
-                </button>
+                </p>
               )}
 
               {/* Description */}

@@ -329,45 +329,39 @@ function MisGastosContent() {
         <AppSidebar />
 
         <main
-          className={`px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-4)] transition-[padding] duration-[var(--duration-slow)] [transition-timing-function:var(--ease-standard)] md:py-[var(--space-8)] md:pr-[var(--space-14)]`}
+          className={`px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-6)] transition-[padding] duration-[var(--duration-slow)] [transition-timing-function:var(--ease-standard)] md:py-[var(--space-10)] md:pr-[var(--space-14)]`}
         >
           <section className="mx-auto w-full max-w-[860px]">
-            <div className="mb-[var(--space-5)] grid grid-cols-3">
-              <KpiCard
-                label="Te deben"
-                value={formatAmount(kpis.owedToYou)}
-                description="Pagos pendientes de recibir"
-                tone="success"
-              />
-              <KpiCard
-                label="Debes"
-                value={formatAmount(kpis.youOwe)}
-                description="Pagos que aún no has hecho"
-                tone="warning"
-              />
-              <KpiCard
-                label="Por confirmar"
-                value={formatAmount(kpis.toConfirmAmount)}
-                description={
-                  kpis.toConfirmCount > 0
-                    ? `${kpis.toConfirmCount} pago${kpis.toConfirmCount === 1 ? "" : "s"} por validar`
-                    : "Nada pendiente de validar"
-                }
-                tone="info"
-              />
-            </div>
+            {/* Título */}
+            <h1 className="text-[var(--font-h2)] font-[var(--fw-regular)] leading-[1.15] text-app md:text-[var(--font-h1)]">
+              Mis gastos
+            </h1>
+            {(kpis.owedToYou > 0 || kpis.youOwe > 0) && (
+              <p className="mt-[var(--space-2)] mb-[var(--space-8)] text-caption text-muted">
+                {kpis.owedToYou > 0 && (
+                  <>Te deben <span className="font-[var(--fw-medium)] text-[var(--success,#15803d)] opacity-60">{formatAmount(kpis.owedToYou)}</span></>
+                )}
+                {kpis.owedToYou > 0 && kpis.youOwe > 0 && " · "}
+                {kpis.youOwe > 0 && (
+                  <>Debes <span className="font-[var(--fw-medium)] text-[var(--warning,#b45309)] opacity-60">{formatAmount(kpis.youOwe)}</span></>
+                )}
+              </p>
+            )}
+            {kpis.owedToYou === 0 && kpis.youOwe === 0 && (
+              <div className="mb-[var(--space-8)]" />
+            )}
 
-            {/* Tabs + filtro plan */}
+            {/* Tabs */}
             <div
               ref={tabRowRef}
-              className="relative mb-[var(--space-3)] mt-[var(--space-5)] sm:mt-[var(--space-10)] flex items-center gap-[var(--space-4)] border-b border-app pb-[var(--space-2)] text-body text-muted"
+              className="relative mb-0 flex items-center gap-[var(--space-5)] border-b border-app pb-[var(--space-2)] text-body text-muted"
             >
               <button
                 ref={paidTabRef}
                 type="button"
                 onClick={() => setActiveTab("history")}
-                className={`-mb-[2px] pb-0 font-[700] transition-colors duration-[var(--duration-base)] ${
-                  activeTab === "history" ? "text-app" : "hover:text-app"
+                className={`-mb-[2px] pb-0 font-[var(--fw-semibold)] transition-colors duration-[var(--duration-base)] ${
+                  activeTab === "history" ? "text-app" : "text-muted hover:text-app"
                 }`}
               >
                 Historial
@@ -376,38 +370,42 @@ function MisGastosContent() {
                 ref={pendingTabRef}
                 type="button"
                 onClick={() => setActiveTab("action")}
-                className={`-mb-[2px] flex items-center gap-2 pb-0 font-[700] transition-colors duration-[var(--duration-base)] ${
-                  activeTab === "action" ? "text-app" : "hover:text-app"
+                className={`-mb-[2px] flex items-center gap-[var(--space-2)] pb-0 font-[var(--fw-semibold)] transition-colors duration-[var(--duration-base)] ${
+                  activeTab === "action" ? "text-app" : "text-muted hover:text-app"
                 }`}
               >
                 Por resolver
                 {actionRequiredCount > 0 && (
-                  <span className="inline-flex size-5 items-center justify-center rounded-full bg-[var(--warning)] text-caption font-[var(--fw-semibold)] text-white">
+                  <span className="inline-flex size-[18px] items-center justify-center rounded-full bg-[var(--warning)] text-[11px] font-[var(--fw-semibold)] text-white">
                     {actionRequiredCount}
                   </span>
                 )}
               </button>
               <span
-                className={`pointer-events-none absolute bottom-0 h-[2px] bg-[var(--text-primary)] transition-[left,width,opacity] duration-[220ms] [transition-timing-function:var(--ease-standard)] ${
+                className={`pointer-events-none absolute bottom-0 h-[1.5px] bg-[var(--text-primary)] transition-[left,width,opacity] duration-[220ms] [transition-timing-function:var(--ease-standard)] ${
                   indicator.ready ? "opacity-100" : "opacity-0"
                 }`}
                 style={{ left: indicator.left, width: indicator.width }}
                 aria-hidden="true"
               />
-              {planOptions.length > 0 && (
+            </div>
+
+            {/* Filtro por plan — debajo de los tabs */}
+            {planOptions.length > 0 && (
+              <div className="flex justify-end pt-[var(--space-3)] pb-[var(--space-1)]">
                 <Popover>
                   <PopoverTrigger asChild>
                     <button
                       type="button"
-                      className="-mb-[2px] flex w-[150px] items-center gap-[5px] overflow-hidden pb-0 text-caption text-muted transition-colors hover:text-app"
+                      className="flex items-center gap-[5px] text-caption text-muted transition-colors hover:text-app"
                     >
-                      <svg viewBox="0 0 24 24" fill="none" className="size-[13px] shrink-0" aria-hidden="true" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <svg viewBox="0 0 24 24" fill="none" className="size-[12px] shrink-0" aria-hidden="true" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M3 6h18M7 12h10M11 18h2" />
                       </svg>
-                      <span className="min-w-0 flex-1 truncate font-[var(--fw-medium)]">
+                      <span className="font-[var(--fw-medium)]">
                         {selectedPlanId === "all" ? "Todos los planes" : selectedPlanName}
                       </span>
-                      <svg viewBox="0 0 24 24" fill="none" className="size-[11px] shrink-0" aria-hidden="true" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <svg viewBox="0 0 24 24" fill="none" className="size-[10px] shrink-0" aria-hidden="true" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M6 9l6 6 6-6" />
                       </svg>
                     </button>
@@ -432,16 +430,16 @@ function MisGastosContent() {
                     </div>
                   </PopoverContent>
                 </Popover>
-              )}
-            </div>
+              </div>
+            )}
 
-            <div className="divide-y divide-app">
+            <div className="flex flex-col">
               {dataLoading ? (
                 <SkeletonList />
               ) : filteredVisibleItems.length === 0 ? (
                 <EmptyState tab={activeTab} selectedPlanName={selectedPlanName} />
               ) : (
-                filteredVisibleItems.map((item) => {
+                filteredVisibleItems.map((item, index) => {
                   const incoming = item.direction === "incoming";
                   const senderName = incoming ? item.counterparty : `${profile?.nombre ?? "Tú"} (Tú)`;
                   const senderImage = incoming ? item.counterpartyImage : profile?.profile_image ?? null;
@@ -454,7 +452,7 @@ function MisGastosContent() {
                     .join(" · ");
 
                   const needsAction = incoming && item.estado === "EN_REVISION";
-                  const statusMeta = getExpenseStatusMeta(item);
+                  const isLast = index === filteredVisibleItems.length - 1;
 
                   return (
                     <article
@@ -468,61 +466,57 @@ function MisGastosContent() {
                           setSelectedExpenseId(item.id);
                         }
                       }}
-                      className="flex cursor-pointer items-center gap-3 px-[var(--space-4)] py-[var(--space-3)] transition-colors hover:bg-surface focus:outline-none"
+                      className="flex cursor-pointer items-center gap-3 transition-colors hover:bg-surface-inset/50 focus:outline-none"
                     >
                       <ExpenseAvatar name={senderName} image={senderImage} />
 
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-body-sm font-[var(--fw-semibold)] text-app">{senderName}</p>
-                        <p className="truncate text-caption text-muted">{secondaryLine}</p>
-                        {item.estado !== "CONFIRMADA" && (
-                          <p className={`mt-0.5 flex items-center gap-1 text-caption ${statusMeta.inlineTextClass}`}>
-                            <svg viewBox="0 0 24 24" fill="none" className="size-3 shrink-0" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                            {statusMeta.text}
-                          </p>
-                        )}
-                      </div>
+                      <div className={`flex min-w-0 flex-1 items-center gap-2 py-[var(--space-4)] ${!isLast ? "border-b border-app" : ""}`}>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-body-sm font-[var(--fw-semibold)] text-app">{senderName}</p>
+                          <p className="truncate text-caption text-muted">{secondaryLine}</p>
+                        </div>
 
-                      <div className="flex shrink-0 items-center gap-2">
-                        {needsAction ? (
-                          <>
-                            <button
-                              type="button"
-                              disabled={actingId === item.id}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                void handleRejectReceipt(item);
-                              }}
-                              className="rounded-chip border border-app px-2.5 py-1 text-caption font-[var(--fw-medium)] text-muted disabled:opacity-50"
-                            >
-                              No recibido
-                            </button>
-                            <button
-                              type="button"
-                              disabled={actingId === item.id}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                void handleConfirmReceipt(item);
-                              }}
-                              className="rounded-chip bg-[#16a34a] px-2.5 py-1 text-caption font-[var(--fw-semibold)] text-white disabled:opacity-50"
-                            >
-                              {actingId === item.id ? "..." : "Confirmar"}
-                            </button>
-                          </>
-                        ) : (
-                          <div className="text-right">
-                            <p
-                              className={`text-body-sm font-[var(--fw-semibold)] ${
-                                incoming ? "text-[var(--success,#15803d)]" : "text-[var(--warning,#b45309)]"
-                              }`}
-                            >
-                              {incoming ? "+" : "-"}{formatAmount(item.amount)}
-                            </p>
-                            <p className="mt-[2px] text-[14px] font-[var(--fw-semibold)] uppercase tracking-[0.06em] text-muted">
-                              Ver detalle
-                            </p>
-                          </div>
-                        )}
+                        <div className="flex shrink-0 items-center gap-2">
+                          {needsAction ? (
+                            <>
+                              <button
+                                type="button"
+                                disabled={actingId === item.id}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  void handleRejectReceipt(item);
+                                }}
+                                className="rounded-chip border border-app px-2.5 py-1 text-caption font-[var(--fw-medium)] text-muted disabled:opacity-50"
+                              >
+                                No recibido
+                              </button>
+                              <button
+                                type="button"
+                                disabled={actingId === item.id}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  void handleConfirmReceipt(item);
+                                }}
+                                className="rounded-chip bg-[#16a34a] px-2.5 py-1 text-caption font-[var(--fw-semibold)] text-white disabled:opacity-50"
+                              >
+                                {actingId === item.id ? "..." : "Confirmar"}
+                              </button>
+                            </>
+                          ) : (
+                            <div className="flex items-center gap-[var(--space-3)]">
+                              <p
+                                className={`text-body-sm font-[var(--fw-semibold)] ${
+                                  incoming ? "text-[var(--success,#15803d)]" : "text-[var(--warning,#b45309)]"
+                                }`}
+                              >
+                                {incoming ? "+" : "-"}{formatAmount(item.amount)}
+                              </p>
+                              <svg viewBox="0 0 24 24" fill="none" className="size-[15px] shrink-0 text-muted" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M9 18l6-6-6-6" />
+                              </svg>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </article>
                   );
@@ -567,9 +561,18 @@ function EmptyState({ tab, selectedPlanName }: { tab: ExpenseTab; selectedPlanNa
 
 function SkeletonList() {
   return (
-    <div className="space-y-[var(--space-3)]">
-      {[1, 2, 3].map((i) => (
-        <div key={i} className="h-20 animate-pulse rounded-[6px] border border-app bg-surface" />
+    <div className="flex flex-col">
+      {[1, 2, 3, 4].map((i, index, arr) => (
+        <div key={i} className={`flex items-center gap-3 ${index < arr.length - 1 ? "border-b border-app" : ""}`}>
+          <div className="size-11 shrink-0 animate-pulse rounded-full bg-surface-2" />
+          <div className={`flex min-w-0 flex-1 items-center justify-between gap-2 py-[var(--space-4)]`}>
+            <div className="flex flex-col gap-[var(--space-2)]">
+              <div className="h-[13px] w-[120px] animate-pulse rounded-full bg-surface-2" style={{ animationDelay: `${index * 60}ms` }} />
+              <div className="h-[11px] w-[80px] animate-pulse rounded-full bg-surface-2 opacity-60" style={{ animationDelay: `${index * 60 + 30}ms` }} />
+            </div>
+            <div className="h-[13px] w-[52px] animate-pulse rounded-full bg-surface-2" style={{ animationDelay: `${index * 60}ms` }} />
+          </div>
+        </div>
       ))}
     </div>
   );
@@ -594,57 +597,6 @@ function ExpenseAvatar({ name, image }: { name: string; image: string | null }) 
   );
 }
 
-function KpiCard({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string;
-  description: string;
-  tone: "success" | "warning" | "info";
-}) {
-  const color =
-    tone === "success" ? "var(--success)" : tone === "warning" ? "var(--warning)" : "var(--info)";
-
-  const icon =
-    tone === "success" ? (
-      /* Arrow down into hand – "te deben" */
-      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[20px] shrink-0" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 4v12M8 12l4 4 4-4" />
-        <path d="M4 18h16" />
-      </svg>
-    ) : tone === "warning" ? (
-      /* Arrow up from hand – "debes" */
-      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[20px] shrink-0" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 20V8M8 12l4-4 4 4" />
-        <path d="M4 6h16" />
-      </svg>
-    ) : (
-      /* Clock – "por confirmar" */
-      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[20px] shrink-0" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="9" />
-        <path d="M12 7v5l3 2" />
-      </svg>
-    );
-
-  return (
-    <div className="flex items-end justify-center gap-[var(--space-2)] px-[var(--space-2)] pb-[var(--space-4)] pt-[var(--space-3)] sm:px-[var(--space-4)] sm:gap-[var(--space-3)]">
-      <span className="mb-[2px] shrink-0" style={{ color }}>{icon}</span>
-      <div className="min-w-0">
-        <p className="truncate text-[14px] font-[var(--fw-semibold)] uppercase tracking-[0.06em] text-muted sm:text-caption">
-          {label}
-        </p>
-        <p
-          className="mt-[4px] font-[var(--fw-bold)] leading-[1.1] text-app"
-          style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "clamp(14px, 3.5vw, var(--font-h3))" }}
-        >
-          {value}
-        </p>
-      </div>
-    </div>
-  );
-}
 
 function PlanFilterOption({
   label,

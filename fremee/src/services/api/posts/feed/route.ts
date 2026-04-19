@@ -33,6 +33,9 @@ type FeedPostDoc = {
     name?: string;
     profileImage?: string | null;
   };
+  photosSnapshot?: { url: string }[] | null;
+  itinerarySnapshot?: { titulo: string; tipo: string; inicio_at: string; ubicacion_nombre: string }[] | null;
+  expensesSnapshot?: { total: number; currency: string } | null;
 };
 
 export type FeedPostEntry = {
@@ -48,6 +51,9 @@ export type FeedPostEntry = {
   ownerUserId: string;
   caption: string | null;
   creator: { id: string; name: string; profileImage: string | null } | null;
+  photosSnapshot: { url: string }[] | null;
+  itinerarySnapshot: { titulo: string; tipo: string; inicio_at: string; ubicacion_nombre: string }[] | null;
+  expensesSnapshot: { total: number; currency: string } | null;
 };
 
 export async function listPublishedPostPlanIdsRoute(params: { limit: number }): Promise<FeedPostEntry[]> {
@@ -86,6 +92,9 @@ export async function listPublishedPostPlanIdsRoute(params: { limit: number }): 
       ownerUserId: doc.ownerUserId ?? p?.ownerUserId ?? "",
       caption: doc.caption ?? null,
       creator: c?.id && c?.name ? { id: c.id, name: c.name, profileImage: c.profileImage ?? null } : null,
+      photosSnapshot: doc.photosSnapshot ?? null,
+      itinerarySnapshot: doc.itinerarySnapshot ?? null,
+      expensesSnapshot: doc.expensesSnapshot ?? null,
     });
   }
 

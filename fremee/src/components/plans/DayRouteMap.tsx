@@ -120,7 +120,7 @@ export default function DayRouteMap({
       fallbackMapRef.current.innerHTML = "";
       const map = new google.maps.Map(fallbackMapRef.current, {
         mapTypeId: "roadmap", disableDefaultUI: true, zoomControl: true, styles: darkMapStyles,
-        center: { lat: 0, lng: 0 }, zoom: 2, gestureHandling: "greedy",
+        center: { lat: 0, lng: 0 }, zoom: 2, gestureHandling: "cooperative",
       });
       const coord = await geocode(ubicacionNombre);
       if (gen !== renderGenRef.current || !fallbackMapRef.current) return;
@@ -169,7 +169,7 @@ export default function DayRouteMap({
         disableDefaultUI: true,
         zoomControl: true,
         styles: darkMapStyles,
-        gestureHandling: "greedy",
+        gestureHandling: "cooperative",
       });
 
       const bounds = new google.maps.LatLngBounds();
