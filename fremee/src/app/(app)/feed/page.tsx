@@ -181,10 +181,11 @@ export default function FeedPage() {
 
       try {
         // 2. Posts + amigos en paralelo — ninguno bloquea al otro
-        const [posts, friends] = await Promise.all([
+        const [feedResult, friends] = await Promise.all([
           getFeedPostsOnly({ limit: 20 }),
           fetchActiveFriends(),
         ]);
+        const posts = feedResult.posts;
         if (cancelled) return;
 
         const newFriendIds = new Set(friends.map((f) => f.id));
