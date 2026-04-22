@@ -2994,7 +2994,7 @@ export default function PlanDetailPage() {
                     ];
 
                     let y = 0;
-                    const totalPages = () => (doc.internal as { getNumberOfPages: () => number }).getNumberOfPages();
+                    const totalPages = () => (doc.internal as unknown as { getNumberOfPages: () => number }).getNumberOfPages();
 
                     const drawFooter = () => {
                       const pg = totalPages();

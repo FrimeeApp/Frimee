@@ -5,7 +5,7 @@ import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
 import android.content.Intent
-import android.graphics.BitmapFactory
+import android.graphics.BitmapFactory 
 import android.net.Uri
 import android.view.View
 import android.widget.RemoteViews

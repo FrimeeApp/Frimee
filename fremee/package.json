@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "build:mobile": "cross-env BUILD_TARGET=capacitor next build",
+    "build:mobile": "node scripts/build-mobile.mjs",
     "start": "next start",
     "lint": "eslint ."
   },

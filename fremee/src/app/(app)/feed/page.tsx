@@ -691,7 +691,7 @@ export default function FeedPage() {
                         : "Aun no hay publicaciones para mostrar."}
                     </div>
                   ) : (
-                    <div className="overflow-y-scroll snap-y snap-mandatory scrollbar-hide h-[calc(100svh-60px)] md:h-[calc(100dvh-100px)]">
+                    <div className="overflow-y-scroll snap-y snap-mandatory scrollbar-hide h-[calc(100svh-60px-env(safe-area-inset-bottom))] md:h-[calc(100dvh-100px)]">
                       {visiblePosts.map((post, idx) => (
                         <div key={post.id} className="snap-start h-full">
                           <FeedCard post={post} currentUserId={currentUserId} currentUserName={profile?.nombre ?? null} currentUserProfileImage={profile?.profile_image ?? null} nextPostHasImage={visiblePosts[idx + 1]?.hasImage ?? true} initialFollowing={followedIds.has(post.plan.ownerUserId ?? "")} initialSaved={savedPlanIds.has(post.plan.id)} />
@@ -1597,21 +1597,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
           else if (x > third * 2) goNext();
         }}
       >
-        {/* Progress bars */}
-        {slides.length > 1 && (
-          <div className="absolute inset-x-0 top-0 z-30 flex items-center gap-[3px] px-3 pt-[max(8px,env(safe-area-inset-top))]">
-            {slides.map((_, i) => (
-              <div
-                key={i}
-                className="h-[2.5px] rounded-full transition-all duration-300"
-                style={{
-                  flex: 1,
-                  background: i === clampedIndex ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.28)",
-                }}
-              />
-            ))}
-          </div>
-        )}
+        {/* Progress bars — rendered below the header row, see header section below */}
 
         {/* Backgrounds — all rendered at once so images preload in parallel */}
         {slides.map((slide, i) => {
@@ -1619,13 +1605,22 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
           const base = "absolute inset-0 transition-opacity duration-150 " + (active ? "opacity-100 z-[1]" : "opacity-0 z-0");
           if (slide.type === "cover") {
             return post.hasImage && post.coverImage ? (
-              <div key="cover" className={`${base} bg-app`}>
+              <div key="cover" className={`${base} bg-black`}>
+                {/* Blurred background to fill letterbox areas */}
+                <NextImage
+                  src={post.coverImage}
+                  alt=""
+                  fill
+                  aria-hidden="true"
+                  className="object-cover scale-110 blur-2xl opacity-60"
+                  unoptimized
+                />
                 {!imgLoaded && active && <div className="skeleton-shimmer absolute inset-0" aria-hidden="true" />}
                 <NextImage
                   src={post.coverImage}
                   alt="Imagen del plan"
                   fill
-                  className="object-contain"
+                  className="object-contain object-center"
                   style={{ opacity: imgLoaded ? 1 : 0, transition: "opacity 0.2s" }}
                   unoptimized
                   onLoad={() => setImgLoaded(true)}
@@ -1742,8 +1737,22 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
           </div>
         )}
 
-        {/* Top: avatar + name + follow (image posts only) */}
-        {post.hasImage && <div className={`absolute inset-x-0 top-0 z-20 flex items-center gap-2.5 px-4 ${slides.length > 1 ? "pt-7" : "pt-4"}`} style={{ filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.45))" }}>
+        {/* Top: avatar + name + follow + progress bars (image posts only) */}
+        {post.hasImage && <div className="absolute inset-x-0 top-0 z-20 flex flex-col pt-4" style={{ filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.45))" }}>
+          {/* Progress bars row */}
+          {slides.length > 1 && (
+            <div className="flex items-center gap-[3px] px-3 pb-2">
+              {slides.map((_, i) => (
+                <div
+                  key={i}
+                  className="h-[2.5px] rounded-full transition-all duration-300"
+                  style={{ flex: 1, background: i === clampedIndex ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.28)" }}
+                />
+              ))}
+            </div>
+          )}
+          {/* Avatar + name row */}
+          <div className="flex items-center gap-2.5 px-4">
           <Link
             href={`/profile/${post.plan.ownerUserId}`}
             onClick={(e) => e.stopPropagation()}
@@ -1777,7 +1786,8 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
               <path d="M13 3L21 12M21 12L13 21M21 12H3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </Link>
-        </div>}
+          </div>{/* end avatar row */}
+        </div>}{/* end header */}
 
         {/* Right: actions (image posts only) */}
         {post.hasImage && <div
@@ -2245,6 +2255,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                     </button>
                   )}
                 </div>
+                <div className="md:hidden" style={{ height: "env(safe-area-inset-bottom)" }} />
               </div>
             </div>
           </div>
