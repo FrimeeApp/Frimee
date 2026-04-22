@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Capacitor } from "@capacitor/core";
+import { App } from "@capacitor/app";
 import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
 import { useAuth } from "@/providers/AuthProvider";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
@@ -262,7 +263,7 @@ export default function SettingsPage() {
     if (typeof window !== "undefined" && window.history.length > 1) {
       router.back();
     } else {
-      router.push("/feed");
+      router.push(user?.id ? `/profile/${user.id}` : "/feed");
     }
   };
 
@@ -274,6 +275,13 @@ export default function SettingsPage() {
     const ok = await onSaveSettings();
     if (ok) navigate();
   };
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    const listenerPromise = App.addListener("backButton", () => { void goBack(); });
+    return () => { void listenerPromise.then((h) => h.remove()); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasChanges, busyAction]);
 
   const uploadSelectedImage = async (file: File) => {
     if (!user?.id) return;

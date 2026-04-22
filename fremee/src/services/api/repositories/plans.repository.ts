@@ -43,6 +43,7 @@ export async function listPlansByIdsInOrder(planIds: number[]): Promise<FeedPlan
       creator: {
         id: p.creado_por_user_id,
         name: p.creador_nombre ?? "Usuario",
+        username: (p as { creador_username?: string | null }).creador_username ?? null,
         profileImage: p.creador_profile_image ?? null,
       },
     });
@@ -78,6 +79,7 @@ export async function listUserRelatedPlans(params: { userId: string; limit?: num
     creator: {
       id: p.creado_por_user_id,
       name: p.creador_nombre ?? "Usuario",
+      username: (p as { creador_username?: string | null }).creador_username ?? null,
       profileImage: p.creador_profile_image ?? null,
     },
   }));

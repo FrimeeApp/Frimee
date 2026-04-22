@@ -149,6 +149,13 @@ export async function listTicketsEndpoint(): Promise<PlanTicket[]> {
   return (data ?? []) as PlanTicket[];
 }
 
+export async function listActiveFriendFlightsEndpoint(): Promise<PlanTicket[]> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_active_friend_flights");
+  if (error) throw error;
+  return (data ?? []) as PlanTicket[];
+}
+
 export async function listTicketsForPlanEndpoint(planId: number): Promise<PlanTicket[]> {
   const supabase = createBrowserSupabaseClient();
   const { data, error } = await supabase.rpc("fn_tickets_list_for_plan", { p_plan_id: planId });

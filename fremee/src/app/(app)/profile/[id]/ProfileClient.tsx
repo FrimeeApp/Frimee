@@ -278,6 +278,14 @@ export default function ProfilePage() {
                   </button>
                   <button
                     type="button"
+                    onClick={() => router.push("/flights")}
+                    aria-label="Vuelos de amigos"
+                    className="flex items-center justify-center rounded-full p-2 text-app transition-opacity hover:opacity-70"
+                  >
+                    <PlaneIcon className="size-[20px]" />
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => router.push("/settings")}
                     aria-label="Ajustes"
                     className="flex items-center justify-center rounded-full p-2 text-app transition-opacity hover:opacity-70"
@@ -626,6 +634,14 @@ function SettingsIcon({ className = "size-icon" }: { className?: string }) {
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
       <path d="M12.22 2h-.44a2 2 0 00-2 2v.18a2 2 0 01-1 1.73l-.43.25a2 2 0 01-2 0l-.15-.08a2 2 0 00-2.73.73l-.22.38a2 2 0 00.73 2.73l.15.1a2 2 0 011 1.72v.51a2 2 0 01-1 1.74l-.15.09a2 2 0 00-.73 2.73l.22.38a2 2 0 002.73.73l.15-.08a2 2 0 012 0l.43.25a2 2 0 011 1.73V20a2 2 0 002 2h.44a2 2 0 002-2v-.18a2 2 0 011-1.73l.43-.25a2 2 0 012 0l.15.08a2 2 0 002.73-.73l.22-.39a2 2 0 00-.73-2.73l-.15-.08a2 2 0 01-1-1.74v-.5a2 2 0 011-1.74l.15-.09a2 2 0 00.73-2.73l-.22-.38a2 2 0 00-2.73-.73l-.15.08a2 2 0 01-2 0l-.43-.25a2 2 0 01-1-1.73V4a2 2 0 00-2-2z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
       <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
+  );
+}
+
+function PlaneIcon({ className = "size-icon" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
+      <path d="M22 16.5L13.5 10V4.5a1.5 1.5 0 00-3 0V10L2 16.5v2l8.5-2.5V20l-2 1.5V23l3.5-1 3.5 1v-1.5L13.5 20v-4l8.5 2.5v-2z" fill="currentColor" />
     </svg>
   );
 }

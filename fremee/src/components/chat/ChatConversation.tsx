@@ -326,7 +326,7 @@ export function ChatConversation({
   const getFreshMembers = async (): Promise<typeof chat.miembros> => {
     try {
       const fresh = await getChatMiembros(chat.chat_id);
-      return fresh.map((m) => ({ id: m.user_id, nombre: m.nombre, profile_image: m.profile_image }));
+      return fresh.map((m) => ({ id: m.user_id, nombre: m.nombre, username: null, profile_image: m.profile_image }));
     } catch {
       return chat.miembros;
     }
@@ -2031,7 +2031,7 @@ function ChatInfoPanel({
       const { user_id, nombre, profile_image } = payload as { user_id: string; nombre?: string; profile_image?: string | null };
       setLocalMembers((prev) => {
         if (prev.some((m) => m.id === user_id)) return prev;
-        return [...prev, { id: user_id, nombre: nombre ?? "Usuario", profile_image: profile_image ?? null }];
+        return [...prev, { id: user_id, nombre: nombre ?? "Usuario", username: null, profile_image: profile_image ?? null }];
       });
     };
     const leaveHandler = ({ payload }: { payload: unknown }) => {
@@ -2094,7 +2094,7 @@ function ChatInfoPanel({
       await addChatMember(chat.chat_id, friendId);
       const added = friends.find((f) => f.id === friendId);
       if (added) {
-        setLocalMembers((prev) => [...prev, { id: added.id, nombre: added.nombre, profile_image: added.profile_image }]);
+        setLocalMembers((prev) => [...prev, { id: added.id, nombre: added.nombre, username: null, profile_image: added.profile_image }]);
         setFriends((prev) => prev.filter((f) => f.id !== friendId));
         void channelRef.current?.send({ type: "broadcast", event: "member_added", payload: { user_id: added.id, nombre: added.nombre, profile_image: added.profile_image } });
         // Notificar al usuario añadido para que actualice su lista de chats
