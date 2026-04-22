@@ -37,17 +37,41 @@ export type GastoRow = {
 };
 
 export type BalanceRow = {
+  liquidacion_id: number;
   from_user_id: string;
   from_nombre: string | null;
-  from_username: string | null;
-  from_foto: string | null;
+  from_profile_image: string | null;
   to_user_id: string;
   to_nombre: string | null;
-  to_username: string | null;
-  to_foto: string | null;
+  to_profile_image: string | null;
   importe: number;
-  estado: string;
 };
+
+export async function pagarLiquidacionEndpoint(liquidacionId: number, comprobanteUrl: string | null): Promise<void> {
+  const supabase = createBrowserSupabaseClient();
+  const { error } = await supabase.rpc("fn_liquidacion_pagar", {
+    p_liquidacion_id: liquidacionId,
+    p_comprobante_url: comprobanteUrl,
+  });
+  if (error) throw error;
+}
+
+export async function uploadComprobanteEndpoint(file: File, userId: string): Promise<string> {
+  const supabase = createBrowserSupabaseClient();
+  const ext = file.name.split(".").pop() ?? "jpg";
+  const path = `comprobantes/${userId}/${Date.now()}.${ext}`;
+  const { error } = await supabase.storage.from("receipts").upload(path, file, { upsert: true });
+  if (error) throw error;
+  // Guardamos el path, las URLs firmadas se generan al mostrar
+  return path;
+}
+
+export async function getComprobanteSignedUrl(path: string): Promise<string> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.storage.from("receipts").createSignedUrl(path, 60 * 60); // 1h
+  if (error) throw error;
+  return data.signedUrl;
+}
 
 // Participante para repartos IGUAL / CANTIDAD / PORCENTAJE
 export type Participante =
