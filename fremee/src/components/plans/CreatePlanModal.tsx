@@ -24,11 +24,23 @@ export type CreatePlanPayload = {
   invitedFriendIds: string[];
 };
 
+export type EditPlanInitialValues = {
+  title: string;
+  description: string;
+  location: string;
+  startDate: string;
+  endDate: string;
+  coverImageUrl: string | null;
+  visibility: CreatePlanPayload["visibility"];
+};
+
 type CreatePlanModalProps = {
   open: boolean;
   onClose: () => void;
   onCreate: (payload: CreatePlanPayload) => void | Promise<void>;
   currentUserId?: string;
+  initialValues?: EditPlanInitialValues;
+  mode?: "create" | "edit";
 };
 
 const DEFAULT_VISIBILITY: CreatePlanPayload["visibility"] = "SOLO_GRUPO";
@@ -251,7 +263,7 @@ function InlineRangeCalendar({
 
 // ─── Main modal ───────────────────────────────────────────────────────────────
 
-export default function CreatePlanModal({ open, onClose, onCreate, currentUserId }: CreatePlanModalProps) {
+export default function CreatePlanModal({ open, onClose, onCreate, currentUserId, initialValues, mode = "create" }: CreatePlanModalProps) {
   const wasOpenRef = useRef(false);
   const coverInputRef = useRef<HTMLInputElement | null>(null);
   const handleNextRef = useRef<() => void>(() => {});
@@ -294,14 +306,14 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
   const resetForm = () => {
     const today = new Date();
     setStep(1);
-    setTitle("");
-    setDescription("");
-    setLocation("");
-    setStartDate(toDateInputValue(today));
-    setEndDate(toDateInputValue(addDays(today, 1)));
-    setVisibility(DEFAULT_VISIBILITY);
+    setTitle(initialValues?.title ?? "");
+    setDescription(initialValues?.description ?? "");
+    setLocation(initialValues?.location ?? "");
+    setStartDate(initialValues?.startDate ?? toDateInputValue(today));
+    setEndDate(initialValues?.endDate ?? toDateInputValue(addDays(today, 1)));
+    setVisibility(initialValues?.visibility ?? DEFAULT_VISIBILITY);
     setInviteMode(DEFAULT_INVITE_MODE);
-    setCoverImageUrl(null);
+    setCoverImageUrl(initialValues?.coverImageUrl ?? null);
     setCoverFile(null);
     setSaving(false);
     setErrorMsg(null);
@@ -869,7 +881,7 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
                 disabled={!canContinue || saving}
                 className={primaryFooterButtonClass}
               >
-                {step === TOTAL_STEPS ? (saving ? "Creando..." : "Crear plan") : "Continuar"}
+                {step === TOTAL_STEPS ? (saving ? "Guardando..." : mode === "edit" ? "Guardar cambios" : "Crear plan") : "Continuar"}
               </button>
             </div>
           )}

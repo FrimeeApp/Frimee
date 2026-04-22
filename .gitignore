@@ -8,3 +8,10 @@ Thumbs.db
 .idea/
 
 .claude/settings.local.json
+
+node_modules/
+package-lock.json
+package.json
+
+seed-test-gastos.mjs
+seed-test-users.mjs

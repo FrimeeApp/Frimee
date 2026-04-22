@@ -267,14 +267,24 @@ export default function ProfilePage() {
             {/* Settings button - own profile only */}
             {isOwnProfile && (
               <div className="mb-[var(--space-4)] flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => router.push("/settings")}
-                  aria-label="Ajustes"
-                  className="flex items-center justify-center rounded-full p-2 text-app transition-opacity hover:opacity-70"
-                >
-                  <SettingsIcon className="size-[20px]" />
-                </button>
+                <div className="inline-flex items-center gap-[var(--space-2)]">
+                  <button
+                    type="button"
+                    onClick={() => router.push("/wallet")}
+                    aria-label="Cartera"
+                    className="flex items-center justify-center rounded-full p-2 text-app transition-opacity hover:opacity-70"
+                  >
+                    <WalletIcon className="size-[20px]" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => router.push("/settings")}
+                    aria-label="Ajustes"
+                    className="flex items-center justify-center rounded-full p-2 text-app transition-opacity hover:opacity-70"
+                  >
+                    <SettingsIcon className="size-[20px]" />
+                  </button>
+                </div>
               </div>
             )}
 
@@ -616,6 +626,16 @@ function SettingsIcon({ className = "size-icon" }: { className?: string }) {
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
       <path d="M12.22 2h-.44a2 2 0 00-2 2v.18a2 2 0 01-1 1.73l-.43.25a2 2 0 01-2 0l-.15-.08a2 2 0 00-2.73.73l-.22.38a2 2 0 00.73 2.73l.15.1a2 2 0 011 1.72v.51a2 2 0 01-1 1.74l-.15.09a2 2 0 00-.73 2.73l.22.38a2 2 0 002.73.73l.15-.08a2 2 0 012 0l.43.25a2 2 0 011 1.73V20a2 2 0 002 2h.44a2 2 0 002-2v-.18a2 2 0 011-1.73l.43-.25a2 2 0 012 0l.15.08a2 2 0 002.73-.73l.22-.39a2 2 0 00-.73-2.73l-.15-.08a2 2 0 01-1-1.74v-.5a2 2 0 011-1.74l.15-.09a2 2 0 00.73-2.73l-.22-.38a2 2 0 00-2.73-.73l-.15.08a2 2 0 01-2 0l-.43-.25a2 2 0 01-1-1.73V4a2 2 0 00-2-2z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
       <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
+  );
+}
+
+function WalletIcon({ className = "size-icon" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
+      <path d="M4 7.5A2.5 2.5 0 016.5 5H18a2 2 0 012 2v1.5H8A2.5 2.5 0 005.5 11v2A2.5 2.5 0 008 15.5h12V17a2 2 0 01-2 2H6.5A2.5 2.5 0 014 16.5v-9z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M18.5 8.5H8A2.5 2.5 0 005.5 11v2A2.5 2.5 0 008 15.5h10.5A1.5 1.5 0 0020 14V10a1.5 1.5 0 00-1.5-1.5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="16" cy="12" r="1" fill="currentColor" />
     </svg>
   );
 }

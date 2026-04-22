@@ -166,6 +166,34 @@ export async function leavePlanEndpoint(planId: number): Promise<string> {
   return data as string;
 }
 
+export type UpdatePlanParams = {
+  planId: number;
+  titulo: string;
+  descripcion: string;
+  inicioAt: string;
+  finAt: string;
+  ubicacionNombre: string;
+  fotoPortada?: string | null;
+  allDay?: boolean;
+  visibilidad?: "PÚBLICO" | "SOLO_GRUPO" | "SOLO_AMIGOS" | "SOLO_FOLLOW";
+};
+
+export async function updatePlanEndpoint(params: UpdatePlanParams): Promise<void> {
+  const supabase = createBrowserSupabaseClient();
+  const { error } = await supabase.rpc("fn_plan_update", {
+    p_plan_id: params.planId,
+    p_titulo: params.titulo,
+    p_descripcion: params.descripcion,
+    p_inicio_at: params.inicioAt,
+    p_fin_at: params.finAt,
+    p_ubicacion_nombre: params.ubicacionNombre,
+    p_all_day: params.allDay ?? false,
+    p_visibilidad: params.visibilidad ?? "SOLO_GRUPO",
+    p_foto_portada: params.fotoPortada ?? null,
+  });
+  if (error) throw error;
+}
+
 export async function fetchUserRelatedPlans(params: { userId: string; limit?: number }): Promise<PlanByIdRow[]> {
   const supabase = createBrowserSupabaseClient();
 
