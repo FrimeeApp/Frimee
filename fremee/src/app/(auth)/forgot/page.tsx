@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { AUTH_EMAIL_REGEX, focusInput, getAuthErrorMessage } from "@/components/auth/AuthFormUtils";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 
 export default function ForgotPage() {
@@ -10,14 +11,25 @@ export default function ForgotPage() {
   const [email, setEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+  const [invalidField, setInvalidField] = useState<"email" | null>(null);
+  const emailRef = useRef<HTMLInputElement>(null);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setMsg(null);
+    setInvalidField(null);
 
     const value = email.trim().toLowerCase();
     if (!value) {
       setMsg({ type: "err", text: "Introduce tu email." });
+      setInvalidField("email");
+      focusInput(emailRef);
+      return;
+    }
+
+    if (!AUTH_EMAIL_REGEX.test(value)) {
+      setMsg({ type: "err", text: "Introduce un email válido." });
+      focusInput(emailRef);
       return;
     }
 
@@ -30,18 +42,11 @@ export default function ForgotPage() {
         redirectTo,
       });
 
-      if (error) {
-        console.error("[forgot] resetPasswordForEmail error", error);
-        setMsg({
-          type: "err",
-          text: error.message || "No se pudo enviar el email. Intentalo de nuevo.",
-        });
-        return;
-      }
+      if (error) throw error;
 
       setMsg({
         type: "ok",
-        text: "Te hemos enviado un enlace para restablecer la contraseña.",
+        text: "Te hemos enviado un enlace para restablecer tu contraseña.",
       });
 
       setTimeout(() => router.replace("/login"), 1500);
@@ -49,54 +54,56 @@ export default function ForgotPage() {
       console.error("[forgot] exception", err);
       setMsg({
         type: "err",
-        text: "Ha ocurrido un error inesperado. Intentalo de nuevo.",
+        text: getAuthErrorMessage(err, "No se pudo enviar el email. Inténtalo de nuevo."),
       });
+      setInvalidField("email");
+      focusInput(emailRef);
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <div className="flex h-full w-full max-w-[420px] flex-col py-[var(--space-6)] text-app md:py-[var(--space-8)]">
+    <div className="auth-page flex h-full w-full max-w-[420px] flex-col py-[var(--space-6)] text-app md:py-[var(--space-8)]">
       <div className="flex flex-1 items-center">
         <div className="w-full">
-          <h1 className="text-[var(--font-h1)] font-[var(--fw-semibold)] leading-[1.05] tracking-[-0.02em] text-app">
+          <h1 className="auth-title font-sans font-[var(--fw-semibold)] text-app">
             Recuperar
           </h1>
-          <h3 className="mt-[var(--space-1)] text-body text-muted">
+          <h3 className="font-sans mt-[var(--space-1)] text-body text-muted">
             Te enviaremos un enlace para restablecer tu contraseña
           </h3>
 
-          <form className="mt-[var(--space-6)] space-y-[var(--space-3)]" onSubmit={onSubmit}>
-            <div className="h-input rounded-input border border-app bg-[var(--input-bg)] px-[var(--input-padding-x)] transition-[border-color,box-shadow] duration-[var(--duration-fast)] [transition-timing-function:var(--ease-standard)] focus-within:border-[var(--input-border-focus)] focus-within:shadow-[0_0_0_var(--focus-ring-width)_var(--focus-ring-color)]">
+          <form className="mt-[var(--space-6)] space-y-[var(--space-3)]" onSubmit={onSubmit} noValidate>
+            <div className={`h-input rounded-input border bg-[var(--input-bg)] px-[var(--input-padding-x)] transition-[border-color] duration-[var(--duration-fast)] [transition-timing-function:var(--ease-standard)] ${invalidField === "email" ? "border-error-token focus-within:border-error-token" : "border-app focus-within:border-[var(--input-border-focus)]"}`}>
               <input
+                ref={emailRef}
                 type="email"
                 className="h-full w-full bg-transparent text-body text-app outline-none placeholder:text-muted focus-visible:shadow-none"
-                aria-label="Correo electronico"
+                aria-label="Correo electrónico"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (invalidField === "email") {
+                    setInvalidField(null);
+                    setMsg(null);
+                  }
+                }}
                 autoComplete="email"
-                required
                 placeholder="Email*"
               />
             </div>
 
             {msg && (
-              <div
-                className={`rounded-input border px-[var(--space-3)] py-[var(--space-2)] text-body-sm ${
-                  msg.type === "ok"
-                    ? "border-success-token bg-[color-mix(in_srgb,var(--success)_14%,var(--surface)_86%)] text-success-token"
-                    : "border-error-token bg-[color-mix(in_srgb,var(--error)_12%,var(--surface)_88%)] text-error-token"
-                }`}
-              >
+              <p className={`text-body-sm ${msg.type === "ok" ? "text-success-token" : "text-error-token"}`}>
                 {msg.text}
-              </div>
+              </p>
             )}
 
             <button
               type="submit"
               disabled={submitting}
-              className="h-btn-primary w-full rounded-button bg-primary-token text-button-md font-[var(--fw-medium)] text-contrast-token transition-colors duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] hover:bg-primary-hover-token disabled:opacity-[var(--disabled-opacity)]"
+              className="auth-solid-button h-btn-primary w-full rounded-button text-button-md font-[var(--fw-medium)] transition-colors duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] disabled:opacity-[var(--disabled-opacity)]"
             >
               {submitting ? "Enviando..." : "Enviar enlace"}
             </button>
@@ -104,7 +111,7 @@ export default function ForgotPage() {
 
           <p className="pt-[var(--space-4)] text-center text-body text-muted">
             ¿Ya la recordaste?{" "}
-            <Link href="/login" className="font-[var(--fw-semibold)] text-primary-token">
+            <Link href="/login" className="auth-link auth-link-primary font-[var(--fw-semibold)]">
               Volver a iniciar sesión
             </Link>
           </p>

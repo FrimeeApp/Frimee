@@ -2,13 +2,13 @@ import { createBrowserSupabaseClient } from "@/services/supabase/client";
 
 export type ChatListItem = {
   chat_id: string;
-  tipo: "DIRECTO" | "GRUPO";
+  tipo: "DIRECTO" | "GRUPO" | "PLAN";
   nombre: string | null;
   foto: string | null;
   last_message: string | null;
   last_message_at: string | null;
   unread_count: number;
-  miembros: Array<{ id: string; nombre: string; profile_image: string | null }>;
+  miembros: Array<{ id: string; nombre: string; username: string | null; profile_image: string | null }>;
 };
 
 export type MensajeRow = {
@@ -32,6 +32,7 @@ export type MensajeRow = {
 export type ChatMiembro = {
   user_id: string;
   nombre: string;
+  username: string | null;
   profile_image: string | null;
   joined_at: string;
 };
@@ -40,7 +41,16 @@ export async function listChatsEndpoint(): Promise<ChatListItem[]> {
   const supabase = createBrowserSupabaseClient();
   const { data, error } = await supabase.rpc("fn_chats_list");
   if (error) throw error;
-  return (data ?? []) as ChatListItem[];
+  return ((data ?? []) as ChatListItem[]).filter((c) => c.tipo !== "PLAN");
+}
+
+export async function fetchPlanChatItem(planId: number): Promise<ChatListItem | null> {
+  const supabase = createBrowserSupabaseClient();
+  const { data: chatId } = await supabase.rpc("fn_get_or_create_plan_chat", { p_plan_id: planId });
+  if (!chatId) return null;
+  const { data } = await supabase.rpc("fn_chats_list");
+  if (!data) return null;
+  return ((data as ChatListItem[]).find((c) => c.chat_id === chatId)) ?? null;
 }
 
 export async function getOrCreateDirectoChatEndpoint(otherUserId: string): Promise<string> {
@@ -73,12 +83,10 @@ export async function listMensajesEndpoint(params: {
   cursorId?: number | null;
 }): Promise<MensajeRow[]> {
   const supabase = createBrowserSupabaseClient();
-  const { data, error } = await supabase.rpc("fn_mensajes_list", {
-    p_chat_id: params.chatId,
-    p_limit: params.limit ?? 30,
-    p_cursor_id: params.cursorId ?? null,
-  });
-  if (error) throw error;
+  const base = { p_chat_id: params.chatId, p_limit: params.limit ?? 30 };
+  const rpcParams = params.cursorId != null ? { ...base, p_cursor_id: params.cursorId } : base;
+  const { data, error } = await supabase.rpc("fn_mensajes_list", rpcParams);
+  if (error) throw new Error(error.message || error.code || "Error cargando mensajes");
   return (data ?? []) as MensajeRow[];
 }
 
@@ -102,6 +110,16 @@ export async function sendMensajeEndpoint(params: {
     p_document_name: params.documentName ?? null,
     p_image_url: params.imageUrl ?? null,
     p_image_type: params.imageType ?? null,
+  });
+  if (error) throw error;
+  return data as number;
+}
+
+export async function sendBotMensajeEndpoint(chatId: string, texto: string): Promise<number> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_bot_message_insert", {
+    p_chat_id: chatId,
+    p_texto: texto,
   });
   if (error) throw error;
   return data as number;
@@ -141,6 +159,12 @@ export async function addChatMemberEndpoint(chatId: string, userId: string): Pro
     p_chat_id: chatId,
     p_user_id: userId,
   });
+  if (error) throw error;
+}
+
+export async function closePollEndpoint(mensajeId: number): Promise<void> {
+  const supabase = createBrowserSupabaseClient();
+  const { error } = await supabase.rpc("fn_poll_close", { p_mensaje_id: mensajeId });
   if (error) throw error;
 }
 

@@ -144,11 +144,11 @@
 | 3.8 | Preview de documento | "📄 Nombre" | ✅ |
 | 3.9 | Nota de voz: reproducir | AudioPlayer funciona | ✅ |
 | 3.10 | Imagen: ver en grande | Click abre lightbox fullscreen con flechas, thumbnails centrados y Escape para cerrar | ✅ |
-| 3.11 | Chat de grupo: nombre y avatar | Icono de grupo, nombre del grupo | 🔲 |
-| 3.12 | Llamada de audio | Inicia llamada, estado "outgoing" | 🔲 |
+| 3.11 | Chat de grupo: nombre y avatar | Icono de grupo, nombre del grupo | ✅ |
+| 3.12 | Llamada de audio | Inicia llamada, estado "outgoing" | ✅ |
 | 3.13 | Llamada perdida en historial | Aparece como "Llamada perdida" con icono | ✅ |
-| 3.14 | Llamada con duración | "Audio call · 1:23" tras terminar | 🔲 |
-| 3.15 | Marcar como leído al abrir | Contador de no leídos se resetea | 🔲 |
+| 3.14 | Llamada con duración | "Audio call · 1:23" tras terminar | ✅ |
+| 3.15 | Marcar como leído al abrir | Contador de no leídos se resetea | ✅ |
 
 ---
 
@@ -156,33 +156,90 @@
 
 | # | Escenario | Esperado | Estado |
 |---|-----------|----------|--------|
-| 4.1 | Vista mensual carga | Muestra mes actual con planes | 🔲 |
-| 4.2 | Navegar mes anterior/siguiente | Cambia el mes | 🔲 |
-| 4.3 | Click en día con plan | Muestra planes de ese día | 🔲 |
-| 4.4 | Crear nuevo plan | Modal se abre, plan se crea | 🔲 |
-| 4.5 | Tab "Activos" / "Hechos" | Filtra planes por estado | 🔲 |
-| 4.6 | Buscar plan | Filtra por nombre | 🔲 |
-| 4.7 | Vista de itinerario de un plan | Subplanes del día ordenados | 🔲 |
-| 4.8 | Mapa de ruta del día | Polylines y marcadores correctos | 🔲 |
+| 4.1 | Vista mensual carga | Muestra mes actual con planes | ✅ |
+| 4.2 | Navegar mes anterior/siguiente | Cambia el mes | ✅ |
+| 4.3 | Click en día con plan | Muestra planes de ese día | ✅ |
+| 4.4 | Crear nuevo plan | Modal se abre, plan se crea | ✅ |
+| 4.5 | Tab "Activos" / "Finalizados" | Filtra planes por estado | ✅ |
+| 4.6 | Buscar plan | Filtra por nombre | ✅ |
+| 4.7 | Vista de itinerario de un plan | Subplanes del día ordenados | ✅ |
+| 4.8 | Mapa de ruta del día | Polylines y marcadores correctos | ✅ |
 
 ---
 
 ## 5. PLANES (`/plans/[id]`)
 
+### 5.1 Carga y cabecera
 | # | Escenario | Esperado | Estado |
 |---|-----------|----------|--------|
-| 5.1 | Carga del plan | Datos del plan visibles | 🔲 |
-| 5.2 | Crear subplan (actividad) | Aparece en la lista y en el mapa | 🔲 |
-| 5.3 | Crear subplan (viaje) | Calcula ruta automáticamente | 🔲 |
-| 5.4 | Cambiar transporte | Ruta se recalcula | 🔲 |
-| 5.5 | Horas ocupadas bloqueadas | No se puede seleccionar hora ya ocupada | 🔲 |
-| 5.6 | Rango de fechas respeta timezone | No permite fecha fuera del rango del plan | 🔲 |
-| 5.7 | Subplan multi-día (fin en otro día) | Campo fecha fin opcional visible | 🔲 |
-| 5.8 | Insertar subplan entre existentes | Mapa se actualiza con nuevo orden | 🔲 |
-| 5.9 | Exportar ruta a Google Maps | URL abre Maps con waypoints | 🔲 |
-| 5.10 | Exportar a Waze | URL abre Waze con destino final | 🔲 |
-| 5.11 | Gastos del plan | Se muestran correctamente | 🔲 |
-| 5.12 | Plan con múltiples miembros | Todos pueden ver subplanes | 🔲 |
+| 5.1.1 | Carga del plan | Título, fechas, ubicación y portada visibles | ✅ |
+| 5.1.2 | Plan sin portada | Fondo degradado o color de fallback | ✅ |
+| 5.1.3 | Plan de varios días | Selector de día visible (DOM 22 MAR, LUN 23 MAR...) | ✅ |
+| 5.1.4 | Cambiar de día | Itinerario y mapa se actualizan al día seleccionado | ✅ |
+| 5.1.5 | Plan finalizado | Badge "Finalizado" visible, no se puede añadir subplanes | ✅ |
+| 5.1.6 | Plan de otro usuario (solo lectura) | No aparecen botones de edición/añadir | ⏸️ Pendiente de diseño |
+
+### 5.2 Tabs
+| # | Escenario | Esperado | Estado |
+|---|-----------|----------|--------|
+| 5.2.1 | Tab "Itinerario" | Lista de subplanes del día | ✅ |
+| 5.2.2 | Tab "Mapa" | Mapa fullscreen con ruta del día | 🔲 |
+| 5.2.3 | Tab "Gastos" | Lista de gastos del plan | 🔲 |
+
+### 5.3 Crear subplan — actividad
+| # | Escenario | Esperado | Estado |
+|---|-----------|----------|--------|
+| 5.3.1 | Abrir formulario de nueva actividad | Modal/panel se abre | 🔲 |
+| 5.3.2 | Crear actividad con nombre y hora | Aparece en el itinerario y en el mapa | 🔲 |
+| 5.3.3 | Actividad sin nombre | No se puede guardar (validación) | 🔲 |
+| 5.3.4 | Hora de inicio fuera del rango del plan | Bloqueado o advertencia | 🔲 |
+| 5.3.5 | Hora solapada con otra actividad | Bloqueado o advertencia | 🔲 |
+
+### 5.4 Crear subplan — viaje
+| # | Escenario | Esperado | Estado |
+|---|-----------|----------|--------|
+| 5.4.1 | Crear viaje entre dos puntos | Ruta calculada automáticamente, aparece en mapa | ✅ |
+| 5.4.2 | Cambiar modo transporte (coche→a pie) | Ruta y duración se recalculan | 🔲 |
+| 5.4.3 | Cambiar modo transporte (coche→transporte público) | Ruta y duración se recalculan | 🔲 |
+| 5.4.4 | Origen o destino sin coordenadas | Muestra error o pide seleccionar lugar válido | 🔲 |
+| 5.4.5 | Viaje multi-día (llega al día siguiente) | Campo fecha fin disponible y reflejado en itinerario | 🔲 |
+
+### 5.5 Editar y borrar subplanes
+| # | Escenario | Esperado | Estado |
+|---|-----------|----------|--------|
+| 5.5.1 | Editar nombre de subplan | Cambio guardado y visible | 🔲 |
+| 5.5.2 | Editar hora de subplan | Itinerario se reordena | 🔲 |
+| 5.5.3 | Borrar subplan | Desaparece del itinerario y del mapa | 🔲 |
+| 5.5.4 | Insertar subplan entre existentes | Orden correcto, mapa actualizado | 🔲 |
+
+### 5.6 Mapa
+| # | Escenario | Esperado | Estado |
+|---|-----------|----------|--------|
+| 5.6.1 | Marcadores numerados visibles | Uno por subplan con ubicación | ✅ |
+| 5.6.2 | Polyline de ruta entre paradas | Línea conectando los puntos | ✅ |
+| 5.6.3 | Click en marcador | Resalta o muestra info del subplan | 🔲 |
+| 5.6.4 | Mapa sin subplanes con ubicación | Mapa vacío sin errores | 🔲 |
+
+### 5.7 Exportar ruta
+| # | Escenario | Esperado | Estado |
+|---|-----------|----------|--------|
+| 5.7.1 | Botón "Maps" | Abre Google Maps con waypoints del día | ✅ |
+| 5.7.2 | Botón "Waze" | Abre Waze con destino final del día | ✅ |
+| 5.7.3 | Día sin subplanes con ubicación | Botones deshabilitados o no visibles | 🔲 |
+
+### 5.8 Gastos
+| # | Escenario | Esperado | Estado |
+|---|-----------|----------|--------|
+| 5.8.1 | Lista de gastos carga | Muestra gastos del plan con importe | ✅ |
+| 5.8.2 | Resumen total visible | Suma total en "Estimación total" | ✅ |
+| 5.8.3 | Desglose por categoría | Vuelos, hotel, etc. con importes | 🔲 |
+| 5.8.4 | Plan sin gastos | Mensaje o lista vacía, sin error | 🔲 |
+
+### 5.9 Compartir / publicar
+| # | Escenario | Esperado | Estado |
+|---|-----------|----------|--------|
+| 5.9.1 | Botón compartir | Publica plan como post en el feed | 🔲 |
+| 5.9.2 | Plan ya publicado | No genera duplicado | 🔲 |
 
 ---
 
@@ -213,13 +270,43 @@
 
 ## 8. LLAMADAS (global — cualquier página)
 
+### 8.1 Flujo básico
 | # | Escenario | Esperado | Estado |
 |---|-----------|----------|--------|
-| 8.1 | Recibir llamada en cualquier página | Pantalla de llamada entrante aparece | 🔲 |
-| 8.2 | Aceptar llamada | Conecta con LiveKit | 🔲 |
-| 8.3 | Rechazar llamada | Llamada termina | 🔲 |
-| 8.4 | Llamada activa: colgar | Duración guardada en chat | 🔲 |
-| 8.5 | Llamada perdida | Aparece en chat como "Llamada perdida" | 🔲 |
+| 8.1.1 | Recibir llamada en cualquier página | Pantalla de llamada entrante aparece | ✅ |
+| 8.1.2 | Aceptar llamada | Conecta con LiveKit | ✅ |
+| 8.1.3 | Rechazar llamada | Llamada termina | ✅ |
+| 8.1.4 | Llamada activa: colgar | Duración guardada en chat | ✅ |
+| 8.1.5 | Llamada perdida | Aparece en chat como "Llamada perdida" | ✅ |
+
+### 8.2 Controles en llamada
+| # | Escenario | Esperado | Estado |
+|---|-----------|----------|--------|
+| 8.2.1 | Silenciar micrófono | Icono cambia, otro participante no escucha | ✅ |
+| 8.2.2 | Activar cámara en llamada de audio | Tile de vídeo aparece | ✅ |
+| 8.2.3 | Compartir pantalla | Nuevo tile "Pantalla de X" aparece en el grid | ✅ |
+| 8.2.4 | Ambos comparten pantalla | 4 tiles en total (2 cámara + 2 pantalla) | ✅ |
+| 8.2.5 | Click en tile → zoom | Tile ocupa pantalla completa | ✅ |
+| 8.2.6 | Click en tile de pantalla compartida → zoom | Igual que cámara | ✅ |
+| 8.2.7 | Tile pantalla compartida | Ocupa 2 columnas con ratio 16:9, sin barras negras | ✅ |
+
+### 8.3 Minimizar llamada
+| # | Escenario | Esperado | Estado |
+|---|-----------|----------|--------|
+| 8.3.1 | Pulsar botón `—` | Llamada se minimiza, widget aparece arriba a la derecha | ✅ |
+| 8.3.2 | Navegar por la app minimizado | Audio/vídeo/screen share siguen activos | ✅ |
+| 8.3.3 | Pulsar widget (nombre/avatar) | Vuelve a pantalla completa | ✅ |
+| 8.3.4 | Colgar desde el widget | Llamada termina correctamente | ✅ |
+| 8.3.5 | Timer en widget | Sigue contando mientras minimizado | ✅ |
+| 8.3.6 | Punto verde pulsante | Visible solo cuando llamada activa | ✅ |
+
+### 8.4 Llamadas de grupo
+| # | Escenario | Esperado | Estado |
+|---|-----------|----------|--------|
+| 8.4.1 | Banner "Llamada en curso" en chat grupal | Aparece cuando hay llamada activa | ✅ |
+| 8.4.2 | Unirse a llamada en curso | Funciona desde el banner | ✅ |
+| 8.4.3 | Uno de 2 cuelga | Llamada termina (último solo no tiene sentido) | ✅ |
+| 8.4.4 | Uno de 3+ cuelga | Resto sigue en llamada | ✅ |
 
 ---
 

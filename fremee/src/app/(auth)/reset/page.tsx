@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { focusInput, getAuthErrorMessage } from "@/components/auth/AuthFormUtils";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 
 export default function ResetPage() {
@@ -16,6 +17,10 @@ export default function ResetPage() {
   const [canReset, setCanReset] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+  const [invalidField, setInvalidField] = useState<"password" | "repeatPassword" | null>(null);
+
+  const passwordRef = useRef<HTMLInputElement>(null);
+  const repeatPasswordRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const validateRecoveryLink = async () => {
@@ -30,7 +35,7 @@ export default function ResetPage() {
         const code = url.searchParams.get("code");
 
         if (queryError) {
-          setMsg({ type: "err", text: "El enlace no es valido o ha expirado." });
+          setMsg({ type: "err", text: "El enlace no es válido o ha expirado." });
           setCanReset(false);
           return;
         }
@@ -38,7 +43,7 @@ export default function ResetPage() {
         if (code) {
           const { error } = await supabase.auth.exchangeCodeForSession(code);
           if (error) {
-            setMsg({ type: "err", text: "El enlace no es valido o ha expirado." });
+            setMsg({ type: "err", text: "El enlace no es válido o ha expirado." });
             setCanReset(false);
             return;
           }
@@ -51,7 +56,7 @@ export default function ResetPage() {
           });
 
           if (error) {
-            setMsg({ type: "err", text: "El enlace no es valido o ha expirado." });
+            setMsg({ type: "err", text: "El enlace no es válido o ha expirado." });
             setCanReset(false);
             return;
           }
@@ -71,12 +76,11 @@ export default function ResetPage() {
           });
 
           if (error) {
-            setMsg({ type: "err", text: "El enlace no es valido o ha expirado." });
+            setMsg({ type: "err", text: "El enlace no es válido o ha expirado." });
             setCanReset(false);
             return;
           }
 
-          // Limpia tokens de la URL tras validar.
           window.history.replaceState({}, document.title, window.location.pathname);
         }
 
@@ -85,7 +89,7 @@ export default function ResetPage() {
         } = await supabase.auth.getSession();
 
         if (!session) {
-          setMsg({ type: "err", text: "No hay una sesion de recuperacion activa." });
+          setMsg({ type: "err", text: "No hay una sesión de recuperación activa." });
           setCanReset(false);
           return;
         }
@@ -95,7 +99,7 @@ export default function ResetPage() {
         console.error("[reset] validateRecoveryLink error", error);
         setMsg({
           type: "err",
-          text: "No se pudo validar el enlace de recuperacion. Intentalo de nuevo.",
+          text: "No se pudo validar el enlace de recuperación. Inténtalo de nuevo.",
         });
         setCanReset(false);
       } finally {
@@ -109,19 +113,34 @@ export default function ResetPage() {
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setMsg(null);
+    setInvalidField(null);
 
     if (!canReset) {
-      setMsg({ type: "err", text: "No hay una sesion de recuperacion activa." });
+      setMsg({ type: "err", text: "No hay una sesión de recuperación activa." });
+      return;
+    }
+
+    if (!password) {
+      setMsg({ type: "err", text: "Introduce una contraseña nueva." });
+      focusInput(passwordRef);
       return;
     }
 
     if (password.length < 6) {
       setMsg({ type: "err", text: "La contraseña debe tener al menos 6 caracteres." });
+      focusInput(passwordRef);
+      return;
+    }
+
+    if (!repeatPassword) {
+      setMsg({ type: "err", text: "Repite la contraseña nueva." });
+      focusInput(repeatPasswordRef);
       return;
     }
 
     if (password !== repeatPassword) {
       setMsg({ type: "err", text: "Las contraseñas no coinciden." });
+      focusInput(repeatPasswordRef);
       return;
     }
 
@@ -130,14 +149,11 @@ export default function ResetPage() {
       const supabase = createBrowserSupabaseClient();
       const { error } = await supabase.auth.updateUser({ password });
 
-      if (error) {
-        setMsg({ type: "err", text: error.message || "No se pudo cambiar la contraseña." });
-        return;
-      }
+      if (error) throw error;
 
       setMsg({
         type: "ok",
-        text: "Contraseña actualizada. Te llevamos a iniciar sesion.",
+        text: "Contraseña actualizada. Te llevamos a iniciar sesión.",
       });
 
       setTimeout(() => router.replace("/login"), 1200);
@@ -145,8 +161,9 @@ export default function ResetPage() {
       console.error("[reset] updateUser error", error);
       setMsg({
         type: "err",
-        text: "Ha ocurrido un error inesperado. Intentalo de nuevo.",
+        text: getAuthErrorMessage(error, "No se pudo cambiar la contraseña. Inténtalo de nuevo."),
       });
+      focusInput(passwordRef);
     } finally {
       setSubmitting(false);
     }
@@ -154,13 +171,13 @@ export default function ResetPage() {
 
   if (checkingLink) {
     return (
-      <div className="flex h-full w-full max-w-[420px] flex-col py-[var(--space-6)] text-app md:py-[var(--space-8)]">
+      <div className="auth-page flex h-full w-full max-w-[420px] flex-col py-[var(--space-6)] text-app md:py-[var(--space-8)]">
         <div className="flex flex-1 items-center">
           <div className="w-full">
-            <h1 className="text-[var(--font-h1)] font-[var(--fw-semibold)] leading-[1.05] tracking-[-0.02em] text-app">
+            <h1 className="auth-title font-sans font-[var(--fw-semibold)] text-app">
               Nueva contraseña
             </h1>
-            <h3 className="mt-[var(--space-1)] text-body text-muted">Validando enlace...</h3>
+            <h3 className="font-sans mt-[var(--space-1)] text-body text-muted">Validando enlace...</h3>
           </div>
         </div>
 
@@ -175,13 +192,13 @@ export default function ResetPage() {
   }
 
   return (
-    <div className="flex h-full w-full max-w-[420px] flex-col py-[var(--space-6)] text-app md:py-[var(--space-8)]">
+    <div className="auth-page flex h-full w-full max-w-[420px] flex-col py-[var(--space-6)] text-app md:py-[var(--space-8)]">
       <div className="flex flex-1 items-center">
         <div className="w-full">
-          <h1 className="text-[var(--font-h1)] font-[var(--fw-semibold)] leading-[1.05] tracking-[-0.02em] text-app">
+          <h1 className="auth-title font-sans font-[var(--fw-semibold)] text-app">
             Nueva contraseña
           </h1>
-          <h3 className="mt-[var(--space-1)] text-body text-muted">Crea una nueva contraseña segura</h3>
+          <h3 className="font-sans mt-[var(--space-1)] text-body text-muted">Crea una nueva contraseña segura</h3>
 
           {msg && (
             <div
@@ -198,23 +215,29 @@ export default function ResetPage() {
           {!canReset ? (
             <div className="pt-[var(--space-4)] text-body text-muted">
               <p>Pide un nuevo enlace para volver a intentarlo.</p>
-              <Link href="/forgot" className="font-[var(--fw-semibold)] text-primary-token">
+              <Link href="/forgot" className="auth-link auth-link-primary font-[var(--fw-semibold)]">
                 Volver a recuperar contraseña
               </Link>
             </div>
           ) : (
-            <form className="mt-[var(--space-6)] space-y-[var(--space-3)]" onSubmit={onSubmit}>
-              <div className="h-input rounded-input border border-app bg-[var(--input-bg)] px-[var(--input-padding-x)] transition-[border-color,box-shadow] duration-[var(--duration-fast)] [transition-timing-function:var(--ease-standard)] focus-within:border-[var(--input-border-focus)] focus-within:shadow-[0_0_0_var(--focus-ring-width)_var(--focus-ring-color)]">
+            <form className="mt-[var(--space-6)] space-y-[var(--space-3)]" onSubmit={onSubmit} noValidate>
+              <div className={`h-input rounded-input border bg-[var(--input-bg)] px-[var(--input-padding-x)] transition-[border-color] duration-[var(--duration-fast)] [transition-timing-function:var(--ease-standard)] ${invalidField === "password" ? "border-error-token focus-within:border-error-token" : "border-app focus-within:border-[var(--input-border-focus)]"}`}>
                 <div className="flex h-full items-center gap-[var(--space-3)]">
                   <input
+                    ref={passwordRef}
                     type={showPassword ? "text" : "password"}
                     className="w-full bg-transparent text-body text-app outline-none placeholder:text-muted focus-visible:shadow-none"
                     aria-label="Contraseña nueva"
                     autoComplete="new-password"
                     placeholder="Contraseña nueva*"
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
+                    onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (invalidField === "password") {
+                      setInvalidField(null);
+                      setMsg(null);
+                    }
+                  }}
                   />
                   <button
                     type="button"
@@ -227,17 +250,23 @@ export default function ResetPage() {
                 </div>
               </div>
 
-              <div className="h-input rounded-input border border-app bg-[var(--input-bg)] px-[var(--input-padding-x)] transition-[border-color,box-shadow] duration-[var(--duration-fast)] [transition-timing-function:var(--ease-standard)] focus-within:border-[var(--input-border-focus)] focus-within:shadow-[0_0_0_var(--focus-ring-width)_var(--focus-ring-color)]">
+              <div className={`h-input rounded-input border bg-[var(--input-bg)] px-[var(--input-padding-x)] transition-[border-color] duration-[var(--duration-fast)] [transition-timing-function:var(--ease-standard)] ${invalidField === "repeatPassword" ? "border-error-token focus-within:border-error-token" : "border-app focus-within:border-[var(--input-border-focus)]"}`}>
                 <div className="flex h-full items-center gap-[var(--space-3)]">
                   <input
+                    ref={repeatPasswordRef}
                     type={showRepeatPassword ? "text" : "password"}
                     className="w-full bg-transparent text-body text-app outline-none placeholder:text-muted focus-visible:shadow-none"
                     aria-label="Repetir contraseña"
                     autoComplete="new-password"
                     placeholder="Repetir contraseña*"
                     value={repeatPassword}
-                    onChange={(e) => setRepeatPassword(e.target.value)}
-                    required
+                    onChange={(e) => {
+                    setRepeatPassword(e.target.value);
+                    if (invalidField === "repeatPassword") {
+                      setInvalidField(null);
+                      setMsg(null);
+                    }
+                  }}
                   />
                   <button
                     type="button"
@@ -257,7 +286,7 @@ export default function ResetPage() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="h-btn-primary w-full rounded-button bg-primary-token text-button-md font-[var(--fw-medium)] text-contrast-token transition-colors duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] hover:bg-primary-hover-token disabled:opacity-[var(--disabled-opacity)]"
+                className="auth-solid-button h-btn-primary w-full rounded-button text-button-md font-[var(--fw-medium)] transition-colors duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] disabled:opacity-[var(--disabled-opacity)]"
               >
                 {submitting ? "Guardando..." : "Cambiar contraseña"}
               </button>

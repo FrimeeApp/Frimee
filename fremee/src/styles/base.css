@@ -1,0 +1,188 @@
+@layer base {
+  html,
+  body {
+    min-height: 100%;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+    scroll-behavior: smooth;
+    background: var(--bg);
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+    scrollbar-gutter: stable;
+  }
+
+  html::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  html::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  html::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border-radius: 3px;
+  }
+
+  html::-webkit-scrollbar-thumb:hover {
+    background: var(--text-secondary);
+  }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: var(--font-body);
+    line-height: var(--lh-body);
+    font-weight: var(--fw-regular);
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-top: constant(safe-area-inset-top);
+    padding-bottom: constant(safe-area-inset-bottom);
+  }
+
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  textarea:-webkit-autofill,
+  select:-webkit-autofill {
+    -webkit-box-shadow: 0 0 0 1000px var(--input-bg) inset !important;
+    -webkit-text-fill-color: var(--text-primary) !important;
+    transition: background-color 5000s ease-in-out 0s;
+  }
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+    border-color: var(--border);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  img,
+  picture,
+  video,
+  canvas,
+  svg {
+    display: block;
+    max-width: 100%;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+    color: inherit;
+  }
+
+  button {
+    cursor: pointer;
+    background: transparent;
+    border: none;
+    padding: 0;
+  }
+
+  :disabled {
+    cursor: not-allowed;
+  }
+
+  ::selection {
+    background: var(--primary);
+    color: var(--contrast);
+  }
+
+  h1,
+  .h1 {
+    font-family: var(--font-display-face), "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+    font-size: var(--font-h1);
+    line-height: var(--lh-h1);
+    font-weight: 400;
+    color: var(--text-primary);
+    letter-spacing: -0.01em;
+  }
+
+  h2,
+  .h2 {
+    font-family: var(--font-sans);
+    font-size: var(--font-h2);
+    line-height: var(--lh-h2);
+    font-weight: 400;
+    color: var(--text-primary);
+    letter-spacing: -0.008em;
+  }
+
+  h3,
+  .h3 {
+    font-family: var(--font-sans);
+    font-size: var(--font-h3);
+    line-height: var(--lh-h3);
+    font-weight: 400;
+    color: var(--text-primary);
+    letter-spacing: -0.004em;
+  }
+
+  h4,
+  .h4 {
+    font-family: var(--font-sans);
+    font-size: var(--font-h4);
+    line-height: var(--lh-h4);
+    font-weight: 400;
+    color: var(--text-primary);
+    letter-spacing: -0.002em;
+  }
+
+  h5,
+  .h5 {
+    font-family: var(--font-sans);
+    font-size: var(--font-h5);
+    line-height: var(--lh-h5);
+    font-weight: 400;
+    color: var(--text-primary);
+  }
+
+  h6,
+  .h6 {
+    font-family: var(--font-sans);
+    font-size: var(--font-h6);
+    line-height: var(--lh-h6);
+    font-weight: 400;
+    color: var(--text-primary);
+  }
+
+  p {
+    margin: 0;
+  }
+
+  a {
+    color: inherit;
+    text-decoration-color: color-mix(in srgb, var(--primary) 50%, transparent);
+    text-underline-offset: 2px;
+  }
+
+  :focus-visible {
+    outline: none;
+  }
+
+  [id] {
+    scroll-margin-top: 88px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -12,6 +12,7 @@ export type FeedExploreRow = {
   foto_portada: string | null;
   creador_id: string;
   creador_nombre: string;
+  creador_username: string | null;
   creador_profile_image: string | null;
 };
 
@@ -29,7 +30,9 @@ export type PlanByIdRow = {
   owner_user_id: string;
   creado_por_user_id: string;
   creador_nombre: string | null;
+  creador_username: string | null;
   creador_profile_image: string | null;
+  join_code: string | null;
 };
 
 export async function fetchExplorePlansRpc(params: {
@@ -101,6 +104,94 @@ export async function fetchPlansByIds(params: { planIds: number[] }): Promise<Pl
 
   if (error) throw error;
   return (data ?? []) as PlanByIdRow[];
+}
+
+export async function fetchPlanMemberIds(planId: number): Promise<string[]> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_get_plan_member_ids", { p_plan_id: planId });
+  if (error) throw error;
+  return (data ?? []).map((r: { user_id: string }) => r.user_id);
+}
+
+export async function fetchPlanUserRol(planId: number, userId: string): Promise<"ADMIN" | "PARTICIPANTE" | null> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_get_plan_user_rol", { p_plan_id: planId, p_user_id: userId });
+  if (error) return null;
+  return (data as "ADMIN" | "PARTICIPANTE" | null) ?? null;
+}
+
+export async function fetchPlanByJoinCode(joinCode: string): Promise<{ plan: PlanByIdRow; planId: number; alreadyMember: boolean } | null> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_join_plan_by_code", { p_join_code: joinCode, p_preview_only: true });
+  if (error) throw error;
+  const result = (typeof data === "string" ? JSON.parse(data) : data) as { plan_id?: number; plan?: PlanByIdRow; already_member?: boolean; error?: string };
+  if (result.error || !result.plan || !result.plan_id) return null;
+  return { plan: result.plan, planId: result.plan_id, alreadyMember: result.already_member ?? false };
+}
+
+export async function joinPlanByCode(joinCode: string): Promise<{ plan_id: number } | { error: string }> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_join_plan_by_code", { p_join_code: joinCode, p_preview_only: false });
+  if (error) throw error;
+  const result = (typeof data === "string" ? JSON.parse(data) : data) as { plan_id?: number; error?: string };
+  if (result.error) return { error: result.error };
+  return { plan_id: result.plan_id! };
+}
+
+export async function demoteAdminEndpoint(planId: number, targetUserId: string): Promise<string> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_plan_demote_admin", { p_plan_id: planId, p_target_user_id: targetUserId });
+  if (error) throw error;
+  return data as string;
+}
+
+export async function promoteToAdminEndpoint(planId: number, targetUserId: string): Promise<string> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_plan_promote_admin", { p_plan_id: planId, p_target_user_id: targetUserId });
+  if (error) throw error;
+  return data as string;
+}
+
+export async function kickMemberEndpoint(planId: number, targetUserId: string): Promise<string> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_plan_kick_member", { p_plan_id: planId, p_target_user_id: targetUserId });
+  if (error) throw error;
+  return data as string;
+}
+
+export async function leavePlanEndpoint(planId: number): Promise<string> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_plan_leave", { p_plan_id: planId });
+  if (error) throw error;
+  return data as string;
+}
+
+export type UpdatePlanParams = {
+  planId: number;
+  titulo: string;
+  descripcion: string;
+  inicioAt: string;
+  finAt: string;
+  ubicacionNombre: string;
+  fotoPortada?: string | null;
+  allDay?: boolean;
+  visibilidad?: "PÚBLICO" | "SOLO_GRUPO" | "SOLO_AMIGOS" | "SOLO_FOLLOW";
+};
+
+export async function updatePlanEndpoint(params: UpdatePlanParams): Promise<void> {
+  const supabase = createBrowserSupabaseClient();
+  const { error } = await supabase.rpc("fn_plan_update", {
+    p_plan_id: params.planId,
+    p_titulo: params.titulo,
+    p_descripcion: params.descripcion,
+    p_inicio_at: params.inicioAt,
+    p_fin_at: params.finAt,
+    p_ubicacion_nombre: params.ubicacionNombre,
+    p_all_day: params.allDay ?? false,
+    p_visibilidad: params.visibilidad ?? "SOLO_GRUPO",
+    p_foto_portada: params.fotoPortada ?? null,
+  });
+  if (error) throw error;
 }
 
 export async function fetchUserRelatedPlans(params: { userId: string; limit?: number }): Promise<PlanByIdRow[]> {

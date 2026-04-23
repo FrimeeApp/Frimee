@@ -4,13 +4,22 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/providers/AuthProvider";
 import LoadingScreen from "@/components/common/LoadingScreen";
+import { syncPlanWidget } from "@/services/widget/planWidget";
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const { loading, user } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading && !user) router.replace("/login");
+    console.log("[AuthGuard] loading=%s user=%s path=%s", loading, !!user, typeof window !== "undefined" ? window.location.pathname : "");
+    if (!loading && !user) {
+      const redirect = encodeURIComponent(window.location.pathname + window.location.search);
+      console.warn("[AuthGuard] NO USER → redirecting to login, redirect=", redirect);
+      router.replace(`/login?redirect=${redirect}`);
+    }
+    if (!loading && user) {
+      void syncPlanWidget(user.id);
+    }
   }, [loading, user, router]);
 
   if (loading) return <LoadingScreen />;
