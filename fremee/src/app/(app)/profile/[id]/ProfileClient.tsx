@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import AppSidebar from "@/components/common/AppSidebar";
 import { useAuth } from "@/providers/AuthProvider";
 import { getPublicUserProfile } from "@/services/api/repositories/users.repository";
@@ -22,8 +22,10 @@ type ProfileData = {
 };
 
 export default function ProfilePage() {
-  const { id } = useParams<{ id: string }>();
+  const { id: routeId } = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
   const router = useRouter();
+  const id = routeId === "static" ? searchParams.get("id") ?? "" : routeId;
   const { user, profile: myProfile, settings, loading: authLoading, refreshProfile } = useAuth();
   const isOwnProfile = user?.id === id;
 

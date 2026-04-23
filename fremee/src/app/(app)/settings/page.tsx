@@ -263,7 +263,13 @@ export default function SettingsPage() {
     if (typeof window !== "undefined" && window.history.length > 1) {
       router.back();
     } else {
-      router.push(user?.id ? `/profile/${user.id}` : "/feed");
+      const profileHref =
+        user?.id && Capacitor.isNativePlatform()
+          ? `/profile/static?id=${user.id}`
+          : user?.id
+            ? `/profile/${user.id}`
+            : "/feed";
+      router.push(profileHref);
     }
   };
 
