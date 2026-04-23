@@ -133,64 +133,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     mountedRef.current = true;
-    let cancelled = false;
     const cachedTheme = readCachedThemePreference();
     applyThemePreference(cachedTheme ?? "SYSTEM");
 
-    const init = async () => {
-      try {
-        console.log("[AuthProvider] init path=", typeof window !== "undefined" ? window.location.pathname : "ssr");
-        const { data, error } = await supabase.auth.getSession();
-        console.log("[AuthProvider] getSession session=", !!data.session, "error=", error?.message ?? null);
-        if (error) {
-          console.warn("[auth] getSession error:", error.message);
-        }
-        if (cancelled || !mountedRef.current) return;
-
-        setSession(data.session ?? null);
-        setUser(data.session?.user ?? null);
-        const sessionWithProvider = data.session as {
-          provider_token?: string | null;
-          provider_refresh_token?: string | null;
-        } | null;
-        const providerTokenFromSession = sessionWithProvider?.provider_token ?? null;
-        const providerRefreshToken = sessionWithProvider?.provider_refresh_token ?? null;
-        if (providerTokenFromSession && data.session?.user?.id) {
-          cacheGoogleProviderToken(data.session.user.id, providerTokenFromSession);
-          setGoogleProviderToken(providerTokenFromSession);
-        } else if (data.session?.user?.id) {
-          setGoogleProviderToken(readCachedGoogleProviderToken(data.session.user.id));
-        } else {
-          setGoogleProviderToken(null);
-        }
-        if (providerRefreshToken && data.session?.user?.id) {
-          void supabase.rpc("fn_user_update_google_refresh_token", {
-            p_refresh_token: providerRefreshToken,
-          });
-        }
-        await loadUserSnapshot(data.session?.user ?? null);
-      } finally {
-        if (!cancelled && mountedRef.current) {
-          setLoading(false);
-        }
-      }
-    };
-
-    void init();
-
     const { data: sub } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       void (async () => {
-        if (cancelled || !mountedRef.current) return;
+        if (!mountedRef.current) return;
 
         setSession(nextSession);
         setUser(nextSession?.user ?? null);
+
         const sess = nextSession as { provider_token?: string | null; provider_refresh_token?: string | null } | null;
-        const providerTokenFromSession = sess?.provider_token ?? null;
+        const providerToken = sess?.provider_token ?? null;
         const providerRefreshToken = sess?.provider_refresh_token ?? null;
 
-        if (providerTokenFromSession && nextSession?.user?.id) {
-          cacheGoogleProviderToken(nextSession.user.id, providerTokenFromSession);
-          setGoogleProviderToken(providerTokenFromSession);
+        if (providerToken && nextSession?.user?.id) {
+          cacheGoogleProviderToken(nextSession.user.id, providerToken);
+          setGoogleProviderToken(providerToken);
         } else if (nextSession?.user?.id) {
           setGoogleProviderToken(readCachedGoogleProviderToken(nextSession.user.id));
         } else {
@@ -205,14 +164,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         await loadUserSnapshot(nextSession?.user ?? null);
 
-        if (!cancelled && mountedRef.current) {
+        if (mountedRef.current) {
           setLoading(false);
         }
       })();
     });
 
     return () => {
-      cancelled = true;
       mountedRef.current = false;
       sub.subscription.unsubscribe();
     };
