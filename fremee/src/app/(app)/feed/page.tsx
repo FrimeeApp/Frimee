@@ -1127,6 +1127,21 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
   function fmtSlideTime(iso: string): string {
     return new Date(iso).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
   }
+
+  function renderImageSlide(imageUrl: string, alt: string, active: boolean, key: string) {
+    const base = "absolute inset-0 transition-opacity duration-200 ease-out will-change-[opacity] " + (active ? "opacity-100 z-[1]" : "opacity-0 z-0");
+    return (
+      <div key={key} className={base}>
+        <NextImage
+          src={imageUrl}
+          alt={alt}
+          fill
+          className="object-contain object-center"
+          unoptimized
+        />
+      </div>
+    );
+  }
   // ─────────────────────────────────────────────────────────────────────────
 
   useEffect(() => { setSaved(initialSaved); }, [initialSaved]);
@@ -1602,43 +1617,34 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
         {/* Backgrounds — all rendered at once so images preload in parallel */}
         {slides.map((slide, i) => {
           const active = i === clampedIndex;
-          const base = "absolute inset-0 transition-opacity duration-150 " + (active ? "opacity-100 z-[1]" : "opacity-0 z-0");
           if (slide.type === "cover") {
             return post.hasImage && post.coverImage ? (
-              <div key="cover" className={`${base} bg-black`}>
-                {/* Blurred background to fill letterbox areas */}
+              <div key="cover" className="absolute inset-0">
+                {renderImageSlide(post.coverImage, "Imagen del plan", active, "cover-image")}
+                {!imgLoaded && active && <div className="skeleton-shimmer absolute inset-0 z-[2]" aria-hidden="true" />}
                 <NextImage
                   src={post.coverImage}
                   alt=""
-                  fill
-                  aria-hidden="true"
-                  className="object-cover scale-110 blur-2xl opacity-60"
-                  unoptimized
-                />
-                {!imgLoaded && active && <div className="skeleton-shimmer absolute inset-0" aria-hidden="true" />}
-                <NextImage
-                  src={post.coverImage}
-                  alt="Imagen del plan"
-                  fill
-                  className="object-contain object-center"
-                  style={{ opacity: imgLoaded ? 1 : 0, transition: "opacity 0.2s" }}
+                  width={1}
+                  height={1}
+                  className="hidden"
                   unoptimized
                   onLoad={() => setImgLoaded(true)}
                   onError={() => setImgLoaded(true)}
                 />
               </div>
             ) : (
-              <div key="cover" className={`${base} bg-app`} />
+              <div
+                key="cover"
+                className={`absolute inset-0 transition-opacity duration-200 ease-out will-change-[opacity] ${active ? "opacity-100 z-[1]" : "opacity-0 z-0"} bg-app`}
+              />
             );
           }
           if (slide.type === "photo") {
-            return (
-              <div key={`photo-${i}`} className={`${base} bg-[#0a0a0a]`}>
-                <NextImage src={slide.url} alt="" fill className="object-contain" unoptimized />
-              </div>
-            );
+            return renderImageSlide(slide.url, "", active, `photo-${i}`);
           }
           if (slide.type === "summary") {
+            const base = "absolute inset-0 transition-opacity duration-200 ease-out will-change-[opacity] " + (active ? "opacity-100 z-[1]" : "opacity-0 z-0");
             return (
               <div key="summary" className={`${base} bg-[#0d0e12]`}>
                 {post.coverImage && (
@@ -1791,8 +1797,8 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
 
         {/* Right: actions (image posts only) */}
         {post.hasImage && <div
-          className="absolute right-4 bottom-0 z-20 flex flex-col items-center gap-6"
-          style={{ paddingBottom: `max(96px, calc(96px + env(safe-area-inset-bottom)))`, filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.4))" }}
+          className="absolute right-4 bottom-0 z-20 flex flex-col items-center gap-4"
+          style={{ paddingBottom: `calc(152px + env(safe-area-inset-bottom))`, filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.4))" }}
         >
           <button
             type="button"
@@ -1815,20 +1821,21 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
             </svg>
             <span className={`text-[13px] font-[700] leading-none ${commentsSection.length > 0 ? "text-white" : "invisible"}`}>{commentsSection.length || 0}</span>
           </button>
-          {!isOwnPost && (
-            <button
-              type="button"
-              className="flex flex-col items-center gap-1 text-white active:scale-90 transition-transform"
-              onClick={(e) => { e.stopPropagation(); handleToggleSave(); }}
-              aria-label={saved ? "Quitar guardado" : "Guardar"}
-            >
-              <svg width={34} height={34} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className={saved ? "text-primary-token" : "text-white"}>
-                <path d="M7 4.5H17C17.55 4.5 18 4.95 18 5.5V20L12 16.2L6 20V5.5C6 4.95 6.45 4.5 7 4.5Z" />
-              </svg>
-              <span className="invisible text-[13px] font-[700] leading-none">0</span>
-            </button>
-          )}
         </div>}
+
+        {post.hasImage && !isOwnPost && (
+          <button
+            type="button"
+            className="absolute bottom-0 right-4 z-20 flex items-center justify-center text-white active:scale-90 transition-transform"
+            style={{ paddingBottom: `max(88px, calc(88px + env(safe-area-inset-bottom)))`, filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.4))" }}
+            onClick={(e) => { e.stopPropagation(); handleToggleSave(); }}
+            aria-label={saved ? "Quitar guardado" : "Guardar"}
+          >
+            <svg width={34} height={34} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className={saved ? "text-primary-token" : "text-white"}>
+              <path d="M7 4.5H17C17.55 4.5 18 4.95 18 5.5V20L12 16.2L6 20V5.5C6 4.95 6.45 4.5 7 4.5Z" />
+            </svg>
+          </button>
+        )}
 
         {/* Bottom: info (image posts only) */}
         {post.hasImage && <div
