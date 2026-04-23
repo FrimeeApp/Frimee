@@ -20,6 +20,7 @@ type CreateCommentInput = {
   userName: string;
   userProfileImage?: string | null;
   content: string;
+  parentId?: string | null;
 };
 
 type CreateCommentResult = {
@@ -36,6 +37,7 @@ export type TopCommentDto = {
   likeCount: number;
   createdAt: string | null;
   likedByMe: boolean;
+  parentId: string | null;
 };
 
 export type CommentDto = TopCommentDto;
@@ -99,6 +101,7 @@ async function getTopCommentInternal(planId: number, userId?: string): Promise<T
     likeCount,
     createdAt: toIsoOrNull(data.created_at),
     likedByMe,
+    parentId: typeof data.parent_id === "string" ? data.parent_id : null,
   };
 }
 
@@ -132,6 +135,7 @@ async function listCommentsInternal(params: {
         likeCount,
         createdAt: toIsoOrNull(data.created_at),
         likedByMe,
+        parentId: typeof data.parent_id === "string" ? data.parent_id : null,
       } satisfies CommentDto;
     }),
   );
@@ -152,6 +156,7 @@ export async function createCommentRoute(input: CreateCommentInput): Promise<Cre
     profile_image: input.userProfileImage ?? null,
     content,
     likeCount: 0,
+    parent_id: input.parentId ?? null,
     created_at: serverTimestamp(),
     updated_at: serverTimestamp(),
   });

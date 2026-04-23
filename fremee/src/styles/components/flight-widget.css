@@ -1,0 +1,20 @@
+@keyframes cloud-drift {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+@keyframes sky-drift {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+.cloud-layer-fast   { animation: cloud-drift 18s linear infinite; }
+.cloud-layer-medium { animation: cloud-drift 26s linear infinite; }
+.cloud-layer-slow   { animation: cloud-drift 36s linear infinite; }
+
+@keyframes plane-bob {
+  0%, 100% { transform: translateY(0px) rotate(-2deg); }
+  50%       { transform: translateY(-4px) rotate(2deg); }
+}
+
+.plane-bob { animation: plane-bob 3s ease-in-out infinite; }

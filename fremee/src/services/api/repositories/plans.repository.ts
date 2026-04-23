@@ -6,6 +6,7 @@ import {
   fetchPlansByIds,
   fetchUserRelatedPlans,
 } from "@/services/api/endpoints/plans.endpoint";
+import { getSavedPlanIds } from "@/services/api/endpoints/saved.endpoint";
 import { mapExploreRowToDto } from "@/services/api/mappers/plan.mapper";
 
 export async function listExplorePlans(params: ExplorePlansParams = {}): Promise<FeedPlanItemDto[]> {
@@ -42,12 +43,19 @@ export async function listPlansByIdsInOrder(planIds: number[]): Promise<FeedPlan
       creator: {
         id: p.creado_por_user_id,
         name: p.creador_nombre ?? "Usuario",
+        username: (p as { creador_username?: string | null }).creador_username ?? null,
         profileImage: p.creador_profile_image ?? null,
       },
     });
   }
 
   return planIds.map((id) => planMap.get(id)).filter((p): p is FeedPlanItemDto => Boolean(p));
+}
+
+export async function listSavedPlans(userId: string): Promise<FeedPlanItemDto[]> {
+  const ids = await getSavedPlanIds(userId);
+  if (ids.length === 0) return [];
+  return listPlansByIdsInOrder(ids);
 }
 
 export async function listUserRelatedPlans(params: { userId: string; limit?: number }): Promise<FeedPlanItemDto[]> {
@@ -71,6 +79,7 @@ export async function listUserRelatedPlans(params: { userId: string; limit?: num
     creator: {
       id: p.creado_por_user_id,
       name: p.creador_nombre ?? "Usuario",
+      username: (p as { creador_username?: string | null }).creador_username ?? null,
       profileImage: p.creador_profile_image ?? null,
     },
   }));

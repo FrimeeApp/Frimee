@@ -14,7 +14,9 @@ function extractProviderToken(session: Session | null) {
 
 async function refreshViaEdgeFunction(supabase: SupabaseClient): Promise<string | null> {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
     if (!session?.access_token) return null;
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -30,14 +32,16 @@ async function refreshViaEdgeFunction(supabase: SupabaseClient): Promise<string 
 
     if (!res.ok) return null;
 
-    const data = await res.json() as { access_token?: string };
+    const data = (await res.json()) as { access_token?: string };
     return data.access_token ?? null;
   } catch {
     return null;
   }
 }
 
-export async function resolveGoogleProviderToken(params: ResolveGoogleProviderTokenParams): Promise<string | null> {
+export async function resolveGoogleProviderToken(
+  params: ResolveGoogleProviderTokenParams,
+): Promise<string | null> {
   const sessionToken = extractProviderToken(params.session);
   if (sessionToken) {
     if (params.userId) cacheGoogleProviderToken(params.userId, sessionToken);
@@ -52,7 +56,7 @@ export async function resolveGoogleProviderToken(params: ResolveGoogleProviderTo
       return refreshedToken;
     }
   } catch {
-    // continuar con siguiente fallback
+    // continue
   }
 
   try {
@@ -63,7 +67,13 @@ export async function resolveGoogleProviderToken(params: ResolveGoogleProviderTo
       return currentToken;
     }
   } catch {
-    // continuar con siguiente fallback
+    // continue
+  }
+
+  const edgeToken = await refreshViaEdgeFunction(params.supabase);
+  if (edgeToken) {
+    if (params.userId) cacheGoogleProviderToken(params.userId, edgeToken);
+    return edgeToken;
   }
 
   if (params.cachedToken) return params.cachedToken;
@@ -71,13 +81,6 @@ export async function resolveGoogleProviderToken(params: ResolveGoogleProviderTo
   if (params.userId) {
     const localToken = readCachedGoogleProviderToken(params.userId);
     if (localToken) return localToken;
-  }
-
-  // Último recurso: Edge Function con el refresh token almacenado en BD
-  const edgeToken = await refreshViaEdgeFunction(params.supabase);
-  if (edgeToken) {
-    if (params.userId) cacheGoogleProviderToken(params.userId, edgeToken);
-    return edgeToken;
   }
 
   return null;

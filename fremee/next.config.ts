@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { NextConfig } from "next";
 
 // Use static export only for Capacitor mobile builds.
@@ -10,8 +11,23 @@ const nextConfig: NextConfig = {
     output: "export",
     trailingSlash: true,
   }),
+  turbopack: {
+    root: path.resolve(__dirname),
+  },
   reactStrictMode: false,
   reactCompiler: true,
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "firebasestorage.googleapis.com",
+      },
+      {
+        protocol: "https",
+        hostname: "*.supabase.co",
+      },
+    ],
+  },
 };
 
 export default nextConfig;

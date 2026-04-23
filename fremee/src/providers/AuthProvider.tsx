@@ -20,6 +20,7 @@ import type { UserSettingsDto } from "@/services/api/repositories/settings.repos
 type Profile = {
   id: string;
   nombre: string;
+  username: string | null;
   fecha_nac: string | null;
   email: string;
   rol: string;
@@ -138,7 +139,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const init = async () => {
       try {
+        console.log("[AuthProvider] init path=", typeof window !== "undefined" ? window.location.pathname : "ssr");
         const { data, error } = await supabase.auth.getSession();
+        console.log("[AuthProvider] getSession session=", !!data.session, "error=", error?.message ?? null);
         if (error) {
           console.warn("[auth] getSession error:", error.message);
         }
@@ -146,7 +149,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         setSession(data.session ?? null);
         setUser(data.session?.user ?? null);
-        const providerTokenFromSession = (data.session as { provider_token?: string | null } | null)?.provider_token ?? null;
+        const sessionWithProvider = data.session as {
+          provider_token?: string | null;
+          provider_refresh_token?: string | null;
+        } | null;
+        const providerTokenFromSession = sessionWithProvider?.provider_token ?? null;
+        const providerRefreshToken = sessionWithProvider?.provider_refresh_token ?? null;
         if (providerTokenFromSession && data.session?.user?.id) {
           cacheGoogleProviderToken(data.session.user.id, providerTokenFromSession);
           setGoogleProviderToken(providerTokenFromSession);
@@ -154,6 +162,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setGoogleProviderToken(readCachedGoogleProviderToken(data.session.user.id));
         } else {
           setGoogleProviderToken(null);
+        }
+        if (providerRefreshToken && data.session?.user?.id) {
+          void supabase.rpc("fn_user_update_google_refresh_token", {
+            p_refresh_token: providerRefreshToken,
+          });
         }
         await loadUserSnapshot(data.session?.user ?? null);
       } finally {
