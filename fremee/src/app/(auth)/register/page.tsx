@@ -1,8 +1,9 @@
-﻿"use client";
+"use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import GoogleAuthButton from "@/components/auth/GoogleAuthButton";
+import { AUTH_EMAIL_REGEX, focusInput, getAuthErrorMessage } from "@/components/auth/AuthFormUtils";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 
 export default function RegisterPage() {
@@ -13,31 +14,65 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [repeatPassword, setRepeatPassword] = useState("");
-
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [registrationComplete, setRegistrationComplete] = useState(false);
+  const [invalidField, setInvalidField] = useState<"name" | "email" | "password" | "repeatPassword" | null>(null);
+
+  const nameRef = useRef<HTMLInputElement>(null);
+  const emailRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
+  const repeatPasswordRef = useRef<HTMLInputElement>(null);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
+    setInvalidField(null);
 
     const normalizedName = name.trim();
     const normalizedEmail = email.trim().toLowerCase();
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-    if (!normalizedName || !normalizedEmail || !password || !repeatPassword) {
-      setErrorMsg("Debes añadir los campos obligatorios.");
+    if (!normalizedName) {
+      setErrorMsg("Introduce tu nombre.");
+      setInvalidField("name");
+      focusInput(nameRef);
       return;
     }
 
-    if (!emailRegex.test(normalizedEmail)) {
-      setErrorMsg("El email no es válido.");
+    if (!normalizedEmail) {
+      setErrorMsg("Introduce tu email.");
+      setInvalidField("email");
+      focusInput(emailRef);
+      return;
+    }
+
+    if (!AUTH_EMAIL_REGEX.test(normalizedEmail)) {
+      setErrorMsg("Introduce un email válido.");
+      focusInput(emailRef);
+      return;
+    }
+
+    if (!password) {
+      setErrorMsg("Introduce una contraseña.");
+      focusInput(passwordRef);
+      return;
+    }
+
+    if (password.length < 6) {
+      setErrorMsg("La contraseña debe tener al menos 6 caracteres.");
+      focusInput(passwordRef);
+      return;
+    }
+
+    if (!repeatPassword) {
+      setErrorMsg("Repite la contraseña.");
+      focusInput(repeatPasswordRef);
       return;
     }
 
     if (password !== repeatPassword) {
-      setErrorMsg("La contraseña no coinciden");
+      setErrorMsg("Las contraseñas no coinciden.");
+      focusInput(repeatPasswordRef);
       return;
     }
 
@@ -45,7 +80,7 @@ export default function RegisterPage() {
     try {
       const supabase = createBrowserSupabaseClient();
 
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email: normalizedEmail,
         password,
         options: {
@@ -55,10 +90,16 @@ export default function RegisterPage() {
 
       if (error) throw error;
 
+      if (data.user?.identities?.length === 0) {
+        setErrorMsg("Ya existe una cuenta con este email. Inicia sesión.");
+        focusInput(emailRef);
+        return;
+      }
+
       setRegistrationComplete(true);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Error registrando usuario.";
-      setErrorMsg(message);
+      setErrorMsg(getAuthErrorMessage(err, "No se pudo crear la cuenta. Inténtalo de nuevo."));
+      focusInput(emailRef);
     } finally {
       setLoading(false);
     }
@@ -86,11 +127,11 @@ export default function RegisterPage() {
 
   if (registrationComplete) {
     return (
-      <div className="flex h-full w-full max-w-[420px] flex-col justify-center text-app">
+      <div className="auth-page flex h-full w-full max-w-[420px] flex-col justify-center text-app">
         <div className="space-y-[var(--space-4)] rounded-modal border border-app bg-surface p-[var(--space-6)] shadow-elev-1">
-          <h1 className="text-[var(--font-h2)] font-[var(--fw-semibold)] tracking-tight text-app">Registro completado</h1>
+          <h1 className="font-sans text-[var(--font-h2)] font-[var(--fw-semibold)] tracking-tight text-app">Registro completado</h1>
           <p className="text-body text-app">
-            Tu cuenta ya esta creada. Para activarla, confirma tu email desde el mensaje
+            Tu cuenta ya está creada. Para activarla, confirma tu email desde el mensaje
             que te acabamos de enviar a <span className="font-[var(--fw-medium)]">{email}</span>.
           </p>
           <p className="text-body-sm text-muted">
@@ -99,12 +140,12 @@ export default function RegisterPage() {
           <button
             type="button"
             onClick={openMailbox}
-            className="h-btn-primary w-full rounded-button bg-primary-token text-button-md font-[var(--fw-medium)] text-contrast-token transition-colors duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] hover:bg-primary-hover-token"
+            className="auth-solid-button h-btn-primary w-full rounded-button text-button-md font-[var(--fw-medium)] transition-colors duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)]"
           >
             Ir a mi correo
           </button>
-          <Link href="/login" className="block text-center text-body-sm font-[var(--fw-medium)] text-primary-token">
-            Ya confirme, ir a iniciar sesion
+          <Link href="/login" className="auth-link auth-link-primary block text-center text-body-sm font-[var(--fw-medium)]">
+            Ya confirmé, ir a iniciar sesión
           </Link>
         </div>
       </div>
@@ -112,15 +153,15 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="flex h-full w-full max-w-[420px] flex-col py-[var(--space-6)] text-app md:py-[var(--space-8)]">
+    <div className="auth-page flex h-full w-full max-w-[420px] flex-col py-[var(--space-6)] text-app md:py-[var(--space-8)]">
       <div className="flex flex-1 items-center">
         <div className="w-full">
-          <h1 className="text-[var(--font-h1)] font-[var(--fw-semibold)] leading-[1.05] tracking-[-0.02em] text-app">
+          <h1 className="auth-title font-sans font-[var(--fw-semibold)] text-app">
             Empecemos
           </h1>
-          <h3 className="mt-[var(--space-1)] text-body text-muted">Crea una cuenta</h3>
+          <h3 className="font-sans mt-[var(--space-1)] text-body text-muted">Crea una cuenta</h3>
 
-          <GoogleAuthButton className="mt-[var(--space-6)] flex h-btn-primary w-full items-center justify-center gap-[var(--button-gap)] rounded-button border border-app bg-[var(--input-bg)] text-button-md font-[var(--fw-medium)] text-app transition-colors duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] hover:bg-[var(--interactive-hover-surface)]" />
+          <GoogleAuthButton className="auth-neutral-button mt-[var(--space-6)] flex h-btn-primary w-full items-center justify-center gap-[var(--button-gap)] rounded-button border border-app bg-[var(--input-bg)] text-button-md font-[var(--fw-medium)] text-app transition-colors duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)]" />
 
           <div className="flex items-center gap-[var(--space-4)] py-[var(--space-3)]">
             <div className="flex-1 border-t border-app" />
@@ -128,41 +169,62 @@ export default function RegisterPage() {
             <div className="flex-1 border-t border-app" />
           </div>
 
-          <form className="space-y-[var(--space-3)]" onSubmit={onSubmit}>
-            <div className="h-input rounded-input border border-app bg-[var(--input-bg)] px-[var(--input-padding-x)] transition-[border-color,box-shadow] duration-[var(--duration-fast)] [transition-timing-function:var(--ease-standard)] focus-within:border-[var(--input-border-focus)] focus-within:shadow-[0_0_0_var(--focus-ring-width)_var(--focus-ring-color)]">
+          <form className="space-y-[var(--space-3)]" onSubmit={onSubmit} noValidate>
+            <div className={`h-input rounded-input border bg-[var(--input-bg)] px-[var(--input-padding-x)] transition-[border-color] duration-[var(--duration-fast)] [transition-timing-function:var(--ease-standard)] ${invalidField === "name" ? "border-error-token focus-within:border-error-token" : "border-app focus-within:border-[var(--input-border-focus)]"}`}>
               <input
+                ref={nameRef}
                 type="text"
                 className="h-full w-full bg-transparent text-body text-app outline-none placeholder:text-muted focus-visible:shadow-none"
                 aria-label="Nombre"
                 autoComplete="name"
                 placeholder="Nombre*"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  if (invalidField === "name") {
+                    setInvalidField(null);
+                    setErrorMsg(null);
+                  }
+                }}
               />
             </div>
 
-            <div className="h-input rounded-input border border-app bg-[var(--input-bg)] px-[var(--input-padding-x)] transition-[border-color,box-shadow] duration-[var(--duration-fast)] [transition-timing-function:var(--ease-standard)] focus-within:border-[var(--input-border-focus)] focus-within:shadow-[0_0_0_var(--focus-ring-width)_var(--focus-ring-color)]">
+            <div className={`h-input rounded-input border bg-[var(--input-bg)] px-[var(--input-padding-x)] transition-[border-color] duration-[var(--duration-fast)] [transition-timing-function:var(--ease-standard)] ${invalidField === "email" ? "border-error-token focus-within:border-error-token" : "border-app focus-within:border-[var(--input-border-focus)]"}`}>
               <input
+                ref={emailRef}
                 type="email"
                 className="h-full w-full bg-transparent text-body text-app outline-none placeholder:text-muted focus-visible:shadow-none"
-                aria-label="Correo electronico"
+                aria-label="Correo electrónico"
                 autoComplete="email"
                 placeholder="Email*"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (invalidField === "email") {
+                    setInvalidField(null);
+                    setErrorMsg(null);
+                  }
+                }}
               />
             </div>
 
-            <div className="h-input rounded-input border border-app bg-[var(--input-bg)] px-[var(--input-padding-x)] transition-[border-color,box-shadow] duration-[var(--duration-fast)] [transition-timing-function:var(--ease-standard)] focus-within:border-[var(--input-border-focus)] focus-within:shadow-[0_0_0_var(--focus-ring-width)_var(--focus-ring-color)]">
+            <div className={`h-input rounded-input border bg-[var(--input-bg)] px-[var(--input-padding-x)] transition-[border-color] duration-[var(--duration-fast)] [transition-timing-function:var(--ease-standard)] ${invalidField === "password" ? "border-error-token focus-within:border-error-token" : "border-app focus-within:border-[var(--input-border-focus)]"}`}>
               <div className="flex h-full items-center gap-[var(--space-3)]">
                 <input
+                  ref={passwordRef}
                   type={showPassword ? "text" : "password"}
                   className="w-full bg-transparent text-body text-app outline-none placeholder:text-muted focus-visible:shadow-none"
                   aria-label="Contraseña"
                   autoComplete="new-password"
                   placeholder="Contraseña*"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (invalidField === "password") {
+                    setInvalidField(null);
+                    setErrorMsg(null);
+                  }
+                }}
                 />
                 <button
                   type="button"
@@ -175,16 +237,23 @@ export default function RegisterPage() {
               </div>
             </div>
 
-            <div className="h-input rounded-input border border-app bg-[var(--input-bg)] px-[var(--input-padding-x)] transition-[border-color,box-shadow] duration-[var(--duration-fast)] [transition-timing-function:var(--ease-standard)] focus-within:border-[var(--input-border-focus)] focus-within:shadow-[0_0_0_var(--focus-ring-width)_var(--focus-ring-color)]">
+            <div className={`h-input rounded-input border bg-[var(--input-bg)] px-[var(--input-padding-x)] transition-[border-color] duration-[var(--duration-fast)] [transition-timing-function:var(--ease-standard)] ${invalidField === "repeatPassword" ? "border-error-token focus-within:border-error-token" : "border-app focus-within:border-[var(--input-border-focus)]"}`}>
               <div className="flex h-full items-center gap-[var(--space-3)]">
                 <input
+                  ref={repeatPasswordRef}
                   type={showRepeatPassword ? "text" : "password"}
                   className="w-full bg-transparent text-body text-app outline-none placeholder:text-muted focus-visible:shadow-none"
                   aria-label="Repetir contraseña"
                   autoComplete="new-password"
                   placeholder="Repetir contraseña*"
                   value={repeatPassword}
-                  onChange={(e) => setRepeatPassword(e.target.value)}
+                  onChange={(e) => {
+                  setRepeatPassword(e.target.value);
+                  if (invalidField === "repeatPassword") {
+                    setInvalidField(null);
+                    setErrorMsg(null);
+                  }
+                }}
                 />
                 <button
                   type="button"
@@ -202,7 +271,7 @@ export default function RegisterPage() {
             <button
               type="submit"
               disabled={loading}
-              className="h-btn-primary w-full rounded-button bg-primary-token text-button-md font-[var(--fw-medium)] text-contrast-token transition-colors duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] hover:bg-primary-hover-token disabled:opacity-[var(--disabled-opacity)]"
+              className="auth-solid-button h-btn-primary w-full rounded-button text-button-md font-[var(--fw-medium)] transition-colors duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] disabled:opacity-[var(--disabled-opacity)]"
             >
               {loading ? "Creando cuenta..." : "Registrarse"}
             </button>
@@ -210,7 +279,7 @@ export default function RegisterPage() {
 
           <p className="pt-[var(--space-4)] text-center text-body text-muted">
             ¿Ya tienes una cuenta?{" "}
-            <Link href="/login" className="font-[var(--fw-semibold)] text-primary-token">
+            <Link href="/login" className="auth-link auth-link-primary font-[var(--fw-semibold)]">
               Iniciar sesión
             </Link>
           </p>

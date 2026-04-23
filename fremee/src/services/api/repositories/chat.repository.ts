@@ -1,15 +1,18 @@
 import {
   listChatsEndpoint,
+  fetchPlanChatItem,
   getOrCreateDirectoChatEndpoint,
   createGrupoChatEndpoint,
   listMensajesEndpoint,
   sendMensajeEndpoint,
+  sendBotMensajeEndpoint,
   markChatReadEndpoint,
   getChatMiembrosEndpoint,
   leaveChatEndpoint,
   updateChatFotoEndpoint,
   addChatMemberEndpoint,
   editMensajeEndpoint,
+  closePollEndpoint,
   deleteMensajeEndpoint,
   reactMensajeEndpoint,
   getMyReaccionesEndpoint,
@@ -19,6 +22,8 @@ import {
   type MensajeRow,
   type ChatMiembro,
 } from "@/services/api/endpoints/chat.endpoint";
+
+export { fetchPlanChatItem };
 
 export type { ChatListItem, MensajeRow, ChatMiembro };
 
@@ -61,6 +66,10 @@ export async function sendMensaje(params: {
   return sendMensajeEndpoint(params);
 }
 
+export async function sendBotMensaje(chatId: string, texto: string): Promise<number> {
+  return sendBotMensajeEndpoint(chatId, texto);
+}
+
 export async function markChatRead(chatId: string): Promise<void> {
   return markChatReadEndpoint(chatId);
 }
@@ -83,6 +92,10 @@ export async function addChatMember(chatId: string, userId: string): Promise<voi
 
 export async function editMensaje(mensajeId: number, texto: string): Promise<void> {
   return editMensajeEndpoint(mensajeId, texto);
+}
+
+export async function closePoll(mensajeId: number): Promise<void> {
+  return closePollEndpoint(mensajeId);
 }
 
 export async function deleteMensaje(mensajeId: number): Promise<void> {
@@ -128,7 +141,10 @@ export function formatChatTime(isoString: string | null): string {
   if (!isoString) return "";
   const date = new Date(isoString);
   const now = new Date();
-  const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+
+  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const dateMidnight = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const diffDays = Math.round((todayMidnight.getTime() - dateMidnight.getTime()) / (1000 * 60 * 60 * 24));
 
   if (diffDays === 0) return date.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
   if (diffDays === 1) return "Ayer";

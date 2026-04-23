@@ -1,13 +1,14 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import AppSidebar from "@/components/common/AppSidebar";
-import LoadingScreen from "@/components/common/LoadingScreen";
 import { useAuth } from "@/providers/AuthProvider";
 import { getPublicUserProfile } from "@/services/api/repositories/users.repository";
-import { sendFriendRequest } from "@/services/api/endpoints/users.endpoint";
-import { listUserRelatedPlans } from "@/services/api/repositories/plans.repository";
+import { sendFriendRequest, getFriendshipStatuses, getFollowStatuses, removeFriend, getFollowerCount } from "@/services/api/endpoints/users.endpoint";
+import { useFollow } from "@/hooks/useFollow";
+import { listUserRelatedPlans, listSavedPlans } from "@/services/api/repositories/plans.repository";
 import {
   uploadProfileImage,
   saveUserProfileAndSettings,
@@ -28,21 +29,31 @@ export default function ProfilePage() {
 
   const [profileData, setProfileData] = useState<ProfileData | null>(null);
   const [plans, setPlans] = useState<FeedPlanItemDto[]>([]);
+  const [savedPlans, setSavedPlans] = useState<FeedPlanItemDto[]>([]);
+  const [activeTab, setActiveTab] = useState<"planes" | "guardados">("planes");
+  const [loadingSaved, setLoadingSaved] = useState(false);
+  const [savedLoaded, setSavedLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [followerCount, setFollowerCount] = useState(0);
 
-  // Follow state (local only — will connect to DB later)
-  const [following, setFollowing] = useState(false);
+  const [initialFollowing, setInitialFollowing] = useState(false);
+  const { following, loading: followLoading, showUnfollowDialog, setShowUnfollowDialog, onPress: onFollowPress, handleUnfollow } = useFollow(
+    isOwnProfile ? null : id,
+    user?.id,
+    initialFollowing
+  );
 
   // Friend request state
-  const [friendRequestSent, setFriendRequestSent] = useState(false);
+  const [friendshipStatus, setFriendshipStatus] = useState<"none" | "pending" | "friends">("none");
   const [sendingFriendRequest, setSendingFriendRequest] = useState(false);
+  const [showUnfriendDialog, setShowUnfriendDialog] = useState(false);
 
   const handleAddFriend = async () => {
-    if (friendRequestSent || sendingFriendRequest) return;
+    if (friendshipStatus !== "none" || sendingFriendRequest) return;
     setSendingFriendRequest(true);
     try {
       await sendFriendRequest(id);
-      setFriendRequestSent(true);
+      setFriendshipStatus("pending");
     } catch (err) {
       console.error("[profile] Error sending friend request:", err);
     } finally {
@@ -50,15 +61,35 @@ export default function ProfilePage() {
     }
   };
 
+  const handleRemoveFriend = async () => {
+    setShowUnfriendDialog(false);
+    try {
+      await removeFriend(id);
+      setFriendshipStatus("none");
+    } catch (err) {
+      console.error("[profile] Error removing friend:", err);
+      setFriendshipStatus("friends");
+    }
+  };
+
+  const onFriendButtonPress = () => {
+    if (friendshipStatus === "friends") {
+      setShowUnfriendDialog(true);
+    } else {
+      void handleAddFriend();
+    }
+  };
+
   // Edit state
-  const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState("");
+  const [nameError, setNameError] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!id) return;
+    if (!id || authLoading) return;
 
     const load = async () => {
       setLoading(true);
@@ -76,12 +107,27 @@ export default function ProfilePage() {
         }
 
         setProfileData(profileResult);
+        if (isOwnProfile && profileResult) setEditName(profileResult.nombre);
 
-        const userPlans = await listUserRelatedPlans({ userId: id, limit: 50 });
+        if (!isOwnProfile) {
+          const [friendStatuses, followStatuses] = await Promise.all([
+            getFriendshipStatuses([id]),
+            getFollowStatuses([id]),
+          ]);
+          const status = friendStatuses[id] ?? "none";
+          setFriendshipStatus(status);
+          if (followStatuses[id]) setInitialFollowing(true);
+        }
+
+        const [userPlans, count] = await Promise.all([
+          listUserRelatedPlans({ userId: id, limit: 50 }),
+          getFollowerCount(id),
+        ]);
         const publicPlans = userPlans.filter(
           (p) => p.visibility === "PÚBLICO" || isOwnProfile
         );
         setPlans(publicPlans);
+        setFollowerCount(count);
       } catch (err) {
         console.error("[profile] Error loading profile:", err);
       } finally {
@@ -90,21 +136,29 @@ export default function ProfilePage() {
     };
 
     load();
-  }, [id, isOwnProfile, myProfile]);
+  }, [id, authLoading, isOwnProfile, myProfile]);
 
-  const handleEditClick = () => {
-    if (!profileData) return;
-    setEditName(profileData.nombre);
-    setEditing(true);
+  const handleTabChange = async (tab: "planes" | "guardados") => {
+    setActiveTab(tab);
+    if (tab === "guardados" && !savedLoaded && user?.id) {
+      setLoadingSaved(true);
+      try {
+        const saved = await listSavedPlans(user.id);
+        setSavedPlans(saved);
+        setSavedLoaded(true);
+      } catch (err) {
+        console.error("[profile] Error loading saved plans:", err);
+      } finally {
+        setLoadingSaved(false);
+      }
+    }
   };
 
   const handleSaveName = async () => {
     if (!user?.id || !settings || !profileData) return;
     const trimmed = editName.trim();
-    if (!trimmed || trimmed === profileData.nombre) {
-      setEditing(false);
-      return;
-    }
+    if (!trimmed) { setNameError(true); nameInputRef.current?.focus(); return; }
+    if (trimmed === profileData.nombre) return;
 
     setSaving(true);
     try {
@@ -125,8 +179,8 @@ export default function ProfilePage() {
         googleSyncExportPlans: settings.google_sync_export_plans ?? true,
       });
       setProfileData((prev) => prev ? { ...prev, nombre: trimmed } : prev);
+      setEditName(trimmed);
       await refreshProfile();
-      setEditing(false);
     } catch (err) {
       console.error("[profile] Error saving name:", err);
     } finally {
@@ -176,7 +230,7 @@ export default function ProfilePage() {
       <div className="min-h-dvh bg-app text-app">
         <div className="relative mx-auto min-h-dvh max-w-[1440px]">
           <AppSidebar />
-          <main className="px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-4)] md:py-[var(--space-8)] md:pr-[var(--space-14)]">
+          <main className="px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-6)] md:py-[var(--space-8)] md:pr-[var(--space-14)]">
             <div className="mx-auto w-full max-w-[760px]">
               <ProfileSkeleton />
             </div>
@@ -191,7 +245,7 @@ export default function ProfilePage() {
       <div className="min-h-dvh bg-app text-app">
         <div className="relative mx-auto min-h-dvh max-w-[1440px]">
           <AppSidebar />
-          <main className="px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-4)] md:py-[var(--space-8)] md:pr-[var(--space-14)]">
+          <main className="px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-6)] md:py-[var(--space-8)] md:pr-[var(--space-14)]">
             <div className="mx-auto w-full max-w-[760px]">
               <p className="py-[var(--space-10)] text-center text-body text-muted">Usuario no encontrado.</p>
             </div>
@@ -202,27 +256,43 @@ export default function ProfilePage() {
   }
 
   const avatarLabel = (profileData.nombre.trim()[0] || "U").toUpperCase();
-  const finishedPlans = plans.filter((p) => new Date(p.endsAt) < new Date());
-  const plansWithCover = plans.filter((p) => p.coverImage);
 
   return (
     <div className="min-h-dvh bg-app text-app">
       <div className="relative mx-auto min-h-dvh max-w-[1440px]">
         <AppSidebar />
 
-        <main className="px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-4)] md:py-[var(--space-8)] md:pr-[var(--space-14)]">
+        <main className="px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-6)] md:py-[var(--space-8)] md:pr-[var(--space-14)]">
           <div className="mx-auto w-full max-w-[760px]">
             {/* Settings button - own profile only */}
             {isOwnProfile && (
               <div className="mb-[var(--space-4)] flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => router.push("/settings")}
-                  className="flex items-center gap-[var(--space-2)] rounded-card px-3 py-[6px] text-body-sm text-muted transition-colors hover:bg-surface hover:text-app"
-                >
-                  <SettingsIcon className="size-[18px]" />
-                  <span>Ajustes</span>
-                </button>
+                <div className="inline-flex items-center gap-[var(--space-2)]">
+                  <button
+                    type="button"
+                    onClick={() => router.push("/wallet")}
+                    aria-label="Cartera"
+                    className="flex items-center justify-center rounded-full p-2 text-app transition-opacity hover:opacity-70"
+                  >
+                    <WalletIcon className="size-[20px]" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => router.push("/flights")}
+                    aria-label="Vuelos de amigos"
+                    className="flex items-center justify-center rounded-full p-2 text-app transition-opacity hover:opacity-70"
+                  >
+                    <PlaneIcon className="size-[20px]" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => router.push("/settings")}
+                    aria-label="Ajustes"
+                    className="flex items-center justify-center rounded-full p-2 text-app transition-opacity hover:opacity-70"
+                  >
+                    <SettingsIcon className="size-[20px]" />
+                  </button>
+                </div>
               </div>
             )}
 
@@ -231,11 +301,14 @@ export default function ProfilePage() {
               {/* Avatar with edit button */}
               <div className="relative">
                 {profileData.profile_image ? (
-                  <img
+                  <Image
                     src={profileData.profile_image}
                     alt={profileData.nombre}
+                    width={96}
+                    height={96}
                     className={`size-[96px] rounded-full border-2 border-app object-cover ${uploading ? "opacity-50" : ""}`}
                     referrerPolicy="no-referrer"
+                    unoptimized
                   />
                 ) : (
                   <div className={`flex size-[96px] items-center justify-center rounded-full bg-[var(--text-primary)] text-[32px] font-[var(--fw-semibold)] text-contrast-token ${uploading ? "opacity-50" : ""}`}>
@@ -248,10 +321,13 @@ export default function ProfilePage() {
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={uploading}
-                    className="absolute -bottom-1 -right-1 flex size-[30px] items-center justify-center rounded-full border-2 border-[var(--bg)] bg-[var(--text-primary)] text-contrast-token transition-opacity hover:opacity-80 disabled:opacity-50"
+                    className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 text-white/90 transition-opacity hover:bg-black/50 disabled:opacity-50"
                     aria-label="Cambiar foto de perfil"
                   >
-                    <PencilIcon className="size-[14px]" />
+                    <svg viewBox="0 0 24 24" fill="none" className="size-[28px]" aria-hidden="true">
+                      <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                      <circle cx="12" cy="13" r="4" stroke="currentColor" strokeWidth="1.5" />
+                    </svg>
                   </button>
                 )}
 
@@ -263,39 +339,56 @@ export default function ProfilePage() {
               </div>
 
               {/* Name - editable on own profile */}
-              {editing ? (
-                <div className="mt-[var(--space-3)] flex items-center gap-2">
+              {isOwnProfile ? (
+                <div className="mt-[var(--space-3)] flex items-center justify-center">
+                  <div className="w-[22px] flex-shrink-0" />
                   <input
+                    ref={nameInputRef}
                     type="text"
                     value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter") handleSaveName(); if (e.key === "Escape") setEditing(false); }}
-                    autoFocus
-                    className="border-b border-app bg-transparent text-center text-[var(--font-h4)] font-[var(--fw-semibold)] leading-[var(--lh-h4)] outline-none"
+                    size={Math.max(1, editName.length)}
+                    onChange={(e) => { setEditName(e.target.value); if (nameError) setNameError(false); }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") void handleSaveName();
+                      if (e.key === "Escape") { setEditName(profileData.nombre); setNameError(false); }
+                    }}
+                    className={`min-w-0 border-b bg-transparent text-center [font-family:var(--font-display-face)] text-[24px] leading-[1.1] font-normal outline-none transition-colors md:text-[28px] ${nameError ? "border-red-500" : "border-transparent focus:border-app"}`}
                   />
                   <button
                     type="button"
-                    onClick={handleSaveName}
+                    onClick={() => {
+                      if (editName.trim() !== profileData.nombre) void handleSaveName();
+                      else nameInputRef.current?.focus();
+                    }}
                     disabled={saving}
-                    className="text-body-sm font-[var(--fw-medium)] text-[var(--primary)] transition-opacity hover:opacity-70 disabled:opacity-50"
+                    aria-label={editName.trim() !== profileData.nombre ? "Guardar nombre" : "Editar nombre"}
+                    className="ml-1.5 w-[22px] flex-shrink-0 flex items-center justify-center text-muted transition-opacity hover:opacity-70 disabled:opacity-50"
                   >
-                    {saving ? "..." : "Guardar"}
+                    {saving ? (
+                      <div className="size-[16px] animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    ) : editName.trim() !== profileData.nombre ? (
+                      <svg viewBox="0 0 24 24" fill="none" className="size-[16px]" aria-hidden="true">
+                        <path d="M4.5 12.5L9.5 17.5L19.5 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    ) : (
+                      <svg viewBox="0 0 24 24" fill="none" className="size-[16px]" aria-hidden="true">
+                        <path d="M4 20H8L18.6 9.4L14.6 5.4L4 16V20Z" stroke="currentColor" strokeWidth="1.7" />
+                        <path d="M12.8 7.2L16.8 11.2" stroke="currentColor" strokeWidth="1.7" />
+                      </svg>
+                    )}
                   </button>
                 </div>
               ) : (
-                <button
-                  type="button"
-                  onClick={isOwnProfile ? handleEditClick : undefined}
-                  className={`mt-[var(--space-3)] text-[var(--font-h4)] font-[var(--fw-semibold)] leading-[var(--lh-h4)] ${isOwnProfile ? "cursor-pointer transition-opacity hover:opacity-70" : ""}`}
-                  disabled={!isOwnProfile}
-                >
+                <p className="mt-[var(--space-3)] [font-family:var(--font-display-face)] text-[24px] leading-[1.1] font-normal md:text-[28px]">
                   {profileData.nombre}
-                </button>
+                </p>
               )}
 
               {/* Description */}
               <p className="mt-[var(--space-1)] text-body-sm text-muted">
-                {isOwnProfile ? "Tu perfil" : `Perfil de ${profileData.nombre}`}
+                {isOwnProfile
+                  ? (myProfile?.username ? `@${myProfile.username}` : "Tu perfil")
+                  : `Perfil de ${profileData.nombre}`}
               </p>
 
               {/* Follow + Add friend buttons - other profiles only */}
@@ -303,8 +396,9 @@ export default function ProfilePage() {
                 <div className="mt-[var(--space-3)] flex gap-[var(--space-2)]">
                   <button
                     type="button"
-                    onClick={() => setFollowing((prev) => !prev)}
-                    className={`rounded-full px-6 py-[6px] text-body-sm font-[var(--fw-semibold)] transition-all ${
+                    onClick={onFollowPress}
+                    disabled={followLoading}
+                    className={`rounded-full px-6 py-[6px] text-body-sm font-[var(--fw-semibold)] transition-all disabled:opacity-50 ${
                       following
                         ? "border border-app bg-transparent text-app hover:border-red-400 hover:text-red-400"
                         : "bg-[var(--text-primary)] text-contrast-token hover:opacity-80"
@@ -314,11 +408,15 @@ export default function ProfilePage() {
                   </button>
                   <button
                     type="button"
-                    onClick={handleAddFriend}
-                    disabled={friendRequestSent || sendingFriendRequest}
-                    className="rounded-full border border-app px-6 py-[6px] text-body-sm font-[var(--fw-semibold)] transition-colors hover:bg-surface disabled:opacity-50"
+                    onClick={onFriendButtonPress}
+                    disabled={friendshipStatus === "pending" || sendingFriendRequest}
+                    className={`rounded-full border px-6 py-[6px] text-body-sm font-[var(--fw-semibold)] transition-all disabled:opacity-50 ${
+                      friendshipStatus === "friends"
+                        ? "border-app bg-transparent text-app hover:border-red-400 hover:text-red-400"
+                        : "border-app bg-transparent text-app hover:bg-surface"
+                    }`}
                   >
-                    {friendRequestSent ? "Solicitud enviada" : sendingFriendRequest ? "..." : "Añadir amigo"}
+                    {sendingFriendRequest ? "..." : friendshipStatus === "friends" ? "Amigos" : friendshipStatus === "pending" ? "Pendiente" : "Añadir amigo"}
                   </button>
                 </div>
               )}
@@ -326,19 +424,19 @@ export default function ProfilePage() {
               {/* Stats */}
               <div className="mt-[var(--space-5)] flex gap-[var(--space-8)]">
                 <div className="flex flex-col items-center">
-                  <span className="text-[var(--font-h5)] font-[var(--fw-semibold)] leading-[var(--lh-h5)]">
-                    {finishedPlans.length}
+                  <span className="text-[18px] font-[600] leading-[1.2]" style={{ fontFamily: "var(--font-inter), sans-serif" }}>
+                    {plans.length}
                   </span>
                   <span className="text-body-sm text-muted">Planes</span>
                 </div>
                 <div className="flex flex-col items-center">
-                  <span className="text-[var(--font-h5)] font-[var(--fw-semibold)] leading-[var(--lh-h5)]">
-                    0
+                  <span className="text-[18px] font-[600] leading-[1.2]" style={{ fontFamily: "var(--font-inter), sans-serif" }}>
+                    {followerCount}
                   </span>
                   <span className="text-body-sm text-muted">Seguidores</span>
                 </div>
                 <div className="flex flex-col items-center">
-                  <span className="text-[var(--font-h5)] font-[var(--fw-semibold)] leading-[var(--lh-h5)]">
+                  <span className="text-[18px] font-[600] leading-[1.2]" style={{ fontFamily: "var(--font-inter), sans-serif" }}>
                     0
                   </span>
                   <span className="text-body-sm text-muted">Paises</span>
@@ -346,39 +444,70 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {/* Divider */}
-            <div className="mt-[var(--space-6)] border-t border-app" />
+            {/* Tabs */}
+            <div className="mt-[var(--space-6)]">
+              <div className="relative flex">
+                <button
+                  type="button"
+                  onClick={() => handleTabChange("planes")}
+                  aria-label="Planes"
+                  className={`flex-1 flex items-center justify-center py-[var(--space-3)] transition-colors duration-200 ${
+                    activeTab === "planes" ? "text-app" : "text-muted hover:text-app"
+                  }`}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" className="size-[20px]" aria-hidden="true">
+                    <rect x="3" y="3" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+                    <rect x="14" y="3" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+                    <rect x="3" y="14" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+                    <rect x="14" y="14" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+                  </svg>
+                </button>
+                {isOwnProfile && (
+                  <button
+                    type="button"
+                    onClick={() => handleTabChange("guardados")}
+                    aria-label="Guardados"
+                    className={`flex-1 flex items-center justify-center py-[var(--space-3)] transition-colors duration-200 ${
+                      activeTab === "guardados" ? "text-app" : "text-muted hover:text-app"
+                    }`}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" className="size-[20px]" aria-hidden="true">
+                      <path d="M19 21l-7-4-7 4V5a2 2 0 012-2h10a2 2 0 012 2z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                )}
+                <span
+                  className="absolute bottom-0 h-[2px] w-[28px] rounded-full bg-[var(--text-primary)] transition-all duration-300 ease-[var(--ease-standard)]"
+                  style={{
+                    left: activeTab === "planes"
+                      ? "calc(25% - 14px)"
+                      : isOwnProfile ? "calc(75% - 14px)" : "calc(50% - 14px)",
+                  }}
+                />
+              </div>
+              <div className="border-b border-app" />
+            </div>
 
-            {/* Masonry grid of plans */}
+            {/* Grid */}
             <div className="mt-[var(--space-5)]">
-              {plansWithCover.length === 0 ? (
+              {activeTab === "planes" ? (
+                plans.length === 0 ? (
+                  <p className="py-[var(--space-6)] text-center text-body-sm text-muted">
+                    {isOwnProfile ? "Aun no tienes planes publicados." : "No hay planes publicos."}
+                  </p>
+                ) : (
+                  <PlanGrid plans={plans} onPlanClick={(planId) => router.push(`/plans/${planId}`)} />
+                )
+              ) : loadingSaved ? (
+                <div className="py-[var(--space-6)] flex justify-center">
+                  <div className="size-[20px] animate-spin rounded-full border-2 border-[var(--text-primary)] border-t-transparent" />
+                </div>
+              ) : savedPlans.length === 0 ? (
                 <p className="py-[var(--space-6)] text-center text-body-sm text-muted">
-                  {isOwnProfile ? "Aun no tienes planes publicados." : "No hay planes publicos."}
+                  Aun no has guardado ningun plan.
                 </p>
               ) : (
-                <div className="columns-2 gap-[var(--space-3)] sm:columns-3">
-                  {plansWithCover.map((plan) => (
-                    <div key={plan.id} className="mb-[var(--space-3)] break-inside-avoid">
-                      <div className="group relative overflow-hidden rounded-[12px]">
-                        <img
-                          src={plan.coverImage!}
-                          alt={plan.title}
-                          className="w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                        />
-                        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-3 pb-3 pt-6">
-                          <p className="text-body-sm font-[var(--fw-medium)] leading-tight text-white">
-                            {plan.title}
-                          </p>
-                          {plan.locationName && (
-                            <p className="mt-[2px] text-[11px] leading-tight text-white/70">
-                              {plan.locationName}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <PlanGrid plans={savedPlans} onPlanClick={(planId) => router.push(`/plans/${planId}`)} />
               )}
             </div>
           </div>
@@ -393,7 +522,109 @@ export default function ProfilePage() {
           className="hidden"
           aria-hidden="true"
         />
+
+        {/* Unfriend dialog */}
+        {showUnfriendDialog && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 px-4" onClick={() => setShowUnfriendDialog(false)}>
+            <div className="w-full max-w-[320px] rounded-card bg-[var(--bg)] p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+              <p className="text-center text-body font-[var(--fw-semibold)]">
+                ¿Eliminar a {profileData.nombre} como amigo?
+              </p>
+              <p className="mt-2 text-center text-body-sm text-muted">
+                Dejareis de ser amigos.
+              </p>
+              <div className="mt-5 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowUnfriendDialog(false)}
+                  className="flex-1 rounded-full border border-app py-2 text-body-sm font-[var(--fw-semibold)] transition-colors hover:bg-surface"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRemoveFriend}
+                  className="flex-1 rounded-full bg-red-500 py-2 text-body-sm font-[var(--fw-semibold)] text-white transition-opacity hover:opacity-80"
+                >
+                  Eliminar amigo
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Unfollow dialog */}
+        {showUnfollowDialog && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 px-4" onClick={() => setShowUnfollowDialog(false)}>
+            <div className="w-full max-w-[320px] rounded-card bg-[var(--bg)] p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+              <p className="text-center text-body font-[var(--fw-semibold)]">
+                ¿Dejar de seguir a {profileData.nombre}?
+              </p>
+              <p className="mt-2 text-center text-body-sm text-muted">
+                Dejarás de ver sus publicaciones en tu feed.
+              </p>
+              <div className="mt-5 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowUnfollowDialog(false)}
+                  className="flex-1 rounded-full border border-app py-2 text-body-sm font-[var(--fw-semibold)] transition-colors hover:bg-surface"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleUnfollow}
+                  className="flex-1 rounded-full bg-red-500 py-2 text-body-sm font-[var(--fw-semibold)] text-white transition-opacity hover:opacity-80"
+                >
+                  Dejar de seguir
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
+    </div>
+  );
+}
+
+function PlanGrid({ plans, onPlanClick }: { plans: FeedPlanItemDto[]; onPlanClick?: (id: number) => void }) {
+  return (
+    <div className="columns-2 gap-[6px] sm:columns-3">
+      {plans.map((plan) => (
+        <div key={plan.id} className="mb-[6px] break-inside-avoid">
+          <div
+            className="group relative cursor-pointer overflow-hidden rounded-[6px]"
+            onClick={() => onPlanClick?.(plan.id)}
+          >
+            {plan.coverImage && (
+              <Image
+                src={plan.coverImage}
+                alt={plan.title}
+                width={760}
+                height={570}
+                className="w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                unoptimized
+              />
+            )}
+            {!plan.coverImage && <div className="aspect-[4/3] w-full bg-black" />}
+            {new Date(plan.endsAt) < new Date() && (
+              <div className="absolute right-2 top-2 rounded-full bg-black/50 px-2 py-[3px] text-[14px] font-[var(--fw-medium)] leading-tight text-white/90 backdrop-blur-sm">
+                Finalizado
+              </div>
+            )}
+            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-3 pb-3 pt-6">
+              <p className="text-body-sm font-[var(--fw-medium)] leading-tight text-white">
+                {plan.title}
+              </p>
+              {plan.locationName && (
+                <p className="mt-[2px] text-[14px] leading-tight text-white/70">
+                  {plan.locationName}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -401,13 +632,26 @@ export default function ProfilePage() {
 function SettingsIcon({ className = "size-icon" }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.8" />
-      <path
-        d="M12 1v2.5M12 20.5V23M23 12h-2.5M3.5 12H1M20.07 3.93l-1.77 1.77M5.7 18.3l-1.77 1.77M20.07 20.07l-1.77-1.77M5.7 5.7L3.93 3.93"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-      />
+      <path d="M12.22 2h-.44a2 2 0 00-2 2v.18a2 2 0 01-1 1.73l-.43.25a2 2 0 01-2 0l-.15-.08a2 2 0 00-2.73.73l-.22.38a2 2 0 00.73 2.73l.15.1a2 2 0 011 1.72v.51a2 2 0 01-1 1.74l-.15.09a2 2 0 00-.73 2.73l.22.38a2 2 0 002.73.73l.15-.08a2 2 0 012 0l.43.25a2 2 0 011 1.73V20a2 2 0 002 2h.44a2 2 0 002-2v-.18a2 2 0 011-1.73l.43-.25a2 2 0 012 0l.15.08a2 2 0 002.73-.73l.22-.39a2 2 0 00-.73-2.73l-.15-.08a2 2 0 01-1-1.74v-.5a2 2 0 011-1.74l.15-.09a2 2 0 00.73-2.73l-.22-.38a2 2 0 00-2.73-.73l-.15.08a2 2 0 01-2 0l-.43-.25a2 2 0 01-1-1.73V4a2 2 0 00-2-2z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
+  );
+}
+
+function PlaneIcon({ className = "size-icon" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
+      <path d="M22 16.5L13.5 10V4.5a1.5 1.5 0 00-3 0V10L2 16.5v2l8.5-2.5V20l-2 1.5V23l3.5-1 3.5 1v-1.5L13.5 20v-4l8.5 2.5v-2z" fill="currentColor" />
+    </svg>
+  );
+}
+
+function WalletIcon({ className = "size-icon" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
+      <path d="M4 7.5A2.5 2.5 0 016.5 5H18a2 2 0 012 2v1.5H8A2.5 2.5 0 005.5 11v2A2.5 2.5 0 008 15.5h12V17a2 2 0 01-2 2H6.5A2.5 2.5 0 014 16.5v-9z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M18.5 8.5H8A2.5 2.5 0 005.5 11v2A2.5 2.5 0 008 15.5h10.5A1.5 1.5 0 0020 14V10a1.5 1.5 0 00-1.5-1.5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="16" cy="12" r="1" fill="currentColor" />
     </svg>
   );
 }
@@ -416,51 +660,30 @@ function ProfileSkeleton() {
   return (
     <div className="flex flex-col items-center" aria-label="Cargando perfil" role="status">
       {/* Avatar */}
-      <div className="feed-skeleton-shimmer size-[96px] rounded-full" />
+      <div className="skeleton-shimmer size-[96px] rounded-full" />
       {/* Name */}
-      <div className="feed-skeleton-shimmer mt-[var(--space-3)] h-5 w-[140px] rounded-full" />
+      <div className="skeleton-shimmer mt-[var(--space-3)] h-5 w-[140px] rounded-full" />
       {/* Subtitle */}
-      <div className="feed-skeleton-shimmer mt-[var(--space-2)] h-3 w-[90px] rounded-full" />
+      <div className="skeleton-shimmer mt-[var(--space-2)] h-3 w-[90px] rounded-full" />
       {/* Stats */}
       <div className="mt-[var(--space-5)] flex gap-[var(--space-8)]">
         {[0, 1, 2].map((i) => (
           <div key={i} className="flex flex-col items-center gap-[6px]">
-            <div className="feed-skeleton-shimmer h-5 w-[28px] rounded-full" />
-            <div className="feed-skeleton-shimmer h-3 w-[50px] rounded-full" />
+            <div className="skeleton-shimmer h-5 w-[28px] rounded-full" />
+            <div className="skeleton-shimmer h-3 w-[50px] rounded-full" />
           </div>
         ))}
       </div>
       {/* Divider */}
-      <div className="feed-skeleton-shimmer mt-[var(--space-6)] h-[1px] w-full" />
+      <div className="skeleton-shimmer mt-[var(--space-6)] h-[1px] w-full" />
       {/* Grid */}
       <div className="mt-[var(--space-5)] w-full columns-2 gap-[var(--space-3)] sm:columns-3">
         {[120, 160, 130, 150, 140, 170].map((h, i) => (
           <div key={i} className="mb-[var(--space-3)] break-inside-avoid">
-            <div className="feed-skeleton-shimmer w-full rounded-[12px]" style={{ height: `${h}px` }} />
+            <div className="skeleton-shimmer w-full rounded-[12px]" style={{ height: `${h}px` }} />
           </div>
         ))}
       </div>
     </div>
-  );
-}
-
-function PencilIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <path
-        d="M16.474 5.408l2.118 2.118m-.756-3.982L12.109 9.27a2.118 2.118 0 0 0-.58 1.082L11 13l2.648-.53a2.118 2.118 0 0 0 1.082-.58l5.727-5.727a1.853 1.853 0 1 0-2.621-2.621z"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M19 15v3a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h3"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
   );
 }

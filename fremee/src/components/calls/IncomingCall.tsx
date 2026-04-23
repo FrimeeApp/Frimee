@@ -1,5 +1,7 @@
 "use client";
 
+import Image from "next/image";
+
 type Props = {
   callerName: string;
   callerFoto?: string;
@@ -15,7 +17,7 @@ export default function IncomingCall({ callerName, callerFoto, tipo, onAccept, o
         <p className="text-caption text-muted">{tipo === "video" ? "Llamada de vídeo entrante" : "Llamada de voz entrante"}</p>
         <div className="h-24 w-24 overflow-hidden rounded-full border border-white/10 bg-white/10">
           {callerFoto ? (
-            <img src={callerFoto} className="h-full w-full object-cover" />
+            <Image src={callerFoto} alt={callerName} width={96} height={96} className="h-full w-full object-cover" unoptimized />
           ) : (
             <div className="flex h-full w-full items-center justify-center text-[40px] font-bold">
               {callerName?.[0]?.toUpperCase()}

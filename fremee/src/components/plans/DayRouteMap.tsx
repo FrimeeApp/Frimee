@@ -7,7 +7,10 @@ import { TIPOS_TRANSPORTE } from "@/services/api/endpoints/subplanes.endpoint";
 type Props = {
   subplanes: SubplanRow[];
   selectedDate: string; // "YYYY-MM-DD"
+  ubicacionNombre?: string; // plan destination used as fallback map center
   onViajeComputed?: (subplanId: number, duracion: string, distancia: string, polyline: string) => void;
+  heightClassName?: string;
+  containerClassName?: string;
 };
 
 function isoDateOnly(iso: string) { return iso.slice(0, 10); }
@@ -32,7 +35,7 @@ async function geocode(address: string): Promise<{ lat: number; lng: number } | 
   return new Promise((resolve) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const geocoder = new (window as any).google.maps.Geocoder();
-    geocoder.geocode({ address }, (results: any, status: string) => {
+    geocoder.geocode({ address }, (results: Array<{ geometry: { location: { lat: () => number; lng: () => number } } }> | null, status: string) => {
       if (status !== "OK" || !results?.[0]) { resolve(null); return; }
       const loc = results[0].geometry.location;
       resolve({ lat: loc.lat(), lng: loc.lng() });
@@ -57,24 +60,24 @@ function decodePath(encoded: string): { lat: number; lng: number }[] {
 }
 
 const darkMapStyles = [
-  { elementType: "geometry", stylers: [{ color: "#1a1a2e" }] },
-  { elementType: "labels.text.stroke", stylers: [{ color: "#1a1a2e" }] },
-  { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
-  { featureType: "road", elementType: "geometry", stylers: [{ color: "#2c2c3e" }] },
-  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#212121" }] },
-  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#3c3c5e" }] },
-  { featureType: "water", elementType: "geometry", stylers: [{ color: "#0e1626" }] },
-  { featureType: "poi", elementType: "geometry", stylers: [{ color: "#1e1e30" }] },
-  { featureType: "transit", elementType: "geometry", stylers: [{ color: "#2f3948" }] },
-  { featureType: "administrative", elementType: "geometry.stroke", stylers: [{ color: "#3c3c5e" }] },
+  { featureType: "all", elementType: "labels.text", stylers: [{ color: "#878787" }] },
+  { featureType: "all", elementType: "labels.text.stroke", stylers: [{ visibility: "off" }] },
+  { featureType: "landscape", elementType: "all", stylers: [{ color: "#f9f5ed" }] },
+  { featureType: "road.highway", elementType: "all", stylers: [{ color: "#f5f5f5" }] },
+  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#c9c9c9" }] },
+  { featureType: "water", elementType: "all", stylers: [{ color: "#aee0f4" }] },
 ];
 
-const TIPO_ICON: Record<string, string> = {
-  VUELO: "✈️", BARCO: "🚢", TREN: "🚆", BUS: "🚌", COCHE: "🚗",
-};
-
-export default function DayRouteMap({ subplanes, selectedDate, onViajeComputed }: Props) {
+export default function DayRouteMap({
+  subplanes,
+  selectedDate,
+  ubicacionNombre,
+  onViajeComputed,
+  heightClassName = "h-[300px] md:h-[240px]",
+  containerClassName = "",
+}: Props) {
   const mapRef = useRef<HTMLDivElement>(null);
+  const fallbackMapRef = useRef<HTMLDivElement>(null);
   const renderGenRef = useRef(0); // increments on each render attempt; stale renders abort
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -103,6 +106,49 @@ export default function DayRouteMap({ subplanes, selectedDate, onViajeComputed }
     }
   });
 
+  // Fallback map: show plan destination when < 2 points
+  const renderFallbackMap = useCallback(async () => {
+    if (!ubicacionNombre || !fallbackMapRef.current) return;
+    const gen = ++renderGenRef.current;
+    setLoading(true);
+    setError(null);
+    try {
+      await loadGoogleMaps();
+      if (gen !== renderGenRef.current || !fallbackMapRef.current) return;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const google = (window as any).google;
+      fallbackMapRef.current.innerHTML = "";
+      const map = new google.maps.Map(fallbackMapRef.current, {
+        mapTypeId: "roadmap", disableDefaultUI: true, zoomControl: true, styles: darkMapStyles,
+        center: { lat: 0, lng: 0 }, zoom: 2, gestureHandling: "cooperative",
+      });
+      const coord = await geocode(ubicacionNombre);
+      if (gen !== renderGenRef.current || !fallbackMapRef.current) return;
+      if (coord) {
+        map.setCenter(coord);
+        map.setZoom(points.length > 0 ? 11 : 5);
+        // Show subplane markers — geocode if no stored coords
+        const resolvedCoords = await Promise.all(
+          points.map((p) => p.coords ? Promise.resolve(p.coords) : geocode(p.name))
+        );
+        if (gen !== renderGenRef.current || !fallbackMapRef.current) return;
+        resolvedCoords.forEach((c, i) => {
+          if (!c) return;
+          new google.maps.Marker({
+            position: c, map,
+            label: { text: String(i + 1), color: "#000", fontWeight: "bold", fontSize: "14px" },
+            icon: { path: google.maps.SymbolPath.CIRCLE, fillColor: "#00C9A7", fillOpacity: 1, strokeColor: "#fff", strokeWeight: 2, scale: 12 },
+            title: points[i].label,
+          });
+        });
+        // Re-center on first subplan marker if available
+        if (resolvedCoords[0]) { map.setCenter(resolvedCoords[0]); map.setZoom(13); }
+      }
+    } catch { /* ignore */ }
+    finally { if (gen === renderGenRef.current) setLoading(false); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDate, subplanes, ubicacionNombre]);
+
   const renderMap = useCallback(async () => {
     if (points.length < 2 || !mapRef.current) return;
     const gen = ++renderGenRef.current;
@@ -123,6 +169,7 @@ export default function DayRouteMap({ subplanes, selectedDate, onViajeComputed }
         disableDefaultUI: true,
         zoomControl: true,
         styles: darkMapStyles,
+        gestureHandling: "cooperative",
       });
 
       const bounds = new google.maps.LatLngBounds();
@@ -140,7 +187,7 @@ export default function DayRouteMap({ subplanes, selectedDate, onViajeComputed }
         new google.maps.Marker({
           position: coord,
           map,
-          label: { text: String(i + 1), color: "#000", fontWeight: "bold", fontSize: "11px" },
+          label: { text: String(i + 1), color: "#000", fontWeight: "bold", fontSize: "14px" },
           icon: {
             path: google.maps.SymbolPath.CIRCLE,
             fillColor: "#00C9A7",
@@ -197,36 +244,36 @@ export default function DayRouteMap({ subplanes, selectedDate, onViajeComputed }
             // ── Polyline stored in DB — zero API calls ──
             drawPolyline(destSubplan.ruta_polyline);
           } else {
-            // ── First time: call DirectionsService client-side (works in Capacitor) ──
+            // ── First time: call server-side directions API ──
             try {
-              const TRAVEL_MODE_MAP: Record<string, string> = {
-                APIE: "WALKING", COCHE: "DRIVING", TAXI: "DRIVING",
-                BUS: "TRANSIT", METRO: "TRANSIT", TREN: "TRANSIT",
-              };
-              const travelMode = destSubplan?.transporte_llegada
-                ? (TRAVEL_MODE_MAP[destSubplan.transporte_llegada] ?? "DRIVING")
-                : "DRIVING";
+              const fromCoord = coords[i];
+              const toCoord   = coords[i + 1];
+              const waypoints = [
+                fromCoord ? `${fromCoord.lat},${fromCoord.lng}` : points[i].name,
+                toCoord   ? `${toCoord.lat},${toCoord.lng}`     : points[i + 1].name,
+              ];
 
-              const origin = coords[i] ?? points[i].name;
-              const destination = coords[i + 1] ?? points[i + 1].name;
-
-              const result = await new Promise<any>((res, rej) => {
-                new google.maps.DirectionsService().route(
-                  { origin, destination, travelMode: google.maps.TravelMode[travelMode as keyof typeof google.maps.TravelMode] },
-                  (r: any, status: string) => status === "OK" ? res(r) : rej(status)
-                );
+              const res = await fetch("/api/directions", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  waypoints,
+                  originCoords: fromCoord ?? undefined,
+                  destCoords:   toCoord   ?? undefined,
+                  travelMode:   destSubplan?.transporte_llegada ?? "COCHE",
+                }),
               });
+              const data = await res.json() as { polyline?: string; legs?: { distance?: string; duration?: string }[]; error?: string };
 
-              const leg = result.routes?.[0]?.legs?.[0];
-              const polyline = result.routes?.[0]?.overview_polyline;
-              if (polyline) {
-                drawPolyline(polyline);
+              if (data.polyline) {
+                drawPolyline(data.polyline);
+                const leg = data.legs?.[0];
                 if (leg?.duration && destSubplan?.id && onViajeComputed) {
                   onViajeComputed(
                     destSubplan.id,
-                    leg.duration.text,
-                    leg.distance?.text ?? "",
-                    polyline,
+                    leg.duration,
+                    leg.distance ?? "",
+                    data.polyline,
                   );
                 }
               }
@@ -244,20 +291,35 @@ export default function DayRouteMap({ subplanes, selectedDate, onViajeComputed }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate, subplanes]);
 
-  useEffect(() => { renderMap(); }, [renderMap]);
+  useEffect(() => {
+    if (points.length < 2) renderFallbackMap();
+    else renderMap();
+  }, [renderMap, renderFallbackMap, points.length]);
 
   if (points.length < 2) {
     return (
-      <div className="flex h-[220px] items-center justify-center rounded-card border border-app bg-surface-inset text-body-sm text-muted">
-        Añade al menos 2 actividades con ubicación para ver la ruta
+      <div className={`overflow-hidden ${containerClassName ?? "rounded-[12px] border border-app"}`} style={containerClassName ? undefined : { clipPath: "inset(0 round 12px)" }}>
+        <div className={`relative w-full bg-surface-inset ${heightClassName}`}>
+          <div ref={fallbackMapRef} className="absolute inset-0" />
+          {loading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-surface-inset text-body-sm text-muted">
+              Cargando mapa...
+            </div>
+          )}
+          {!loading && !ubicacionNombre && (
+            <div className="absolute inset-0 flex items-center justify-center px-6 text-center text-body-sm text-muted">
+              Añade al menos 2 actividades con ubicación para ver la ruta
+            </div>
+          )}
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="overflow-hidden rounded-card border border-app">
+    <div className={`overflow-hidden ${containerClassName ?? "rounded-[12px] border border-app"}`} style={containerClassName ? undefined : { clipPath: "inset(0 round 12px)" }}>
       {/* Wrapper: mapRef is a leaf div React never renders children into */}
-      <div className="relative h-[240px] w-full bg-surface-inset">
+      <div className={`relative w-full bg-surface-inset ${heightClassName}`}>
         <div ref={mapRef} className="absolute inset-0" />
         {loading && (
           <div className="absolute inset-0 flex items-center justify-center bg-surface-inset text-body-sm text-muted">
