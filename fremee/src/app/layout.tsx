@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, Instrument_Serif } from "next/font/google";
-import "/";
+import "../styles/globals.css";
 import { AuthProvider } from "@/providers/AuthProvider";
 import NativeDeepLinks from "@/components/common/NativeDeepLinks";
 import NativeSystemUi from "@/components/common/NativeSystemUi";
@@ -47,12 +47,17 @@ const themeInitScript = `
     if (window.Capacitor) {
       const _f = window.fetch.bind(window);
       window.fetch = function(input, opts) {
-        var s = typeof input === "string" ? input : (input && input.url) ? input.url : null;
-        console.log("[fetch-patch] type=" + typeof input + " url=" + (s ? s.substring(0, 80) : "?") + " hasNext=" + (s ? s.indexOf("__next.!") >= 0 : false));
-        if (typeof input === "string" && input.indexOf("__next.!") >= 0)
-          input = input.split("!").join("-");
-        else if (input && input.url && input.url.indexOf("__next.!") >= 0)
-          input = new Request(input.url.split("!").join("-"), input);
+        var raw = typeof input === "string" ? input
+                : (input && typeof input.href === "string") ? input.href
+                : (input && typeof input.url === "string") ? input.url
+                : String(input);
+        if (raw.indexOf("__next.!") >= 0) {
+          var fixed = raw.split("!").join("-");
+          if (typeof input === "string") input = fixed;
+          else if (input instanceof URL) input = new URL(fixed);
+          else if (input instanceof Request) input = new Request(fixed, input);
+          else input = fixed;
+        }
         return _f(input, opts);
       };
     }
