@@ -4,6 +4,7 @@ import type { UserSettingsRow } from "@/services/api/endpoints/settings.endpoint
 export type UserProfileRow = {
   id: string;
   nombre: string;
+  username: string | null;
   fecha_nac: string | null;
   email: string;
   rol: string;
@@ -16,6 +17,7 @@ export type UserProfileRow = {
 export type PublicUserProfileRow = {
   id: string;
   nombre: string;
+  username: string | null;
   profile_image: string | null;
 };
 
@@ -46,6 +48,7 @@ export type UserAuthSnapshotRow = {
 type UserAuthSnapshotRpcRow = {
   id: string;
   nombre: string;
+  username: string | null;
   fecha_nac: string | null;
   email: string;
   rol: string;
@@ -125,6 +128,57 @@ export async function removeFriend(otherUserId: string): Promise<void> {
   if (error) throw error;
 }
 
+export async function followUser(targetUserId: string): Promise<void> {
+  const supabase = createBrowserSupabaseClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+  const { error } = await supabase
+    .from("seguidores")
+    .insert({ follower_id: user.id, following_id: targetUserId });
+  if (error && error.code !== "23505") throw error;
+}
+
+export async function unfollowUser(targetUserId: string): Promise<void> {
+  const supabase = createBrowserSupabaseClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+  const { error } = await supabase
+    .from("seguidores")
+    .delete()
+    .eq("follower_id", user.id)
+    .eq("following_id", targetUserId);
+  if (error) throw error;
+}
+
+export async function getFollowerCount(userId: string): Promise<number> {
+  const supabase = createBrowserSupabaseClient();
+  const { count, error } = await supabase
+    .from("seguidores")
+    .select("*", { count: "exact", head: true })
+    .eq("following_id", userId);
+  if (error) throw error;
+  return count ?? 0;
+}
+
+export async function getFollowStatuses(targetUserIds: string[]): Promise<Record<string, boolean>> {
+  if (targetUserIds.length === 0) return {};
+  const supabase = createBrowserSupabaseClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return {};
+  const { data, error } = await supabase
+    .from("seguidores")
+    .select("following_id")
+    .eq("follower_id", user.id)
+    .in("following_id", targetUserIds);
+  if (error) throw error;
+  const result: Record<string, boolean> = {};
+  for (const id of targetUserIds) result[id] = false;
+  for (const row of (data ?? []) as { following_id: string }[]) {
+    result[row.following_id] = true;
+  }
+  return result;
+}
+
 export async function fetchUserAuthSnapshotById(userId: string): Promise<UserAuthSnapshotRow> {
   const supabase = createBrowserSupabaseClient();
 
@@ -143,6 +197,7 @@ export async function fetchUserAuthSnapshotById(userId: string): Promise<UserAut
     profile: {
       id: row.id,
       nombre: row.nombre,
+      username: row.username ?? null,
       fecha_nac: row.fecha_nac,
       email: row.email,
       rol: row.rol,

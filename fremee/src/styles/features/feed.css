@@ -1,0 +1,90 @@
+@keyframes comments-overlay-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes comments-panel-in-mobile {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes comments-panel-in-desktop {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.992);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Snap feed scroll container — hide scrollbar on mobile */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+@layer components {
+  .feed-image-container,
+  .feed-divider {
+    margin-left: calc(-1 * max(var(--page-margin-x), env(safe-area-inset-left)));
+    margin-right: calc(-1 * max(var(--page-margin-x), env(safe-area-inset-right)));
+    width: calc(100% + max(var(--page-margin-x), env(safe-area-inset-left)) + max(var(--page-margin-x), env(safe-area-inset-right)));
+    max-width: none;
+  }
+
+  .feed-image-responsive {
+    width: 100%;
+    border-radius: 0;
+    border: 0;
+    display: block;
+    object-fit: cover;
+  }
+
+  .comments-modal-overlay {
+    animation: comments-overlay-in 180ms var(--ease-standard);
+  }
+
+  .comments-modal-panel {
+    animation: comments-panel-in-mobile 220ms var(--ease-standard);
+  }
+
+  @media (min-width: 768px) {
+    .feed-image-container,
+    .feed-divider {
+      margin-left: 0;
+      margin-right: 0;
+      width: 100%;
+    }
+
+    .feed-image-container {
+      border-radius: var(--radius-card);
+    }
+
+    .feed-image-responsive {
+      border-radius: var(--radius-card);
+      border: 1px solid var(--border);
+    }
+
+    .comments-modal-panel {
+      animation: comments-panel-in-desktop 220ms var(--ease-standard);
+    }
+  }
+}

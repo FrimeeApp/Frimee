@@ -1,26 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import Image from "next/image";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import AppSidebar from "@/components/common/AppSidebar";
 import LoadingScreen from "@/components/common/LoadingScreen";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useAuth } from "@/providers/AuthProvider";
 import {
   listLiquidacionesForUserEndpoint,
-  requestConfirmationEndpoint,
   confirmReceiptEndpoint,
   rejectReceiptEndpoint,
 } from "@/services/api/endpoints/liquidaciones.endpoint";
 
-function useIsMobile() {
-  const [isMobile, setIsMobile] = useState(false);
-  useEffect(() => {
-    setIsMobile(/Android|iPhone|iPad|iPod/i.test(navigator.userAgent));
-  }, []);
-  return isMobile;
-}
-
-type ExpenseTab = "paid" | "pending";
+type ExpenseTab = "history" | "action";
 type EstadoLiquidacion = "PENDIENTE" | "EN_REVISION" | "CONFIRMADA" | "ANULADA";
 
 type ExpenseItem = {
@@ -30,11 +23,14 @@ type ExpenseItem = {
   direction: "outgoing" | "incoming";
   counterparty: string;
   counterpartyId: string;
+  counterpartyImage: string | null;
   planName: string;
   planId: number;
   concept: string | null;
   estado: EstadoLiquidacion;
 };
+
+type PlanFilter = "all" | number;
 
 function formatAmount(value: number): string {
   return new Intl.NumberFormat("es-ES", {
@@ -45,14 +41,83 @@ function formatAmount(value: number): string {
   }).format(value);
 }
 
-function formatDate(value: string): string {
+function formatListDate(value: string): string {
   return new Intl.DateTimeFormat("es-ES", {
     day: "2-digit",
     month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
   }).format(new Date(value));
+}
+
+function formatDetailDate(value: string): string {
+  return new Intl.DateTimeFormat("es-ES", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  }).format(new Date(value));
+}
+
+function isNativePlatform() {
+  if (typeof window === "undefined") return false;
+  const platformWindow = window as Window & {
+    Capacitor?: {
+      isNativePlatform?: () => boolean;
+    };
+  };
+  return Boolean(platformWindow.Capacitor?.isNativePlatform?.());
+}
+
+function getExpenseStatusMeta(item: ExpenseItem) {
+  if (item.direction === "incoming" && item.estado === "EN_REVISION") {
+    return {
+      text: "Por confirmar",
+      toneClass: "border-[var(--info)]/30 bg-[var(--info)]/10 text-[var(--info)]",
+      inlineTextClass: "text-[var(--info,#2563eb)]",
+      description: "Has recibido un pago y debes validarlo.",
+    };
+  }
+
+  if (item.direction === "outgoing" && item.estado === "EN_REVISION") {
+    return {
+      text: "Confirmación pendiente",
+      toneClass: "border-[var(--warning)]/30 bg-[var(--warning)]/10 text-[var(--warning)]",
+      inlineTextClass: "text-[var(--warning,#d97706)]",
+      description: "Ya has pagado y estás esperando confirmación.",
+    };
+  }
+
+  if (item.direction === "incoming" && item.estado === "PENDIENTE") {
+    return {
+      text: "Te deben",
+      toneClass: "border-[var(--success)]/30 bg-[var(--success)]/10 text-[var(--success)]",
+      inlineTextClass: "text-[var(--success,#15803d)]",
+      description: "Todavía no has recibido este pago.",
+    };
+  }
+
+  if (item.direction === "outgoing" && item.estado === "PENDIENTE") {
+    return {
+      text: "Debes",
+      toneClass: "border-[var(--warning)]/30 bg-[var(--warning)]/10 text-[var(--warning)]",
+      inlineTextClass: "text-[var(--warning,#d97706)]",
+      description: "Todavía no has completado este pago.",
+    };
+  }
+
+  if (item.estado === "CONFIRMADA") {
+    return {
+      text: "Confirmado",
+      toneClass: "border-[var(--success)]/25 bg-[var(--success)]/10 text-[var(--success)]",
+      inlineTextClass: "text-[var(--success,#15803d)]",
+      description: "Operación confirmada correctamente.",
+    };
+  }
+
+  return {
+    text: "Anulada",
+    toneClass: "border-app bg-surface text-muted",
+    inlineTextClass: "text-muted",
+    description: "Operación anulada.",
+  };
 }
 
 export default function MisGastosPage() {
@@ -66,12 +131,14 @@ export default function MisGastosPage() {
 }
 
 function MisGastosContent() {
-  const { user } = useAuth();
-  const isMobile = useIsMobile();
-  const [activeTab, setActiveTab] = useState<ExpenseTab>("pending");
+  const { user, profile } = useAuth();
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState<ExpenseTab>("action");
   const [items, setItems] = useState<ExpenseItem[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
   const [actingId, setActingId] = useState<number | null>(null);
+  const [selectedPlanId, setSelectedPlanId] = useState<PlanFilter>("all");
+  const [selectedExpenseId, setSelectedExpenseId] = useState<number | null>(null);
   const tabRowRef = useRef<HTMLDivElement | null>(null);
   const paidTabRef = useRef<HTMLButtonElement | null>(null);
   const pendingTabRef = useRef<HTMLButtonElement | null>(null);
@@ -92,6 +159,7 @@ function MisGastosContent() {
             direction: l.from_user_id === user.id ? "outgoing" : "incoming",
             counterparty: l.counterparty_nombre ?? "Usuario",
             counterpartyId: l.counterparty_id,
+            counterpartyImage: l.counterparty_profile_image ?? null,
             planName: l.plan_titulo ?? `Plan ${l.plan_id}`,
             planId: l.plan_id,
             concept: l.nota,
@@ -115,7 +183,7 @@ function MisGastosContent() {
         item.id === Number(confirmadaId) ? { ...item, estado: "CONFIRMADA" } : item
       )
     );
-    setActiveTab("paid");
+    setActiveTab("history");
     window.history.replaceState(null, "", "/mis-gastos");
   }, [searchParams]);
 
@@ -129,7 +197,69 @@ function MisGastosContent() {
     [items]
   );
 
-  const visibleItems = activeTab === "paid" ? paidItems : pendingItems;
+  const visibleItems = activeTab === "history" ? paidItems : pendingItems;
+
+  const selectedExpense = useMemo(
+    () => items.find((item) => item.id === selectedExpenseId) ?? null,
+    [items, selectedExpenseId]
+  );
+
+  const planOptions = useMemo(() => {
+    const uniquePlans = new Map<number, string>();
+    items.forEach((item) => {
+      if (!uniquePlans.has(item.planId)) {
+        uniquePlans.set(item.planId, item.planName);
+      }
+    });
+
+    return [...uniquePlans.entries()].map(([id, name]) => ({ id, name }));
+  }, [items]);
+
+  const filteredVisibleItems = useMemo(() => {
+    const scopedItems =
+      selectedPlanId === "all"
+        ? visibleItems
+        : visibleItems.filter((item) => item.planId === selectedPlanId);
+
+    if (activeTab !== "action") return scopedItems;
+
+    const getPriority = (item: ExpenseItem) => {
+      if (item.direction === "incoming" && item.estado === "EN_REVISION") return 0;
+      if (item.direction === "incoming" && item.estado === "PENDIENTE") return 1;
+      if (item.direction === "outgoing" && item.estado === "PENDIENTE") return 2;
+      if (item.direction === "outgoing" && item.estado === "EN_REVISION") return 3;
+      return 4;
+    };
+
+    return [...scopedItems].sort((a, b) => {
+      const priorityDiff = getPriority(a) - getPriority(b);
+      if (priorityDiff !== 0) return priorityDiff;
+      return new Date(b.date).getTime() - new Date(a.date).getTime();
+    });
+  }, [activeTab, selectedPlanId, visibleItems]);
+
+  const selectedPlanName = useMemo(() => {
+    if (selectedPlanId === "all") return null;
+    return planOptions.find((plan) => plan.id === selectedPlanId)?.name ?? null;
+  }, [planOptions, selectedPlanId]);
+
+  const kpis = useMemo(
+    () => ({
+      owedToYou: items
+        .filter((item) => item.direction === "incoming" && item.estado === "PENDIENTE")
+        .reduce((sum, item) => sum + item.amount, 0),
+      youOwe: items
+        .filter((item) => item.direction === "outgoing" && item.estado === "PENDIENTE")
+        .reduce((sum, item) => sum + item.amount, 0),
+      toConfirmAmount: items
+        .filter((item) => item.direction === "incoming" && item.estado === "EN_REVISION")
+        .reduce((sum, item) => sum + item.amount, 0),
+      toConfirmCount: items.filter(
+        (item) => item.direction === "incoming" && item.estado === "EN_REVISION"
+      ).length,
+    }),
+    [items]
+  );
 
   // Badge: deudas propias sin pagar + pagos entrantes esperando que confirmes
   const actionRequiredCount = useMemo(
@@ -142,21 +272,10 @@ function MisGastosContent() {
     [pendingItems]
   );
 
-  const overduePendingDebts = useMemo(() => {
-    if (activeTab !== "pending") return [];
-    const twoDaysMs = 2 * 24 * 60 * 60 * 1000;
-    return pendingItems.filter(
-      (i) =>
-        i.direction === "outgoing" &&
-        i.estado === "PENDIENTE" &&
-        Date.now() - new Date(i.date).getTime() > twoDaysMs
-    );
-  }, [activeTab, pendingItems]);
-
   useEffect(() => {
-    const updateIndicator = () => {
+      const updateIndicator = () => {
       const row = tabRowRef.current;
-      const target = activeTab === "paid" ? paidTabRef.current : pendingTabRef.current;
+      const target = activeTab === "history" ? paidTabRef.current : pendingTabRef.current;
       if (!row || !target) return;
       const rowRect = row.getBoundingClientRect();
       const tabRect = target.getBoundingClientRect();
@@ -167,18 +286,11 @@ function MisGastosContent() {
     return () => window.removeEventListener("resize", updateIndicator);
   }, [activeTab]);
 
-  // Payer clicks "Marcar como pagado" → sends to EN_REVISION so payee can confirm
-  const handleRequestConfirmation = async (item: ExpenseItem) => {
-    setActingId(item.id);
-    try {
-      await requestConfirmationEndpoint(item.id);
-      setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, estado: "EN_REVISION" } : i)));
-    } catch {
-      alert("No se pudo enviar la solicitud. Inténtalo de nuevo.");
-    } finally {
-      setActingId(null);
+  useEffect(() => {
+    if (selectedExpenseId && !items.some((item) => item.id === selectedExpenseId)) {
+      setSelectedExpenseId(null);
     }
-  };
+  }, [items, selectedExpenseId]);
 
   // Payee confirms receipt → CONFIRMADA
   const handleConfirmReceipt = async (item: ExpenseItem) => {
@@ -186,7 +298,7 @@ function MisGastosContent() {
     try {
       await confirmReceiptEndpoint(item.id);
       setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, estado: "CONFIRMADA" } : i)));
-      setActiveTab("paid");
+      setActiveTab("history");
     } catch {
       alert("No se pudo confirmar. Inténtalo de nuevo.");
     } finally {
@@ -207,47 +319,70 @@ function MisGastosContent() {
     }
   };
 
+  const openPlan = (planId: number) => {
+    router.push(isNativePlatform() ? `/plans/static?id=${planId}` : `/plans/${planId}`);
+  };
+
   return (
     <div className="min-h-dvh bg-app text-app">
       <div className="relative mx-auto min-h-dvh max-w-[1440px]">
         <AppSidebar />
 
         <main
-          className={`px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-4)] transition-[padding] duration-[var(--duration-slow)] [transition-timing-function:var(--ease-standard)] md:py-[var(--space-8)] md:pr-[var(--space-14)]`}
+          className={`px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-6)] transition-[padding] duration-[var(--duration-slow)] [transition-timing-function:var(--ease-standard)] md:py-[var(--space-10)] md:pr-[var(--space-14)]`}
         >
           <section className="mx-auto w-full max-w-[860px]">
+            {/* Título */}
+            <h1 className="text-[var(--font-h2)] font-[var(--fw-regular)] leading-[1.15] text-app md:text-[var(--font-h1)]">
+              Mis gastos
+            </h1>
+            {(kpis.owedToYou > 0 || kpis.youOwe > 0) && (
+              <p className="mt-[var(--space-2)] mb-[var(--space-8)] text-caption text-muted">
+                {kpis.owedToYou > 0 && (
+                  <>Te deben <span className="font-[var(--fw-medium)] text-[var(--success,#15803d)] opacity-60">{formatAmount(kpis.owedToYou)}</span></>
+                )}
+                {kpis.owedToYou > 0 && kpis.youOwe > 0 && " · "}
+                {kpis.youOwe > 0 && (
+                  <>Debes <span className="font-[var(--fw-medium)] text-[var(--warning,#b45309)] opacity-60">{formatAmount(kpis.youOwe)}</span></>
+                )}
+              </p>
+            )}
+            {kpis.owedToYou === 0 && kpis.youOwe === 0 && (
+              <div className="mb-[var(--space-8)]" />
+            )}
+
             {/* Tabs */}
             <div
               ref={tabRowRef}
-              className="relative mb-[var(--space-5)] flex gap-[var(--space-8)] border-b border-app text-body text-muted"
+              className="relative mb-0 flex items-center gap-[var(--space-5)] border-b border-app pb-[var(--space-2)] text-body text-muted"
             >
               <button
                 ref={paidTabRef}
                 type="button"
-                onClick={() => setActiveTab("paid")}
-                className={`pb-[var(--space-2)] font-[var(--fw-medium)] transition-colors duration-[var(--duration-base)] ${
-                  activeTab === "paid" ? "text-app" : "hover:text-app"
+                onClick={() => setActiveTab("history")}
+                className={`-mb-[2px] pb-0 font-[var(--fw-semibold)] transition-colors duration-[var(--duration-base)] ${
+                  activeTab === "history" ? "text-app" : "text-muted hover:text-app"
                 }`}
               >
-                Pagados
+                Historial
               </button>
               <button
                 ref={pendingTabRef}
                 type="button"
-                onClick={() => setActiveTab("pending")}
-                className={`flex items-center gap-2 pb-[var(--space-2)] font-[var(--fw-medium)] transition-colors duration-[var(--duration-base)] ${
-                  activeTab === "pending" ? "text-app" : "hover:text-app"
+                onClick={() => setActiveTab("action")}
+                className={`-mb-[2px] flex items-center gap-[var(--space-2)] pb-0 font-[var(--fw-semibold)] transition-colors duration-[var(--duration-base)] ${
+                  activeTab === "action" ? "text-app" : "text-muted hover:text-app"
                 }`}
               >
-                Pendientes
+                Por resolver
                 {actionRequiredCount > 0 && (
-                  <span className="inline-flex size-5 items-center justify-center rounded-full bg-[var(--warning)] text-caption font-[var(--fw-semibold)] text-white">
+                  <span className="inline-flex size-[18px] items-center justify-center rounded-full bg-[var(--warning)] text-[11px] font-[var(--fw-semibold)] text-white">
                     {actionRequiredCount}
                   </span>
                 )}
               </button>
               <span
-                className={`pointer-events-none absolute bottom-0 h-[2px] bg-black transition-[left,width,opacity] duration-[220ms] [transition-timing-function:var(--ease-standard)] dark:bg-white ${
+                className={`pointer-events-none absolute bottom-0 h-[1.5px] bg-[var(--text-primary)] transition-[left,width,opacity] duration-[220ms] [transition-timing-function:var(--ease-standard)] ${
                   indicator.ready ? "opacity-100" : "opacity-0"
                 }`}
                 style={{ left: indicator.left, width: indicator.width }}
@@ -255,114 +390,131 @@ function MisGastosContent() {
               />
             </div>
 
-            {activeTab === "pending" && overduePendingDebts.length > 0 && (
-              <div className="mb-[var(--space-4)] rounded-card border border-app bg-surface px-[var(--space-3)] py-[var(--space-2)] text-body-sm text-muted">
-                Recordatorio: tienes {overduePendingDebts.length} pago(s) pendiente(s) desde hace más de 2 días.
+            {/* Filtro por plan — debajo de los tabs */}
+            {planOptions.length > 0 && (
+              <div className="flex justify-end pt-[var(--space-3)] pb-[var(--space-1)]">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="flex items-center gap-[5px] text-caption text-muted transition-colors hover:text-app"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" className="size-[12px] shrink-0" aria-hidden="true" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3 6h18M7 12h10M11 18h2" />
+                      </svg>
+                      <span className="font-[var(--fw-medium)]">
+                        {selectedPlanId === "all" ? "Todos los planes" : selectedPlanName}
+                      </span>
+                      <svg viewBox="0 0 24 24" fill="none" className="size-[10px] shrink-0" aria-hidden="true" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M6 9l6 6 6-6" />
+                      </svg>
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-[min(300px,calc(100vw-32px))] p-[var(--space-2)]">
+                    <div className="max-h-[calc(5*44px)] overflow-y-auto space-y-[2px]">
+                      <PlanFilterOption
+                        label="Todos los planes"
+                        count={visibleItems.length}
+                        active={selectedPlanId === "all"}
+                        onClick={() => setSelectedPlanId("all")}
+                      />
+                      {planOptions.map((plan) => (
+                        <PlanFilterOption
+                          key={plan.id}
+                          label={plan.name}
+                          count={visibleItems.filter((item) => item.planId === plan.id).length}
+                          active={selectedPlanId === plan.id}
+                          onClick={() => setSelectedPlanId(plan.id)}
+                        />
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
               </div>
             )}
 
-            <div className="space-y-[var(--space-3)]">
+            <div className="flex flex-col">
               {dataLoading ? (
                 <SkeletonList />
-              ) : visibleItems.length === 0 ? (
-                <EmptyState tab={activeTab} />
+              ) : filteredVisibleItems.length === 0 ? (
+                <EmptyState tab={activeTab} selectedPlanName={selectedPlanName} />
               ) : (
-                visibleItems.map((item) => {
+                filteredVisibleItems.map((item, index) => {
                   const incoming = item.direction === "incoming";
-                  const isOverdue =
-                    !incoming &&
-                    item.estado === "PENDIENTE" &&
-                    activeTab === "pending" &&
-                    Date.now() - new Date(item.date).getTime() > 2 * 24 * 60 * 60 * 1000;
+                  const senderName = incoming ? item.counterparty : `${profile?.nombre ?? "Tú"} (Tú)`;
+                  const senderImage = incoming ? item.counterpartyImage : profile?.profile_image ?? null;
+                  const secondaryLine = [
+                    item.concept || item.planName,
+                    item.concept ? item.planName : null,
+                    formatListDate(item.date),
+                  ]
+                    .filter(Boolean)
+                    .join(" · ");
 
-                  const relationText =
-                    activeTab === "paid"
-                      ? incoming
-                        ? `Te pagó ${item.counterparty}`
-                        : `Pagaste a ${item.counterparty}`
-                      : incoming
-                        ? `Te debe ${item.counterparty}`
-                        : `Debes a ${item.counterparty}`;
-
-                  const cardToneClass =
-                    item.estado === "EN_REVISION" && incoming
-                      ? "border-[color-mix(in_srgb,var(--info,#0099ff)_28%,var(--border)_72%)] bg-[color-mix(in_srgb,var(--info,#0099ff)_5%,var(--bg)_95%)]"
-                      : isOverdue
-                        ? "border-[color-mix(in_srgb,var(--error)_28%,var(--border)_72%)] bg-[color-mix(in_srgb,var(--error)_8%,var(--bg)_92%)]"
-                        : "border-app bg-app";
+                  const needsAction = incoming && item.estado === "EN_REVISION";
+                  const isLast = index === filteredVisibleItems.length - 1;
 
                   return (
                     <article
                       key={item.id}
-                      className={`rounded-card border p-[var(--space-4)] shadow-elev-1 ${cardToneClass}`}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setSelectedExpenseId(item.id)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          setSelectedExpenseId(item.id);
+                        }
+                      }}
+                      className="flex cursor-pointer items-center gap-3 transition-colors hover:bg-surface-inset/50 focus:outline-none"
                     >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-start gap-3">
-                          <DirectionIcon incoming={incoming} enRevision={item.estado === "EN_REVISION"} />
-                          <div>
-                            <p className="text-body font-[var(--fw-semibold)]">{relationText}</p>
-                            <p className="mt-1 text-body-sm text-muted">
-                              Plan:{" "}
-                              <span className="font-[var(--fw-medium)] text-app">
-                                {item.planName}
-                              </span>
-                            </p>
-                            {item.concept && (
-                              <p className="mt-1 text-body-sm text-muted">{item.concept}</p>
-                            )}
-                          </div>
+                      <ExpenseAvatar name={senderName} image={senderImage} />
+
+                      <div className={`flex min-w-0 flex-1 items-center gap-2 py-[var(--space-4)] ${!isLast ? "border-b border-app" : ""}`}>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-body-sm font-[var(--fw-semibold)] text-app">{senderName}</p>
+                          <p className="truncate text-caption text-muted">{secondaryLine}</p>
                         </div>
 
-                        <div className="flex flex-col items-end gap-2">
-                          <p
-                            className={`text-body font-[var(--fw-semibold)] ${
-                              activeTab === "pending"
-                                ? "text-muted"
-                                : incoming
-                                  ? "text-[#15803d]"
-                                  : "text-[#b45309]"
-                            }`}
-                          >
-                            {incoming ? "+" : "-"}
-                            {formatAmount(item.amount)}
-                          </p>
-                          <p className="text-caption text-muted">{formatDate(item.date)}</p>
-
-                          {/* Outgoing PENDIENTE: pay + mark as sent */}
-                          {activeTab === "pending" && !incoming && item.estado === "PENDIENTE" && (
-                            <PayActions
-                              item={item}
-                              isMobile={isMobile}
-                              actingId={actingId}
-                              onMarkAsSent={handleRequestConfirmation}
-                            />
-                          )}
-
-                          {/* Outgoing EN_REVISION: waiting for payee */}
-                          {activeTab === "pending" && !incoming && item.estado === "EN_REVISION" && (
-                            <span className="mt-1 flex items-center gap-1.5 text-caption text-muted">
-                              <svg viewBox="0 0 24 24" fill="none" className="size-3.5 animate-spin" stroke="currentColor" strokeWidth="2">
-                                <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" strokeLinecap="round" />
+                        <div className="flex shrink-0 items-center gap-2">
+                          {needsAction ? (
+                            <>
+                              <button
+                                type="button"
+                                disabled={actingId === item.id}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  void handleRejectReceipt(item);
+                                }}
+                                className="rounded-chip border border-app px-2.5 py-1 text-caption font-[var(--fw-medium)] text-muted disabled:opacity-50"
+                              >
+                                No recibido
+                              </button>
+                              <button
+                                type="button"
+                                disabled={actingId === item.id}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  void handleConfirmReceipt(item);
+                                }}
+                                className="rounded-chip bg-[#16a34a] px-2.5 py-1 text-caption font-[var(--fw-semibold)] text-white disabled:opacity-50"
+                              >
+                                {actingId === item.id ? "..." : "Confirmar"}
+                              </button>
+                            </>
+                          ) : (
+                            <div className="flex items-center gap-[var(--space-3)]">
+                              <p
+                                className={`text-body-sm font-[var(--fw-semibold)] ${
+                                  incoming ? "text-[var(--success,#15803d)]" : "text-[var(--warning,#b45309)]"
+                                }`}
+                              >
+                                {incoming ? "+" : "-"}{formatAmount(item.amount)}
+                              </p>
+                              <svg viewBox="0 0 24 24" fill="none" className="size-[15px] shrink-0 text-muted" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M9 18l6-6-6-6" />
                               </svg>
-                              Esperando confirmación
-                            </span>
-                          )}
-
-                          {/* Incoming PENDIENTE: waiting for payer */}
-                          {activeTab === "pending" && incoming && item.estado === "PENDIENTE" && (
-                            <span className="mt-1 text-caption text-muted">
-                              Esperando pago
-                            </span>
-                          )}
-
-                          {/* Incoming EN_REVISION: payee must confirm or reject */}
-                          {activeTab === "pending" && incoming && item.estado === "EN_REVISION" && (
-                            <ConfirmReceiptActions
-                              item={item}
-                              actingId={actingId}
-                              onConfirm={handleConfirmReceipt}
-                              onReject={handleRejectReceipt}
-                            />
+                            </div>
                           )}
                         </div>
                       </div>
@@ -374,132 +526,32 @@ function MisGastosContent() {
           </section>
         </main>
       </div>
+
+      <ExpenseDetailModal
+        item={selectedExpense}
+        profileName={profile?.nombre ?? "Tú"}
+        actingId={actingId}
+        onClose={() => setSelectedExpenseId(null)}
+        onOpenPlan={openPlan}
+        onConfirm={(item) => void handleConfirmReceipt(item)}
+        onReject={(item) => void handleRejectReceipt(item)}
+      />
     </div>
   );
 }
 
-// ── Pay actions (payer side) ──────────────────────────────────────────────────
-
-function PayActions({
-  item,
-  isMobile,
-  actingId,
-  onMarkAsSent,
-}: {
-  item: ExpenseItem;
-  isMobile: boolean;
-  actingId: number | null;
-  onMarkAsSent: (item: ExpenseItem) => void;
-}) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = () => {
-    const text = `${item.concept ? item.concept + " — " : ""}${new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" }).format(item.amount)} a ${item.counterparty}`;
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  };
-
-  return (
-    <div className="mt-1 flex flex-col items-end gap-2">
-      {isMobile ? (
-        <a
-          href="bizum://"
-          className="flex items-center gap-1.5 rounded-card bg-[#0099ff] px-3 py-1.5 text-body-sm font-[var(--fw-semibold)] text-white"
-        >
-          <svg viewBox="0 0 24 24" fill="none" className="size-3.5" stroke="currentColor" strokeWidth="2">
-            <rect x="2" y="5" width="20" height="14" rx="2" />
-            <path d="M2 10h20" />
-          </svg>
-          Pagar con Bizum
-        </a>
-      ) : (
-        <button
-          type="button"
-          onClick={handleCopy}
-          className="flex items-center gap-1.5 rounded-card border border-app bg-surface px-3 py-1.5 text-body-sm font-[var(--fw-medium)] text-app transition-colors"
-        >
-          {copied ? (
-            <>
-              <svg viewBox="0 0 24 24" fill="none" className="size-3.5 text-[var(--success)]" stroke="currentColor" strokeWidth="2.5">
-                <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              ¡Copiado!
-            </>
-          ) : (
-            <>
-              <svg viewBox="0 0 24 24" fill="none" className="size-3.5" stroke="currentColor" strokeWidth="2">
-                <rect x="9" y="9" width="13" height="13" rx="2" />
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-              </svg>
-              Copiar datos del pago
-            </>
-          )}
-        </button>
-      )}
-      <button
-        type="button"
-        disabled={actingId === item.id}
-        onClick={() => onMarkAsSent(item)}
-        className="text-caption text-muted underline underline-offset-2 disabled:opacity-50"
-      >
-        {actingId === item.id ? "Enviando…" : "Ya he pagado"}
-      </button>
-    </div>
-  );
-}
-
-// ── Confirm receipt actions (payee side) ──────────────────────────────────────
-
-function ConfirmReceiptActions({
-  item,
-  actingId,
-  onConfirm,
-  onReject,
-}: {
-  item: ExpenseItem;
-  actingId: number | null;
-  onConfirm: (item: ExpenseItem) => void;
-  onReject: (item: ExpenseItem) => void;
-}) {
-  const isActing = actingId === item.id;
-  return (
-    <div className="mt-2 flex flex-col items-end gap-2">
-      <p className="text-body-sm font-[var(--fw-medium)] text-app">
-        ¿Te ha llegado el pago?
-      </p>
-      <div className="flex gap-2">
-        <button
-          type="button"
-          disabled={isActing}
-          onClick={() => onReject(item)}
-          className="rounded-card border border-app bg-surface px-3 py-1.5 text-body-sm font-[var(--fw-medium)] text-muted transition-colors disabled:opacity-50"
-        >
-          No recibido
-        </button>
-        <button
-          type="button"
-          disabled={isActing}
-          onClick={() => onConfirm(item)}
-          className="rounded-card bg-[var(--success,#16a34a)] px-3 py-1.5 text-body-sm font-[var(--fw-semibold)] text-white transition-opacity disabled:opacity-50"
-        >
-          {isActing ? "Confirmando…" : "Sí, confirmar"}
-        </button>
-      </div>
-    </div>
-  );
-}
 
 // ── Empty state ───────────────────────────────────────────────────────────────
 
-function EmptyState({ tab }: { tab: ExpenseTab }) {
+function EmptyState({ tab, selectedPlanName }: { tab: ExpenseTab; selectedPlanName: string | null }) {
   return (
     <div className="py-[var(--space-10)] text-center">
       <p className="text-body-sm text-muted">
-        {tab === "paid"
-          ? "Aún no tienes pagos confirmados."
-          : "No tienes pagos pendientes. ¡Todo al día!"}
+        {selectedPlanName
+          ? `No hay movimientos ${tab === "history" ? "en historial" : "por resolver"} en ${selectedPlanName}.`
+          : tab === "history"
+            ? "Aún no tienes movimientos cerrados."
+            : "No tienes nada por resolver. ¡Todo al día!"}
       </p>
     </div>
   );
@@ -509,56 +561,209 @@ function EmptyState({ tab }: { tab: ExpenseTab }) {
 
 function SkeletonList() {
   return (
-    <div className="space-y-[var(--space-3)]">
-      {[1, 2, 3].map((i) => (
-        <div key={i} className="h-24 animate-pulse rounded-card border border-app bg-surface" />
+    <div className="flex flex-col">
+      {[1, 2, 3, 4].map((i, index, arr) => (
+        <div key={i} className={`flex items-center gap-3 ${index < arr.length - 1 ? "border-b border-app" : ""}`}>
+          <div className="size-11 shrink-0 animate-pulse rounded-full bg-surface-2" />
+          <div className={`flex min-w-0 flex-1 items-center justify-between gap-2 py-[var(--space-4)]`}>
+            <div className="flex flex-col gap-[var(--space-2)]">
+              <div className="h-[13px] w-[120px] animate-pulse rounded-full bg-surface-2" style={{ animationDelay: `${index * 60}ms` }} />
+              <div className="h-[11px] w-[80px] animate-pulse rounded-full bg-surface-2 opacity-60" style={{ animationDelay: `${index * 60 + 30}ms` }} />
+            </div>
+            <div className="h-[13px] w-[52px] animate-pulse rounded-full bg-surface-2" style={{ animationDelay: `${index * 60}ms` }} />
+          </div>
+        </div>
       ))}
     </div>
   );
 }
 
+
 // ── Icons ─────────────────────────────────────────────────────────────────────
 
-function DirectionIcon({ incoming, enRevision }: { incoming: boolean; enRevision: boolean }) {
+function ExpenseAvatar({ name, image }: { name: string; image: string | null }) {
+  if (image) {
+    return (
+      <div className="relative mt-0.5 size-11 shrink-0 overflow-hidden rounded-full border border-app">
+        <Image src={image} alt={name} fill sizes="44px" className="object-cover" unoptimized referrerPolicy="no-referrer" />
+      </div>
+    );
+  }
+
   return (
-    <div
-      className={`mt-1 flex size-9 shrink-0 items-center justify-center rounded-avatar border ${
-        enRevision
-          ? "border-[color-mix(in_srgb,#0099ff_40%,var(--border)_60%)] text-[#0099ff]"
-          : incoming
-            ? "border-[color-mix(in_srgb,var(--success)_32%,var(--border)_68%)] text-[var(--success)]"
-            : "border-[color-mix(in_srgb,var(--warning)_32%,var(--border)_68%)] text-[var(--warning)]"
-      }`}
-      aria-hidden="true"
-    >
-      {enRevision ? (
-        <svg viewBox="0 0 24 24" fill="none" className="size-5" stroke="currentColor" strokeWidth="1.8">
-          <path d="M12 8v4l2.5 2.5" strokeLinecap="round" strokeLinejoin="round" />
-          <circle cx="12" cy="12" r="9" />
-        </svg>
-      ) : incoming ? (
-        <ArrowDownLeftIcon />
-      ) : (
-        <ArrowUpRightIcon />
-      )}
+    <div className="mt-0.5 flex size-11 shrink-0 items-center justify-center rounded-full border border-app bg-surface-2 text-body-sm font-[var(--fw-semibold)] text-muted">
+      {(name.trim()[0] || "U").toUpperCase()}
     </div>
   );
 }
 
-function ArrowDownLeftIcon() {
+
+function PlanFilterOption({
+  label,
+  count,
+  active,
+  onClick,
+}: {
+  label: string;
+  count: number;
+  active: boolean;
+  onClick: () => void;
+}) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" className="size-5">
-      <path d="M18 6L6 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      <path d="M8 18H6V16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex w-full items-center justify-between rounded-[10px] px-[var(--space-3)] py-[10px] text-left text-body-sm transition-colors ${
+        active ? "bg-surface-inset text-app" : "text-app hover:bg-surface"
+      }`}
+    >
+      <span className={`min-w-0 truncate ${active ? "font-[var(--fw-semibold)]" : "font-[var(--fw-medium)]"}`}>
+        {label}
+      </span>
+      <div className="ml-[var(--space-3)] flex shrink-0 items-center">
+        <span className={`inline-flex min-w-[22px] items-center justify-center rounded-full px-1.5 py-[2px] text-[14px] font-[var(--fw-semibold)] ${
+          active ? "bg-[var(--primary)] text-[var(--contrast)]" : "bg-app text-muted"
+        }`}>
+          {count}
+        </span>
+      </div>
+    </button>
   );
 }
 
-function ArrowUpRightIcon() {
+function ExpenseDetailModal({
+  item,
+  profileName,
+  actingId,
+  onClose,
+  onOpenPlan,
+  onConfirm,
+  onReject,
+}: {
+  item: ExpenseItem | null;
+  profileName: string;
+  actingId: number | null;
+  onClose: () => void;
+  onOpenPlan: (planId: number) => void;
+  onConfirm: (item: ExpenseItem) => void;
+  onReject: (item: ExpenseItem) => void;
+}) {
+  if (!item) return null;
+
+  const incoming = item.direction === "incoming";
+  const otherPartyLabel = incoming ? item.counterparty : `${profileName} (Tú)`;
+  const statusMeta = getExpenseStatusMeta(item);
+  const requiresValidation = incoming && item.estado === "EN_REVISION";
+
   return (
-    <svg viewBox="0 0 24 24" fill="none" className="size-5">
-      <path d="M6 18L18 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      <path d="M16 6H18V8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
+    <div
+      className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center bg-black/50 px-[var(--space-4)] py-[var(--space-6)] backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-[520px] rounded-[18px] border border-app bg-app shadow-elev-4"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-[var(--space-4)] border-b border-app px-[var(--space-5)] py-[var(--space-4)]">
+          <div className="min-w-0">
+            <p className="text-caption font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
+              {item.planName}
+            </p>
+            <h2 className="mt-[6px] text-[var(--font-h3)] font-[var(--fw-bold)] leading-[1.15] text-app">
+              {incoming
+                ? item.estado === "CONFIRMADA"
+                  ? "Pago recibido"
+                  : item.estado === "EN_REVISION"
+                  ? "Pago por confirmar"
+                  : "Pago pendiente"
+                : item.estado === "CONFIRMADA"
+                  ? "Pago realizado"
+                  : item.estado === "EN_REVISION"
+                  ? "Pago enviado"
+                  : "Pago pendiente"}
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex size-9 items-center justify-center rounded-full text-muted transition-colors hover:bg-surface"
+            aria-label="Cerrar detalle"
+          >
+            <svg viewBox="0 0 24 24" fill="none" className="size-[18px]">
+              <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="space-y-[var(--space-4)] px-[var(--space-5)] py-[var(--space-5)]">
+          <div className="flex items-start justify-between gap-[var(--space-4)]">
+            <div>
+              <p className="text-caption font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
+                Importe
+              </p>
+              <p className={`mt-[6px] text-[32px] font-[var(--fw-bold)] leading-none ${incoming ? "text-[var(--success,#15803d)]" : "text-[var(--warning,#b45309)]"}`}>
+                {incoming ? "+" : "-"}{formatAmount(item.amount)}
+              </p>
+            </div>
+            <span className={`inline-flex rounded-full border px-[var(--space-3)] py-[6px] text-body-sm font-[var(--fw-semibold)] ${statusMeta.toneClass}`}>
+              {statusMeta.text}
+            </span>
+          </div>
+
+          <p className="text-body-sm text-muted">
+            {statusMeta.description}
+          </p>
+
+          <div className="grid grid-cols-1 gap-[var(--space-3)] sm:grid-cols-2">
+            <DetailCard label="Persona" value={otherPartyLabel} />
+            <DetailCard label="Fecha" value={formatDetailDate(item.date)} />
+            <DetailCard label="Plan" value={item.planName} />
+            <DetailCard label="Concepto" value={item.concept?.trim() || "Sin concepto"} />
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-[var(--space-2)] border-t border-app px-[var(--space-5)] py-[var(--space-4)]">
+          {requiresValidation && (
+            <div className="flex gap-[var(--space-2)]">
+              <button
+                type="button"
+                disabled={actingId === item.id}
+                onClick={() => onReject(item)}
+                className="flex-1 rounded-full border border-app py-[12px] text-body-sm font-[var(--fw-semibold)] text-app transition-colors hover:bg-surface disabled:opacity-50"
+              >
+                No recibido
+              </button>
+              <button
+                type="button"
+                disabled={actingId === item.id}
+                onClick={() => onConfirm(item)}
+                className="flex-1 rounded-full bg-[var(--success)] py-[12px] text-body-sm font-[var(--fw-semibold)] text-white transition-opacity hover:opacity-85 disabled:opacity-50"
+              >
+                {actingId === item.id ? "Confirmando..." : "Confirmar pago"}
+              </button>
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => onOpenPlan(item.planId)}
+            className="w-full rounded-full bg-[var(--text-primary)] py-[12px] text-body-sm font-[var(--fw-semibold)] text-contrast-token transition-opacity hover:opacity-85"
+          >
+            Ir al plan
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DetailCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="py-[var(--space-2)]">
+      <p className="text-caption font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
+        {label}
+      </p>
+      <p className="mt-[4px] text-body-sm font-[var(--fw-semibold)] text-app">{value}</p>
+    </div>
   );
 }
