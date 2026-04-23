@@ -15,7 +15,8 @@ export type UserSettingsVisibility = ProfileVisibility;
 export type UserProfileAndSettingsDto = UserProfileAndSettingsRow;
 
 export async function getUserSettings(userId: string): Promise<UserSettingsDto | null> {
-  return fetchUserSettingsByUserId(userId);
+  void userId;
+  return fetchUserSettingsByUserId();
 }
 
 export async function saveUserProfileAndSettings(

@@ -1,15 +1,18 @@
 import {
   listChatsEndpoint,
+  fetchPlanChatItem,
   getOrCreateDirectoChatEndpoint,
   createGrupoChatEndpoint,
   listMensajesEndpoint,
   sendMensajeEndpoint,
+  sendBotMensajeEndpoint,
   markChatReadEndpoint,
   getChatMiembrosEndpoint,
   leaveChatEndpoint,
   updateChatFotoEndpoint,
   addChatMemberEndpoint,
   editMensajeEndpoint,
+  closePollEndpoint,
   deleteMensajeEndpoint,
   reactMensajeEndpoint,
   getMyReaccionesEndpoint,
@@ -19,6 +22,8 @@ import {
   type MensajeRow,
   type ChatMiembro,
 } from "@/services/api/endpoints/chat.endpoint";
+
+export { fetchPlanChatItem };
 
 export type { ChatListItem, MensajeRow, ChatMiembro };
 
@@ -61,6 +66,10 @@ export async function sendMensaje(params: {
   return sendMensajeEndpoint(params);
 }
 
+export async function sendBotMensaje(chatId: string, texto: string): Promise<number> {
+  return sendBotMensajeEndpoint(chatId, texto);
+}
+
 export async function markChatRead(chatId: string): Promise<void> {
   return markChatReadEndpoint(chatId);
 }
@@ -83,6 +92,10 @@ export async function addChatMember(chatId: string, userId: string): Promise<voi
 
 export async function editMensaje(mensajeId: number, texto: string): Promise<void> {
   return editMensajeEndpoint(mensajeId, texto);
+}
+
+export async function closePoll(mensajeId: number): Promise<void> {
+  return closePollEndpoint(mensajeId);
 }
 
 export async function deleteMensaje(mensajeId: number): Promise<void> {

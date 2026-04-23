@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "build:mobile": "cross-env BUILD_TARGET=capacitor next build",
+    "build:mobile": "node scripts/build-mobile.mjs",
     "start": "next start",
     "lint": "eslint ."
   },
@@ -28,13 +28,17 @@
     "date-fns": "^4.1.0",
     "firebase": "^12.9.0",
     "firebase-admin": "^13.6.1",
+    "jspdf": "^4.2.1",
     "livekit-client": "^2.17.3",
     "livekit-server-sdk": "^2.15.0",
+    "lucide-react": "^1.7.0",
     "next": "16.1.6",
+    "qrcode.react": "^4.2.0",
     "react": "19.2.3",
     "react-day-picker": "^9.14.0",
     "react-dom": "19.2.3",
-    "stripe": "^20.4.1"
+    "stripe": "^20.4.1",
+    "unpdf": "^1.4.0"
   },
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",

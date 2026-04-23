@@ -16,6 +16,7 @@ export type CreateCommentParams = {
   userName: string;
   userProfileImage?: string | null;
   content: string;
+  parentId?: string | null;
 };
 
 export type ToggleCommentLikeParams = {
