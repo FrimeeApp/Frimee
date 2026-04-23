@@ -11,8 +11,10 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
+    console.log("[AuthGuard] loading=%s user=%s path=%s", loading, !!user, typeof window !== "undefined" ? window.location.pathname : "");
     if (!loading && !user) {
       const redirect = encodeURIComponent(window.location.pathname + window.location.search);
+      console.warn("[AuthGuard] NO USER → redirecting to login, redirect=", redirect);
       router.replace(`/login?redirect=${redirect}`);
     }
     if (!loading && user) {

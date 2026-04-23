@@ -156,6 +156,41 @@ export async function listActiveFriendFlightsEndpoint(): Promise<PlanTicket[]> {
   return (data ?? []) as PlanTicket[];
 }
 
+export async function listActiveFriendFerriesEndpoint(): Promise<PlanTicket[]> {
+  const supabase = createBrowserSupabaseClient();
+  const now = new Date().toISOString();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data, error } = await supabase
+    .from("plan_tickets")
+    .select("*")
+    .eq("type", "ferry")
+    .eq("status", "upcoming")
+    .lte("starts_at", now)
+    .or(`ends_at.is.null,ends_at.gte.${now}`)
+    .neq("user_id", user.id);
+
+  if (error) throw error;
+  if (!data?.length) return [];
+
+  // Fetch names separately
+  const userIds = [...new Set(data.map(r => r.user_id as string))];
+  const { data: profiles } = await supabase
+    .from("usuarios_public")
+    .select("id, nombre")
+    .in("id", userIds);
+
+  const nameMap: Record<string, string> = {};
+  for (const p of profiles ?? []) nameMap[p.id] = p.nombre ?? "";
+
+  return data.map(r => ({
+    ...r,
+    shared_by_user_id: r.user_id as string,
+    shared_by_nombre: nameMap[r.user_id as string] ?? null,
+  })) as PlanTicket[];
+}
+
 export async function listTicketsForPlanEndpoint(planId: number): Promise<PlanTicket[]> {
   const supabase = createBrowserSupabaseClient();
   const { data, error } = await supabase.rpc("fn_tickets_list_for_plan", { p_plan_id: planId });
