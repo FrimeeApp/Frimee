@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/cayet/.claude/projects/c--Users-cayet-Desktop-Proyectos-Frimee/**)",
+      "Bash(find c:/Users/cayet/Desktop/Proyectos/Frimee -type f -name *.sql -exec grep -l \"liquidaciones\\\\|gastos\" {})",
+      "Bash(2)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\cayet\\.claude\\projects\\c--Users-cayet-Desktop-Proyectos-Frimee\\memory",
+      "c:\\Users\\cayet\\.claude\\projects\\c--Users-cayet-Desktop-Proyectos-Frimee"
+    ]
+  }
+}

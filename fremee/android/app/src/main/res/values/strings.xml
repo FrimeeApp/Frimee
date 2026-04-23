@@ -4,4 +4,8 @@
     <string name="title_activity_main">Frimee</string>
     <string name="package_name">com.frimee.app</string>
     <string name="custom_url_scheme">com.frimee.app</string>
+    <string name="appwidget_text">Frimee</string>
+    <string name="add_widget">Add widget</string>
+    <string name="app_widget_description">Tu proximo plan en la pantalla de inicio</string>
+    <string name="countdown_widget_description">Cuenta atras hasta tu proximo plan</string>
 </resources>
