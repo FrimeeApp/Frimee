@@ -139,7 +139,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const init = async () => {
       try {
+        console.log("[AuthProvider] init path=", typeof window !== "undefined" ? window.location.pathname : "ssr");
         const { data, error } = await supabase.auth.getSession();
+        console.log("[AuthProvider] getSession session=", !!data.session, "error=", error?.message ?? null);
         if (error) {
           console.warn("[auth] getSession error:", error.message);
         }
