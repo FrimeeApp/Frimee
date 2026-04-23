@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import { Capacitor } from "@capacitor/core";
 import { useAuth } from "@/providers/AuthProvider";
 import CreatePlanModal, { type CreatePlanPayload } from "@/components/plans/CreatePlanModal";
 import { createPlan } from "@/services/api/repositories/plans.repository";
@@ -177,7 +178,15 @@ export default function AppSidebar({ onCreatePlan, hideMobileNav }: AppSidebarPr
     };
   }, [searchPopoverOpen, searchValue, user?.id]);
 
-  const openProfile = () => router.push(user?.id ? `/profile/${user.id}` : "/settings");
+  const openProfile = () => {
+    if (!user?.id) {
+      router.push("/settings");
+      return;
+    }
+
+    const isCapacitor = Capacitor.isNativePlatform();
+    router.push(isCapacitor ? `/profile/static?id=${user.id}` : `/profile/${user.id}`);
+  };
   const openCreatePlan = () => {
     if (onCreatePlan) {
       onCreatePlan();
