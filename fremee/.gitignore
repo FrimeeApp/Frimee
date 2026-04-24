@@ -141,3 +141,7 @@ ios/App/**/*.xcuserstate
 
 # General (por si aparece)
 .capacitor/
+
+# Capacitor generated config
+ios/App/App/capacitor.config.json
+android/app/src/main/assets/capacitor.config.json

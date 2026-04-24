@@ -295,7 +295,8 @@ export default function AppSidebar({ onCreatePlan, hideMobileNav }: AppSidebarPr
     <>
       {/* Mobile bottom nav */}
       <nav
-        className={`fixed inset-x-0 bottom-0 z-sticky flex h-[calc(var(--space-16)+env(safe-area-inset-bottom))] items-center justify-around border-t border-strong bg-app px-[var(--space-5)] pb-safe transition-transform duration-[var(--duration-slow)] [transition-timing-function:var(--ease-decelerate)] md:hidden ${
+        style={{ ["--mobile-nav-base-height" as const]: "clamp(56px, 8dvh, 64px)" }}
+        className={`fixed inset-x-0 bottom-0 z-sticky flex h-[calc(var(--mobile-nav-base-height)+env(safe-area-inset-bottom))] items-center justify-around border-t border-strong bg-app px-[clamp(var(--space-4),5vw,var(--space-5))] pb-safe transition-transform duration-[var(--duration-slow)] [transition-timing-function:var(--ease-decelerate)] md:hidden ${
           mobileNavVisible ? "translate-y-0" : "translate-y-full"
         } ${hideMobileNav || createPlanModalOpen ? "!translate-y-full" : ""}`}
       >

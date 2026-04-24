@@ -4,8 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "NODE_OPTIONS=\"--max-old-space-size=4096\" next dev",
+    "dev:mobile": "NODE_OPTIONS=\"--max-old-space-size=4096\" next dev --hostname 0.0.0.0",
     "build": "NODE_OPTIONS=\"--max-old-space-size=4096\" next build",
     "build:mobile": "node scripts/build-mobile.mjs",
+    "cap:sync:ios:live": "node scripts/cap-live-reload.mjs ios",
+    "cap:open:ios": "npx cap open ios",
     "start": "next start",
     "lint": "eslint ."
   },
@@ -17,6 +20,7 @@
     "@capacitor/core": "^8.1.0",
     "@capacitor/geolocation": "^8.1.0",
     "@capacitor/ios": "^8.1.0",
+    "@capacitor/keyboard": "^8.0.3",
     "@capacitor/preferences": "^8.0.1",
     "@capacitor/screen-orientation": "^8.0.1",
     "@capacitor/status-bar": "^8.0.1",

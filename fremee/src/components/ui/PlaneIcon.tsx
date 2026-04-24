@@ -1,11 +1,14 @@
+import type { CSSProperties } from "react";
+
 type Props = {
   liked: boolean;
   animating?: boolean;
   size?: number;
   className?: string;
+  style?: CSSProperties;
 };
 
-export default function PlaneIcon({ liked, animating = false, size = 28, className }: Props) {
+export default function PlaneIcon({ liked, animating = false, size = 28, className, style }: Props) {
   return (
     <svg
       width={size}
@@ -13,6 +16,7 @@ export default function PlaneIcon({ liked, animating = false, size = 28, classNa
       viewBox="0 0 24 24"
       fill="currentColor"
       aria-hidden="true"
+      style={style}
       className={`transition-all duration-150 ${className ?? (liked ? "text-primary-token" : "text-app")} ${animating ? "scale-[1.2]" : "scale-100"}`}
     >
       <path
