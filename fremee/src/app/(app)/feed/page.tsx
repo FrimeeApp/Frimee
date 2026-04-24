@@ -154,6 +154,8 @@ export default function FeedPage() {
   const [suggestedProfiles, setSuggestedProfiles] = useState<PublicUserProfileDto[]>([]);
   const [recentProfiles, setRecentProfiles] = useState<RecentProfile[]>([]);
   const mobileSearchInputRef = useRef<HTMLInputElement>(null);
+  const mobileHeaderRef = useRef<HTMLDivElement | null>(null);
+  const [mobileHeaderHeight, setMobileHeaderHeight] = useState(60);
 
   useEffect(() => {
     if (!currentUserId) {
@@ -292,6 +294,27 @@ export default function FeedPage() {
     return () => window.removeEventListener("resize", updateIndicator);
   }, [activeFeedTab]);
 
+  useEffect(() => {
+    const header = mobileHeaderRef.current;
+    if (!header || typeof window === "undefined") return;
+
+    const measure = () => {
+      const nextHeight = Math.ceil(header.getBoundingClientRect().height);
+      setMobileHeaderHeight((prev) => (prev === nextHeight ? prev : nextHeight));
+    };
+
+    measure();
+
+    const observer = new ResizeObserver(measure);
+    observer.observe(header);
+    window.addEventListener("resize", measure);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, []);
+
   // Unread notifications badge
   useEffect(() => {
     if (!currentUserId) return;
@@ -375,6 +398,9 @@ export default function FeedPage() {
     closeMobileSearch();
   };
 
+  const mobileBottomNavBaseHeight = "clamp(56px, 8dvh, 64px)";
+  const mobileFeedViewportHeight = `calc(100dvh - env(safe-area-inset-top) - ${mobileHeaderHeight}px - ${mobileBottomNavBaseHeight} - env(safe-area-inset-bottom))`;
+
   if (loading) return <LoadingScreen />;
 
   return (
@@ -388,11 +414,14 @@ export default function FeedPage() {
           <div className="mx-auto max-w-[1160px]">
             <div className="md:border-b md:border-[#262626]">
               <div className="mx-auto w-full max-w-[760px] xl:mx-0">
-              <div className="sticky top-0 z-[100] bg-app flex items-center gap-[var(--space-3)] py-[var(--space-2)] pl-[max(var(--page-margin-x),env(safe-area-inset-left))] pr-[max(var(--page-margin-x),env(safe-area-inset-right))] md:hidden">
+              <div
+                ref={mobileHeaderRef}
+                className="sticky top-0 z-[100] bg-app flex items-center gap-[clamp(10px,2.8vw,var(--space-3))] py-[clamp(6px,1.6dvh,var(--space-2))] pl-[max(var(--page-margin-x),env(safe-area-inset-left))] pr-[max(var(--page-margin-x),env(safe-area-inset-right))] md:hidden"
+              >
                 <button
                   type="button"
                   onClick={() => setActiveFeedTab((prev) => (prev === "explore" ? "following" : "explore"))}
-                  className="flex h-[44px] items-center gap-[8px] px-[4px] text-body-sm font-[700] text-app"
+                  className="flex h-[clamp(40px,5.8dvh,44px)] items-center gap-[8px] px-[4px] text-body-sm font-[700] text-app"
                 >
                   <span>{activeFeedTab === "explore" ? "Explorar" : "Siguiendo"}</span>
                   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[18px]">
@@ -404,22 +433,22 @@ export default function FeedPage() {
                   type="button"
                   onClick={() => setMobileSearchOpen(true)}
                   aria-label="Buscar"
-                  className="flex h-[44px] min-w-0 flex-1 items-center gap-[10px] rounded-[8px] bg-[var(--search-field-bg)] px-[14px] text-muted transition-opacity hover:opacity-80"
+                  className="flex h-[clamp(40px,5.8dvh,44px)] min-w-0 flex-1 items-center gap-[10px] rounded-[8px] bg-[var(--search-field-bg)] px-[clamp(12px,3.4vw,14px)] text-muted transition-opacity hover:opacity-80"
                 >
-                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[22px] shrink-0">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[clamp(20px,5.6vw,22px)] shrink-0">
                     <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.8" />
                     <path d="M16 16L20.5 20.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
                   </svg>
-                  <span className="truncate text-[15px]">Buscar</span>
+                  <span className="truncate text-[clamp(14px,4vw,15px)]">Buscar</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setNotifPanelOpen(true)}
                   aria-label="Notificaciones"
-                  className="relative flex h-[44px] w-[44px] shrink-0 items-center justify-center text-app transition-opacity hover:opacity-70"
+                  className="relative flex h-[clamp(40px,5.8dvh,44px)] w-[clamp(40px,5.8dvh,44px)] shrink-0 items-center justify-center text-app transition-opacity hover:opacity-70"
                 >
-                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[28px]">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[clamp(24px,7vw,28px)]">
                     <path
                       d="M6 10.5C6 7.46 8.24 5 12 5s6 2.46 6 5.5v3l1.5 2.5H4.5L6 13.5v-3Z"
                       stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"
@@ -439,7 +468,7 @@ export default function FeedPage() {
                 <Link
                   href={currentUserId ? `/profile/${currentUserId}` : "/settings"}
                   aria-label="Perfil"
-                  className="flex h-[44px] w-[44px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset transition-opacity hover:opacity-80"
+                  className="flex h-[clamp(40px,5.8dvh,44px)] w-[clamp(40px,5.8dvh,44px)] shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset transition-opacity hover:opacity-80"
                 >
                   {profile?.profile_image ? (
                     <NextImage src={profile.profile_image} alt="Foto de perfil" width={44} height={44} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
@@ -691,9 +720,16 @@ export default function FeedPage() {
                         : "Aun no hay publicaciones para mostrar."}
                     </div>
                   ) : (
-                    <div className="overflow-y-scroll snap-y snap-mandatory scrollbar-hide h-[calc(100svh-60px-env(safe-area-inset-bottom))] md:h-[calc(100dvh-100px)]">
+                    <div
+                      className="overflow-y-scroll snap-y snap-mandatory scrollbar-hide h-[var(--mobile-feed-viewport-height)] md:h-[calc(100dvh-100px)]"
+                      style={{ ["--mobile-feed-viewport-height" as const]: mobileFeedViewportHeight }}
+                    >
                       {visiblePosts.map((post, idx) => (
-                        <div key={post.id} className="snap-start h-full">
+                        <div
+                          key={post.id}
+                          className="h-[var(--mobile-feed-viewport-height)] snap-start snap-always md:h-full"
+                          style={{ ["--mobile-feed-viewport-height" as const]: mobileFeedViewportHeight }}
+                        >
                           <FeedCard post={post} currentUserId={currentUserId} currentUserName={profile?.nombre ?? null} currentUserProfileImage={profile?.profile_image ?? null} nextPostHasImage={visiblePosts[idx + 1]?.hasImage ?? true} initialFollowing={followedIds.has(post.plan.ownerUserId ?? "")} initialSaved={savedPlanIds.has(post.plan.id)} />
                         </div>
                       ))}
@@ -1058,6 +1094,19 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
   const [replyingTo, setReplyingTo] = useState<{ commentId: string; userName: string } | null>(null);
   const [saved, setSaved] = useState(initialSaved);
   const isOwnPost = post.plan.ownerUserId === currentUserId;
+  const mobileImagePostVars = post.hasImage
+    ? ({
+        ["--feed-mobile-side-inset" as const]: "clamp(12px, 4vw, 16px)",
+        ["--feed-mobile-header-top" as const]: "clamp(12px, 2.2dvh, 18px)",
+        ["--feed-mobile-actions-gap" as const]: "clamp(12px, 2dvh, 16px)",
+        ["--feed-mobile-actions-bottom" as const]: "clamp(72px, 10dvh, 92px)",
+        ["--feed-mobile-footer-bottom" as const]: "clamp(16px, calc(env(safe-area-inset-bottom) + 8px), 28px)",
+        ["--feed-mobile-avatar-size" as const]: "clamp(30px, 8.6vw, 34px)",
+        ["--feed-mobile-icon-size" as const]: "clamp(30px, 9vw, 34px)",
+        ["--feed-mobile-title-size" as const]: "clamp(16px, 4.8vw, 18px)",
+        ["--feed-mobile-meta-size" as const]: "clamp(12px, 3.7vw, 14px)",
+      } satisfies React.CSSProperties)
+    : undefined;
 
   // ── Slides (swipeable stories) ────────────────────────────────────────────
   const [slideIndex, setSlideIndex] = useState(0);
@@ -1131,7 +1180,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
   function renderImageSlide(imageUrl: string, alt: string, active: boolean, key: string) {
     const base = "absolute inset-0 transition-opacity duration-200 ease-out will-change-[opacity] " + (active ? "opacity-100 z-[1]" : "opacity-0 z-0");
     return (
-      <div key={key} className={base}>
+      <div key={key} className={`${base} bg-black`}>
         <NextImage
           src={imageUrl}
           alt={alt}
@@ -1596,7 +1645,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
   };
 
   return (
-    <article className={`relative h-full overflow-hidden md:overflow-visible ${post.hasImage && !nextPostHasImage ? "" : ""}`}>
+    <article className={`relative h-full overflow-hidden md:overflow-visible ${post.hasImage && !nextPostHasImage ? "" : ""}`} style={mobileImagePostVars}>
 
       {/* ── MOBILE: full-screen snap card ── */}
       <div
@@ -1619,7 +1668,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
           const active = i === clampedIndex;
           if (slide.type === "cover") {
             return post.hasImage && post.coverImage ? (
-              <div key="cover" className="absolute inset-0">
+              <div key="cover" className="absolute inset-0 bg-black">
                 {renderImageSlide(post.coverImage, "Imagen del plan", active, "cover-image")}
                 {!imgLoaded && active && <div className="skeleton-shimmer absolute inset-0 z-[2]" aria-hidden="true" />}
                 <NextImage
@@ -1744,10 +1793,10 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
         )}
 
         {/* Top: avatar + name + follow + progress bars (image posts only) */}
-        {post.hasImage && <div className="absolute inset-x-0 top-0 z-20 flex flex-col pt-4" style={{ filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.45))" }}>
+        {post.hasImage && <div className="absolute inset-x-0 top-0 z-20 flex flex-col pt-[var(--feed-mobile-header-top)]" style={{ filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.45))" }}>
           {/* Progress bars row */}
           {slides.length > 1 && (
-            <div className="flex items-center gap-[3px] px-3 pb-2">
+            <div className="flex items-center gap-[3px] px-[var(--feed-mobile-side-inset)] pb-2">
               {slides.map((_, i) => (
                 <div
                   key={i}
@@ -1758,13 +1807,13 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
             </div>
           )}
           {/* Avatar + name row */}
-          <div className="flex items-center gap-2.5 px-4">
+          <div className="flex items-center gap-2.5 px-[var(--feed-mobile-side-inset)]">
           <Link
             href={`/profile/${post.plan.ownerUserId}`}
             onClick={(e) => e.stopPropagation()}
             className="flex items-center gap-2 min-w-0"
           >
-            <div className="flex size-[34px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-raised)]">
+            <div className="flex size-[var(--feed-mobile-avatar-size)] shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-raised)]">
               {post.avatarImage ? (
                 <NextImage src={post.avatarImage} alt={post.avatarLabel} width={34} height={34} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
               ) : (
@@ -1797,8 +1846,8 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
 
         {/* Right: actions (image posts only) */}
         {post.hasImage && <div
-          className="absolute right-4 bottom-0 z-20 flex flex-col items-center gap-4"
-          style={{ paddingBottom: `calc(152px + env(safe-area-inset-bottom))`, filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.4))" }}
+          className="absolute bottom-0 right-[var(--feed-mobile-side-inset)] z-20 flex flex-col items-center gap-[var(--feed-mobile-actions-gap)]"
+          style={{ paddingBottom: 'var(--feed-mobile-actions-bottom)', filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.4))" }}
         >
           <button
             type="button"
@@ -1807,7 +1856,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
             disabled={!currentUserId || likeLoading}
             aria-label={liked ? "Quitar like" : "Dar like"}
           >
-            <PlaneIcon liked={liked} animating={likeAnimating} size={34} className={liked ? "text-primary-token" : "text-white"} />
+            <PlaneIcon liked={liked} animating={likeAnimating} size={34} className={liked ? "text-primary-token" : "text-white"} style={{ width: "var(--feed-mobile-icon-size)", height: "var(--feed-mobile-icon-size)" }} />
             <span className={`text-[13px] font-[700] leading-none ${likeCount > 0 ? "text-white" : "invisible"}`}>{likeCount || 0}</span>
           </button>
           <button
@@ -1816,7 +1865,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
             onClick={(e) => { e.stopPropagation(); openCommentsModal(); }}
             aria-label="Comentarios"
           >
-            <svg viewBox="0 0 24 24" fill="currentColor" className="size-[34px]" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="currentColor" className="size-[34px]" style={{ width: "var(--feed-mobile-icon-size)", height: "var(--feed-mobile-icon-size)" }} aria-hidden="true">
               <path d="M12 4C7.582 4 4 6.91 4 10.5C4 12.31 4.913 13.947 6.39 15.109C6.272 16.213 5.79 17.343 4.98 18.316C4.787 18.549 5.02 18.88 5.315 18.785C7.005 18.243 8.357 17.471 9.235 16.86C10.115 17.113 11.04 17.25 12 17.25C16.418 17.25 20 14.34 20 10.75C20 7.16 16.418 4 12 4Z" />
             </svg>
             <span className={`text-[13px] font-[700] leading-none ${commentsSection.length > 0 ? "text-white" : "invisible"}`}>{commentsSection.length || 0}</span>
@@ -1826,12 +1875,12 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
         {post.hasImage && !isOwnPost && (
           <button
             type="button"
-            className="absolute bottom-0 right-4 z-20 flex items-center justify-center text-white active:scale-90 transition-transform"
-            style={{ paddingBottom: `max(88px, calc(88px + env(safe-area-inset-bottom)))`, filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.4))" }}
+            className="absolute bottom-0 right-[var(--feed-mobile-side-inset)] z-20 flex items-center justify-center text-white active:scale-90 transition-transform"
+            style={{ paddingBottom: 'var(--feed-mobile-footer-bottom)', filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.4))" }}
             onClick={(e) => { e.stopPropagation(); handleToggleSave(); }}
             aria-label={saved ? "Quitar guardado" : "Guardar"}
           >
-            <svg width={34} height={34} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className={saved ? "text-primary-token" : "text-white"}>
+            <svg width={34} height={34} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className={saved ? "text-primary-token" : "text-white"} style={{ width: "var(--feed-mobile-icon-size)", height: "var(--feed-mobile-icon-size)" }}>
               <path d="M7 4.5H17C17.55 4.5 18 4.95 18 5.5V20L12 16.2L6 20V5.5C6 4.95 6.45 4.5 7 4.5Z" />
             </svg>
           </button>
@@ -1839,8 +1888,8 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
 
         {/* Bottom: info (image posts only) */}
         {post.hasImage && <div
-          className="absolute inset-x-0 bottom-0 z-20 px-4 pr-[76px]"
-          style={{ paddingBottom: `max(88px, calc(88px + env(safe-area-inset-bottom)))`, filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.45))" }}
+          className="absolute inset-x-0 bottom-0 z-20 px-[var(--feed-mobile-side-inset)] pr-[76px]"
+          style={{ paddingBottom: 'var(--feed-mobile-footer-bottom)', filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.45))" }}
         >
           {currentSlide.type === "summary" ? (
             /* Summary slide: mini itinerary + expenses (sombra en contenedor padre) */
@@ -1905,9 +1954,9 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
             /* Cover / photo slides: title + location */
             <div className="min-w-0">
               {post.plan.title && (
-                <p className="text-[18px] font-[800] leading-tight text-white">{post.plan.title}</p>
+                <p className="text-[var(--feed-mobile-title-size)] font-[800] leading-tight text-white">{post.plan.title}</p>
               )}
-              <p className="mt-[2px] text-[14px] font-[600] text-white/80">
+              <p className="mt-[2px] text-[var(--feed-mobile-meta-size)] font-[600] text-white/80">
                 {[
                   post.plan.locationName,
                   formatDate(post.plan.startsAt) === formatDate(post.plan.endsAt)

@@ -6,7 +6,7 @@ import { MapPin } from "lucide-react";
 
 export function AuthSplitLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="h-dvh w-full overflow-hidden bg-surface">
+    <div className="fixed inset-0 w-full bg-surface">
       <div className="grid h-full grid-cols-4 gap-0 overflow-hidden min-[1025px]:grid-cols-12">
         <section className="relative hidden overflow-hidden bg-primary-token text-contrast-token min-[1025px]:col-span-6 min-[1025px]:block min-[1025px]:h-full">
           <div className="pointer-events-none absolute inset-0">
@@ -63,14 +63,14 @@ export function AuthSplitLayout({ children }: { children: ReactNode }) {
 
         </section>
 
-        <main className="col-span-full overflow-hidden bg-surface min-[1025px]:col-span-6">
-          <div className="flex h-full flex-col px-[max(var(--space-5),env(safe-area-inset-left))] pb-[var(--space-8)] pt-[var(--space-6)] min-[800px]:py-[var(--space-8)] lg:px-[clamp(44px,4vw,72px)]">
-            <div className="sticky top-[max(var(--space-12),env(safe-area-inset-top))] z-10 flex justify-center pb-[var(--space-6)]">
-              <div className="w-full max-w-[420px] text-center [font-family:var(--font-display-face)] text-[1.95rem] leading-none text-primary-token">
-                Frimee
-              </div>
+        <main className="col-span-full flex flex-col overflow-hidden bg-surface pt-[env(safe-area-inset-top)] min-[1025px]:col-span-6">
+          <div className="shrink-0 flex justify-center px-[max(var(--space-5),env(safe-area-inset-left))] pt-[var(--space-4)] pb-[var(--space-4)] min-[800px]:pt-[var(--space-6)] min-[800px]:pb-[var(--space-5)] lg:px-[clamp(44px,4vw,72px)]">
+            <div className="w-full max-w-[420px] text-center [font-family:var(--font-display-face)] text-[1.95rem] leading-none text-primary-token">
+              Frimee
             </div>
-            <div className="flex flex-1 items-center justify-center">{children}</div>
+          </div>
+          <div className="flex flex-1 items-center justify-center overflow-y-auto px-[max(var(--space-5),env(safe-area-inset-left))] pb-[var(--space-6)] min-[800px]:pb-[var(--space-8)] lg:px-[clamp(44px,4vw,72px)]">
+            {children}
           </div>
         </main>
       </div>

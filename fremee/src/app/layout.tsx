@@ -20,8 +20,17 @@ const instrumentSerif = Instrument_Serif({
 });
 
 export const metadata: Metadata = {
-  title: "Fremee",
+  title: "Frimee",
   description: "Organiza planes, viajes y grupos",
+  icons: {
+    icon: [
+      { url: "/logo_app_frimee.png" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+    shortcut: ["/logo_app_frimee.png"],
+  },
 };
 
 export const viewport: Viewport = {
