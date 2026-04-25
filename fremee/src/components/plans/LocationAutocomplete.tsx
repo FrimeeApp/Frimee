@@ -23,6 +23,7 @@ export default function LocationAutocomplete({
   onCommit,
   onEnter,
   dropdownVariant = "plain",
+  autoFocus = false,
 }: {
   value: string;
   onChange: (v: string, coords?: Coords) => void;
@@ -31,6 +32,7 @@ export default function LocationAutocomplete({
   onCommit?: () => void;
   onEnter?: () => void;
   dropdownVariant?: "plain" | "surface";
+  autoFocus?: boolean;
 }) {
   const [mapsReady, setMapsReady] = useState(
     () =>
@@ -45,6 +47,12 @@ export default function LocationAutocomplete({
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isMounted = typeof document !== "undefined";
+
+  useEffect(() => {
+    if (!autoFocus) return;
+    const frame = window.requestAnimationFrame(() => inputRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [autoFocus]);
 
   useEffect(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -129,15 +137,22 @@ export default function LocationAutocomplete({
   };
 
   return (
-    <div ref={wrapperRef} className={`relative flex-1 ${className ?? ""}`}>
+    <div
+      ref={wrapperRef}
+      className={`relative flex-1 ${className ?? ""}`}
+      onPointerUp={() => inputRef.current?.focus()}
+    >
       <input
         ref={inputRef}
         value={value}
+        autoFocus={autoFocus}
         onChange={(e) => handleChange(e.target.value)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         onKeyDown={(e) => {
           if (e.key === "Enter") { e.preventDefault(); setOpen(false); onEnter?.(); }
         }}
+        inputMode="search"
+        enterKeyHint="search"
         placeholder={placeholder}
         className="w-full border-none bg-transparent text-body outline-none ring-0 focus:border-none focus:outline-none focus:ring-0 placeholder:text-muted"
       />

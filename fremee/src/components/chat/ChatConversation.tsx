@@ -1621,7 +1621,7 @@ export function ChatConversation({
 
       {/* Header */}
       {!embedded && (
-        <div className="flex items-center gap-[var(--space-3)] border-b border-app px-[var(--space-3)] pb-[var(--space-3)] md:px-[var(--space-4)]">
+        <div className="flex items-center gap-[var(--space-3)] border-b border-app px-[var(--space-3)] pb-[var(--space-3)] pt-[env(safe-area-inset-top)] md:px-[var(--space-4)] md:py-[var(--space-3)]">
           <button type="button" onClick={onBack} className="flex size-[32px] items-center justify-center rounded-full transition-colors hover:bg-surface" aria-label="Volver">
             <BackIcon className="size-[18px]" />
           </button>
@@ -1792,7 +1792,7 @@ export function ChatConversation({
       </div>
 
       {/* Input area */}
-      <div className="border-t border-app px-[var(--space-3)] pb-[var(--space-3)] pt-[var(--space-3)] md:px-[var(--space-4)]">
+      <div className="border-t border-app px-[var(--space-3)] pb-[max(12px,env(safe-area-inset-bottom))] pt-[var(--space-3)] md:px-[var(--space-4)] md:pb-[var(--space-3)]">
         {replyingTo && (
           <div className="mb-[var(--space-2)] flex items-center gap-[var(--space-2)] rounded-[10px] border-l-2 border-[var(--text-primary)] bg-surface px-3 py-[8px]">
             <div className="min-w-0 flex-1">
@@ -1891,6 +1891,11 @@ export function ChatConversation({
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 onKeyDown={onKeyDown}
+                onFocus={() => {
+                  setTimeout(() => {
+                    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+                  }, 300);
+                }}
                 placeholder={editingMsg ? "Editar mensaje..." : "Escribe un mensaje..."}
                 className="min-w-0 flex-1 rounded-full border border-app bg-surface px-4 py-[8px] text-body-sm text-app outline-none transition-colors focus:border-[var(--border-strong)]"
               />
@@ -2121,7 +2126,7 @@ function ChatInfoPanel({
   return (
     <div className={containerClassName ?? "relative flex h-[calc(100dvh-var(--space-20)-env(safe-area-inset-bottom))] flex-col md:h-[calc(100dvh-var(--space-16))]"}>
       {/* Header */}
-      <div className="flex items-center gap-[var(--space-2)] border-b border-app px-[var(--space-3)] pb-[var(--space-3)] md:px-[var(--space-4)]">
+      <div className="flex items-center gap-[var(--space-2)] border-b border-app px-[var(--space-3)] pb-[var(--space-3)] pt-[env(safe-area-inset-top)] md:px-[var(--space-4)] md:py-[var(--space-3)]">
         <button type="button" onClick={onBack} className="flex size-[32px] items-center justify-center rounded-full transition-colors hover:bg-surface" aria-label="Volver">
           <BackIcon className="size-[18px]" />
         </button>
@@ -2133,7 +2138,7 @@ function ChatInfoPanel({
       {/* Add members overlay */}
       {showAddMembers && (
         <div className="absolute inset-0 z-40 flex flex-col bg-app">
-          <div className="flex items-center gap-[var(--space-2)] border-b border-app px-[var(--space-3)] py-[var(--space-3)] md:px-[var(--space-4)]">
+          <div className="flex items-center gap-[var(--space-2)] border-b border-app px-[var(--space-3)] pb-[var(--space-3)] pt-[env(safe-area-inset-top)] md:px-[var(--space-4)] md:py-[var(--space-3)]">
             <button type="button" onClick={() => setShowAddMembers(false)} className="flex size-[32px] items-center justify-center rounded-full transition-colors hover:bg-surface">
               <BackIcon className="size-[18px]" />
             </button>

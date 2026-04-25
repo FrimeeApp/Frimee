@@ -39,10 +39,6 @@
     font-size: var(--font-body);
     line-height: var(--lh-body);
     font-weight: var(--fw-regular);
-    padding-top: env(safe-area-inset-top);
-    padding-bottom: env(safe-area-inset-bottom);
-    padding-top: constant(safe-area-inset-top);
-    padding-bottom: constant(safe-area-inset-bottom);
   }
 
   input:-webkit-autofill,
