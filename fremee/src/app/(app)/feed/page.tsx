@@ -5,6 +5,7 @@ import Link from "next/link";
 import PlaneIcon from "@/components/ui/PlaneIcon";
 import { useFollow } from "@/hooks/useFollow";
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
+import type { CSSProperties } from "react";
 import AppSidebar from "@/components/common/AppSidebar";
 import LoadingScreen from "@/components/common/LoadingScreen";
 import { useAuth } from "@/providers/AuthProvider";
@@ -58,6 +59,18 @@ const RECENTS_KEY = "fremee:search-recents";
 const RECENTS_MAX = 10;
 
 type RecentProfile = { id: string; nombre: string; profile_image: string | null };
+type MobileFeedViewportStyle = CSSProperties & { "--mobile-feed-viewport-height": string };
+type FeedMobileImageVars = CSSProperties & {
+  "--feed-mobile-side-inset": string;
+  "--feed-mobile-header-top": string;
+  "--feed-mobile-actions-gap": string;
+  "--feed-mobile-actions-bottom": string;
+  "--feed-mobile-footer-bottom": string;
+  "--feed-mobile-avatar-size": string;
+  "--feed-mobile-icon-size": string;
+  "--feed-mobile-title-size": string;
+  "--feed-mobile-meta-size": string;
+};
 
 function readRecents(): RecentProfile[] {
   try {
@@ -399,7 +412,7 @@ export default function FeedPage() {
   };
 
   const mobileBottomNavBaseHeight = "clamp(56px, 8dvh, 64px)";
-  const mobileFeedViewportHeight = `calc(100dvh - env(safe-area-inset-top) - ${mobileHeaderHeight}px - ${mobileBottomNavBaseHeight} - env(safe-area-inset-bottom))`;
+  const mobileFeedViewportHeight = `calc(100dvh - ${mobileHeaderHeight}px - ${mobileBottomNavBaseHeight} - env(safe-area-inset-bottom))`;
 
   if (loading) return <LoadingScreen />;
 
@@ -416,69 +429,72 @@ export default function FeedPage() {
               <div className="mx-auto w-full max-w-[760px] xl:mx-0">
               <div
                 ref={mobileHeaderRef}
-                className="sticky top-0 z-[100] bg-app flex items-center gap-[clamp(10px,2.8vw,var(--space-3))] py-[clamp(6px,1.6dvh,var(--space-2))] pl-[max(var(--page-margin-x),env(safe-area-inset-left))] pr-[max(var(--page-margin-x),env(safe-area-inset-right))] md:hidden"
+                className="sticky top-0 z-[100] bg-app pb-[clamp(6px,1.6dvh,var(--space-2))] pt-[env(safe-area-inset-top)] pl-[max(var(--page-margin-x),env(safe-area-inset-left))] pr-[max(var(--page-margin-x),env(safe-area-inset-right))] md:hidden"
               >
-                <button
-                  type="button"
-                  onClick={() => setActiveFeedTab((prev) => (prev === "explore" ? "following" : "explore"))}
-                  className="flex h-[clamp(40px,5.8dvh,44px)] items-center gap-[8px] px-[4px] text-body-sm font-[700] text-app"
-                >
-                  <span>{activeFeedTab === "explore" ? "Explorar" : "Siguiendo"}</span>
-                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[18px]">
-                    <path d="M7 10L12 15L17 10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </button>
+                <div className="relative flex items-center justify-between gap-[10px]">
+                  <button
+                    type="button"
+                    onClick={() => setMobileSearchOpen(true)}
+                    aria-label="Buscar"
+                    className="flex h-[clamp(40px,5.8dvh,44px)] min-w-[112px] max-w-[38vw] items-center gap-[10px] rounded-[8px] bg-[var(--search-field-bg)] px-[clamp(12px,3.4vw,14px)] text-muted transition-opacity hover:opacity-80"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[clamp(20px,5.6vw,22px)] shrink-0">
+                      <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.8" />
+                      <path d="M16 16L20.5 20.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                    </svg>
+                    <span className="truncate text-[clamp(14px,4vw,15px)]">Buscar</span>
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={() => setMobileSearchOpen(true)}
-                  aria-label="Buscar"
-                  className="flex h-[clamp(40px,5.8dvh,44px)] min-w-0 flex-1 items-center gap-[10px] rounded-[8px] bg-[var(--search-field-bg)] px-[clamp(12px,3.4vw,14px)] text-muted transition-opacity hover:opacity-80"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[clamp(20px,5.6vw,22px)] shrink-0">
-                    <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.8" />
-                    <path d="M16 16L20.5 20.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                  </svg>
-                  <span className="truncate text-[clamp(14px,4vw,15px)]">Buscar</span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveFeedTab((prev) => (prev === "explore" ? "following" : "explore"))}
+                    className="absolute left-1/2 flex h-[clamp(40px,5.8dvh,44px)] -translate-x-1/2 items-center gap-[8px] px-[4px] text-body-sm font-[700] text-app"
+                  >
+                    <span>{activeFeedTab === "explore" ? "Explorar" : "Siguiendo"}</span>
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[18px]">
+                      <path d="M7 10L12 15L17 10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={() => setNotifPanelOpen(true)}
-                  aria-label="Notificaciones"
-                  className="relative flex h-[clamp(40px,5.8dvh,44px)] w-[clamp(40px,5.8dvh,44px)] shrink-0 items-center justify-center text-app transition-opacity hover:opacity-70"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[clamp(24px,7vw,28px)]">
-                    <path
-                      d="M6 10.5C6 7.46 8.24 5 12 5s6 2.46 6 5.5v3l1.5 2.5H4.5L6 13.5v-3Z"
-                      stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"
-                    />
-                    <path
-                      d="M10 17.5a2 2 0 0 0 4 0"
-                      stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"
-                    />
-                  </svg>
-                  {unreadNotifs > 0 && (
-                    <span className="absolute right-0 top-0 flex size-[14px] items-center justify-center rounded-full bg-blue-500 text-white text-[9px] font-[var(--fw-semibold)] leading-none">
-                      {unreadNotifs > 9 ? "9+" : unreadNotifs}
-                    </span>
-                  )}
-                </button>
+                  <div className="ml-auto flex items-center gap-[10px]">
+                    <button
+                      type="button"
+                      onClick={() => setNotifPanelOpen(true)}
+                      aria-label="Notificaciones"
+                      className="relative flex h-[clamp(40px,5.8dvh,44px)] w-[clamp(40px,5.8dvh,44px)] shrink-0 items-center justify-center text-app transition-opacity hover:opacity-70"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[clamp(24px,7vw,28px)]">
+                        <path
+                          d="M6 10.5C6 7.46 8.24 5 12 5s6 2.46 6 5.5v3l1.5 2.5H4.5L6 13.5v-3Z"
+                          stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"
+                        />
+                        <path
+                          d="M10 17.5a2 2 0 0 0 4 0"
+                          stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"
+                        />
+                      </svg>
+                      {unreadNotifs > 0 && (
+                        <span className="absolute right-0 top-0 flex size-[14px] items-center justify-center rounded-full bg-blue-500 text-white text-[9px] font-[var(--fw-semibold)] leading-none">
+                          {unreadNotifs > 9 ? "9+" : unreadNotifs}
+                        </span>
+                      )}
+                    </button>
 
-                <Link
-                  href={currentUserId ? `/profile/${currentUserId}` : "/settings"}
-                  aria-label="Perfil"
-                  className="flex h-[clamp(40px,5.8dvh,44px)] w-[clamp(40px,5.8dvh,44px)] shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset transition-opacity hover:opacity-80"
-                >
-                  {profile?.profile_image ? (
-                    <NextImage src={profile.profile_image} alt="Foto de perfil" width={44} height={44} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
-                  ) : (
-                    <span className="text-[14px] font-[var(--fw-semibold)] text-app">
-                      {(profile?.nombre?.trim()[0] ?? "P").toUpperCase()}
-                    </span>
-                  )}
-                </Link>
-
+                    <Link
+                      href={currentUserId ? `/profile/${currentUserId}` : "/settings"}
+                      aria-label="Perfil"
+                      className="flex h-[clamp(40px,5.8dvh,44px)] w-[clamp(40px,5.8dvh,44px)] shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset transition-opacity hover:opacity-80"
+                    >
+                      {profile?.profile_image ? (
+                        <NextImage src={profile.profile_image} alt="Foto de perfil" width={44} height={44} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
+                      ) : (
+                        <span className="text-[14px] font-[var(--fw-semibold)] text-app">
+                          {(profile?.nombre?.trim()[0] ?? "P").toUpperCase()}
+                        </span>
+                      )}
+                    </Link>
+                  </div>
+                </div>
               </div>
 
               {/* Fullscreen mobile search panel — fade in/out, above bottom nav */}
@@ -488,7 +504,7 @@ export default function FeedPage() {
                 }`}
               >
                 {/* Search bar at the top */}
-                <div className="flex items-center gap-[8px] px-[var(--space-4)] pt-[var(--space-4)]">
+                <div className="flex items-center gap-[8px] px-[var(--space-4)] pb-[var(--space-4)] pt-[calc(env(safe-area-inset-top)+var(--space-4))]">
                   <button
                     type="button"
                     onClick={closeMobileSearch}
@@ -713,6 +729,9 @@ export default function FeedPage() {
                   const visiblePosts = activeFeedTab === "following"
                     ? uiPosts.filter((p) => p.plan.ownerUserId && friendIds.has(p.plan.ownerUserId))
                     : uiPosts;
+                  const mobileViewportStyle: MobileFeedViewportStyle = {
+                    "--mobile-feed-viewport-height": mobileFeedViewportHeight,
+                  };
                   return visiblePosts.length === 0 ? (
                     <div className="rounded-modal border border-app bg-surface p-[var(--space-5)] text-body text-muted shadow-elev-1">
                       {activeFeedTab === "following"
@@ -722,13 +741,13 @@ export default function FeedPage() {
                   ) : (
                     <div
                       className="overflow-y-scroll snap-y snap-mandatory scrollbar-hide h-[var(--mobile-feed-viewport-height)] md:h-[calc(100dvh-100px)]"
-                      style={{ ["--mobile-feed-viewport-height" as const]: mobileFeedViewportHeight }}
+                      style={mobileViewportStyle}
                     >
                       {visiblePosts.map((post, idx) => (
                         <div
                           key={post.id}
                           className="h-[var(--mobile-feed-viewport-height)] snap-start snap-always md:h-full"
-                          style={{ ["--mobile-feed-viewport-height" as const]: mobileFeedViewportHeight }}
+                          style={mobileViewportStyle}
                         >
                           <FeedCard post={post} currentUserId={currentUserId} currentUserName={profile?.nombre ?? null} currentUserProfileImage={profile?.profile_image ?? null} nextPostHasImage={visiblePosts[idx + 1]?.hasImage ?? true} initialFollowing={followedIds.has(post.plan.ownerUserId ?? "")} initialSaved={savedPlanIds.has(post.plan.id)} />
                         </div>
@@ -1094,18 +1113,18 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
   const [replyingTo, setReplyingTo] = useState<{ commentId: string; userName: string } | null>(null);
   const [saved, setSaved] = useState(initialSaved);
   const isOwnPost = post.plan.ownerUserId === currentUserId;
-  const mobileImagePostVars = post.hasImage
+  const mobileImagePostVars: FeedMobileImageVars | undefined = post.hasImage
     ? ({
-        ["--feed-mobile-side-inset" as const]: "clamp(12px, 4vw, 16px)",
-        ["--feed-mobile-header-top" as const]: "clamp(12px, 2.2dvh, 18px)",
-        ["--feed-mobile-actions-gap" as const]: "clamp(12px, 2dvh, 16px)",
-        ["--feed-mobile-actions-bottom" as const]: "clamp(72px, 10dvh, 92px)",
-        ["--feed-mobile-footer-bottom" as const]: "clamp(16px, calc(env(safe-area-inset-bottom) + 8px), 28px)",
-        ["--feed-mobile-avatar-size" as const]: "clamp(30px, 8.6vw, 34px)",
-        ["--feed-mobile-icon-size" as const]: "clamp(30px, 9vw, 34px)",
-        ["--feed-mobile-title-size" as const]: "clamp(16px, 4.8vw, 18px)",
-        ["--feed-mobile-meta-size" as const]: "clamp(12px, 3.7vw, 14px)",
-      } satisfies React.CSSProperties)
+        "--feed-mobile-side-inset": "clamp(12px, 4vw, 16px)",
+        "--feed-mobile-header-top": "clamp(12px, 2.2dvh, 18px)",
+        "--feed-mobile-actions-gap": "clamp(12px, 2dvh, 16px)",
+        "--feed-mobile-actions-bottom": "clamp(72px, 10dvh, 92px)",
+        "--feed-mobile-footer-bottom": "clamp(16px, calc(env(safe-area-inset-bottom) + 8px), 28px)",
+        "--feed-mobile-avatar-size": "clamp(30px, 8.6vw, 34px)",
+        "--feed-mobile-icon-size": "clamp(30px, 9vw, 34px)",
+        "--feed-mobile-title-size": "clamp(16px, 4.8vw, 18px)",
+        "--feed-mobile-meta-size": "clamp(12px, 3.7vw, 14px)",
+      })
     : undefined;
 
   // ── Slides (swipeable stories) ────────────────────────────────────────────

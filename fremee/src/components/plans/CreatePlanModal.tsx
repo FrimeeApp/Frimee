@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent } from "react";
+import { Capacitor } from "@capacitor/core";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { Globe, Lock, Plane, User, Users } from "lucide-react";
@@ -368,11 +369,16 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
 
   useEffect(() => {
     if (!open) return;
+    const isNative = Capacitor.isNativePlatform();
     const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    if (!isNative) {
+      document.body.style.overflow = "hidden";
+    }
     document.body.setAttribute("data-create-plan-open", "true");
     return () => {
-      document.body.style.overflow = prev;
+      if (!isNative) {
+        document.body.style.overflow = prev;
+      }
       document.body.removeAttribute("data-create-plan-open");
     };
   }, [open]);
@@ -484,7 +490,7 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
       role="presentation"
     >
       <div
-        className="relative flex h-dvh w-full flex-col overflow-hidden bg-[var(--bg)] md:h-[min(760px,90dvh)] md:w-full md:max-w-[var(--create-plan-desktop-max-width)] md:rounded-[24px] md:shadow-elev-4 md:transition-[max-width] md:duration-300 md:[transition-timing-function:cubic-bezier(0.22,1,0.36,1)]"
+        className="relative flex h-dvh w-full flex-col overflow-hidden bg-[var(--bg)] pt-[env(safe-area-inset-top)] md:h-[min(760px,90dvh)] md:w-full md:max-w-[var(--create-plan-desktop-max-width)] md:rounded-[24px] md:pt-0 md:shadow-elev-4 md:transition-[max-width] md:duration-300 md:[transition-timing-function:cubic-bezier(0.22,1,0.36,1)]"
         style={{ "--create-plan-desktop-max-width": desktopMaxWidth } as CSSProperties}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
@@ -543,6 +549,7 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
                 placeholder="París, Tokyo, Nueva York..."
                 onCommit={canContinue ? handleNext : undefined}
                 onEnter={canContinue ? handleNext : undefined}
+                autoFocus
               />
             </div>
           )}
@@ -850,7 +857,7 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
         </div>
 
         {/* ── Footer ── */}
-        <div className="shrink-0 border-t border-app px-[var(--space-5)] py-[var(--space-4)]">
+        <div className="shrink-0 border-t border-app px-[var(--space-5)] pb-[calc(var(--space-4)+env(safe-area-inset-bottom))] pt-[var(--space-4)] md:py-[var(--space-4)]">
           {step === 2 ? (
             <div className="flex items-center justify-between">
               <button

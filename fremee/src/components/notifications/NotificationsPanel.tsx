@@ -180,7 +180,7 @@ function NotifItem({
         )}
       </div>
       <div className="min-w-0 flex-1 pt-0.5">
-        <div className="flex min-w-0 flex-col gap-2 md:flex-row md:items-start md:justify-between md:gap-3">
+        <div className="flex min-w-0 items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <p className="text-body-sm leading-snug">
               {n.tipo === "recordatorio_deuda" ? (
@@ -203,7 +203,7 @@ function NotifItem({
           </div>
 
           {(isFriendRequest || isPlanInvite) && (
-            <div className="flex shrink-0 items-center gap-1.5 md:pt-0.5">
+            <div className="flex shrink-0 items-center gap-1.5 pt-0.5">
               <button
                 type="button"
                 disabled={acting}
@@ -348,7 +348,7 @@ export default function NotificationsPanel({ open, onClose, onRead, desktopPosit
         ref={panelRef}
         role="dialog"
         aria-label="Notificaciones"
-        className={`fixed inset-0 flex h-dvh w-full flex-col bg-[var(--bg)] transition-transform duration-300 [transition-timing-function:var(--ease-standard)] md:inset-auto md:top-0 md:max-w-[408px] md:shadow-elev-3 ${
+        className={`fixed inset-0 flex h-dvh w-full flex-col bg-[var(--bg)] pb-safe transition-transform duration-300 [transition-timing-function:var(--ease-standard)] md:inset-auto md:top-0 md:max-w-[408px] md:shadow-elev-3 md:pb-0 ${
           open ? "translate-x-0" : "translate-x-full"
         } ${
           desktopPosition === "left"
@@ -358,7 +358,7 @@ export default function NotificationsPanel({ open, onClose, onRead, desktopPosit
         style={{ zIndex: "calc(var(--z-modal) + 1)" }}
       >
         {/* Header */}
-        <div className="flex items-center gap-[var(--space-3)] px-[var(--space-4)] py-[var(--space-3)] border-b border-[var(--border)]">
+        <div className="flex items-center gap-[var(--space-3)] border-b border-[var(--border)] px-[var(--space-4)] pb-[var(--space-3)] pt-[max(var(--space-2),env(safe-area-inset-top))] md:py-[var(--space-3)]">
           <button
             type="button"
             onClick={onClose}

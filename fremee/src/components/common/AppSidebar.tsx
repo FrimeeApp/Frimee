@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { Capacitor } from "@capacitor/core";
 import { useAuth } from "@/providers/AuthProvider";
@@ -27,6 +27,7 @@ type AppSidebarProps = {
   onCreatePlan?: () => void;
   hideMobileNav?: boolean;
 };
+type MobileNavStyle = CSSProperties & { "--mobile-nav-base-height": string };
 
 function dateInputToIso(dateInput: string, hour = 12) {
   const [year, month, day] = dateInput.split("-").map(Number);
@@ -36,7 +37,6 @@ function dateInputToIso(dateInput: string, hour = 12) {
 export default function AppSidebar({ onCreatePlan, hideMobileNav }: AppSidebarProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const [mobileNavVisible, setMobileNavVisible] = useState(true);
   const [createPlanModalOpen, setCreatePlanModalOpen] = useState(false);
 
   // Hide bottom nav whenever CreatePlanModal is open (from any page)
@@ -47,7 +47,6 @@ export default function AppSidebar({ onCreatePlan, hideMobileNav }: AppSidebarPr
     observer.observe(document.body, { attributes: true, attributeFilter: ["data-create-plan-open"] });
     return () => observer.disconnect();
   }, []);
-  const lastScrollYRef = useRef(0);
   const [hovered, setHovered] = useState(false);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [notifPanelOpen, setNotifPanelOpen] = useState(false);
@@ -62,32 +61,6 @@ export default function AppSidebar({ onCreatePlan, hideMobileNav }: AppSidebarPr
   const { user, profile } = useAuth();
 
   const expanded = hovered;
-
-  // Mobile scroll hide/show
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const threshold = 10;
-    lastScrollYRef.current = window.scrollY;
-
-    const onScroll = () => {
-      const currentY = window.scrollY;
-      const delta = currentY - lastScrollYRef.current;
-
-      if (currentY <= 8) {
-        setMobileNavVisible(true);
-      } else if (delta > threshold) {
-        setMobileNavVisible(false);
-      } else if (delta < -threshold) {
-        setMobileNavVisible(true);
-      }
-
-      lastScrollYRef.current = currentY;
-    };
-
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
 
   useEffect(() => {
     void countNotificacionesNoLeidas().then(setUnreadNotifs).catch(() => setUnreadNotifs(0));
@@ -290,15 +263,16 @@ export default function AppSidebar({ onCreatePlan, hideMobileNav }: AppSidebarPr
   };
 
   const searchActive = searchPopoverOpen || isActive("/search");
+  const mobileNavStyle: MobileNavStyle = { "--mobile-nav-base-height": "clamp(56px, 8dvh, 64px)" };
 
   return (
     <>
       {/* Mobile bottom nav */}
       <nav
-        style={{ ["--mobile-nav-base-height" as const]: "clamp(56px, 8dvh, 64px)" }}
+        style={mobileNavStyle}
         className={`fixed inset-x-0 bottom-0 z-sticky flex h-[calc(var(--mobile-nav-base-height)+env(safe-area-inset-bottom))] items-center justify-around border-t border-strong bg-app px-[clamp(var(--space-4),5vw,var(--space-5))] pb-safe transition-transform duration-[var(--duration-slow)] [transition-timing-function:var(--ease-decelerate)] md:hidden ${
-          mobileNavVisible ? "translate-y-0" : "translate-y-full"
-        } ${hideMobileNav || createPlanModalOpen ? "!translate-y-full" : ""}`}
+          hideMobileNav || createPlanModalOpen ? "translate-y-full" : "translate-y-0"
+        }`}
       >
         {items.slice(0, 2).map((item) => (
           <Link
@@ -307,7 +281,7 @@ export default function AppSidebar({ onCreatePlan, hideMobileNav }: AppSidebarPr
             aria-label={item.label}
             className={`${isActive(item.href) ? "text-[var(--primary)]" : "text-app"} transition-opacity duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] active:opacity-[var(--disabled-opacity)]`}
           >
-            <item.icon className="size-[24px]" />
+            <item.icon className="size-[clamp(25px,6.4vw,28px)]" />
           </Link>
         ))}
 
@@ -317,7 +291,7 @@ export default function AppSidebar({ onCreatePlan, hideMobileNav }: AppSidebarPr
           onClick={openCreatePlan}
           className="text-app transition-opacity duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] active:opacity-[var(--disabled-opacity)]"
         >
-          <PlusIcon className="size-[24px]" />
+          <PlusIcon className="size-[clamp(25px,6.4vw,28px)]" />
         </button>
 
         {items.slice(2).map((item) => (
@@ -327,7 +301,7 @@ export default function AppSidebar({ onCreatePlan, hideMobileNav }: AppSidebarPr
             aria-label={item.label}
             className={`${isActive(item.href) ? "text-[var(--primary)]" : "text-app"} transition-opacity duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] active:opacity-[var(--disabled-opacity)]`}
           >
-            <item.icon className="size-[24px]" />
+            <item.icon className="size-[clamp(25px,6.4vw,28px)]" />
           </Link>
         ))}
 

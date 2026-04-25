@@ -162,7 +162,7 @@ export default function MessagesPage() {
   const chatListContent = showFriendPicker ? (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="flex items-center gap-[var(--space-3)] px-[var(--space-4)] py-[var(--space-3)]">
+      <div className="flex items-center gap-[var(--space-3)] px-[var(--space-4)] pb-[var(--space-3)] pt-[env(safe-area-inset-top)] md:py-[var(--space-3)]">
         <button
           type="button"
           onClick={() => {
@@ -320,7 +320,7 @@ export default function MessagesPage() {
   ) : (
     <div className="flex h-full flex-col">
       {/* Header + compose */}
-      <div className="flex items-center justify-between px-[var(--space-4)] py-[var(--space-3)]">
+      <div className="flex items-center justify-between px-[var(--space-4)] pb-[var(--space-3)] pt-[env(safe-area-inset-top)] md:py-[var(--space-3)]">
         <h1 className="text-[var(--font-h2)] font-[var(--fw-regular)] leading-[1.15] text-app md:text-[var(--font-h1)]">Mensajes</h1>
         <button
           type="button"
