@@ -175,9 +175,9 @@ export default function MessagesPage() {
         >
           <BackIcon className="size-[18px]" />
         </button>
-        <h2 className="text-[var(--font-h4)] font-[var(--fw-medium)] text-app">
+        <h1 className="text-[var(--font-h2)] font-[var(--fw-regular)] leading-[1.15] text-app md:text-[var(--font-h1)]">
           {showGroupCreator ? "Nuevo grupo" : "Nueva conversación"}
-        </h2>
+        </h1>
       </div>
 
       <div className="flex-1 overflow-y-auto overscroll-contain px-[var(--space-3)]">

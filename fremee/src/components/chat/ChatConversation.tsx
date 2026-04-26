@@ -265,6 +265,16 @@ export function ChatConversation({
   const observerReadyRef = useRef(false);
 
   useEffect(() => {
+    setLoading(true);
+    setMessages([]);
+    setLoadingMore(false);
+    setHasMore(true);
+    oldestIdRef.current = null;
+    isNearBottomRef.current = true;
+    observerReadyRef.current = false;
+  }, [chat.chat_id]);
+
+  useEffect(() => {
     if (loading) return;
     if (!observerReadyRef.current) {
       // Primera carga: saltar al fondo instantáneamente
