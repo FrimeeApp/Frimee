@@ -960,7 +960,7 @@ export function ChatConversation({
       } else if (winners.length > 1) {
         resultLines.push(`Empate entre: ${winners.map((w) => w.opt).join(", ")}`);
       } else {
-        winnerOption = winners[0]!.opt;
+        winnerOption = winners[0].opt;
         resultLines.push(`Ganadora: ${winnerOption}`);
       }
 
@@ -1073,7 +1073,7 @@ export function ChatConversation({
         .slice(-6)
         .map((m) => ({
           role: m.sender_id === currentUserId ? "user" : "assistant",
-          content: m.texto!,
+          content: m.texto,
         }));
 
       // Mostrar mensaje del usuario al instante con ID temporal
@@ -1717,7 +1717,7 @@ export function ChatConversation({
                 setReactingPos(null);
               };
               return (
-                <div id={`msg-${msg.id}`} key={(msg as LocalMsg)._key ?? msg.id} className={`group/msg flex ${isMe ? "justify-end" : "justify-start"} ${isFirstInGroup ? "mt-[var(--space-3)]" : "mt-[2px]"} ${reaction ? "mb-[20px]" : ""} ${highlightedId === msg.id ? "rounded-card bg-[var(--text-primary)]/10 transition-colors" : ""}`}>
+                <div id={`msg-${msg.id}`} key={(msg)._key ?? msg.id} className={`group/msg flex ${isMe ? "justify-end" : "justify-start"} ${isFirstInGroup ? "mt-[var(--space-3)]" : "mt-[2px]"} ${reaction ? "mb-[20px]" : ""} ${highlightedId === msg.id ? "rounded-card bg-[var(--text-primary)]/10 transition-colors" : ""}`}>
                   {!isMe && (chat.tipo === "GRUPO" || isBot) && (
                     <div className="mr-[var(--space-2)] w-[24px] shrink-0">
                       {isFirstInGroup && (

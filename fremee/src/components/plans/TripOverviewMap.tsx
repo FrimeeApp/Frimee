@@ -3,18 +3,28 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { SubplanRow } from "@/services/api/endpoints/subplanes.endpoint";
 import { TIPOS_TRANSPORTE } from "@/services/api/endpoints/subplanes.endpoint";
-import { loadGoogleMapsScript } from "@/lib/googleMaps";
+import { getGoogleMaps, loadGoogleMapsScript } from "@/lib/googleMaps";
 
 type Props = { subplanes: SubplanRow[] };
+type Coord = google.maps.LatLngLiteral;
+type GoogleMapsApi = typeof google.maps;
+type DayMarker = { marker: google.maps.Marker | null; coord: Coord | null; label: string };
+type DaySegment = { path: Coord[]; isArc: boolean };
+type DayData = { color: string; date: string; markers: DayMarker[]; segments: DaySegment[] };
+type Point = { name: string; isDestination?: boolean; subplanIdx: number; coords: Coord | null };
 
 function isoDateOnly(iso: string) { return iso.slice(0, 10); }
 
-async function geocode(address: string): Promise<{ lat: number; lng: number } | null> {
+function toCoord(lat: number | null | undefined, lng: number | null | undefined): Coord | null {
+  if (lat == null || lng == null) return null;
+  return { lat, lng };
+}
+
+async function geocode(address: string): Promise<Coord | null> {
   return new Promise((resolve) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const geocoder = new (window as any).google.maps.Geocoder();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    geocoder.geocode({ address }, (results: any, status: string) => {
+    const maps = getGoogleMaps();
+    const geocoder = new maps.Geocoder();
+    geocoder.geocode({ address }, (results, status) => {
       if (status !== "OK" || !results?.[0]) { resolve(null); return; }
       const loc = results[0].geometry.location;
       resolve({ lat: loc.lat(), lng: loc.lng() });
@@ -22,8 +32,8 @@ async function geocode(address: string): Promise<{ lat: number; lng: number } | 
   });
 }
 
-function decodePath(encoded: string): { lat: number; lng: number }[] {
-  const pts: { lat: number; lng: number }[] = [];
+function decodePath(encoded: string): Coord[] {
+  const pts: Coord[] = [];
   let i = 0, lat = 0, lng = 0;
   while (i < encoded.length) {
     let b, shift = 0, result = 0;
@@ -51,8 +61,7 @@ const DAY_COLORS = ["#00C9A7", "#FF6B6B", "#4ECDC4", "#FFE66D", "#A855F7", "#F97
 function delay(ms: number) { return new Promise<void>(r => setTimeout(r, ms)); }
 
 // Pop a marker in with a scale animation and pan map to it
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function popMarker(marker: any, google: any, map: any, color: string, label: string, coord: { lat: number; lng: number }): Promise<void> {
+function popMarker(marker: google.maps.Marker, maps: GoogleMapsApi, map: google.maps.Map, color: string, label: string, coord: Coord): Promise<void> {
   return new Promise((resolve) => {
     map.panTo(coord);
     let scale = 0;
@@ -60,7 +69,7 @@ function popMarker(marker: any, google: any, map: any, color: string, label: str
     const interval = setInterval(() => {
       scale = Math.min(scale + 2, target);
       marker.setIcon({
-        path: google.maps.SymbolPath.CIRCLE,
+        path: maps.SymbolPath.CIRCLE,
         fillColor: color, fillOpacity: 1,
         strokeColor: "#fff", strokeWeight: 2,
         scale,
@@ -72,7 +81,7 @@ function popMarker(marker: any, google: any, map: any, color: string, label: str
 }
 
 // Calculate compass bearing (degrees clockwise from north) between two coords
-function bearing(from: { lat: number; lng: number }, to: { lat: number; lng: number }): number {
+function bearing(from: Coord, to: Coord): number {
   const lat1 = from.lat * Math.PI / 180;
   const lat2 = to.lat * Math.PI / 180;
   const dLng = (to.lng - from.lng) * Math.PI / 180;
@@ -86,9 +95,9 @@ const PLANE_PATH = "M 0,-10 L 2.5,-2 L 10,3 L 2.5,1 L 2.5,7 L 5,9 L 0,8 L -5,9 L
 
 // Animate a plane icon flying from path[0] to path[last], with dashed arc trail
 function animatePlane(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  google: any, map: any,
-  path: { lat: number; lng: number }[],
+  maps: GoogleMapsApi,
+  map: google.maps.Map,
+  path: Coord[],
   color: string,
   aborted: () => boolean,
 ): Promise<void> {
@@ -96,21 +105,20 @@ function animatePlane(
     if (path.length < 2) { resolve(); return; }
 
     // Show both endpoints so full route is visible
-    const arcBounds = new google.maps.LatLngBounds();
+    const arcBounds = new maps.LatLngBounds();
     arcBounds.extend(path[0]);
     arcBounds.extend(path[path.length - 1]);
     map.fitBounds(arcBounds, 80);
 
     // Trail polyline — grows as the plane flies
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const trail: any = new google.maps.Polyline({
+    const trail = new maps.Polyline({
       path: [], geodesic: true,
       strokeOpacity: 0, strokeWeight: 0,
       icons: [{ icon: { path: "M 0,-1 0,1", strokeOpacity: 0.5, strokeColor: color, scale: 3 }, offset: "0", repeat: "14px" }],
       map,
     });
 
-    const planeIcon = (coord: { lat: number; lng: number }, nextCoord: { lat: number; lng: number }) => ({
+    const planeIcon = (coord: Coord, nextCoord: Coord): google.maps.Symbol => ({
       path: PLANE_PATH,
       fillColor: color,
       fillOpacity: 1,
@@ -118,12 +126,10 @@ function animatePlane(
       strokeWeight: 1.5,
       scale: 1.1,
       rotation: bearing(coord, nextCoord),
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      anchor: new (google.maps as any).Point(0, 0),
+      anchor: new maps.Point(0, 0),
     });
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const planeMarker: any = new google.maps.Marker({
+    const planeMarker = new maps.Marker({
       position: path[0],
       map,
       icon: planeIcon(path[0], path[1]),
@@ -151,16 +157,16 @@ function animatePlane(
 
 // Draw a road polyline progressively, panning the map along the route
 function animatePolyline(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  google: any, map: any,
-  path: { lat: number; lng: number }[],
+  maps: GoogleMapsApi,
+  map: google.maps.Map,
+  path: Coord[],
   color: string,
   aborted: () => boolean,
 ): Promise<void> {
   return new Promise((resolve) => {
     if (path.length < 2) { resolve(); return; }
 
-    const polyline = new google.maps.Polyline({
+    const polyline = new maps.Polyline({
       path: [], geodesic: true,
       strokeColor: color, strokeOpacity: 0.85, strokeWeight: 3, map,
     });
@@ -204,23 +210,13 @@ export default function TripOverviewMap({ subplanes }: Props) {
     try {
       await loadGoogleMapsScript();
       if (abortedRef.current || !mapRef.current) return;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const google = (window as any).google;
+      const maps = getGoogleMaps();
 
       mapRef.current.innerHTML = "";
-      const map = new google.maps.Map(mapRef.current, {
+      const map = new maps.Map(mapRef.current, {
         mapTypeId: "roadmap", disableDefaultUI: true, zoomControl: true, styles: darkMapStyles,
       });
-      const bounds = new google.maps.LatLngBounds();
-
-      // ── Phase 1: geocode everything & build per-day data ──
-      type DayData = {
-        color: string;
-        date: string;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        markers: { marker: any; coord: { lat: number; lng: number } | null; label: string }[];
-        segments: { path: { lat: number; lng: number }[]; isArc: boolean }[];
-      };
+      const bounds = new maps.LatLngBounds();
 
       const dayDataList: DayData[] = [];
 
@@ -231,12 +227,12 @@ export default function TripOverviewMap({ subplanes }: Props) {
           .filter(s => isoDateOnly(s.inicio_at) === date && s.ubicacion_nombre)
           .sort((a, b) => a.inicio_at.localeCompare(b.inicio_at));
 
-        type Point = { name: string; isDestination?: boolean; subplanIdx: number; coords: { lat: number; lng: number } | null };
         const points: Point[] = [];
         items.forEach((s, i) => {
-          points.push({ name: s.ubicacion_nombre, subplanIdx: i, coords: s.ubicacion_lat != null ? { lat: s.ubicacion_lat, lng: s.ubicacion_lng! } : null });
-          if (TIPOS_TRANSPORTE.includes(s.tipo) && s.ubicacion_fin_nombre)
-            points.push({ name: s.ubicacion_fin_nombre, isDestination: true, subplanIdx: i, coords: s.ubicacion_fin_lat != null ? { lat: s.ubicacion_fin_lat, lng: s.ubicacion_fin_lng! } : null });
+          points.push({ name: s.ubicacion_nombre, subplanIdx: i, coords: toCoord(s.ubicacion_lat, s.ubicacion_lng) });
+          if (TIPOS_TRANSPORTE.includes(s.tipo) && s.ubicacion_fin_nombre) {
+            points.push({ name: s.ubicacion_fin_nombre, isDestination: true, subplanIdx: i, coords: toCoord(s.ubicacion_fin_lat, s.ubicacion_fin_lng) });
+          }
         });
         if (points.length === 0) continue;
 
@@ -247,12 +243,11 @@ export default function TripOverviewMap({ subplanes }: Props) {
 
         // Create invisible markers
         const markers: DayData["markers"] = coords.map((coord, i) => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const marker: any = coord ? new google.maps.Marker({
+          const marker = coord ? new maps.Marker({
             position: coord, map,
             label: { text: " " },
-            icon: { path: google.maps.SymbolPath.CIRCLE, fillColor: color, fillOpacity: 0, strokeColor: "transparent", strokeWeight: 0, scale: 0 },
-            title: points[i].name,
+            icon: { path: maps.SymbolPath.CIRCLE, fillColor: color, fillOpacity: 0, strokeColor: "transparent", strokeWeight: 0, scale: 0 },
+            title: points[i]?.name ?? "",
           }) : null;
           return { marker, coord, label: String(i + 1) };
         });
@@ -265,11 +260,13 @@ export default function TripOverviewMap({ subplanes }: Props) {
           const fromSubplan = items[points[i].subplanIdx];
           const isArc = TIPOS_TRANSPORTE.includes(fromSubplan?.tipo) && !!points[i + 1]?.isDestination;
           const destSubplan = items[points[i + 1].subplanIdx];
-          let path: { lat: number; lng: number }[];
+          let path: Coord[];
           if (isArc) {
             path = Array.from({ length: 241 }, (_, t) => ({ lat: from.lat + (to.lat - from.lat) * (t / 240), lng: from.lng + (to.lng - from.lng) * (t / 240) }));
           } else if (destSubplan?.ruta_polyline) {
-            path = google.maps.geometry?.encoding ? google.maps.geometry.encoding.decodePath(destSubplan.ruta_polyline) : decodePath(destSubplan.ruta_polyline);
+            path = maps.geometry?.encoding
+              ? maps.geometry.encoding.decodePath(destSubplan.ruta_polyline).map((point) => ({ lat: point.lat(), lng: point.lng() }))
+              : decodePath(destSubplan.ruta_polyline);
           } else {
             path = [from, to];
           }
@@ -284,7 +281,7 @@ export default function TripOverviewMap({ subplanes }: Props) {
       // Zoom to first day's extent to start the animation
       const firstDay = dayDataList[0];
       if (firstDay) {
-        const dayBounds = new google.maps.LatLngBounds();
+        const dayBounds = new maps.LatLngBounds();
         firstDay.markers.forEach(m => { if (m.coord) dayBounds.extend(m.coord); });
         if (!dayBounds.isEmpty()) map.fitBounds(dayBounds, 80);
         else map.fitBounds(bounds, 48);
@@ -298,14 +295,14 @@ export default function TripOverviewMap({ subplanes }: Props) {
         for (let i = 0; i < dd.markers.length; i++) {
           if (abortedRef.current) return;
           const { marker, coord, label } = dd.markers[i];
-          if (marker && coord) await popMarker(marker, google, map, dd.color, label, coord);
+          if (marker && coord) await popMarker(marker, maps, map, dd.color, label, coord);
           await delay(250);
           if (i < dd.segments.length && dd.segments[i].path.length > 0) {
             if (abortedRef.current) return;
             if (dd.segments[i].isArc) {
-              await animatePlane(google, map, dd.segments[i].path, dd.color, () => abortedRef.current);
+              await animatePlane(maps, map, dd.segments[i].path, dd.color, () => abortedRef.current);
             } else {
-              await animatePolyline(google, map, dd.segments[i].path, dd.color, () => abortedRef.current);
+              await animatePolyline(maps, map, dd.segments[i].path, dd.color, () => abortedRef.current);
             }
             // After an arc, zoom in to the destination before continuing
             if (dd.segments[i].isArc) {

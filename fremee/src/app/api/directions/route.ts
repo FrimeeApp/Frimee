@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Client, TravelMode, UnitSystem, Language } from "@googlemaps/google-maps-services-js";
+import { getGoogleMapsServerKey } from "@/config/env";
 import { createSupabaseServerClient, createSupabaseServiceClient } from "@/services/supabase/server";
 
 const client = new Client({});
@@ -9,18 +10,55 @@ function r(n: number) { return Math.round(n * 1e4) / 1e4; }
 
 type LatLng = { lat: number; lng: number };
 
+type DirectionsRequestBody = {
+  waypoints: string[];
+  originCoords?: LatLng;
+  destCoords?: LatLng;
+  travelMode?: string;
+};
+
+type ApiErrorLike = {
+  response?: {
+    data?: {
+      status?: string;
+    };
+  };
+};
+
+function isLatLng(value: unknown): value is LatLng {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  return typeof candidate.lat === "number" && typeof candidate.lng === "number";
+}
+
+function isDirectionsRequestBody(value: unknown): value is DirectionsRequestBody {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  const { waypoints, originCoords, destCoords, travelMode } = candidate;
+  return (
+    Array.isArray(waypoints) &&
+    waypoints.every((item) => typeof item === "string") &&
+    (originCoords === undefined || isLatLng(originCoords)) &&
+    (destCoords === undefined || isLatLng(destCoords)) &&
+    (travelMode === undefined || typeof travelMode === "string")
+  );
+}
+
+function getApiStatus(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null) return undefined;
+  return (error as ApiErrorLike).response?.data?.status;
+}
+
 export async function POST(req: NextRequest) {
   const authClient = await createSupabaseServerClient();
   const { data: { user } } = await authClient.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
   try {
-    const body = await req.json() as {
-      waypoints: string[];
-      originCoords?: LatLng;
-      destCoords?: LatLng;
-      travelMode?: string;
-    };
+    const body = await req.json() as unknown;
+    if (!isDirectionsRequestBody(body)) {
+      return NextResponse.json({ error: "Body inválido" }, { status: 400 });
+    }
     const { waypoints, originCoords, destCoords, travelMode } = body;
 
     const TRAVEL_MODE_MAP: Record<string, TravelMode> = {
@@ -75,7 +113,7 @@ export async function POST(req: NextRequest) {
         mode,
         units: UnitSystem.metric,
         language: Language.es,
-        key: process.env.GOOGLE_MAPS_SERVER_KEY!,
+        key: getGoogleMapsServerKey(),
       },
     });
 
@@ -109,8 +147,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ polyline, legs, bounds: route.bounds });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const apiStatus = (err as any)?.response?.data?.status;
+    const apiStatus = getApiStatus(err);
     console.error("[directions]", msg, apiStatus);
     return NextResponse.json({ error: apiStatus ?? msg }, { status: 500 });
   }

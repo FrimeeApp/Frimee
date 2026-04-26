@@ -40,7 +40,7 @@ function PlanExpenseAvatar({ name, image }: { name: string; image: string | null
 
 // ── Modal ─────────────────────────────────────────────────────────────────────
 
-interface PlanGastoDetailModalProps {
+type PlanGastoDetailModalProps = {
   gasto: GastoRow | null;
   planName: string;
   currentUserId: string | null;

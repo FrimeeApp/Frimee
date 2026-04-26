@@ -239,7 +239,7 @@ function WalletStack({ tickets, onOpen }: { tickets: PlanTicket[]; onOpen: (t: P
                 willChange:      "transform, opacity",
               }}
             >
-              <TicketCard ticket={ticket} index={0} />
+              <TicketCard ticket={ticket} />
             </div>
           );
         })}
@@ -251,7 +251,7 @@ function WalletStack({ tickets, onOpen }: { tickets: PlanTicket[]; onOpen: (t: P
 
 // ── TicketCard ─────────────────────────────────────────────────────────────────
 
-function TicketCard({ ticket, index }: { ticket: PlanTicket; index: number }) {
+function TicketCard({ ticket }: { ticket: PlanTicket }) {
   const gradient = ticket.cover_color ?? getTicketColor(ticket.type, ticket.id);
   const textCls  = TICKET_TEXT[ticket.type];
   const mutedCls = TICKET_MUTED[ticket.type];
@@ -363,19 +363,32 @@ function TicketCard({ ticket, index }: { ticket: PlanTicket; index: number }) {
 
 function TicketSourceViewer({ ticket, onClose }: { ticket: PlanTicket; onClose: () => void }) {
   const [url, setUrl]         = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
   const [error, setError]     = useState<string | null>(null);
+  const [resolvedSourcePath, setResolvedSourcePath] = useState<string | null>(null);
 
   const sourcePath = ticket.source_image_url ?? ticket.source_pdf_url ?? null;
   const isPdf      = !!ticket.source_pdf_url && !ticket.source_image_url;
+  const loading    = !!sourcePath && resolvedSourcePath !== sourcePath && !error;
 
   useEffect(() => {
     if (!sourcePath) return;
-    setLoading(true);
+    let cancelled = false;
     getTicketSourceSignedUrl(sourcePath)
-      .then(setUrl)
-      .catch(() => setError("No se pudo cargar la imagen original."))
-      .finally(() => setLoading(false));
+      .then((nextUrl) => {
+        if (cancelled) return;
+        setUrl(nextUrl);
+        setError(null);
+        setResolvedSourcePath(sourcePath);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setUrl(null);
+        setError("No se pudo cargar la imagen original.");
+        setResolvedSourcePath(sourcePath);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [sourcePath]);
 
   // Close on Escape
@@ -560,4 +573,3 @@ function QrStamp() {
     </div>
   );
 }
-

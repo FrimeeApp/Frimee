@@ -43,11 +43,11 @@ export type Interval = { from: number; to: number };
 export function mergeIntervals(intervals: Interval[]): Interval[] {
   if (!intervals.length) return [];
   const sorted = [...intervals].sort((a, b) => a.from - b.from);
-  const merged: Interval[] = [{ ...sorted[0]! }];
+  const merged: Interval[] = [{ ...sorted[0] }];
   for (let i = 1; i < sorted.length; i++) {
-    const last = merged[merged.length - 1]!;
-    if (sorted[i]!.from < last.to) last.to = Math.max(last.to, sorted[i]!.to);
-    else merged.push({ ...sorted[i]! });
+    const last = merged[merged.length - 1];
+    if (sorted[i].from < last.to) last.to = Math.max(last.to, sorted[i].to);
+    else merged.push({ ...sorted[i] });
   }
   return merged;
 }

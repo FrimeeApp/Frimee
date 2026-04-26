@@ -14,7 +14,7 @@ const TEXT_CLASSES: Record<AvatarSize, string> = {
   lg:  "text-body-sm",
 };
 
-interface AvatarProps {
+type AvatarProps = {
   name: string;
   src?: string | null;
   size?: AvatarSize;

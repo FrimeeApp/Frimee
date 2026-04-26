@@ -2,7 +2,7 @@
 
 import { forwardRef } from "react";
 
-interface SearchInputProps {
+type SearchInputProps = {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;

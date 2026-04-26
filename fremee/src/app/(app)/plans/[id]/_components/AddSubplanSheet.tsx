@@ -88,7 +88,7 @@ function PlanInlineCalendar({
       const isOutside = dateStr < minDate || dateStr > maxDate;
       const isStart = dateStr === startDate;
       const isEnd = hasRange && dateStr === endDate;
-      const inRange = hasRange && dateStr > startDate && dateStr < endDate!;
+      const inRange = hasRange && dateStr > startDate && dateStr < endDate;
       const inPreview = !!previewEnd && dateStr > startDate && dateStr < previewEnd && !hasRange;
       const isPreviewEnd = dateStr === previewEnd && !hasRange;
 
@@ -207,11 +207,11 @@ function TimeWheelInput({ value, onChange, minTime, maxTime }: {
         value={String(h).padStart(2, "0")}
         onChange={(e) => emit(Math.max(0, Math.min(23, parseInt(e.target.value) || 0)), m)}
         onWheel={(e) => { e.preventDefault(); emit(h + (e.deltaY > 0 ? -1 : 1), m); }}
-        onTouchStart={(e) => { touchHRef.current = { startY: e.touches[0]!.clientY, start: h }; }}
+        onTouchStart={(e) => { touchHRef.current = { startY: e.touches[0].clientY, start: h }; }}
         onTouchMove={(e) => {
           if (!touchHRef.current) return;
           e.preventDefault();
-          const delta = Math.round((touchHRef.current.startY - e.touches[0]!.clientY) / 20);
+          const delta = Math.round((touchHRef.current.startY - e.touches[0].clientY) / 20);
           emit(touchHRef.current.start + delta, m);
         }}
         onTouchEnd={() => { touchHRef.current = null; }}
@@ -223,11 +223,11 @@ function TimeWheelInput({ value, onChange, minTime, maxTime }: {
         value={String(m).padStart(2, "0")}
         onChange={(e) => emit(h, Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
         onWheel={(e) => { e.preventDefault(); emit(h, m + (e.deltaY > 0 ? -1 : 1)); }}
-        onTouchStart={(e) => { touchMRef.current = { startY: e.touches[0]!.clientY, start: m }; }}
+        onTouchStart={(e) => { touchMRef.current = { startY: e.touches[0].clientY, start: m }; }}
         onTouchMove={(e) => {
           if (!touchMRef.current) return;
           e.preventDefault();
-          const delta = Math.round((touchMRef.current.startY - e.touches[0]!.clientY) / 8);
+          const delta = Math.round((touchMRef.current.startY - e.touches[0].clientY) / 8);
           emit(h, touchMRef.current.start + delta);
         }}
         onTouchEnd={() => { touchMRef.current = null; }}
@@ -438,7 +438,7 @@ export function AddSubplanSheet({
 
   const canContinueWizard = wizardStep === 3 ? titulo.trim().length > 0 : true;
   const isLastStep = wizardStep === TOTAL_STEPS;
-  const meta = STEP_META[wizardStep - 1]!;
+  const meta = STEP_META[wizardStep - 1];
 
   const handleAdvance = () => {
     if (!canContinueWizard || saving) return;

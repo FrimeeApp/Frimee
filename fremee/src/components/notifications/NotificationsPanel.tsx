@@ -153,7 +153,7 @@ function NotifItem({
       if (accept) {
         await acceptPlanInvite(Number(n.entity_id), n.id);
         onAction(n.id);
-        onPlanAccepted?.(n.entity_id!);
+        onPlanAccepted?.(n.entity_id);
       } else {
         await rejectPlanInvite(n.id);
         onAction(n.id);
@@ -231,7 +231,7 @@ function NotifItem({
 
 // ─── panel ──────────────────────────────────────────────────────────────────
 
-interface Props {
+type Props = {
   open: boolean;
   onClose: () => void;
   onRead: () => void; // called when all are marked read → reset badge

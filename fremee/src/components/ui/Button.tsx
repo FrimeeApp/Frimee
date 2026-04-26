@@ -4,7 +4,7 @@ import { ChevronLeftIcon } from "@/components/icons";
 type ButtonVariant = "primary" | "secondary" | "ghost" | "icon" | "back";
 type ButtonSize    = "sm" | "md" | "lg";
 
-interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+type ButtonProps = {
   variant?: ButtonVariant;
   size?: ButtonSize;
   children?: ReactNode;
@@ -12,7 +12,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   iconLeft?: ReactNode;
   /** Icon rendered after children */
   iconRight?: ReactNode;
-}
+} & ButtonHTMLAttributes<HTMLButtonElement>
 
 const BASE = "inline-flex items-center justify-center font-[var(--fw-semibold)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-color)] disabled:opacity-[var(--disabled-opacity)] disabled:pointer-events-none";
 

@@ -1,12 +1,13 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { getSupabaseServiceRoleKey } from "@/config/env";
 import { supabaseUrl, supabaseAnonKey } from "./config";
 
 /** Client for authenticated requests — reads session from cookies */
 export async function createSupabaseServerClient() {
   const cookieStore = await cookies();
 
-  return createServerClient(supabaseUrl!, supabaseAnonKey!, {
+  return createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {
       getAll() {
         return cookieStore.getAll();
@@ -27,8 +28,8 @@ export async function createSupabaseServerClient() {
 /** Service-role client — bypasses RLS, use only in trusted server contexts */
 export function createSupabaseServiceClient() {
   return createServerClient(
-    supabaseUrl!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    supabaseUrl,
+    getSupabaseServiceRoleKey(),
     { cookies: { getAll: () => [], setAll: () => {} } }
   );
 }

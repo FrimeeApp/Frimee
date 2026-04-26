@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "crypto";
+import { publicEnv, getSupabaseServiceRoleKey } from "@/config/env";
 import { OPENAI_API_BASE_URL } from "@/config/external";
 import { createSupabaseServerClient } from "@/services/supabase/server";
 
@@ -55,8 +56,8 @@ export async function POST(req: NextRequest) {
     // Usamos service role para saltarnos RLS en el servidor (la política de Storage
     // aplica a peticiones del cliente, no a llamadas server-side con service role)
     const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
+      publicEnv.supabaseUrl,
+      getSupabaseServiceRoleKey()
     );
 
     const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg";

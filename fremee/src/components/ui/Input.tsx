@@ -2,11 +2,11 @@
 
 import { forwardRef, type InputHTMLAttributes, type ReactNode } from "react";
 
-interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
+type InputProps = {
   error?: boolean;
   trailing?: ReactNode;
   wrapperClassName?: string;
-}
+} & InputHTMLAttributes<HTMLInputElement>
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
   function Input({ error, trailing, wrapperClassName = "", className = "", ...props }, ref) {
