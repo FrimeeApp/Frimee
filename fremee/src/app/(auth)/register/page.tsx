@@ -5,6 +5,9 @@ import Link from "next/link";
 import GoogleAuthButton from "@/components/auth/GoogleAuthButton";
 import { AUTH_EMAIL_REGEX, focusInput, getAuthErrorMessage } from "@/components/auth/AuthFormUtils";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
+import { Input } from "@/components/ui/Input";
+import { EyeIcon } from "@/components/icons";
+import { resolveMailboxUrl } from "@/config/external";
 
 export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -106,17 +109,7 @@ export default function RegisterPage() {
   };
 
   const openMailbox = () => {
-    const domain = email.split("@")[1]?.toLowerCase();
-    const providers: Record<string, string> = {
-      "gmail.com": "https://mail.google.com",
-      "outlook.com": "https://outlook.live.com/mail",
-      "hotmail.com": "https://outlook.live.com/mail",
-      "live.com": "https://outlook.live.com/mail",
-      "yahoo.com": "https://mail.yahoo.com",
-      "icloud.com": "https://www.icloud.com/mail",
-    };
-
-    const url = domain ? providers[domain] : null;
+    const url = resolveMailboxUrl(email);
     if (url) {
       window.open(url, "_blank", "noopener,noreferrer");
       return;
@@ -170,62 +163,56 @@ export default function RegisterPage() {
           </div>
 
           <form className="space-y-[var(--space-3)]" onSubmit={onSubmit} noValidate>
-            <div className={`h-input rounded-input border bg-[var(--input-bg)] px-[var(--input-padding-x)] transition-[border-color] duration-[var(--duration-fast)] [transition-timing-function:var(--ease-standard)] ${invalidField === "name" ? "border-error-token focus-within:border-error-token" : "border-app focus-within:border-[var(--input-border-focus)]"}`}>
-              <input
-                ref={nameRef}
-                type="text"
-                className="h-full w-full bg-transparent text-body text-app outline-none placeholder:text-muted focus-visible:shadow-none"
-                aria-label="Nombre"
-                autoComplete="name"
-                placeholder="Nombre*"
-                value={name}
-                onChange={(e) => {
-                  setName(e.target.value);
-                  if (invalidField === "name") {
-                    setInvalidField(null);
-                    setErrorMsg(null);
-                  }
-                }}
-              />
-            </div>
+            <Input
+              ref={nameRef}
+              type="text"
+              error={invalidField === "name"}
+              aria-label="Nombre"
+              autoComplete="name"
+              placeholder="Nombre*"
+              value={name}
+              onChange={(e) => {
+                setName(e.target.value);
+                if (invalidField === "name") {
+                  setInvalidField(null);
+                  setErrorMsg(null);
+                }
+              }}
+            />
 
-            <div className={`h-input rounded-input border bg-[var(--input-bg)] px-[var(--input-padding-x)] transition-[border-color] duration-[var(--duration-fast)] [transition-timing-function:var(--ease-standard)] ${invalidField === "email" ? "border-error-token focus-within:border-error-token" : "border-app focus-within:border-[var(--input-border-focus)]"}`}>
-              <input
-                ref={emailRef}
-                type="email"
-                className="h-full w-full bg-transparent text-body text-app outline-none placeholder:text-muted focus-visible:shadow-none"
-                aria-label="Correo electrónico"
-                autoComplete="email"
-                placeholder="Email*"
-                value={email}
-                onChange={(e) => {
-                  setEmail(e.target.value);
-                  if (invalidField === "email") {
-                    setInvalidField(null);
-                    setErrorMsg(null);
-                  }
-                }}
-              />
-            </div>
+            <Input
+              ref={emailRef}
+              type="email"
+              error={invalidField === "email"}
+              aria-label="Correo electrónico"
+              autoComplete="email"
+              placeholder="Email*"
+              value={email}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (invalidField === "email") {
+                  setInvalidField(null);
+                  setErrorMsg(null);
+                }
+              }}
+            />
 
-            <div className={`h-input rounded-input border bg-[var(--input-bg)] px-[var(--input-padding-x)] transition-[border-color] duration-[var(--duration-fast)] [transition-timing-function:var(--ease-standard)] ${invalidField === "password" ? "border-error-token focus-within:border-error-token" : "border-app focus-within:border-[var(--input-border-focus)]"}`}>
-              <div className="flex h-full items-center gap-[var(--space-3)]">
-                <input
-                  ref={passwordRef}
-                  type={showPassword ? "text" : "password"}
-                  className="w-full bg-transparent text-body text-app outline-none placeholder:text-muted focus-visible:shadow-none"
-                  aria-label="Contraseña"
-                  autoComplete="new-password"
-                  placeholder="Contraseña*"
-                  value={password}
-                  onChange={(e) => {
-                  setPassword(e.target.value);
-                  if (invalidField === "password") {
-                    setInvalidField(null);
-                    setErrorMsg(null);
-                  }
-                }}
-                />
+            <Input
+              ref={passwordRef}
+              type={showPassword ? "text" : "password"}
+              error={invalidField === "password"}
+              aria-label="Contraseña"
+              autoComplete="new-password"
+              placeholder="Contraseña*"
+              value={password}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                if (invalidField === "password") {
+                  setInvalidField(null);
+                  setErrorMsg(null);
+                }
+              }}
+              trailing={
                 <button
                   type="button"
                   className="text-muted"
@@ -234,27 +221,25 @@ export default function RegisterPage() {
                 >
                   <EyeIcon open={showPassword} />
                 </button>
-              </div>
-            </div>
+              }
+            />
 
-            <div className={`h-input rounded-input border bg-[var(--input-bg)] px-[var(--input-padding-x)] transition-[border-color] duration-[var(--duration-fast)] [transition-timing-function:var(--ease-standard)] ${invalidField === "repeatPassword" ? "border-error-token focus-within:border-error-token" : "border-app focus-within:border-[var(--input-border-focus)]"}`}>
-              <div className="flex h-full items-center gap-[var(--space-3)]">
-                <input
-                  ref={repeatPasswordRef}
-                  type={showRepeatPassword ? "text" : "password"}
-                  className="w-full bg-transparent text-body text-app outline-none placeholder:text-muted focus-visible:shadow-none"
-                  aria-label="Repetir contraseña"
-                  autoComplete="new-password"
-                  placeholder="Repetir contraseña*"
-                  value={repeatPassword}
-                  onChange={(e) => {
-                  setRepeatPassword(e.target.value);
-                  if (invalidField === "repeatPassword") {
-                    setInvalidField(null);
-                    setErrorMsg(null);
-                  }
-                }}
-                />
+            <Input
+              ref={repeatPasswordRef}
+              type={showRepeatPassword ? "text" : "password"}
+              error={invalidField === "repeatPassword"}
+              aria-label="Repetir contraseña"
+              autoComplete="new-password"
+              placeholder="Repetir contraseña*"
+              value={repeatPassword}
+              onChange={(e) => {
+                setRepeatPassword(e.target.value);
+                if (invalidField === "repeatPassword") {
+                  setInvalidField(null);
+                  setErrorMsg(null);
+                }
+              }}
+              trailing={
                 <button
                   type="button"
                   className="text-muted"
@@ -263,8 +248,8 @@ export default function RegisterPage() {
                 >
                   <EyeIcon open={showRepeatPassword} />
                 </button>
-              </div>
-            </div>
+              }
+            />
 
             {errorMsg && <p className="text-body-sm text-error-token">{errorMsg}</p>}
 
@@ -293,19 +278,5 @@ export default function RegisterPage() {
         <span className="font-[var(--fw-semibold)] text-muted">Condiciones</span> de Frimee
       </p>
     </div>
-  );
-}
-
-function EyeIcon({ open }: { open: boolean }) {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" className="size-5" aria-hidden="true">
-      <path
-        d="M2 12C3.8 8.6 7.4 6.5 12 6.5C16.6 6.5 20.2 8.6 22 12C20.2 15.4 16.6 17.5 12 17.5C7.4 17.5 3.8 15.4 2 12Z"
-        stroke="currentColor"
-        strokeWidth="1.7"
-      />
-      <circle cx="12" cy="12" r="3.2" stroke="currentColor" strokeWidth="1.7" />
-      {!open && <path d="M4 4L20 20" stroke="currentColor" strokeWidth="1.7" />}
-    </svg>
   );
 }

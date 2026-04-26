@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "crypto";
+import { OPENAI_API_BASE_URL } from "@/config/external";
+import { createSupabaseServerClient } from "@/services/supabase/server";
 
 // Tipos que devuelve el OCR al frontend
 export type OcrResult = {
@@ -27,6 +29,13 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    // ── 0. Verificar sesión ────────────────────────────────────────────────
+    const authClient = await createSupabaseServerClient();
+    const { data: { user: sessionUser } } = await authClient.auth.getUser();
+    if (!sessionUser) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+    }
+
     // ── 1. Leer el archivo del formulario ──────────────────────────────────
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
@@ -35,6 +44,11 @@ export async function POST(req: NextRequest) {
 
     if (!file || !planId || !userId) {
       return NextResponse.json({ error: "Faltan parámetros: file, plan_id, user_id" }, { status: 400 });
+    }
+
+    // Asegurar que el userId del formulario coincide con la sesión activa
+    if (userId !== sessionUser.id) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 403 });
     }
 
     // ── 2. Subir a Supabase Storage ────────────────────────────────────────
@@ -106,7 +120,7 @@ Si no puedes extraer algún campo, pon null. Los items pueden ser array vacío s
       ];
     }
 
-    const openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+    const openaiRes = await fetch(`${OPENAI_API_BASE_URL}/chat/completions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

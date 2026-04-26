@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ChevronLeftIcon } from "@/components/icons";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import {
   listActiveFriendFlightsEndpoint,
@@ -9,6 +10,7 @@ import {
 } from "@/services/api/endpoints/wallet.endpoint";
 import type { PlanTicket } from "@/services/api/endpoints/wallet.endpoint";
 import { flightProgressFromPosition, flightProgressFromTime, AIRPORTS } from "@/lib/airports";
+import { buildAishubVesselUrl, buildOpenSkyStatesUrl } from "@/config/external";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -43,6 +45,7 @@ const AISHUB_KEY = process.env.NEXT_PUBLIC_AISHUB_KEY ?? "";
 
 export default function FlightsPage() {
   const router = useRouter();
+  const [nowTs, setNowTs] = useState(() => Date.now());
   const [flights,   setFlights]   = useState<PlanTicket[]>([]);
   const [ferries,   setFerries]   = useState<PlanTicket[]>([]);
   const [positions, setPositions] = useState<Record<string, FlightPosition>>({});
@@ -72,8 +75,7 @@ export default function FlightsPage() {
 
     if (isCapacitor) {
       try {
-        const padded = callsign.padEnd(8, " ");
-        const url = `https://opensky-network.org/api/states/all?callsign=${encodeURIComponent(padded)}`;
+        const url = buildOpenSkyStatesUrl(callsign);
         const res = await fetch(url, { headers: { Accept: "application/json" } });
         if (!res.ok) return;
         const data = await res.json() as { states: unknown[][] | null };
@@ -121,7 +123,7 @@ export default function FlightsPage() {
     const mmsi = ticket.booking_code?.trim();
     if (!mmsi || !AISHUB_KEY) return;
     try {
-      const url = `https://data.aishub.net/ws.php?username=${AISHUB_KEY}&format=1&output=json&compress=0&mmsi=${mmsi}`;
+      const url = buildAishubVesselUrl(AISHUB_KEY, mmsi);
       const res = await fetch(url, { headers: { Accept: "application/json" } });
       if (!res.ok) return;
       const raw = await res.json() as unknown[];
@@ -145,6 +147,11 @@ export default function FlightsPage() {
 
   async function pollAllFlights()  { for (const t of flightsRef.current)  await pollFlight(t); }
   async function pollAllVessels()  { for (const t of ferriesRef.current)   await pollVessel(t); }
+
+  useEffect(() => {
+    const interval = setInterval(() => setNowTs(Date.now()), 30_000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     refreshAll();
@@ -205,7 +212,7 @@ export default function FlightsPage() {
   const isEmpty    = !hasFlights && !hasFerries;
 
   return (
-    <main className="min-h-screen px-safe pt-[var(--space-6)] pb-[calc(var(--space-20)+env(safe-area-inset-bottom))]">
+    <main className="min-h-screen px-safe pt-[calc(env(safe-area-inset-top)+var(--space-6))] pb-[calc(var(--space-20)+env(safe-area-inset-bottom))]">
       <div className="mx-auto w-full max-w-[420px] px-4">
 
         <div className="mb-6 flex items-center gap-3">
@@ -214,7 +221,7 @@ export default function FlightsPage() {
             onClick={() => router.back()}
             className="flex size-9 items-center justify-center rounded-full text-app transition-opacity hover:opacity-70"
           >
-            <BackIcon className="size-5" />
+            <ChevronLeftIcon className="size-5" />
           </button>
           <h1 className="text-[20px] font-[var(--fw-bold)] text-app">En ruta</h1>
         </div>
@@ -250,6 +257,7 @@ export default function FlightsPage() {
                     key={ticket.id}
                     ticket={ticket}
                     position={ticket.booking_code ? positions[ticket.booking_code.trim()] ?? null : null}
+                    nowTs={nowTs}
                   />
                 ))}
               </section>
@@ -265,6 +273,7 @@ export default function FlightsPage() {
                     key={ticket.id}
                     ticket={ticket}
                     position={ticket.booking_code ? vessels[ticket.booking_code.trim()] ?? null : null}
+                    nowTs={nowTs}
                   />
                 ))}
               </section>
@@ -278,7 +287,7 @@ export default function FlightsPage() {
 
 // ── FlightWidget ──────────────────────────────────────────────────────────────
 
-function FlightWidget({ ticket, position }: { ticket: PlanTicket; position: FlightPosition | null }) {
+function FlightWidget({ ticket, position, nowTs }: { ticket: PlanTicket; position: FlightPosition | null; nowTs: number }) {
   const from = ticket.from_label ?? "";
   const to   = ticket.to_label   ?? "";
 
@@ -304,7 +313,7 @@ function FlightWidget({ ticket, position }: { ticket: PlanTicket; position: Flig
   const originCity = AIRPORTS[from.toUpperCase()]?.city ?? from;
   const destCity   = AIRPORTS[to.toUpperCase()]?.city   ?? to;
 
-  const staleMs = position ? Date.now() - new Date(position.updated_at).getTime() : null;
+  const staleMs = position ? nowTs - new Date(position.updated_at).getTime() : null;
   const isStale = staleMs != null && staleMs > 90_000;
 
   return (
@@ -368,7 +377,7 @@ function FlightWidget({ ticket, position }: { ticket: PlanTicket; position: Flig
 
 // ── FerryWidget ───────────────────────────────────────────────────────────────
 
-function FerryWidget({ ticket, position }: { ticket: PlanTicket; position: VesselPosition | null }) {
+function FerryWidget({ ticket, position, nowTs }: { ticket: PlanTicket; position: VesselPosition | null; nowTs: number }) {
   const from = ticket.from_label ?? "";
   const to   = ticket.to_label   ?? "";
 
@@ -388,7 +397,7 @@ function FerryWidget({ ticket, position }: { ticket: PlanTicket; position: Vesse
   const boatX    = progress * Math.max(0, trackW - BOAT_W);
   const speedKn  = position?.sog ? Math.round(position.sog) : null;
 
-  const staleMs  = position ? Date.now() - new Date(position.updated_at).getTime() : null;
+  const staleMs  = position ? nowTs - new Date(position.updated_at).getTime() : null;
   const isStale  = staleMs != null && staleMs > 180_000;
 
   return (
@@ -544,14 +553,6 @@ function BoatSvg({ size = 56 }: { size?: number }) {
       <rect x="31" y="5" width="4" height="5" rx="1" fill="#cc2222" />
       {/* Línea de flotación */}
       <line x1="8" y1="28" x2="56" y2="28" stroke="#1a3a6b" strokeWidth="1.5" opacity="0.3" />
-    </svg>
-  );
-}
-
-function BackIcon({ className = "size-5" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

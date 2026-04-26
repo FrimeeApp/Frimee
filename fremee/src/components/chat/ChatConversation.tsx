@@ -29,10 +29,19 @@ import { fetchActiveFriends, type PublicUserProfileRow } from "@/services/api/en
 import { closePollEndpoint } from "@/services/api/endpoints/chat.endpoint";
 import { uploadPlanCoverFile, uploadAudioBlob, uploadAudioFile, uploadDocumentFile, uploadMediaFile } from "@/services/firebase/upload";
 import AudioPlayer from "@/components/common/AudioPlayer";
+import { CameraModal } from "@/components/chat/CameraModal";
+import { PollCreatorModal } from "@/components/chat/PollCreatorModal";
+import { PLAN_WRITE_COMMANDS, VALID_TASK_CATEGORIES } from "@/components/chat/chat.constants";
 import { crearTareaEndpoint, misTareasEndpoint, todasTareasEndpoint, updateEstadoTareaEndpoint, recordarEndpoint, type TareaRow } from "@/services/api/endpoints/tareas.endpoint";
 import { createGastoEndpoint, getBalancesForPlanEndpoint } from "@/services/api/endpoints/gastos.endpoint";
 import { promoteToAdminEndpoint, demoteAdminEndpoint, kickMemberEndpoint, leavePlanEndpoint } from "@/services/api/endpoints/plans.endpoint";
 import { callFrimeeAssistant, type FrimeeHistoryEntry } from "@/services/api/endpoints/frimee.endpoint";
+import {
+  Trash2, Ban, AlertTriangle, LogOut, ChevronDown, Pencil, Reply, Copy,
+  Smile, Forward, Pin, Star, Camera, Send as LucideSend, PlusCircle, Mic,
+  File, Video, Music, BarChart2, Edit, ChevronLeft, ChevronRight, Users,
+  Phone, Check, Download, X, Plus,
+} from "lucide-react";
 
 export function ChatConversation({
   chat,
@@ -332,14 +341,14 @@ export function ChatConversation({
     }
   };
 
-  const CATEGORIAS_VALIDAS = ["vuelo", "ferry", "coche", "alojamiento", "actividad", "comida", "otro"] as const;
+  const CATEGORIAS_VALIDAS = VALID_TASK_CATEGORIES;
 
   const isPlanFinished = planInfo?.fin_at ? new Date(planInfo.fin_at) < new Date() : false;
 
   const fmtEstado = (e: string) =>
     ({ hecho: "Hecho", pendiente: "Pendiente", en_progreso: "En progreso" }[e] ?? e);
 
-  const WRITE_COMMANDS = new Set(["tarea", "gasto", "votar", "voto", "recordar", "admin", "deadmin", "expulsar"]);
+  const WRITE_COMMANDS = PLAN_WRITE_COMMANDS;
 
   const handleCommand = async (cmd: string): Promise<string> => {
     const parts = cmd.slice(1).trim().split(/\s+/);
@@ -1621,7 +1630,7 @@ export function ChatConversation({
 
       {/* Header */}
       {!embedded && (
-        <div className="flex items-center gap-[var(--space-3)] border-b border-app px-[var(--space-3)] pb-[var(--space-3)] pt-[env(safe-area-inset-top)] md:px-[var(--space-4)] md:py-[var(--space-3)]">
+        <div className="flex items-center gap-[var(--space-3)] border-b border-app px-[var(--space-3)] pb-[var(--space-3)] pt-mobile-safe-top md:px-[var(--space-4)] md:py-[var(--space-3)]">
           <button type="button" onClick={onBack} className="flex size-[32px] items-center justify-center rounded-full transition-colors hover:bg-surface" aria-label="Volver">
             <BackIcon className="size-[18px]" />
           </button>
@@ -2126,7 +2135,7 @@ function ChatInfoPanel({
   return (
     <div className={containerClassName ?? "relative flex h-[calc(100dvh-var(--space-20)-env(safe-area-inset-bottom))] flex-col md:h-[calc(100dvh-var(--space-16))]"}>
       {/* Header */}
-      <div className="flex items-center gap-[var(--space-2)] border-b border-app px-[var(--space-3)] pb-[var(--space-3)] pt-[env(safe-area-inset-top)] md:px-[var(--space-4)] md:py-[var(--space-3)]">
+      <div className="flex items-center gap-[var(--space-2)] border-b border-app px-[var(--space-3)] pb-[var(--space-3)] pt-mobile-safe-top md:px-[var(--space-4)] md:py-[var(--space-3)]">
         <button type="button" onClick={onBack} className="flex size-[32px] items-center justify-center rounded-full transition-colors hover:bg-surface" aria-label="Volver">
           <BackIcon className="size-[18px]" />
         </button>
@@ -2138,7 +2147,7 @@ function ChatInfoPanel({
       {/* Add members overlay */}
       {showAddMembers && (
         <div className="absolute inset-0 z-40 flex flex-col bg-app">
-          <div className="flex items-center gap-[var(--space-2)] border-b border-app px-[var(--space-3)] pb-[var(--space-3)] pt-[env(safe-area-inset-top)] md:px-[var(--space-4)] md:py-[var(--space-3)]">
+          <div className="flex items-center gap-[var(--space-2)] border-b border-app px-[var(--space-3)] pb-[var(--space-3)] pt-mobile-safe-top md:px-[var(--space-4)] md:py-[var(--space-3)]">
             <button type="button" onClick={() => setShowAddMembers(false)} className="flex size-[32px] items-center justify-center rounded-full transition-colors hover:bg-surface">
               <BackIcon className="size-[18px]" />
             </button>
@@ -2236,9 +2245,7 @@ function ChatInfoPanel({
                 className="flex w-full items-center gap-[var(--space-3)] rounded-[10px] px-2 py-[10px] text-left transition-colors hover:bg-surface"
               >
                 <div className="avatar-md flex shrink-0 items-center justify-center rounded-full border border-dashed border-[var(--border-strong)] bg-surface-inset">
-                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[16px] text-muted">
-                    <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                  </svg>
+                  <Plus className="size-[16px] text-muted" aria-hidden />
                 </div>
                 <p className="text-body-sm font-[var(--fw-medium)] text-app">Añadir personas</p>
               </button>
@@ -2349,327 +2356,40 @@ function ActionRow({
   );
 }
 
-function TrashLightIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-full">
-      <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-function TrashIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-full">
-      <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-function BlockIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-full">
-      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M5.636 5.636l12.728 12.728" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  );
-}
-function ReportIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-full">
-      <path d="M12 9v4M12 17h.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-    </svg>
-  );
-}
-function LeaveIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-full">
-      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function ChevronDownIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-function EditIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-full">
-      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-function ReplyIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-full">
-      <path d="M9 17H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M15 19l-4-4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M11 15h7a2 2 0 0 1 2 2v2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-function CopyIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-full">
-      <rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-function EmojiIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-full">
-      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M8 13s1.5 2 4 2 4-2 4-2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      <circle cx="9" cy="9.5" r="1" fill="currentColor" />
-      <circle cx="15" cy="9.5" r="1" fill="currentColor" />
-    </svg>
-  );
-}
-function ForwardIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-full">
-      <path d="M15 17l5-5-5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M20 12H9a5 5 0 0 0-5 5v1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-function PinIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <path d="M12 17v5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      <path d="M8.5 5l-.5 5-3 2 7 4 7-4-3-2-.5-5z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-function StarIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-full">
-      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function CameraIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-      <circle cx="12" cy="13" r="4" stroke="currentColor" strokeWidth="1.8" />
-    </svg>
-  );
-}
+const TrashLightIcon = Trash2;
+const TrashIcon = Trash2;
+const BlockIcon = Ban;
+const ReportIcon = AlertTriangle;
+const LeaveIcon = LogOut;
+const ChevronDownIcon = ChevronDown;
+const EditIcon = Pencil;
+const ReplyIcon = Reply;
+const CopyIcon = Copy;
+const EmojiIcon = Smile;
+const ForwardIcon = Forward;
+const PinIcon = Pin;
+const StarIcon = Star;
+const CameraIcon = Camera;
+const PhotoVideoIcon = Video;
+const AudioFileIcon = Music;
+const PollIcon = BarChart2;
+const AttachPlusIcon = PlusCircle;
+const MicIcon = Mic;
+const DocIcon = File;
+const SendMsgIcon = LucideSend;
 
 export function ComposeIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <path d="M12 5H7a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L12 14l-4 1 1-4 7.5-7.5z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
+  return <Edit className={className} aria-hidden />;
 }
 
 export function BackIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
+  return <ChevronLeft className={className} aria-hidden />;
 }
 
 export function GroupIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <circle cx="9" cy="7" r="3" stroke="currentColor" strokeWidth="1.6" />
-      <path d="M2 19c1-3 3.5-4.5 7-4.5s6 1.5 7 4.5" stroke="currentColor" strokeWidth="1.6" />
-      <circle cx="17" cy="8" r="2.5" stroke="currentColor" strokeWidth="1.4" />
-      <path d="M18.5 14.5c1.5.8 2.8 2 3.5 4.5" stroke="currentColor" strokeWidth="1.4" />
-    </svg>
-  );
+  return <Users className={className} aria-hidden />;
 }
 
-function SendMsgIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <path d="M22 2L11 13" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function CameraModal({ onCapture, onClose }: { onCapture: (file: File) => void; onClose: () => void }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const videoChunksRef = useRef<Blob[]>([]);
-  const [ready, setReady] = useState(false);
-  const [mode, setMode] = useState<"photo" | "video">("photo");
-  const [recording, setRecording] = useState(false);
-  const [recSeconds, setRecSeconds] = useState(0);
-  const recTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [captured, setCaptured] = useState<string | null>(null);     // foto: dataURL
-  const [capturedVideo, setCapturedVideo] = useState<Blob | null>(null); // video: blob
-  const [capturedVideoUrl, setCapturedVideoUrl] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
-
-  const videoRefCallback = useCallback((el: HTMLVideoElement | null) => { setVideoEl(el); }, []);
-
-  useEffect(() => {
-    if (!videoEl) return;
-    let cancelled = false;
-    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-      .then((stream) => {
-        if (cancelled) { stream.getTracks().forEach((t) => t.stop()); return; }
-        streamRef.current = stream;
-        videoEl.srcObject = stream;
-      })
-      .catch((e: unknown) => setError(`No se pudo acceder a la cámara: ${(e as Error).message ?? String(e)}`));
-    return () => {
-      cancelled = true;
-      streamRef.current?.getTracks().forEach((t) => t.stop());
-    };
-  }, [videoEl]);
-
-  const handleCapturePhoto = () => {
-    const video = videoEl;
-    const canvas = canvasRef.current;
-    if (!video || !canvas) return;
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    canvas.getContext("2d")?.drawImage(video, 0, 0);
-    setCaptured(canvas.toDataURL("image/jpeg", 0.92));
-  };
-
-  const handleStartVideo = () => {
-    const stream = streamRef.current;
-    if (!stream) return;
-    videoChunksRef.current = [];
-    const recorder = new MediaRecorder(stream);
-    recorder.ondataavailable = (e) => { if (e.data.size > 0) videoChunksRef.current.push(e.data); };
-    recorder.onstop = () => {
-      const blob = new Blob(videoChunksRef.current, { type: "video/webm" });
-      const url = URL.createObjectURL(blob);
-      setCapturedVideo(blob);
-      setCapturedVideoUrl(url);
-    };
-    recorder.start();
-    recorderRef.current = recorder;
-    setRecording(true);
-    setRecSeconds(0);
-    recTimerRef.current = setInterval(() => setRecSeconds((s) => s + 1), 1000);
-  };
-
-  const handleStopVideo = () => {
-    recorderRef.current?.stop();
-    if (recTimerRef.current) clearInterval(recTimerRef.current);
-    setRecording(false);
-  };
-
-  const handleSendPhoto = () => {
-    if (!captured) return;
-    const byteString = atob(captured.split(",")[1]!);
-    const buffer = new Uint8Array(byteString.length);
-    for (let i = 0; i < byteString.length; i++) buffer[i] = byteString.charCodeAt(i);
-    onCapture(new File([buffer], `foto_${Date.now()}.jpg`, { type: "image/jpeg" }));
-  };
-
-  const handleSendVideo = () => {
-    if (!capturedVideo) return;
-    if (capturedVideoUrl) URL.revokeObjectURL(capturedVideoUrl);
-    onCapture(new File([capturedVideo], `video_${Date.now()}.webm`, { type: "video/webm" }));
-  };
-
-  const handleRepeat = () => {
-    if (capturedVideoUrl) { URL.revokeObjectURL(capturedVideoUrl); setCapturedVideoUrl(null); }
-    setCaptured(null);
-    setCapturedVideo(null);
-  };
-
-  const fmt = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
-  const hasCapture = captured ?? capturedVideo;
-
-  return (
-    <div className="fixed inset-0 z-[100] flex flex-col bg-black">
-      {/* Cerrar */}
-      <button type="button" onClick={onClose} className="absolute right-[16px] top-[16px] z-10 flex size-[36px] items-center justify-center rounded-full bg-black/40 text-white">
-        <svg viewBox="0 0 24 24" fill="none" className="size-[18px]"><path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
-      </button>
-
-      {error ? (
-        <div className="flex flex-1 items-center justify-center">
-          <p className="px-8 text-center text-white/80">{error}</p>
-        </div>
-      ) : hasCapture ? (
-        /* Preview */
-        <>
-          <div className="relative flex-1 overflow-hidden">
-            {captured ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <NextImage src={captured} alt="Captura" width={1200} height={900} className="h-full w-full object-contain" unoptimized />
-            ) : (
-              <video src={capturedVideoUrl ?? undefined} controls autoPlay className="h-full w-full object-contain" />
-            )}
-          </div>
-          <div className="flex items-center justify-center gap-[16px] py-[28px]">
-            <button type="button" onClick={handleRepeat} className="rounded-full border border-white/50 px-[24px] py-[10px] text-white">
-              Repetir
-            </button>
-            <button type="button" onClick={captured ? handleSendPhoto : handleSendVideo} className="rounded-full bg-white px-[28px] py-[10px] font-semibold text-black">
-              Enviar
-            </button>
-          </div>
-        </>
-      ) : (
-        /* Visor */
-        <>
-          <div className="relative flex-1 overflow-hidden">
-            <video ref={videoRefCallback} autoPlay playsInline muted onCanPlay={() => setReady(true)} className="h-full w-full object-cover" />
-            {!ready && <div className="absolute inset-0 flex items-center justify-center"><span className="text-sm text-white/60">Iniciando cámara...</span></div>}
-            {recording && (
-              <div className="absolute left-[16px] top-[16px] flex items-center gap-[6px] rounded-full bg-black/50 px-[12px] py-[4px]">
-                <span className="size-[8px] animate-pulse rounded-full bg-red-500" />
-                <span className="text-[14px] text-white">{fmt(recSeconds)}</span>
-              </div>
-            )}
-          </div>
-          <canvas ref={canvasRef} className="hidden" />
-
-          {/* Controles */}
-          <div className="flex items-center justify-center gap-[40px] py-[28px]">
-            {/* Switch foto/video */}
-            <div className="flex rounded-full bg-white/15 p-[3px]">
-              <button type="button" onClick={() => setMode("photo")} className={`rounded-full px-[14px] py-[6px] text-[14px] font-medium transition-colors ${mode === "photo" ? "bg-white text-black" : "text-white"}`}>
-                Foto
-              </button>
-              <button type="button" onClick={() => setMode("video")} className={`rounded-full px-[14px] py-[6px] text-[14px] font-medium transition-colors ${mode === "video" ? "bg-white text-black" : "text-white"}`}>
-                Vídeo
-              </button>
-            </div>
-
-            {/* Botón captura */}
-            {mode === "photo" ? (
-              <button type="button" onClick={handleCapturePhoto} disabled={!ready}
-                className="flex size-[64px] items-center justify-center rounded-full border-[3px] border-white bg-white/20 transition-opacity disabled:opacity-40 hover:bg-white/30">
-                <div className="size-[48px] rounded-full bg-white" />
-              </button>
-            ) : (
-              <button type="button" onClick={recording ? handleStopVideo : handleStartVideo} disabled={!ready}
-                className={`flex size-[64px] items-center justify-center rounded-full border-[3px] transition-all disabled:opacity-40 ${recording ? "border-red-500 bg-red-500/20" : "border-white bg-white/20 hover:bg-white/30"}`}>
-                <div className={`rounded-full bg-red-500 transition-all ${recording ? "size-[24px] rounded-[6px]" : "size-[48px]"}`} />
-              </button>
-            )}
-
-            {/* Placeholder para centrar */}
-            <div className="w-[80px]" />
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
 
 function CallBubble({ tipo, duracion }: { tipo: string; duracion: number }) {
   const missed = tipo.includes("missed");
@@ -2915,9 +2635,7 @@ function PollBubble({ msg, isMe, onVote }: { msg: MensajeRow; isMe: boolean; onV
               <div className="relative flex items-center justify-between gap-2">
                 <div className="flex items-center gap-[6px]">
                   {selected && (
-                    <svg viewBox="0 0 24 24" fill="none" className="size-[13px] shrink-0" style={{ color: isMe ? "rgba(255,255,255,0.9)" : "var(--text-primary)" }}>
-                      <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
+                    <Check className="size-[13px] shrink-0" strokeWidth={2.5} style={{ color: isMe ? "rgba(255,255,255,0.9)" : "var(--text-primary)" }} aria-hidden />
                   )}
                   <span className="text-body-sm">{opt}</span>
                 </div>
@@ -2934,68 +2652,6 @@ function PollBubble({ msg, isMe, onVote }: { msg: MensajeRow; isMe: boolean; onV
   );
 }
 
-function PollCreatorModal({ onClose, onCreate }: { onClose: () => void; onCreate: (question: string, options: string[]) => void }) {
-  const [question, setQuestion] = useState("");
-  const [options, setOptions] = useState(["", ""]);
-  const canCreate = question.trim().length > 0 && options.filter((o) => o.trim()).length >= 2;
-
-  return (
-    <div className="absolute inset-0 z-50 flex items-end justify-center bg-black/40 md:items-center" onClick={onClose}>
-      <div className="w-full max-w-[420px] rounded-t-[20px] bg-app p-[var(--space-5)] md:rounded-[16px]" onClick={(e) => e.stopPropagation()}>
-        <p className="mb-[var(--space-4)] text-body font-[var(--fw-semibold)] text-app">Nueva encuesta</p>
-        <input
-          value={question}
-          onChange={(e) => setQuestion(e.target.value)}
-          placeholder="Pregunta..."
-          className="mb-[var(--space-3)] w-full rounded-[10px] border border-app bg-surface px-3 py-[10px] text-body-sm text-app outline-none focus:border-[var(--border-strong)]"
-        />
-        <div className="mb-[var(--space-3)] space-y-[8px]">
-          {options.map((opt, idx) => (
-            <div key={idx} className="flex items-center gap-2">
-              <input
-                value={opt}
-                onChange={(e) => setOptions((prev) => prev.map((o, i) => (i === idx ? e.target.value : o)))}
-                placeholder={`Opción ${idx + 1}`}
-                className="flex-1 rounded-[10px] border border-app bg-surface px-3 py-[8px] text-body-sm text-app outline-none focus:border-[var(--border-strong)]"
-              />
-              {options.length > 2 && (
-                <button
-                  type="button"
-                  onClick={() => setOptions((prev) => prev.filter((_, i) => i !== idx))}
-                  className="text-muted transition-colors hover:text-red-400"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" className="size-[16px]"><path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-        {options.length < 6 && (
-          <button
-            type="button"
-            onClick={() => setOptions((prev) => [...prev, ""])}
-            className="mb-[var(--space-4)] text-body-sm text-[var(--text-primary)] transition-opacity hover:opacity-70"
-          >
-            + Añadir opción
-          </button>
-        )}
-        <div className="flex gap-[var(--space-2)]">
-          <button type="button" onClick={onClose} className="flex-1 rounded-full border border-app py-[10px] text-body-sm font-[var(--fw-semibold)] text-app transition-colors hover:bg-surface">
-            Cancelar
-          </button>
-          <button
-            type="button"
-            disabled={!canCreate}
-            onClick={() => onCreate(question.trim(), options.filter((o) => o.trim()))}
-            className="flex-1 rounded-full bg-[var(--text-primary)] py-[10px] text-body-sm font-[var(--fw-semibold)] text-contrast-token transition-opacity hover:opacity-80 disabled:opacity-30"
-          >
-            Crear
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function DocumentBubble({ url, name, sending }: { url: string; name: string; sending?: boolean }) {
   const ext = name.split(".").pop()?.toUpperCase() ?? "DOC";
@@ -3020,86 +2676,18 @@ function DocumentBubble({ url, name, sending }: { url: string; name: string; sen
       </div>
       {/* Flecha descarga */}
       {!sending && (
-        <svg viewBox="0 0 24 24" fill="none" className="size-[16px] shrink-0 opacity-50">
-          <path d="M12 3v13M5 13l7 7 7-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
+        <Download className="size-[16px] shrink-0 opacity-50" aria-hidden />
       )}
     </a>
   );
 }
 
-function AttachPlusIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.6" />
-      <path d="M12 7v10M7 12h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function MicIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <rect x="9" y="2" width="6" height="12" rx="3" stroke="currentColor" strokeWidth="1.6" />
-      <path d="M5 10a7 7 0 0 0 14 0" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-      <path d="M12 19v3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function DocIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
-      <path d="M14 2v6h6M8 13h8M8 17h5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function PhotoVideoIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <rect x="2" y="5" width="14" height="14" rx="2" stroke="currentColor" strokeWidth="1.6" />
-      <path d="M16 9l6-3v12l-6-3V9Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function AudioFileIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <path d="M9 18V6l12-2v12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="6" cy="18" r="3" stroke="currentColor" strokeWidth="1.4" />
-      <circle cx="18" cy="16" r="3" stroke="currentColor" strokeWidth="1.4" />
-    </svg>
-  );
-}
-
-function PollIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <rect x="3" y="14" width="4" height="7" rx="1" stroke="currentColor" strokeWidth="1.5" />
-      <rect x="10" y="9" width="4" height="12" rx="1" stroke="currentColor" strokeWidth="1.5" />
-      <rect x="17" y="4" width="4" height="17" rx="1" stroke="currentColor" strokeWidth="1.5" />
-    </svg>
-  );
-}
-
 export function PhoneCallIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.27h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.91a16 16 0 0 0 6.08 6.08l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
+  return <Phone className={className} aria-hidden />;
 }
 
 export function VideoCallIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <polygon points="23 7 16 12 23 17 23 7" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-      <rect x="1" y="5" width="15" height="14" rx="2" stroke="currentColor" strokeWidth="1.8" />
-    </svg>
-  );
+  return <Video className={className} aria-hidden />;
 }
 
 function Lightbox({ url, imageUrls, onClose }: { url: string; imageUrls: string[]; onClose: () => void }) {
@@ -3130,7 +2718,7 @@ function Lightbox({ url, imageUrls, onClose }: { url: string; imageUrls: string[
       {/* Header */}
       <div className="flex shrink-0 items-center justify-end p-3" onClick={(e) => e.stopPropagation()}>
         <button type="button" onClick={onClose} className="rounded-full p-2 text-white hover:bg-white/10">
-          <svg viewBox="0 0 24 24" fill="none" className="size-6"><path d="M18 6 6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+          <X className="size-6" aria-hidden />
         </button>
       </div>
 
@@ -3138,13 +2726,13 @@ function Lightbox({ url, imageUrls, onClose }: { url: string; imageUrls: string[
       <div className="relative flex flex-1 items-center justify-center overflow-hidden" onClick={(e) => e.stopPropagation()}>
         {hasPrev && (
           <button type="button" onClick={() => setCurrent(imageUrls[idx - 1])} className="absolute left-3 z-10 rounded-full bg-white/10 p-2 text-white hover:bg-white/20">
-            <svg viewBox="0 0 24 24" fill="none" className="size-6"><path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            <ChevronLeft className="size-6" aria-hidden />
           </button>
         )}
         <NextImage src={current} alt="Imagen" width={1600} height={1200} className="max-h-full max-w-full object-contain" unoptimized referrerPolicy="no-referrer" />
         {hasNext && (
           <button type="button" onClick={() => setCurrent(imageUrls[idx + 1])} className="absolute right-3 z-10 rounded-full bg-white/10 p-2 text-white hover:bg-white/20">
-            <svg viewBox="0 0 24 24" fill="none" className="size-6"><path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            <ChevronRight className="size-6" aria-hidden />
           </button>
         )}
       </div>

@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { OPENAI_API_BASE_URL } from "@/config/external";
+import { createSupabaseServerClient } from "@/services/supabase/server";
 
 
 export async function POST(req: NextRequest) {
+  const authClient = await createSupabaseServerClient();
+  const { data: { user } } = await authClient.auth.getUser();
+  if (!user) return NextResponse.json({ toxic: false }, { status: 401 });
+
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     return NextResponse.json({ toxic: false });
@@ -13,7 +19,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ toxic: false });
     }
 
-    const res = await fetch("https://api.openai.com/v1/moderations", {
+    const res = await fetch(`${OPENAI_API_BASE_URL}/moderations`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

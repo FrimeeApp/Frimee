@@ -3,272 +3,50 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
-import type { LucideIcon } from "lucide-react";
-import { BusFront, CarFront, CarTaxiFront, CircleEllipsis, FerrisWheel, Footprints, Hotel, Maximize2, Plane, Ship, TrainFront, TramFront, UtensilsCrossed, X } from "lucide-react";
+import { Maximize2, X, ChevronLeft, ChevronDown, UserPlus, Share2, Pencil, MapPin, Calendar, ArrowRight, Plus, ExternalLink, Upload, Check, FileText, Download, QrCode } from "lucide-react";
 import { useAuth } from "@/providers/AuthProvider";
 import { useCallContext } from "@/providers/CallProvider";
 import { ChatConversation, PhoneCallIcon, VideoCallIcon } from "@/components/chat/ChatConversation";
 import { fetchPlanChatItem, type ChatListItem } from "@/services/api/repositories/chat.repository";
 import { resolveChatName, resolveChatAvatar } from "@/services/api/repositories/chat.repository";
 import { fetchPlansByIds, fetchPlanMemberIds, fetchPlanUserRol, updatePlanEndpoint, type PlanByIdRow } from "@/services/api/endpoints/plans.endpoint";
-import CreatePlanModal, { type EditPlanInitialValues } from "@/components/plans/CreatePlanModal";
+import CreatePlanModal, { type EditPlanInitialValues } from "@/components/plans/modals/CreatePlanModal";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
-import { fetchSubplanes, createSubplan, updateSubplan, updateSubplanTransporte, updateSubplanViaje, type SubplanRow, type TipoSubplan, TIPOS_TRANSPORTE } from "@/services/api/endpoints/subplanes.endpoint";
+import { fetchSubplanes, updateSubplanTransporte, updateSubplanViaje, type SubplanRow, TIPOS_TRANSPORTE } from "@/services/api/endpoints/subplanes.endpoint";
 import { getBalancesForPlanEndpoint, listGastosForPlanEndpoint, pagarLiquidacionEndpoint, uploadComprobanteEndpoint, type BalanceRow, type GastoRow } from "@/services/api/endpoints/gastos.endpoint";
 import DayRouteMap from "@/components/plans/DayRouteMap";
-import LocationAutocomplete, { type Coords } from "@/components/plans/LocationAutocomplete";
-import AddGastoSheet from "@/components/plans/AddGastoSheet";
+import AddGastoSheet from "@/components/plans/modals/AddGastoSheet";
 import { fetchActiveFriends, type PublicUserProfileRow } from "@/services/api/endpoints/users.endpoint";
 import { insertNotificacion, fetchPendingPlanInviteUserIds } from "@/services/api/repositories/notifications.repository";
 import { syncPlanWidget } from "@/services/widget/planWidget";
 import { QRCodeSVG } from "qrcode.react";
 import AppSidebar from "@/components/common/AppSidebar";
-import PublishPlanModal from "@/components/plans/PublishPlanModal";
+import PublishPlanModal from "@/components/plans/modals/PublishPlanModal";
 import PlanFotosTab from "@/components/plans/PlanFotosTab";
+import { PlanGastoDetailModal } from "@/components/plans/modals/PlanGastoDetailModal";
+import { formatMoney, formatExpenseDateTime, getInitial, formatDateRange, fmtTime, fmtDayHeader } from "@/lib/formatters";
+import { FIELD_LINE_CLS } from "@/lib/styles";
+import { buildGoogleMapsDirectionsUrl, buildWazeDirectionsUrl } from "@/config/external";
+import { PlanDetailSkeleton } from "./_components/PlanDetailSkeleton";
+import { AddSubplanSheet, TRANSPORT_MAP, TRANSPORT_LLEGADA, type AddSheetProps } from "./_components/AddSubplanSheet";
+import { isoDateOnly, groupByDay, normalizeDateKey, summarizeRecipients, getOccupiedIntervals, timeToMin, mergeIntervals, type Interval } from "./_components/plan-utils";
+const ChevronDownIcon = ChevronDown;
+
+// ── local icon aliases (used throughout this file) ──────────────────────────
 
 type Tab = "itinerario" | "gastos" | "chat" | "fotos";
 
-/* ───────────── icons ───────────── */
-
-function BackIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" className={className}>
-      <path d="M15 19L8 12L15 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function InviteIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" className={className}>
-      <circle cx="9" cy="7" r="3.5" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M2 20C2.5 16.5 5.5 14 9 14C12.5 14 15.5 16.5 16 20" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      <path d="M19 11V17M16 14H22" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function ShareIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" className={className}>
-      <path d="M4 12V20C4 20.5523 4.44772 21 5 21H19C19.5523 21 20 20.5523 20 20V12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M16 6L12 2L8 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M12 2V15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function EditIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" className={className}>
-      <path d="M16.474 5.408L18.592 7.526M17.836 3.186L12.109 8.913C11.81 9.212 11.601 9.589 11.506 10.002L11 12L12.998 11.494C13.411 11.399 13.788 11.19 14.087 10.891L19.814 5.164C20.395 4.583 20.395 3.767 19.814 3.186C19.233 2.605 18.417 2.605 17.836 3.186Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M19 15V19C19 20.1046 18.1046 21 17 21H5C3.89543 21 3 20.1046 3 19V7C3 5.89543 3.89543 5 5 5H9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function MapPinIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" className={className}>
-      <path d="M12 2C8.13 2 5 5.13 5 9C5 14.25 12 22 12 22C12 22 19 14.25 19 9C19 5.13 15.87 2 12 2Z" stroke="currentColor" strokeWidth="1.5" />
-      <circle cx="12" cy="9" r="2.5" stroke="currentColor" strokeWidth="1.5" />
-    </svg>
-  );
-}
-
-function CalendarSmallIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" className={className}>
-      <rect x="3" y="5" width="18" height="16" rx="2" stroke="currentColor" strokeWidth="1.5" />
-      <path d="M8 3V7M16 3V7M3 10H21" stroke="currentColor" strokeWidth="1.5" />
-    </svg>
-  );
-}
-
-function ArrowRightIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" className={className}>
-      <path d="M5 12H19M13 6L19 12L13 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function ChevronDownIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" className={className}>
-      <path d="M6 9L12 15L18 9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function PlusIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" className={className}>
-      <path d="M12 7V17M7 12H17" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function ExternalLinkIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
-      <path d="M10 6H18V14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M18 6L8 16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-/* ───────────── skeleton ───────────── */
-
-function PlanDetailSkeleton() {
-  return (
-    <div className="min-h-dvh bg-app text-app">
-      <div className="relative min-h-dvh w-full">
-        <main className="pb-[max(var(--space-6),env(safe-area-inset-bottom))] md:py-0 md:pl-[102px]">
-          <div className="md:grid md:grid-cols-[minmax(88px,1fr)_minmax(0,1536px)_minmax(88px,1fr)] xl:grid-cols-[minmax(180px,1fr)_minmax(0,1280px)_minmax(180px,1fr)] 2xl:grid-cols-[minmax(240px,1fr)_minmax(0,1240px)_minmax(240px,1fr)]">
-            <div className="md:col-start-2">
-
-          {/* Hero skeleton */}
-          <div
-            className="relative w-full overflow-hidden md:ml-0 md:rounded-b-[20px] animate-pulse bg-[var(--surface-2)]"
-            style={{ height: "clamp(260px, 40vh, 380px)" }}
-          >
-            <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
-            {/* Back button placeholder */}
-            <div className="absolute left-[var(--page-margin-x)] top-[calc(env(safe-area-inset-top)+var(--space-4))] md:top-[var(--space-6)] h-9 w-9 rounded-full bg-white/20" />
-            {/* Title & meta placeholders */}
-            <div className="absolute bottom-0 left-0 right-0 px-[var(--page-margin-x)] pb-[var(--space-6)] space-y-[var(--space-2)]">
-              <div className="h-8 w-2/3 rounded-lg bg-white/20" />
-              <div className="h-4 w-1/3 rounded-md bg-white/15" />
-              <div className="flex gap-[var(--space-4)] pt-[var(--space-1)]">
-                <div className="h-4 w-24 rounded-md bg-white/15" />
-                <div className="h-4 w-28 rounded-md bg-white/15" />
-              </div>
-            </div>
-          </div>
-
-          {/* Tabs skeleton */}
-          <div className="border-b border-app px-[var(--page-margin-x)]">
-            <div className="flex gap-[var(--space-8)] py-[var(--space-4)]">
-              {[80, 56, 64].map((w, i) => (
-                <div key={i} className="h-4 rounded-md bg-[var(--surface-2)] animate-pulse" style={{ width: w }} />
-              ))}
-            </div>
-          </div>
-
-          {/* Content skeleton */}
-          <div className="px-[var(--page-margin-x)] pt-[var(--space-8)] space-y-[var(--space-6)]">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="flex gap-[var(--space-4)]">
-                <div className="h-6 w-6 shrink-0 rounded-full bg-[var(--surface-2)] animate-pulse" />
-                <div className="flex-1 space-y-[var(--space-2)]">
-                  <div className="h-4 w-1/4 rounded-md bg-[var(--surface-2)] animate-pulse" />
-                  <div className="h-4 w-1/2 rounded-md bg-[var(--surface-2)] animate-pulse" />
-                  <div className="h-3 w-1/3 rounded-md bg-[var(--surface-2)] animate-pulse" />
-                </div>
-              </div>
-            ))}
-          </div>
-
-            </div>
-          </div>
-
-        </main>
-      </div>
-    </div>
-  );
-}
+const BackIcon = ({ className = "size-icon" }: { className?: string }) => <ChevronLeft className={className} aria-hidden />;
+const InviteIcon = ({ className = "size-icon" }: { className?: string }) => <UserPlus className={className} aria-hidden />;
+const ShareIcon = ({ className = "size-icon" }: { className?: string }) => <Share2 className={className} aria-hidden />;
+const EditIcon = ({ className = "size-icon" }: { className?: string }) => <Pencil className={className} aria-hidden />;
+const MapPinIcon = ({ className = "size-icon" }: { className?: string }) => <MapPin className={className} aria-hidden />;
+const CalendarSmallIcon = ({ className = "size-icon" }: { className?: string }) => <Calendar className={className} aria-hidden />;
+const ArrowRightIcon = ({ className = "size-icon" }: { className?: string }) => <ArrowRight className={className} aria-hidden />;
+const PlusIcon = ({ className = "size-icon" }: { className?: string }) => <Plus className={className} aria-hidden />;
+const ExternalLinkIcon = ({ className = "size-icon" }: { className?: string }) => <ExternalLink className={className} aria-hidden />;
 
 /* ───────────── page ───────────── */
-
-function formatDateRange(startsAt: string, endsAt: string) {
-  const start = new Date(startsAt);
-  const end = new Date(endsAt);
-  const months = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
-  const sameDay = start.getFullYear() === end.getFullYear() && start.getMonth() === end.getMonth() && start.getDate() === end.getDate();
-  if (sameDay) return `${start.getDate()} ${months[start.getMonth()]}`;
-  if (start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear()) {
-    return `${start.getDate()} – ${end.getDate()} ${months[start.getMonth()]}`;
-  }
-  return `${start.getDate()} ${months[start.getMonth()]} – ${end.getDate()} ${months[end.getMonth()]}`;
-}
-
-/* ───────────── helpers ───────────── */
-
-const MONTHS = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
-const DAYS_ES = ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
-
-function fmtTime(iso: string) {
-  const d = new Date(iso);
-  return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
-}
-
-function fmtDayHeader(iso: string) {
-  const d = new Date(iso);
-  return `${DAYS_ES[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`;
-}
-
-function isoDateOnly(iso: string) {
-  return iso.slice(0, 10);
-}
-
-function groupByDay(subplanes: SubplanRow[]) {
-  const map = new Map<string, SubplanRow[]>();
-  for (const s of subplanes) {
-    const key = isoDateOnly(s.inicio_at);
-    if (!map.has(key)) map.set(key, []);
-    map.get(key)!.push(s);
-  }
-  return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
-}
-
-/* ───────────── location autocomplete ───────────── */
-
-/* ───────────── occupied-time helpers ───────────── */
-
-
-function timeToMin(hhmm: string): number {
-  const [h, m] = hhmm.split(":").map(Number);
-  return h * 60 + m;
-}
-
-function formatMoney(value: number, currency = "EUR") {
-  return new Intl.NumberFormat("es-ES", {
-    style: "currency",
-    currency,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value);
-}
-
-function normalizeDateKey(value: string) {
-  if (/^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
-  return isoDateOnly(new Date(value).toISOString());
-}
-
-function formatExpenseDateTime(value: string) {
-  const formatted = new Intl.DateTimeFormat("es-ES", {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
-  return formatted.replace(",", " ·");
-}
-
-function getInitial(value: string | null | undefined) {
-  return (value?.trim()[0] || "U").toUpperCase();
-}
-
-function summarizeRecipients(parts: GastoRow["partes"], excludeUserId?: string | null) {
-  const filtered = (parts ?? []).filter((part) => part.user_id !== excludeUserId);
-  if (!filtered.length) return "Sin reparto";
-  if (filtered.length === 1) return filtered[0].nombre ?? "1 persona";
-  if (filtered.length === 2) {
-    return `${filtered[0].nombre ?? "Persona"} y ${filtered[1].nombre ?? "persona"}`;
-  }
-  return `${filtered[0].nombre ?? "Persona"} y ${filtered.length - 1} más`;
-}
 
 function PlanExpenseAvatar({ name, image }: { name: string; image: string | null }) {
   if (image) {
@@ -284,178 +62,6 @@ function PlanExpenseAvatar({ name, image }: { name: string; image: string | null
       {getInitial(name)}
     </div>
   );
-}
-
-function formatExpenseDetailDate(value: string) {
-  return new Intl.DateTimeFormat("es-ES", {
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
-
-function PlanGastoDetailModal({
-  gasto,
-  planName,
-  currentUserId,
-  onClose,
-}: {
-  gasto: GastoRow | null;
-  planName: string;
-  currentUserId: string | null;
-  onClose: () => void;
-}) {
-  if (!gasto) return null;
-
-  const payerName = gasto.pagado_por_nombre ?? "Usuario";
-  const categoryLine = gasto.subplan_titulo ?? gasto.categoria_nombre ?? gasto.descripcion?.trim() ?? "Sin detalle";
-  const categoryLabel = gasto.subplan_titulo
-    ? "Actividad"
-    : gasto.categoria_nombre
-      ? "Categoría"
-      : "Detalle";
-  const yourShare = currentUserId
-    ? gasto.partes?.find((parte) => parte.user_id === currentUserId)?.importe ?? null
-    : null;
-  return (
-    <div
-      className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center bg-black/50 px-[var(--space-4)] py-[var(--space-6)] backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-[560px] rounded-[18px] border border-app bg-app shadow-elev-4"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-[var(--space-4)] border-b border-app px-[var(--space-5)] py-[var(--space-4)]">
-          <div className="min-w-0">
-            <p className="text-caption font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
-              {planName}
-            </p>
-            <h2 className="mt-[6px] truncate text-[var(--font-h3)] font-[var(--fw-bold)] leading-[1.15] text-app">
-              {gasto.titulo}
-            </h2>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex size-9 items-center justify-center rounded-full text-muted transition-colors hover:bg-surface"
-            aria-label="Cerrar detalle"
-          >
-            <X className="size-[18px]" strokeWidth={2} />
-          </button>
-        </div>
-
-        <div className="space-y-[var(--space-5)] px-[var(--space-5)] py-[var(--space-5)]">
-          <div className="flex items-start justify-between gap-[var(--space-4)]">
-            <div>
-              <p className="text-caption font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
-                Importe
-              </p>
-              <p className="mt-[6px] text-[32px] font-[var(--fw-bold)] leading-none text-app">
-                {formatMoney(gasto.total, gasto.moneda)}
-              </p>
-            </div>
-            {yourShare != null && (
-              <div className="text-right">
-                <p className="text-caption font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
-                  Tu parte
-                </p>
-                <p className="mt-[6px] text-body font-[var(--fw-semibold)] text-app">
-                  {formatMoney(yourShare, gasto.moneda)}
-                </p>
-              </div>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 gap-[var(--space-3)] sm:grid-cols-2">
-            <PlanExpenseDetailItem label="Pagado por" value={payerName} />
-            <PlanExpenseDetailItem label="Fecha" value={formatExpenseDetailDate(gasto.fecha_gasto)} />
-            <PlanExpenseDetailItem label={categoryLabel} value={categoryLine} />
-          </div>
-
-          {gasto.descripcion?.trim() && (
-            <div>
-              <p className="text-caption font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
-                Descripción
-              </p>
-              <p className="mt-[4px] text-body-sm text-app">{gasto.descripcion.trim()}</p>
-            </div>
-          )}
-
-          <div>
-            <p className="text-caption font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
-              Repartido entre
-            </p>
-            <div className="mt-[var(--space-3)] divide-y divide-app">
-              {(gasto.partes ?? []).map((parte) => {
-                const partName = parte.user_id === currentUserId ? "Tú" : (parte.nombre ?? "Usuario");
-                return (
-                  <div key={`${gasto.id}-${parte.user_id}`} className="flex items-center gap-3 py-[var(--space-3)]">
-                    <PlanExpenseAvatar name={partName} image={parte.foto ?? null} />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-body-sm font-[var(--fw-semibold)] text-app">{partName}</p>
-                    </div>
-                    <p className="shrink-0 text-body-sm font-[var(--fw-semibold)] text-app">
-                      {formatMoney(parte.importe, gasto.moneda)}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function PlanExpenseDetailItem({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="py-[var(--space-2)]">
-      <p className="text-caption font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
-        {label}
-      </p>
-      <p className="mt-[4px] text-body-sm font-[var(--fw-semibold)] text-app">{value}</p>
-    </div>
-  );
-}
-
-type Interval = { from: number; to: number };
-
-function mergeIntervals(intervals: Interval[]): Interval[] {
-  if (!intervals.length) return [];
-  const sorted = [...intervals].sort((a, b) => a.from - b.from);
-  const merged: Interval[] = [{ ...sorted[0] }];
-  for (let i = 1; i < sorted.length; i++) {
-    const last = merged[merged.length - 1];
-    if (sorted[i].from < last.to) last.to = Math.max(last.to, sorted[i].to);
-    else merged.push({ ...sorted[i] });
-  }
-  return merged;
-}
-
-function getOccupiedIntervals(subplanes: SubplanRow[], fecha: string): Interval[] {
-  const toLocalHHMM = (iso: string) => {
-    const d = new Date(iso);
-    return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
-  };
-  const toLocalDate = (iso: string) => {
-    const d = new Date(iso);
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-  };
-
-  const daySubplanes = subplanes
-    .filter(s => toLocalDate(s.inicio_at) === fecha)
-    .sort((a, b) => new Date(a.inicio_at).getTime() - new Date(b.inicio_at).getTime());
-
-  const intervals: Interval[] = daySubplanes.map(s => ({
-    from: timeToMin(toLocalHHMM(s.inicio_at)),
-    to:   timeToMin(toLocalHHMM(s.fin_at)),
-  }));
-
-  return mergeIntervals(intervals);
 }
 
 /* ───────────── invoice debtor list ───────────── */
@@ -486,7 +92,7 @@ function InvoiceDebtorList({ debtors, currency, formatMoney }: { debtors: Invoic
               </span>
               <span className="shrink-0 text-body-sm font-[var(--fw-semibold)] text-[var(--warning,#b45309)]">{formatMoney(d.total, currency)}</span>
               {!single && (
-                <svg className={`shrink-0 text-muted transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 5l4 4 4-4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                <ChevronDown className={`size-[14px] shrink-0 text-muted transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} aria-hidden />
               )}
             </button>
             {!single && isOpen && (
@@ -503,726 +109,6 @@ function InvoiceDebtorList({ debtors, currency, formatMoney }: { debtors: Invoic
         );
       })}
     </div>
-  );
-}
-
-/* ───────────── plan inline calendar ───────────── */
-
-function PlanInlineCalendar({
-  minDate, maxDate, startDate, endDate, onChange,
-}: {
-  minDate: string; maxDate: string;
-  startDate: string; endDate: string | null;
-  onChange: (start: string, end: string | null) => void;
-}) {
-  const [phase, setPhase] = useState<"start" | "end">("start");
-  const [hoverDate, setHoverDate] = useState<string | null>(null);
-
-  const parseYMD = (s: string) => new Date(s + "T12:00:00");
-
-  const handleDayClick = (dateStr: string) => {
-    if (dateStr < minDate || dateStr > maxDate) return;
-    if (phase === "start") {
-      onChange(dateStr, null);
-      setPhase("end");
-    } else {
-      if (dateStr === startDate) { onChange(startDate, null); setPhase("start"); }
-      else if (dateStr > startDate) { onChange(startDate, dateStr); setPhase("start"); }
-      else { onChange(dateStr, null); setPhase("end"); }
-    }
-  };
-
-  const hasRange = !!endDate && endDate !== startDate;
-  const previewEnd = phase === "end" && hoverDate && hoverDate > startDate ? hoverDate : null;
-
-  const renderMonth = (year: number, month: number) => {
-    const firstDay = new Date(year, month, 1);
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    let startDow = firstDay.getDay();
-    startDow = (startDow + 6) % 7;
-    const monthLabel = firstDay.toLocaleDateString("es-ES", { month: "long", year: "numeric" });
-
-    const cells: React.ReactNode[] = Array.from({ length: startDow }, (_, i) => <div key={`pad-${i}`} />);
-
-    for (let i = 0; i < daysInMonth; i++) {
-      const day = i + 1;
-      const mm = String(month + 1).padStart(2, "0");
-      const dd = String(day).padStart(2, "0");
-      const dateStr = `${year}-${mm}-${dd}`;
-      const isOutside = dateStr < minDate || dateStr > maxDate;
-      const isStart = dateStr === startDate;
-      const isEnd = hasRange && dateStr === endDate;
-      const inRange = hasRange && dateStr > startDate && dateStr < endDate!;
-      const inPreview = !!previewEnd && dateStr > startDate && dateStr < previewEnd && !hasRange;
-      const isPreviewEnd = dateStr === previewEnd && !hasRange;
-
-      cells.push(
-        <div
-          key={dateStr}
-          className="relative flex h-12 items-center justify-center"
-          onClick={() => !isOutside && handleDayClick(dateStr)}
-          onMouseEnter={() => !isOutside && setHoverDate(dateStr)}
-          onMouseLeave={() => setHoverDate(null)}
-        >
-          {inRange && <div className="absolute inset-y-[4px] inset-x-0 bg-[var(--surface-2)]" />}
-          {!inRange && inPreview && <div className="absolute inset-y-[4px] inset-x-0 bg-[var(--surface-2)] opacity-50" />}
-          {isStart && (hasRange || !!previewEnd) && (
-            <div className={`absolute inset-y-[4px] left-1/2 right-0 bg-[var(--surface-2)] ${!hasRange ? "opacity-50" : ""}`} />
-          )}
-          {(isEnd || isPreviewEnd) && (
-            <div className={`absolute inset-y-[4px] left-0 right-1/2 bg-[var(--surface-2)] ${isPreviewEnd ? "opacity-50" : ""}`} />
-          )}
-          <div className={[
-            "relative z-10 flex size-10 items-center justify-center rounded-full text-[15px] font-[var(--fw-semibold)] select-none transition-colors",
-            isStart || isEnd ? "bg-[var(--text-primary)] text-[var(--bg)]" :
-            isPreviewEnd ? "bg-[var(--surface-2)] text-app" :
-            isOutside ? "cursor-default text-muted opacity-20" :
-            "cursor-pointer text-app hover:bg-[var(--surface-2)]",
-          ].join(" ")}>
-            {day}
-          </div>
-        </div>
-      );
-    }
-
-    while (cells.length < 42) cells.push(<div key={`tail-${cells.length}`} />);
-
-    return (
-      <div key={`${year}-${month}`}>
-        <p className="mb-[var(--space-4)] text-center text-[15px] font-[var(--fw-bold)] capitalize text-app">{monthLabel}</p>
-        <div className="mb-[var(--space-1)] grid grid-cols-7 text-center">
-          {["L","M","X","J","V","S","D"].map((d) => (
-            <span key={d} className="py-1 text-[14px] font-[var(--fw-semibold)] text-muted">{d}</span>
-          ))}
-        </div>
-        <div className="grid grid-cols-7">{cells}</div>
-      </div>
-    );
-  };
-
-  // Build months in plan range
-  const startMonthDate = parseYMD(minDate);
-  const endMonthDate = parseYMD(maxDate);
-  const allMonths: { year: number; month: number }[] = [];
-  const cur = new Date(startMonthDate.getFullYear(), startMonthDate.getMonth(), 1);
-  const last = new Date(endMonthDate.getFullYear(), endMonthDate.getMonth(), 1);
-  while (cur <= last) {
-    allMonths.push({ year: cur.getFullYear(), month: cur.getMonth() });
-    cur.setMonth(cur.getMonth() + 1);
-  }
-
-  const totalMonths = allMonths.length;
-
-  return (
-    <div>
-      {/* Mobile: all months stacked */}
-      <div className="space-y-[var(--space-8)] md:hidden">
-        {allMonths.map(({ year, month }) => renderMonth(year, month))}
-      </div>
-
-      {/* Desktop: 1 month → centered; 2+ → 2-col grid (parent scrolls for overflow) */}
-      <div className="hidden md:block">
-        {totalMonths === 1 ? (
-          <div className="mx-auto max-w-[320px]">
-            {allMonths.map(({ year, month }) => renderMonth(year, month))}
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-[var(--space-8)]">
-            {allMonths.map(({ year, month }) => renderMonth(year, month))}
-          </div>
-        )}
-      </div>
-
-      {/* Range hint */}
-      <p className="mt-[var(--space-3)] text-center text-caption text-muted">
-        {!endDate || endDate === startDate
-          ? parseYMD(startDate).toLocaleDateString("es-ES", { day: "numeric", month: "short" })
-          : `${parseYMD(startDate).toLocaleDateString("es-ES", { day: "numeric", month: "short" })} → ${parseYMD(endDate).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}`
-        }
-        {phase === "end" && (!endDate || endDate === startDate) && (
-          <span className="ml-1 opacity-60">— elige fecha de fin o continúa</span>
-        )}
-      </p>
-    </div>
-  );
-}
-
-/* ───────────── time wheel input ───────────── */
-
-function TimeWheelInput({ value, onChange, minTime, maxTime }: {
-  value: string;
-  onChange: (v: string) => void;
-  minTime?: string;
-  maxTime?: string;
-}) {
-  const [hStr, mStr] = value.split(":");
-  const h = parseInt(hStr ?? "0", 10);
-  const m = parseInt(mStr ?? "0", 10);
-  const touchHRef = useRef<{ startY: number; start: number } | null>(null);
-  const touchMRef = useRef<{ startY: number; start: number } | null>(null);
-
-  const emit = (hh: number, mm: number) => {
-    let total = Math.max(0, Math.min(23 * 60 + 59, hh * 60 + mm));
-    if (minTime) { const [a, b] = minTime.split(":").map(Number); total = Math.max((a ?? 0) * 60 + (b ?? 0), total); }
-    if (maxTime) { const [a, b] = maxTime.split(":").map(Number); total = Math.min((a ?? 0) * 60 + (b ?? 0), total); }
-    onChange(`${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`);
-  };
-
-  const inputCls = "w-[46px] bg-transparent text-[28px] font-[var(--fw-bold)] text-app outline-none text-center [appearance:textfield] [&::-webkit-inner-spin-button]:hidden [&::-webkit-outer-spin-button]:hidden";
-
-  return (
-    <div className="flex items-baseline">
-      <input
-        type="number" min={0} max={23}
-        value={String(h).padStart(2, "0")}
-        onChange={(e) => emit(Math.max(0, Math.min(23, parseInt(e.target.value) || 0)), m)}
-        onWheel={(e) => { e.preventDefault(); emit(h + (e.deltaY > 0 ? -1 : 1), m); }}
-        onTouchStart={(e) => { touchHRef.current = { startY: e.touches[0]!.clientY, start: h }; }}
-        onTouchMove={(e) => {
-          if (!touchHRef.current) return;
-          e.preventDefault();
-          const delta = Math.round((touchHRef.current.startY - e.touches[0]!.clientY) / 20);
-          emit(touchHRef.current.start + delta, m);
-        }}
-        onTouchEnd={() => { touchHRef.current = null; }}
-        className={inputCls}
-      />
-      <span className="text-[28px] font-[var(--fw-bold)] text-app select-none">:</span>
-      <input
-        type="number" min={0} max={59}
-        value={String(m).padStart(2, "0")}
-        onChange={(e) => emit(h, Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
-        onWheel={(e) => { e.preventDefault(); emit(h, m + (e.deltaY > 0 ? -1 : 1)); }}
-        onTouchStart={(e) => { touchMRef.current = { startY: e.touches[0]!.clientY, start: m }; }}
-        onTouchMove={(e) => {
-          if (!touchMRef.current) return;
-          e.preventDefault();
-          const delta = Math.round((touchMRef.current.startY - e.touches[0]!.clientY) / 8);
-          emit(h, touchMRef.current.start + delta);
-        }}
-        onTouchEnd={() => { touchMRef.current = null; }}
-        className={inputCls}
-      />
-    </div>
-  );
-}
-
-/* ───────────── add sheet ───────────── */
-
-const TRANSPORT_LLEGADA = [
-  { value: "APIE", Icon: Footprints, label: "A pie", googleMode: "walking" },
-  { value: "COCHE", Icon: CarFront, label: "Coche", googleMode: "driving" },
-  { value: "TAXI", Icon: CarTaxiFront, label: "Taxi", googleMode: "driving" },
-  { value: "BUS", Icon: BusFront, label: "Bus", googleMode: "transit" },
-  { value: "METRO", Icon: TramFront, label: "Metro", googleMode: "transit" },
-  { value: "TREN", Icon: TrainFront, label: "Tren", googleMode: "transit" },
-] as const satisfies ReadonlyArray<{
-  value: string;
-  Icon: LucideIcon;
-  label: string;
-  googleMode: "walking" | "driving" | "transit";
-}>;
-
-const TRANSPORT_MAP = Object.fromEntries(TRANSPORT_LLEGADA.map((t) => [t.value, t]));
-
-const ACTIVITY_TYPE_OPTIONS = [
-  { value: "ACTIVIDAD", label: "Actividad", Icon: FerrisWheel },
-  { value: "VUELO", label: "Vuelo", Icon: Plane },
-  { value: "BARCO", label: "Barco", Icon: Ship },
-  { value: "HOTEL", label: "Hotel", Icon: Hotel },
-  { value: "RESTAURANTE", label: "Restaurante", Icon: UtensilsCrossed },
-  { value: "OTRO", label: "Otro", Icon: CircleEllipsis },
-] as const satisfies ReadonlyArray<{
-  value: TipoSubplan;
-  label: string;
-  Icon: LucideIcon;
-}>;
-
-type AddSheetProps = {
-  planId: number;
-  planStartDate: string;
-  planEndDate: string;
-  subplanes: SubplanRow[];
-  onClose: () => void;
-  onSaved: (saved: SubplanRow, original?: SubplanRow | null) => void;
-  initialTitulo?: string;
-  initialDate?: string;
-  initialSubplan?: SubplanRow | null;
-};
-
-function AddSubplanSheet({ planId, planStartDate, planEndDate, subplanes, onClose, onSaved, initialTitulo, initialDate, initialSubplan }: AddSheetProps) {
-  const TOTAL_STEPS = 3;
-  const STEP_META = [
-    { title: "¿Qué hacéis?", subtitle: "Tipo y lugar de la actividad" },
-    { title: "¿Cuándo?", subtitle: "Fecha y horario" },
-    { title: initialSubplan ? "Editar actividad" : "¿Cómo se llama?", subtitle: "Dale un nombre a la actividad" },
-  ];
-
-  // Use local date to avoid UTC-offset shifting the allowed range by one day
-  const toLocalDate = (iso: string) => {
-    const d = new Date(iso);
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-  };
-  const toLocalTime = (iso: string) => {
-    const d = new Date(iso);
-    return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
-  };
-  const minDate = toLocalDate(planStartDate);
-  const maxDate = toLocalDate(planEndDate);
-  const planStartTime = toLocalTime(planStartDate);
-  const planEndTime   = toLocalTime(planEndDate);
-  const planIsAllDay  = planStartTime === "00:00" && planEndTime === "23:59";
-  const isEditing = Boolean(initialSubplan);
-
-  const initialStartDate = initialSubplan ? toLocalDate(initialSubplan.inicio_at) : null;
-  const initialEndDate = initialSubplan ? toLocalDate(initialSubplan.fin_at) : null;
-  const defaultDate = initialStartDate && initialStartDate >= minDate && initialStartDate <= maxDate
-    ? initialStartDate
-    : initialDate && initialDate >= minDate && initialDate <= maxDate
-      ? initialDate
-      : minDate;
-  // Default hours clamped to plan bounds (only matters when plan has specific hours)
-  const defaultHoraInicio = initialSubplan ? toLocalTime(initialSubplan.inicio_at) : (planIsAllDay ? "10:00" : planStartTime);
-  const defaultHoraFin    = initialSubplan ? toLocalTime(initialSubplan.fin_at) : (planIsAllDay ? "11:00" : planEndTime);
-
-  const [titulo, setTitulo] = useState(initialSubplan?.titulo ?? initialTitulo ?? "");
-  const [descripcion, setDescripcion] = useState(initialSubplan?.descripcion ?? "");
-  const [fecha, setFecha] = useState(defaultDate);
-  const [fechaFin, setFechaFin] = useState<string | null>(initialEndDate && initialEndDate !== defaultDate ? initialEndDate : null); // null = mismo día que fecha
-  const [horaInicio, setHoraInicio] = useState(defaultHoraInicio);
-  const [horaFin, setHoraFin] = useState(defaultHoraFin);
-  const allDay = false;
-  const [tipo, setTipo] = useState<TipoSubplan>(initialSubplan?.tipo ?? "ACTIVIDAD");
-  const [ubicacion, setUbicacion] = useState(initialSubplan?.ubicacion_nombre ?? "");
-  const [ubicacionCoords, setUbicacionCoords] = useState<Coords | null>(
-    initialSubplan?.ubicacion_lat != null && initialSubplan?.ubicacion_lng != null
-      ? { lat: initialSubplan.ubicacion_lat, lng: initialSubplan.ubicacion_lng }
-      : null
-  );
-  const [ubicacionFin, setUbicacionFin] = useState(initialSubplan?.ubicacion_fin_nombre ?? "");
-  const [ubicacionFinCoords, setUbicacionFinCoords] = useState<Coords | null>(
-    initialSubplan?.ubicacion_fin_lat != null && initialSubplan?.ubicacion_fin_lng != null
-      ? { lat: initialSubplan.ubicacion_fin_lat, lng: initialSubplan.ubicacion_fin_lng }
-      : null
-  );
-  const [transporteLlegada, setTransporteLlegada] = useState<string | null>(initialSubplan?.transporte_llegada ?? null);
-  const [saving, setSaving] = useState(false);
-  const [wizardStep, setWizardStep] = useState(1);
-
-  const planMonthCount = useMemo(() => {
-    const s = new Date(minDate + "T12:00:00");
-    const e = new Date(maxDate + "T12:00:00");
-    return (e.getFullYear() - s.getFullYear()) * 12 + (e.getMonth() - s.getMonth()) + 1;
-  }, [minDate, maxDate]);
-
-  // ¿Ya hay actividades ese día? → mostrar selector de transporte
-  const hayActividadEseDia = subplanes.some((s) => s.id !== initialSubplan?.id && isoDateOnly(s.inicio_at) === fecha);
-  const esTransporte = TIPOS_TRANSPORTE.includes(tipo);
-  const [error, setError] = useState<string | null>(null);
-  const sheetRef = useRef<HTMLDivElement>(null);
-
-  // Lock body scroll while modal is open
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = prev; };
-  }, []);
-
-  // Clamp hours when date or hours change to ensure they stay within plan bounds
-  const clampedHoraInicio = (() => {
-    if (planIsAllDay) return horaInicio;
-    if (fecha === minDate && horaInicio < planStartTime) return planStartTime;
-    if (fecha === maxDate && horaInicio > planEndTime)   return planEndTime;
-    return horaInicio;
-  })();
-
-  const efectivaFechaFin = fechaFin ?? fecha;
-  const clampedHoraFin = (() => {
-    if (planIsAllDay) return horaFin;
-    if (efectivaFechaFin === maxDate && horaFin > planEndTime) return planEndTime;
-    // Only enforce fin > inicio when on the same day
-    if (efectivaFechaFin === fecha && horaFin <= clampedHoraInicio) {
-      const [h, m] = clampedHoraInicio.split(":").map(Number);
-      const totalMin = h * 60 + m + 60;
-      const maxTotal = planIsAllDay ? 23 * 60 + 59 : (Number(planEndTime.split(":")[0]) * 60 + Number(planEndTime.split(":")[1]));
-      const clamped = Math.min(totalMin, maxTotal);
-      return `${String(Math.floor(clamped / 60)).padStart(2, "0")}:${String(clamped % 60).padStart(2, "0")}`;
-    }
-    return horaFin;
-  })();
-
-  // Occupied intervals for the selected day (existing subplans + travel time)
-  const occupiedIntervals = fecha ? getOccupiedIntervals(subplanes.filter((s) => s.id !== initialSubplan?.id), fecha) : [];
-
-  const canSubmit = titulo.trim().length > 0 && fecha.length > 0 && fecha >= minDate && fecha <= maxDate && !saving;
-
-  const handleSubmit = async (e?: React.FormEvent) => {
-    e?.preventDefault();
-    if (!canSubmit) return;
-
-    // Validate dates are within plan range
-    if (fecha < minDate || fecha > maxDate) {
-      setError(`La actividad debe estar entre el ${minDate} y el ${maxDate}.`);
-      return;
-    }
-    if (efectivaFechaFin > maxDate) {
-      setError(`La fecha de fin debe estar dentro del rango del plan.`);
-      return;
-    }
-
-    // Validate no overlap with existing subplans + travel time
-    if (!allDay && occupiedIntervals.length > 0) {
-      const newFrom = timeToMin(clampedHoraInicio);
-      const newTo   = timeToMin(clampedHoraFin);
-      const overlaps = occupiedIntervals.some(b => newFrom < b.to && newTo > b.from);
-      if (overlaps) {
-        setError("Este horario se solapa con una actividad existente o su tiempo de viaje.");
-        return;
-      }
-    }
-
-    setSaving(true);
-    setError(null);
-    try {
-      const inicioAt = `${fecha}T${clampedHoraInicio}:00`;
-      const finAt    = `${efectivaFechaFin}T${clampedHoraFin}:00`;
-      const normalizedSubplan = {
-        titulo: titulo.trim(),
-        descripcion: descripcion.trim(),
-        inicio_at: new Date(inicioAt).toISOString(),
-        fin_at: new Date(finAt).toISOString(),
-        all_day: allDay,
-        tipo,
-        ubicacion_nombre: ubicacion.trim(),
-        ubicacion_fin_nombre: esTransporte ? ubicacionFin.trim() : null,
-        ubicacion_lat: ubicacionCoords?.lat ?? null,
-        ubicacion_lng: ubicacionCoords?.lng ?? null,
-        ubicacion_fin_lat: esTransporte ? (ubicacionFinCoords?.lat ?? null) : null,
-        ubicacion_fin_lng: esTransporte ? (ubicacionFinCoords?.lng ?? null) : null,
-        transporte_llegada: hayActividadEseDia ? transporteLlegada : null,
-      };
-
-      if (initialSubplan) {
-        await updateSubplan({
-          subplanId: initialSubplan.id,
-          titulo: normalizedSubplan.titulo,
-          descripcion: normalizedSubplan.descripcion,
-          inicioAt: normalizedSubplan.inicio_at,
-          finAt: normalizedSubplan.fin_at,
-          allDay,
-          tipo,
-          ubicacionNombre: normalizedSubplan.ubicacion_nombre,
-          ubicacionFinNombre: normalizedSubplan.ubicacion_fin_nombre,
-          ubicacionLat: normalizedSubplan.ubicacion_lat,
-          ubicacionLng: normalizedSubplan.ubicacion_lng,
-          ubicacionFinLat: normalizedSubplan.ubicacion_fin_lat,
-          ubicacionFinLng: normalizedSubplan.ubicacion_fin_lng,
-          transporteLlegada: normalizedSubplan.transporte_llegada,
-        });
-
-        onSaved({
-          ...initialSubplan,
-          ...normalizedSubplan,
-          ruta_polyline: null,
-          duracion_viaje: null,
-          distancia_viaje: null,
-        }, initialSubplan);
-      } else {
-        const newId = await createSubplan({
-          planId,
-          titulo: normalizedSubplan.titulo,
-          descripcion: normalizedSubplan.descripcion,
-          inicioAt: normalizedSubplan.inicio_at,
-          finAt: normalizedSubplan.fin_at,
-          allDay,
-          tipo,
-          ubicacionNombre: normalizedSubplan.ubicacion_nombre,
-          ubicacionFinNombre: normalizedSubplan.ubicacion_fin_nombre,
-          ubicacionLat: normalizedSubplan.ubicacion_lat,
-          ubicacionLng: normalizedSubplan.ubicacion_lng,
-          ubicacionFinLat: normalizedSubplan.ubicacion_fin_lat,
-          ubicacionFinLng: normalizedSubplan.ubicacion_fin_lng,
-          transporteLlegada: normalizedSubplan.transporte_llegada,
-        });
-        onSaved({
-          id: newId, plan_id: planId, parent_subplan_id: null,
-          ...normalizedSubplan,
-          ubicacion_direccion: null,
-          ubicacion_fin_direccion: null,
-          duracion_viaje: null, distancia_viaje: null, ruta_polyline: null,
-          orden: 0, estado: "ACTIVO",
-          creado_por_user_id: "", created_at: new Date().toISOString(),
-        });
-      }
-      onClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : `Error al ${isEditing ? "guardar" : "crear"} la actividad`);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const canContinueWizard = wizardStep === 3 ? titulo.trim().length > 0 : true;
-  const isLastStep = wizardStep === TOTAL_STEPS;
-  const meta = STEP_META[wizardStep - 1];
-
-  const handleAdvance = () => {
-    if (!canContinueWizard || saving) return;
-    if (isLastStep) { void handleSubmit(); }
-    else { setWizardStep((s) => s + 1); }
-  };
-
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key !== "Enter") return;
-      const tag = (e.target as HTMLElement).tagName;
-      // Let textarea handle Enter naturally; text inputs in step 3 handled separately
-      if (tag === "TEXTAREA") return;
-      e.preventDefault();
-      handleAdvance();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canContinueWizard, saving, isLastStep, wizardStep, titulo]);
-
-  return (
-    <>
-      <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center" onClick={onClose}>
-        <div
-          ref={sheetRef}
-          className={`flex h-dvh w-full flex-col overflow-hidden bg-[var(--bg)] transition-[max-width] duration-[400ms] [transition-timing-function:var(--ease-standard)] md:h-auto md:max-h-[90dvh] md:rounded-[24px] md:shadow-elev-4 ${
-            wizardStep === 2
-              ? planMonthCount === 1 ? "md:max-w-[420px]" : "md:max-w-[760px]"
-              : "md:max-w-[520px]"
-          }`}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {/* Progress bar */}
-          <div className="h-[3px] w-full shrink-0 bg-[var(--surface-2)]">
-            <div
-              className="h-full bg-primary-token transition-all duration-[400ms] [transition-timing-function:var(--ease-standard)]"
-              style={{ width: `${(wizardStep / TOTAL_STEPS) * 100}%` }}
-            />
-          </div>
-
-          {/* Top nav */}
-          <div className="flex shrink-0 items-center justify-between px-[var(--space-5)] py-[var(--space-3)]">
-            <button
-              type="button"
-              onClick={wizardStep === 1 ? onClose : () => setWizardStep((s) => s - 1)}
-              className="flex size-9 items-center justify-center rounded-full text-app transition-colors hover:bg-surface"
-            >
-              {wizardStep === 1 ? (
-                <svg viewBox="0 0 24 24" fill="none" className="size-[18px]">
-                  <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                </svg>
-              ) : (
-                <svg viewBox="0 0 24 24" fill="none" className="size-[18px]">
-                  <path d="M15 19l-7-7 7-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              )}
-            </button>
-            <span className="text-caption font-[var(--fw-medium)] text-muted">{wizardStep} de {TOTAL_STEPS}</span>
-            <div className="size-9" aria-hidden="true" />
-          </div>
-
-          {/* Content */}
-          <div className="flex-1 overflow-y-auto px-[var(--space-6)] pb-[var(--space-8)] pt-[var(--space-2)]">
-            <div className="mb-[var(--space-6)]">
-              <h2 className="font-[var(--fw-bold)] leading-tight text-app" style={{ fontSize: "clamp(22px, 5vw, 28px)" }}>
-                {meta.title}
-              </h2>
-              <p className="mt-[var(--space-1)] text-body-sm text-muted">{meta.subtitle}</p>
-            </div>
-
-            {/* ── Step 1: Tipo + Ubicación ── */}
-            {wizardStep === 1 && (
-              <div className="space-y-[var(--space-6)]">
-                {/* Activity type grid */}
-                <div className="grid grid-cols-3 gap-[var(--space-2)] sm:gap-[var(--space-3)]">
-                  {ACTIVITY_TYPE_OPTIONS.map((t) => (
-                    <button
-                      key={t.value}
-                      type="button"
-                      onClick={() => setTipo(t.value)}
-                      className={`flex flex-col items-start gap-[var(--space-2)] rounded-[14px] border-2 px-[var(--space-3)] py-[var(--space-3)] text-left transition-colors sm:rounded-[16px] sm:p-[var(--space-4)] ${
-                        tipo === t.value
-                          ? "border-[var(--primary)]/40 bg-[var(--primary)]/10"
-                          : "border-app bg-app hover:bg-surface"
-                      }`}
-                    >
-                      <t.Icon className={`size-5 shrink-0 ${tipo === t.value ? "text-primary-token" : "text-muted"}`} strokeWidth={1.5} />
-                      <span className="text-[14px] leading-[1.15] font-[var(--fw-semibold)] text-app sm:text-body-sm">{t.label}</span>
-                    </button>
-                  ))}
-                </div>
-
-                {/* Ubicación */}
-                <div>
-                  <p className="mb-[var(--space-2)] text-[14px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
-                    {esTransporte ? "Origen" : "Ubicación"} <span className="normal-case font-[var(--fw-normal)]">(opcional)</span>
-                  </p>
-                  <div className="group flex items-center gap-[var(--space-3)] border-b-2 border-app pb-[var(--space-2)] transition-colors focus-within:border-primary-token">
-                    <MapPinIcon className="size-[16px] shrink-0 text-muted transition-colors group-focus-within:text-primary-token" />
-                    <LocationAutocomplete
-                      value={ubicacion}
-                      onChange={(v, coords) => { setUbicacion(v); if (coords) setUbicacionCoords(coords); else setUbicacionCoords(null); }}
-                      dropdownVariant="surface"
-                      placeholder={
-                        tipo === "VUELO" ? "Aeropuerto de salida" :
-                        tipo === "BARCO" ? "Puerto de salida" :
-                        tipo === "HOTEL" ? "Nombre del hotel" :
-                        tipo === "RESTAURANTE" ? "Nombre del restaurante" :
-                        "¿Dónde será?"
-                      }
-                    />
-                  </div>
-                </div>
-
-                {/* Destino (transport only) */}
-                {esTransporte && (
-                  <div>
-                    <p className="mb-[var(--space-2)] text-[14px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Destino</p>
-                    <div className="group flex items-center gap-[var(--space-3)] border-b-2 border-app pb-[var(--space-2)] transition-colors focus-within:border-primary-token">
-                      <MapPinIcon className="size-[16px] shrink-0 text-primary-token" />
-                      <LocationAutocomplete
-                        value={ubicacionFin}
-                        onChange={(v, coords) => { setUbicacionFin(v); if (coords) setUbicacionFinCoords(coords); else setUbicacionFinCoords(null); }}
-                        dropdownVariant="surface"
-                        placeholder={tipo === "VUELO" ? "Aeropuerto de llegada" : "Puerto de llegada"}
-                      />
-                    </div>
-                  </div>
-                )}
-
-              </div>
-            )}
-
-            {/* ── Step 2: Cuándo (calendar + hours) ── */}
-            {wizardStep === 2 && (
-              <div className="space-y-[var(--space-6)]">
-                <PlanInlineCalendar
-                  key={`${minDate}-${maxDate}`}
-                  minDate={minDate}
-                  maxDate={maxDate}
-                  startDate={fecha}
-                  endDate={fechaFin}
-                  onChange={(start, end) => { setFecha(start); setFechaFin(end); }}
-                />
-                {/* Time pickers */}
-                <div className="grid grid-cols-2 gap-[var(--space-5)]">
-                  <div>
-                    <p className="mb-[var(--space-2)] text-[14px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Hora inicio</p>
-                    <div className="border-b-2 border-app pb-[var(--space-1)] transition-colors focus-within:border-primary-token">
-                      <TimeWheelInput
-                        value={horaInicio}
-                        onChange={setHoraInicio}
-                        minTime={fecha === minDate && !planIsAllDay ? planStartTime : undefined}
-                        maxTime={fecha === maxDate && !planIsAllDay ? planEndTime : undefined}
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <p className="mb-[var(--space-2)] text-[14px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Hora fin</p>
-                    <div className="border-b-2 border-app pb-[var(--space-1)] transition-colors focus-within:border-primary-token">
-                      <TimeWheelInput
-                        value={horaFin}
-                        onChange={setHoraFin}
-                        minTime={efectivaFechaFin === fecha ? horaInicio : undefined}
-                        maxTime={efectivaFechaFin === maxDate && !planIsAllDay ? planEndTime : undefined}
-                      />
-                    </div>
-                  </div>
-                </div>
-                {error && wizardStep === 2 && <p className="text-body-sm text-[var(--error)]">{error}</p>}
-              </div>
-            )}
-
-            {/* ── Step 3: Nombre ── */}
-            {wizardStep === 3 && (
-              <div className="space-y-[var(--space-5)]">
-                <div className="border-b-2 border-app pb-[var(--space-2)] transition-colors focus-within:border-primary-token">
-                  <input
-                    value={titulo}
-                    onChange={(e) => setTitulo(e.target.value)}
-                    placeholder={
-                      tipo === "VUELO" ? "Vuelo a París" :
-                      tipo === "HOTEL" ? "Hotel Marina Bay" :
-                      tipo === "RESTAURANTE" ? "Cena en La Trattoria" :
-                      tipo === "BARCO" ? "Ferry a Ibiza" :
-                      "Tarde en el museo"
-                    }
-                    autoFocus
-                    className="w-full bg-transparent text-[22px] font-[var(--fw-semibold)] text-app outline-none placeholder:text-muted"
-                  />
-                </div>
-                <div className="border-b border-app pb-[var(--space-1)] transition-colors focus-within:border-[var(--border-strong)]">
-                  <input
-                    value={descripcion}
-                    onChange={(e) => setDescripcion(e.target.value)}
-                    placeholder="Descripción breve (opcional)"
-                    className="w-full bg-transparent text-body-sm text-app outline-none placeholder:text-muted"
-                  />
-                </div>
-
-                {/* ¿Cómo llegas? */}
-                {hayActividadEseDia && (
-                  <div>
-                    <p className="mb-[var(--space-3)] text-[14px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">¿Cómo llegas?</p>
-                    <div className="grid grid-cols-3 gap-[var(--space-2)]">
-                      {TRANSPORT_LLEGADA.map((t) => (
-                        <button
-                          key={t.value}
-                          type="button"
-                          onClick={() => setTransporteLlegada(transporteLlegada === t.value ? null : t.value)}
-                          className={`flex flex-col items-center gap-[var(--space-1)] rounded-[14px] border-2 py-[var(--space-3)] transition-colors ${
-                            transporteLlegada === t.value
-                              ? "border-[var(--primary)]/40 bg-[var(--primary)]/10"
-                              : "border-app bg-app hover:bg-surface"
-                          }`}
-                        >
-                          <t.Icon className={`size-[18px] shrink-0 ${transporteLlegada === t.value ? "text-primary-token" : "text-muted"}`} strokeWidth={1.5} />
-                          <span className={`text-[14px] font-[var(--fw-semibold)] ${transporteLlegada === t.value ? "text-primary-token" : "text-app"}`}>{t.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {error && isLastStep && <p className="text-body-sm text-[var(--error)]">{error}</p>}
-          </div>
-
-          {/* Footer */}
-          <div className="shrink-0 border-t border-app px-[var(--space-5)] py-[var(--space-4)]">
-            <div className="flex items-center justify-between">
-              {wizardStep === 2 ? (
-                <button
-                  type="button"
-                  onClick={() => { setFecha(defaultDate); setFechaFin(null); setHoraInicio(defaultHoraInicio); setHoraFin(defaultHoraFin); }}
-                  className="text-body-sm font-[var(--fw-semibold)] text-app underline underline-offset-2 transition-opacity hover:opacity-60"
-                >
-                  Restablecer
-                </button>
-              ) : (
-                <div />
-              )}
-              <button
-                type="button"
-                disabled={!canContinueWizard || (isLastStep && saving)}
-                onClick={handleAdvance}
-                className="rounded-[14px] bg-[var(--text-primary)] px-[var(--space-8)] py-[12px] text-body-sm font-[var(--fw-semibold)] text-contrast-token transition-opacity hover:opacity-85 disabled:opacity-[var(--disabled-opacity)]"
-              >
-                {isLastStep ? (saving ? "Guardando..." : isEditing ? "Guardar cambios" : "Crear actividad") : wizardStep === 2 ? "Siguiente" : "Continuar"}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </>
   );
 }
 
@@ -1381,19 +267,21 @@ export default function PlanDetailPage() {
   const routeShouldShowMap = !(isPast && !routeHasRoute && !plan?.ubicacion_nombre);
   const routeMapsUrl = useMemo(() => {
     if (!routeHasRoute) return null;
-    const origin = encodeURIComponent(routeStops[0]);
-    const destination = encodeURIComponent(routeStops[routeStops.length - 1]);
-    const waypoints = routeStops.slice(1, -1).map(encodeURIComponent).join("|");
     const modes = routeDayItems
       .slice(1)
       .map((s) => TRANSPORT_MAP[s.transporte_llegada ?? ""]?.googleMode ?? "driving");
     const travelmode =
       modes.sort((a, b) => modes.filter((m) => m === b).length - modes.filter((m) => m === a).length)[0] ?? "driving";
-    return `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}${waypoints ? `&waypoints=${waypoints}` : ""}&travelmode=${travelmode}`;
+    return buildGoogleMapsDirectionsUrl({
+      origin: routeStops[0],
+      destination: routeStops[routeStops.length - 1],
+      waypoints: routeStops.slice(1, -1),
+      travelMode: travelmode,
+    });
   }, [routeDayItems, routeHasRoute, routeStops]);
   const routeWazeUrl = useMemo(() => {
     if (!routeHasRoute) return null;
-    return `https://waze.com/ul?q=${encodeURIComponent(routeStops[routeStops.length - 1])}&navigate=yes`;
+    return buildWazeDirectionsUrl(routeStops[routeStops.length - 1]);
   }, [routeHasRoute, routeStops]);
 
   useEffect(() => {
@@ -1780,7 +668,7 @@ export default function PlanDetailPage() {
                     onClick={() => setShowPublishModal(true)}
                     className="flex h-9 items-center gap-1.5 rounded-full bg-white/20 px-3.5 text-[14px] font-[600] text-white backdrop-blur-sm transition-colors hover:bg-white/30"
                   >
-                    <svg viewBox="0 0 20 20" fill="none" className="size-[15px]"><path d="M10 2.5L17 10H12.5V17H7.5V10H3L10 2.5Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" /></svg>
+                    <Upload className="size-[15px]" aria-hidden />
                     Publicar
                   </button>
                 )}
@@ -2151,7 +1039,11 @@ export default function PlanDetailPage() {
                                               </button>
                                             )}
                                             <a
-                                              href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(s.ubicacion_fin_nombre ?? s.ubicacion_nombre ?? "")}&destination=${encodeURIComponent(items[idx + 1].ubicacion_nombre ?? "")}&travelmode=${nextTransporte.googleMode ?? "driving"}`}
+                                              href={buildGoogleMapsDirectionsUrl({
+                                                origin: s.ubicacion_fin_nombre ?? s.ubicacion_nombre ?? "",
+                                                destination: items[idx + 1].ubicacion_nombre ?? "",
+                                                travelMode: nextTransporte.googleMode ?? "driving",
+                                              })}
                                               target="_blank"
                                               rel="noopener noreferrer"
                                               className="inline-flex items-center text-caption text-muted transition-colors hover:text-primary-token"
@@ -2160,7 +1052,7 @@ export default function PlanDetailPage() {
                                               <Image src="/brands/google-maps.svg" alt="Google Maps" width={14} height={14} className="size-[14px]" />
                                             </a>
                                             <a
-                                              href={`https://waze.com/ul?q=${encodeURIComponent(items[idx + 1].ubicacion_nombre ?? "")}&navigate=yes`}
+                                              href={buildWazeDirectionsUrl(items[idx + 1].ubicacion_nombre ?? "")}
                                               target="_blank"
                                               rel="noopener noreferrer"
                                               className="inline-flex items-center text-caption text-muted transition-colors hover:text-primary-token"
@@ -2436,12 +1328,7 @@ export default function PlanDetailPage() {
                       title={isPast ? "Generar factura final" : "Generar resumen parcial"}
                       className="absolute left-0 top-0 hidden size-10 items-center justify-center rounded-full bg-primary-token text-contrast-token md:flex"
                     >
-                      <svg viewBox="0 0 24 24" fill="none" className="size-[15px]" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                        <polyline points="14 2 14 8 20 8" />
-                        <line x1="16" y1="13" x2="8" y2="13" />
-                        <line x1="16" y1="17" x2="8" y2="17" />
-                      </svg>
+                      <FileText className="size-[15px]" aria-hidden />
                     </button>
                   )}
                   <div className="text-center">
@@ -2461,9 +1348,7 @@ export default function PlanDetailPage() {
                     aria-label="Añadir gasto"
                     className="absolute right-0 top-0 hidden size-10 items-center justify-center rounded-full bg-primary-token text-contrast-token md:flex"
                   >
-                    <svg viewBox="0 0 24 24" fill="none" className="size-4" stroke="currentColor" strokeWidth="2.5">
-                      <path d="M12 5v14M5 12h14" strokeLinecap="round" />
-                    </svg>
+                    <Plus className="size-4" strokeWidth={2.5} aria-hidden />
                   </button>
                   )}
                 </div>
@@ -2557,7 +1442,7 @@ export default function PlanDetailPage() {
                                     </div>
                                     {hasMultiple && (
                                       <span className={`text-muted transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`}>
-                                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                        <ChevronDown className="size-[16px]" aria-hidden />
                                       </span>
                                     )}
                                   </div>
@@ -2862,7 +1747,7 @@ export default function PlanDetailPage() {
             <div className="flex items-center justify-between px-5 py-4 border-b border-app">
               <p className="text-body font-[var(--fw-semibold)]">Invitar al plan</p>
               <button type="button" onClick={() => setShowInviteModal(false)} className="text-muted transition-opacity hover:opacity-70">
-                <svg viewBox="0 0 24 24" fill="none" className="size-[20px]"><path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+                <X className="size-[20px]" aria-hidden />
               </button>
             </div>
 
@@ -2884,7 +1769,7 @@ export default function PlanDetailPage() {
                     return (
                       <div key={friend.id} className="flex h-[52px] w-full items-center gap-3 rounded-[8px] px-3">
                         {friend.profile_image ? (
-                          <Image src={friend.profile_image} alt={friend.nombre} width={32} height={32} className="size-[32px] rounded-full object-cover" referrerPolicy="no-referrer" unoptimized />
+                          <Image src={friend.profile_image} alt={friend.nombre} width={32} height={32} className="size-[32px] rounded-full object-cover" unoptimized referrerPolicy="no-referrer" />
                         ) : (
                           <div className="flex size-[32px] items-center justify-center rounded-full bg-[var(--text-primary)] text-[14px] font-[var(--fw-semibold)] text-contrast-token">{avatarLabel}</div>
                         )}
@@ -2914,7 +1799,7 @@ export default function PlanDetailPage() {
                     onClick={() => setShowQr((v) => !v)}
                     className="flex items-center gap-1 text-[14px] text-muted hover:text-[var(--text-primary)] transition-colors"
                   >
-                    <svg viewBox="0 0 24 24" fill="none" className="size-[14px]"><rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="1.8"/><rect x="14" y="3" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="1.8"/><rect x="3" y="14" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="1.8"/><path d="M14 14h3v3M17 17v3h3M14 20h3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+                    <QrCode className="size-[14px]" aria-hidden />
                     QR
                   </button>
                 </div>
@@ -3297,15 +2182,11 @@ export default function PlanDetailPage() {
                   }}
                   className="flex items-center gap-1.5 rounded-full border border-app px-3 py-1.5 text-body-sm font-[var(--fw-semibold)] transition-colors hover:bg-surface"
                 >
-                  <svg viewBox="0 0 24 24" fill="none" className="size-[15px]" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                    <polyline points="7 10 12 15 17 10" />
-                    <line x1="12" y1="15" x2="12" y2="3" />
-                  </svg>
+                  <Download className="size-[15px]" aria-hidden />
                   Descargar PDF
                 </button>
                 <button type="button" onClick={() => setShowInvoiceModal(false)} className="text-muted transition-opacity hover:opacity-70">
-                  <svg viewBox="0 0 24 24" fill="none" className="size-[20px]"><path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
+                  <X className="size-[20px]" aria-hidden />
                 </button>
               </div>
             </div>
@@ -3417,7 +2298,7 @@ export default function PlanDetailPage() {
                 </p>
               </div>
               <button type="button" onClick={() => { setPagarDeuda(null); setComprobanteFile(null); setComprobantePreview(null); }} className="text-muted hover:text-app">
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                <X className="size-[20px]" aria-hidden />
               </button>
             </div>
 
@@ -3431,12 +2312,12 @@ export default function PlanDetailPage() {
                     onClick={() => { setComprobanteFile(null); setComprobantePreview(null); }}
                     className="absolute top-2 right-2 rounded-full bg-black/60 p-1 text-white hover:bg-black/80"
                   >
-                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 3l8 8M11 3L3 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                    <X className="size-[14px]" aria-hidden />
                   </button>
                 </div>
               ) : (
                 <label className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border border-dashed border-app bg-surface-2 px-4 py-5 text-center hover:bg-surface-3 transition-colors">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 16V8m0 0-3 3m3-3 3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><rect x="3" y="3" width="18" height="18" rx="4" stroke="currentColor" strokeWidth="1.5"/></svg>
+                  <Upload className="size-6" aria-hidden />
                   <span className="text-body-sm text-muted">Sube una captura del pago</span>
                   <input
                     type="file"

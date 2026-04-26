@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Client, TravelMode, UnitSystem, Language } from "@googlemaps/google-maps-services-js";
-import { createSupabaseServiceClient } from "@/services/supabase/server";
+import { createSupabaseServerClient, createSupabaseServiceClient } from "@/services/supabase/server";
 
 const client = new Client({});
 
@@ -10,6 +10,10 @@ function r(n: number) { return Math.round(n * 1e4) / 1e4; }
 type LatLng = { lat: number; lng: number };
 
 export async function POST(req: NextRequest) {
+  const authClient = await createSupabaseServerClient();
+  const { data: { user } } = await authClient.auth.getUser();
+  if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+
   try {
     const body = await req.json() as {
       waypoints: string[];

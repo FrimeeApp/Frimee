@@ -4,6 +4,11 @@ import Image from "next/image";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Capacitor } from "@capacitor/core";
+import { ArrowLeftIcon, ChevronRightIcon } from "@/components/icons";
+import {
+  Pencil, User, Shield, Calendar, Bell, Moon, Globe, Clock,
+  Mail, MessageSquare, LogOut, Trash2,
+} from "lucide-react";
 import { App } from "@capacitor/app";
 import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
 import { useAuth } from "@/providers/AuthProvider";
@@ -16,6 +21,7 @@ import {
   type UserSettingsTheme,
   type UserSettingsVisibility,
 } from "@/services/api/repositories/settings.repository";
+import { STORAGE_KEYS } from "@/config/storage";
 
 type BusyAction = "save" | "signout" | "delete" | "upload-image" | null;
 type ThemeOption = UserSettingsTheme;
@@ -414,7 +420,7 @@ export default function SettingsPage() {
         console.warn("[settings] auth metadata sync error:", metadataError);
       }
       if (typeof window !== "undefined") {
-        window.localStorage.setItem("fremee.profile.updated_at", String(Date.now()));
+        window.localStorage.setItem(STORAGE_KEYS.profileUpdatedAt, String(Date.now()));
       }
       await refreshProfile();
       setSaveMsg("Ajustes guardados.");
@@ -454,7 +460,7 @@ export default function SettingsPage() {
 
   return (
     <div className="min-h-dvh bg-app text-app">
-      <div className="container-app pb-[calc(var(--space-12)+env(safe-area-inset-bottom))] pt-[var(--space-4)] lg:pt-[var(--space-8)]">
+      <div className="container-app pb-[calc(var(--space-12)+env(safe-area-inset-bottom))] pt-[calc(env(safe-area-inset-top)+var(--space-4))] lg:pt-[var(--space-8)]">
         <div className="mx-auto max-w-[980px]">
           <div className="flex items-center gap-[var(--space-3)]">
             <button
@@ -711,7 +717,7 @@ export default function SettingsPage() {
 function SettingsPageSkeleton() {
   return (
     <div className="min-h-dvh bg-app text-app" role="status" aria-label="Cargando ajustes">
-      <div className="container-app pb-[calc(var(--space-12)+env(safe-area-inset-bottom))] pt-[var(--space-4)] lg:pt-[var(--space-8)]">
+      <div className="container-app pb-[calc(var(--space-12)+env(safe-area-inset-bottom))] pt-[calc(env(safe-area-inset-top)+var(--space-4))] lg:pt-[var(--space-8)]">
         <div className="mx-auto max-w-[980px]">
           <div className="flex items-center gap-[var(--space-3)]">
             <div className="skeleton-shimmer h-8 w-8 rounded-full" />
@@ -792,7 +798,7 @@ function SettingsRow({
         </div>
       </div>
       <div className="flex w-full flex-wrap items-center gap-[var(--space-2)] sm:w-auto sm:justify-end">
-        {right ?? <ChevronRightIcon className="shrink-0 text-tertiary" />}
+        {right ?? <ChevronRightIcon className="size-[18px] shrink-0 text-tertiary" />}
       </div>
     </div>
   );
@@ -946,8 +952,8 @@ function Avatar({ profileImage, fallback }: { profileImage: string | null; fallb
           width={64}
           height={64}
           className="h-full w-full object-cover"
-          referrerPolicy="no-referrer"
           unoptimized
+          referrerPolicy="no-referrer"
         />
       ) : (
         <span className="text-[var(--font-h2)] font-[var(--fw-semibold)] text-app">{fallback}</span>
@@ -956,159 +962,18 @@ function Avatar({ profileImage, fallback }: { profileImage: string | null; fallb
   );
 }
 
-function ArrowLeftIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" aria-hidden="true">
-      <path d="M14.5 5L7.5 12L14.5 19" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function ChevronRightIcon({ className = "" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" aria-hidden="true" className={className}>
-      <path d="M10 6L16 12L10 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  );
-}
 
 function PencilIcon({ className = "" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" width="17" height="17" fill="none" aria-hidden="true" className={className}>
-      <path d="M4 20H8L18.6 9.4L14.6 5.4L4 16V20Z" stroke="currentColor" strokeWidth="1.7" />
-      <path d="M12.8 7.2L16.8 11.2" stroke="currentColor" strokeWidth="1.7" />
-    </svg>
-  );
+  return <Pencil width="17" height="17" aria-hidden className={className} />;
 }
-
-function UserIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="21" height="21" fill="none" aria-hidden="true">
-      <circle cx="12" cy="8" r="3.2" stroke="currentColor" strokeWidth="1.7" />
-      <path d="M5.8 19C7 15.9 9.1 14.4 12 14.4C14.9 14.4 17 15.9 18.2 19" stroke="currentColor" strokeWidth="1.7" />
-    </svg>
-  );
-}
-
-function ShieldIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="21" height="21" fill="none" aria-hidden="true">
-      <path
-        d="M12 3L19 6V11.5C19 15.3 16.2 18.8 12 20.5C7.8 18.8 5 15.3 5 11.5V6L12 3Z"
-        stroke="currentColor"
-        strokeWidth="1.7"
-      />
-      <path d="M9.5 11.8L11.1 13.4L14.6 9.9" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function CalendarIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="21" height="21" fill="none" aria-hidden="true">
-      <rect x="3" y="5" width="18" height="16" rx="2" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M8 3V7M16 3V7M3 10.5H21" stroke="currentColor" strokeWidth="1.8" />
-    </svg>
-  );
-}
-
-function BellIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="21" height="21" fill="none" aria-hidden="true">
-      <path
-        d="M6.5 16H17.5L16.8 14.8V10.8C16.8 8.1 14.7 6 12 6C9.3 6 7.2 8.1 7.2 10.8V14.8L6.5 16Z"
-        stroke="currentColor"
-        strokeWidth="1.7"
-      />
-      <path
-        d="M10.1 18.2C10.4 19.1 11.1 19.7 12 19.7C12.9 19.7 13.6 19.1 13.9 18.2"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-function MoonIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="21" height="21" fill="none" aria-hidden="true">
-      <path
-        d="M14.8 4.7C10.8 5.2 7.8 8.6 7.8 12.7C7.8 16.9 11.2 20.3 15.4 20.3C17 20.3 18.4 19.8 19.6 18.9C18.8 19.1 18 19.2 17.2 19.2C12.9 19.2 9.5 15.8 9.5 11.5C9.5 8.9 10.8 6.6 12.8 5.2C13.4 4.8 14.1 4.6 14.8 4.7Z"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function LanguageIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="21" height="21" fill="none" aria-hidden="true">
-      <path d="M4 6H12M8 4V6M6 6C6.3 9 7.8 12 10 14" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-      <path d="M14 18L17.8 9.5L21.6 18M15.2 15.2H20.4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function ClockIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="21" height="21" fill="none" aria-hidden="true">
-      <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="1.7" />
-      <path d="M12 7.8V12.4L15.2 14.4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function MailIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="21" height="21" fill="none" aria-hidden="true">
-      <rect x="4" y="6" width="16" height="12" rx="2" stroke="currentColor" strokeWidth="1.7" />
-      <path d="M5.2 7.2L12 12.3L18.8 7.2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function ChatIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="21" height="21" fill="none" aria-hidden="true">
-      <path
-        d="M4 6.5A1.5 1.5 0 0 1 5.5 5H18.5A1.5 1.5 0 0 1 20 6.5V13.5A1.5 1.5 0 0 1 18.5 15H8.5L4 18.5V6.5Z"
-        stroke="currentColor"
-        strokeWidth="1.7"
-      />
-    </svg>
-  );
-}
-
-function LogOutIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="21" height="21" fill="none" aria-hidden="true">
-      <path
-        d="M9 5.5H6.8C5.8 5.5 5 6.3 5 7.3V16.7C5 17.7 5.8 18.5 6.8 18.5H9"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-      />
-      <path d="M13 16.5L17.5 12L13 7.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-      <path d="M17.5 12H9.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function TrashIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="21" height="21" fill="none" aria-hidden="true">
-      <path d="M4.8 7H19.2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-      <path d="M9.5 4.8H14.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-      <path
-        d="M8 7L8.6 18.1C8.6 18.9 9.2 19.5 10 19.5H14C14.8 19.5 15.4 18.9 15.4 18.1L16 7"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-      />
-      <path d="M10.2 10.3V16.1M13.8 10.3V16.1" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-    </svg>
-  );
-}
+const UserIcon = User;
+const ShieldIcon = Shield;
+const CalendarIcon = Calendar;
+const BellIcon = Bell;
+const MoonIcon = Moon;
+const LanguageIcon = Globe;
+const ClockIcon = Clock;
+const MailIcon = Mail;
+const ChatIcon = MessageSquare;
+const LogOutIcon = LogOut;
+const TrashIcon = Trash2;

@@ -35,6 +35,7 @@ import {
 } from "@/services/api/repositories/chat.repository";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import AudioPlayer from "@/components/common/AudioPlayer";
+import { STORAGE_KEYS, STORAGE_TTLS } from "@/config/storage";
 
 const EMOJI_LIST = [
   "😀","😃","😄","😁","😆","😅","🤣","😂","🙂","😊",
@@ -52,10 +53,10 @@ const EMOJI_LIST = [
   "🍕","🍔","🍟","🌮","🍣","🍩","🍪","🎂","🍰","☕",
   "💪","🦾","👀","👁️","🫣","😈","👿","💀","☠️","👻",
 ];
-const COMMENT_AUTHOR_CACHE_TTL_MS = 60_000;
+const COMMENT_AUTHOR_CACHE_TTL_MS = STORAGE_TTLS.commentAuthorCacheMs;
 const commentAuthorCache = new Map<string, { name: string; profileImage: string | null; cachedAt: number }>();
 
-const RECENTS_KEY = "fremee:search-recents";
+const RECENTS_KEY = STORAGE_KEYS.feedSearchRecents;
 const RECENTS_MAX = 10;
 
 type RecentProfile = { id: string; nombre: string; profile_image: string | null };
@@ -94,10 +95,10 @@ function removeRecent(id: string) {
   } catch { /* ignore */ }
 }
 
-const FEED_CACHE_KEY = "fremee:feed:v2";
-const FEED_CACHE_TTL_MS = 5 * 60 * 1000;
-const FRIENDS_CACHE_KEY = "fremee:friends:v1";
-const FRIENDS_CACHE_TTL_MS = 2 * 60 * 1000;
+const FEED_CACHE_KEY = STORAGE_KEYS.feedCache;
+const FEED_CACHE_TTL_MS = STORAGE_TTLS.feedCacheMs;
+const FRIENDS_CACHE_KEY = STORAGE_KEYS.friendsCache;
+const FRIENDS_CACHE_TTL_MS = STORAGE_TTLS.friendsCacheMs;
 
 function readFeedCache(userId: string): FeedItemDto[] | null {
   try {
@@ -260,7 +261,7 @@ export default function FeedPage() {
     if (typeof window === "undefined") return;
 
     const checkProfileUpdate = () => {
-      const marker = window.localStorage.getItem("fremee.profile.updated_at");
+      const marker = window.localStorage.getItem(STORAGE_KEYS.profileUpdatedAt);
       if (!marker || marker === lastProfileUpdatedAtRef.current) return;
 
       lastProfileUpdatedAtRef.current = marker;
@@ -429,7 +430,7 @@ export default function FeedPage() {
               <div className="mx-auto w-full max-w-[760px] xl:mx-0">
               <div
                 ref={mobileHeaderRef}
-                className="sticky top-0 z-[100] bg-app pb-[clamp(6px,1.6dvh,var(--space-2))] pt-[env(safe-area-inset-top)] pl-[max(var(--page-margin-x),env(safe-area-inset-left))] pr-[max(var(--page-margin-x),env(safe-area-inset-right))] md:hidden"
+                className="sticky top-0 z-[100] bg-app pb-[clamp(6px,1.6dvh,var(--space-2))] pt-mobile-safe-top pl-[max(var(--page-margin-x),env(safe-area-inset-left))] pr-[max(var(--page-margin-x),env(safe-area-inset-right))] md:hidden"
               >
                 <div className="relative flex items-center justify-between gap-[10px]">
                   <button

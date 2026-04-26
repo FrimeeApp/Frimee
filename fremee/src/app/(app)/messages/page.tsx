@@ -19,6 +19,7 @@ import {
 import { fetchActiveFriends, type PublicUserProfileRow } from "@/services/api/endpoints/users.endpoint";
 import { createGrupoEndpoint } from "@/services/api/endpoints/grupos.endpoint";
 import { ChatConversation, BackIcon, GroupIcon } from "@/components/chat/ChatConversation";
+import { SearchInput } from "@/components/ui/SearchInput";
 
 export default function MessagesPage() {
   const { user, loading } = useAuth();
@@ -162,7 +163,7 @@ export default function MessagesPage() {
   const chatListContent = showFriendPicker ? (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="flex items-center gap-[var(--space-3)] px-[var(--space-4)] pb-[var(--space-3)] pt-[env(safe-area-inset-top)] md:py-[var(--space-3)]">
+      <div className="flex items-center gap-[var(--space-3)] px-[var(--space-4)] pb-[var(--space-3)] pt-mobile-safe-top md:py-[var(--space-3)]">
         <button
           type="button"
           onClick={() => {
@@ -237,7 +238,7 @@ export default function MessagesPage() {
                       >
                         <div className="avatar-md flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">
                           {friend.profile_image ? (
-                            <Image src={friend.profile_image} alt={friend.nombre} width={34} height={34} className="h-full w-full object-cover" referrerPolicy="no-referrer" unoptimized />
+                            <Image src={friend.profile_image} alt={friend.nombre} width={34} height={34} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
                           ) : avatarLabel}
                         </div>
                         <p className="min-w-0 flex-1 truncate text-body-sm font-[var(--fw-medium)] text-app">{friend.nombre}</p>
@@ -302,7 +303,7 @@ export default function MessagesPage() {
                   >
                     <div className="avatar-md flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">
                       {friend.profile_image ? (
-                        <Image src={friend.profile_image} alt={friend.nombre} width={34} height={34} className="h-full w-full object-cover" referrerPolicy="no-referrer" unoptimized />
+                        <Image src={friend.profile_image} alt={friend.nombre} width={34} height={34} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
                       ) : avatarLabel}
                     </div>
                     <p className="min-w-0 flex-1 truncate text-body-sm font-[var(--fw-medium)] text-app">{friend.nombre}</p>
@@ -320,7 +321,7 @@ export default function MessagesPage() {
   ) : (
     <div className="flex h-full flex-col">
       {/* Header + compose */}
-      <div className="flex items-center justify-between px-[var(--space-4)] pb-[var(--space-3)] pt-[env(safe-area-inset-top)] md:py-[var(--space-3)]">
+      <div className="flex items-center justify-between px-[var(--space-4)] pb-[var(--space-3)] pt-mobile-safe-top md:py-[var(--space-3)]">
         <h1 className="text-[var(--font-h2)] font-[var(--fw-regular)] leading-[1.15] text-app md:text-[var(--font-h1)]">Mensajes</h1>
         <button
           type="button"
@@ -336,24 +337,11 @@ export default function MessagesPage() {
 
       {/* Search bar */}
       <div className="px-[var(--space-4)] pb-[var(--space-3)]">
-        <div className="flex h-[44px] w-full items-center gap-[10px] rounded-[8px] bg-[var(--search-field-bg)] px-[14px]">
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[20px] shrink-0 text-muted">
-            <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.8" />
-            <path d="M16 16L20.5 20.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-          </svg>
-          <input
-            type="search"
-            value={searchValue}
-            onChange={(e) => setSearchValue(e.target.value)}
-            placeholder="Buscar"
-            className="min-w-0 flex-1 border-none bg-transparent text-[15px] text-app shadow-none outline-none ring-0 focus:border-none focus:shadow-none focus:outline-none focus:ring-0 placeholder:text-muted [&::-webkit-search-cancel-button]:hidden"
-          />
-          {searchValue && (
-            <button type="button" onClick={() => setSearchValue("")} className="shrink-0 text-muted transition-opacity hover:opacity-70">
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[18px]"><path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
-            </button>
-          )}
-        </div>
+        <SearchInput
+          value={searchValue}
+          onChange={setSearchValue}
+          className="h-[44px] w-full"
+        />
       </div>
 
       {/* Chat list */}

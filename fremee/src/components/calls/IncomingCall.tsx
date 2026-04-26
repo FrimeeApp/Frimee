@@ -1,6 +1,8 @@
 "use client";
 
 import Image from "next/image";
+import { PhoneOffIcon } from "@/components/icons";
+import { Phone } from "lucide-react";
 
 type Props = {
   callerName: string;
@@ -17,7 +19,7 @@ export default function IncomingCall({ callerName, callerFoto, tipo, onAccept, o
         <p className="text-caption text-muted">{tipo === "video" ? "Llamada de vídeo entrante" : "Llamada de voz entrante"}</p>
         <div className="h-24 w-24 overflow-hidden rounded-full border border-white/10 bg-white/10">
           {callerFoto ? (
-            <Image src={callerFoto} alt={callerName} width={96} height={96} className="h-full w-full object-cover" unoptimized />
+            <Image src={callerFoto} alt={callerName} width={96} height={96} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
           ) : (
             <div className="flex h-full w-full items-center justify-center text-[40px] font-bold">
               {callerName?.[0]?.toUpperCase()}
@@ -52,19 +54,5 @@ export default function IncomingCall({ callerName, callerFoto, tipo, onAccept, o
   );
 }
 
-function PhoneIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" className="size-6" stroke="currentColor" strokeWidth="1.8">
-      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.27h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.91a16 16 0 0 0 6.08 6.08l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
-    </svg>
-  );
-}
+const PhoneIcon = () => <Phone className="size-6" aria-hidden />;
 
-function PhoneOffIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" className="size-6" stroke="currentColor" strokeWidth="1.8">
-      <path d="M10.68 13.31a16 16 0 0 0 3.01 2.99l1.96-1.96a1 1 0 0 1 1.09-.22 11.3 11.3 0 0 0 3.57.73 1 1 0 0 1 .93 1v3.57a1 1 0 0 1-.9 1A17 17 0 0 1 3 5.9a1 1 0 0 1 1-.9h3.57a1 1 0 0 1 1 .92 11.3 11.3 0 0 0 .73 3.57 1 1 0 0 1-.22 1.09l-1.96 1.96" />
-      <line x1="2" y1="2" x2="22" y2="22" />
-    </svg>
-  );
-}

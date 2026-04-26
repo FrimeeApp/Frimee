@@ -1,4 +1,5 @@
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
+import { getProfileImagesBucket } from "@/config/external";
 
 export type ThemePreference = "SYSTEM" | "LIGHT" | "DARK";
 export type ProfileVisibility = "PUBLICO" | "PRIVADO";
@@ -67,7 +68,7 @@ export type UserProfileAndSettingsRow = {
   google_sync_export_plans?: boolean | null;
 };
 
-const profileImagesBucket = process.env.NEXT_PUBLIC_SUPABASE_PROFILE_BUCKET ?? "profile-images";
+const profileImagesBucket = getProfileImagesBucket();
 
 export async function fetchUserSettingsByUserId(): Promise<UserSettingsRow | null> {
   const supabase = createBrowserSupabaseClient();

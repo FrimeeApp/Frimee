@@ -14,6 +14,7 @@ import {
   saveUserProfileAndSettings,
 } from "@/services/api/repositories/settings.repository";
 import type { FeedPlanItemDto } from "@/services/api/dtos/plan.dto";
+import { Settings, Plane, Wallet, Camera, Check, Pencil, LayoutGrid, Bookmark } from "lucide-react";
 
 type ProfileData = {
   id: string;
@@ -232,7 +233,7 @@ export default function ProfilePage() {
       <div className="min-h-dvh bg-app text-app">
         <div className="relative mx-auto min-h-dvh max-w-[1440px]">
           <AppSidebar />
-          <main className="px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-6)] md:py-[var(--space-8)] md:pr-[var(--space-14)]">
+          <main className="px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[calc(env(safe-area-inset-top)+var(--space-6))] md:py-[var(--space-8)] md:pr-[var(--space-14)]">
             <div className="mx-auto w-full max-w-[760px]">
               <ProfileSkeleton />
             </div>
@@ -247,7 +248,7 @@ export default function ProfilePage() {
       <div className="min-h-dvh bg-app text-app">
         <div className="relative mx-auto min-h-dvh max-w-[1440px]">
           <AppSidebar />
-          <main className="px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-6)] md:py-[var(--space-8)] md:pr-[var(--space-14)]">
+          <main className="px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[calc(env(safe-area-inset-top)+var(--space-6))] md:py-[var(--space-8)] md:pr-[var(--space-14)]">
             <div className="mx-auto w-full max-w-[760px]">
               <p className="py-[var(--space-10)] text-center text-body text-muted">Usuario no encontrado.</p>
             </div>
@@ -264,7 +265,7 @@ export default function ProfilePage() {
       <div className="relative mx-auto min-h-dvh max-w-[1440px]">
         <AppSidebar />
 
-        <main className="px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-6)] md:py-[var(--space-8)] md:pr-[var(--space-14)]">
+        <main className="px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[calc(env(safe-area-inset-top)+var(--space-6))] md:py-[var(--space-8)] md:pr-[var(--space-14)]">
           <div className="mx-auto w-full max-w-[760px]">
             {/* Settings button - own profile only */}
             {isOwnProfile && (
@@ -309,8 +310,8 @@ export default function ProfilePage() {
                     width={96}
                     height={96}
                     className={`size-[96px] rounded-full border-2 border-app object-cover ${uploading ? "opacity-50" : ""}`}
-                    referrerPolicy="no-referrer"
                     unoptimized
+                    referrerPolicy="no-referrer"
                   />
                 ) : (
                   <div className={`flex size-[96px] items-center justify-center rounded-full bg-[var(--text-primary)] text-[32px] font-[var(--fw-semibold)] text-contrast-token ${uploading ? "opacity-50" : ""}`}>
@@ -326,10 +327,7 @@ export default function ProfilePage() {
                     className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 text-white/90 transition-opacity hover:bg-black/50 disabled:opacity-50"
                     aria-label="Cambiar foto de perfil"
                   >
-                    <svg viewBox="0 0 24 24" fill="none" className="size-[28px]" aria-hidden="true">
-                      <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                      <circle cx="12" cy="13" r="4" stroke="currentColor" strokeWidth="1.5" />
-                    </svg>
+                    <Camera className="size-[28px]" aria-hidden />
                   </button>
                 )}
 
@@ -369,14 +367,9 @@ export default function ProfilePage() {
                     {saving ? (
                       <div className="size-[16px] animate-spin rounded-full border-2 border-current border-t-transparent" />
                     ) : editName.trim() !== profileData.nombre ? (
-                      <svg viewBox="0 0 24 24" fill="none" className="size-[16px]" aria-hidden="true">
-                        <path d="M4.5 12.5L9.5 17.5L19.5 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
+                      <Check className="size-[16px]" aria-hidden />
                     ) : (
-                      <svg viewBox="0 0 24 24" fill="none" className="size-[16px]" aria-hidden="true">
-                        <path d="M4 20H8L18.6 9.4L14.6 5.4L4 16V20Z" stroke="currentColor" strokeWidth="1.7" />
-                        <path d="M12.8 7.2L16.8 11.2" stroke="currentColor" strokeWidth="1.7" />
-                      </svg>
+                      <Pencil className="size-[16px]" aria-hidden />
                     )}
                   </button>
                 </div>
@@ -457,12 +450,7 @@ export default function ProfilePage() {
                     activeTab === "planes" ? "text-app" : "text-muted hover:text-app"
                   }`}
                 >
-                  <svg viewBox="0 0 24 24" fill="none" className="size-[20px]" aria-hidden="true">
-                    <rect x="3" y="3" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
-                    <rect x="14" y="3" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
-                    <rect x="3" y="14" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
-                    <rect x="14" y="14" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
-                  </svg>
+                  <LayoutGrid className="size-[20px]" aria-hidden />
                 </button>
                 {isOwnProfile && (
                   <button
@@ -473,9 +461,7 @@ export default function ProfilePage() {
                       activeTab === "guardados" ? "text-app" : "text-muted hover:text-app"
                     }`}
                   >
-                    <svg viewBox="0 0 24 24" fill="none" className="size-[20px]" aria-hidden="true">
-                      <path d="M19 21l-7-4-7 4V5a2 2 0 012-2h10a2 2 0 012 2z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
+                    <Bookmark className="size-[20px]" aria-hidden />
                   </button>
                 )}
                 <span
@@ -631,32 +617,9 @@ function PlanGrid({ plans, onPlanClick }: { plans: FeedPlanItemDto[]; onPlanClic
   );
 }
 
-function SettingsIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <path d="M12.22 2h-.44a2 2 0 00-2 2v.18a2 2 0 01-1 1.73l-.43.25a2 2 0 01-2 0l-.15-.08a2 2 0 00-2.73.73l-.22.38a2 2 0 00.73 2.73l.15.1a2 2 0 011 1.72v.51a2 2 0 01-1 1.74l-.15.09a2 2 0 00-.73 2.73l.22.38a2 2 0 002.73.73l.15-.08a2 2 0 012 0l.43.25a2 2 0 011 1.73V20a2 2 0 002 2h.44a2 2 0 002-2v-.18a2 2 0 011-1.73l.43-.25a2 2 0 012 0l.15.08a2 2 0 002.73-.73l.22-.39a2 2 0 00-.73-2.73l-.15-.08a2 2 0 01-1-1.74v-.5a2 2 0 011-1.74l.15-.09a2 2 0 00.73-2.73l-.22-.38a2 2 0 00-2.73-.73l-.15.08a2 2 0 01-2 0l-.43-.25a2 2 0 01-1-1.73V4a2 2 0 00-2-2z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.5" />
-    </svg>
-  );
-}
-
-function PlaneIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <path d="M22 16.5L13.5 10V4.5a1.5 1.5 0 00-3 0V10L2 16.5v2l8.5-2.5V20l-2 1.5V23l3.5-1 3.5 1v-1.5L13.5 20v-4l8.5 2.5v-2z" fill="currentColor" />
-    </svg>
-  );
-}
-
-function WalletIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <path d="M4 7.5A2.5 2.5 0 016.5 5H18a2 2 0 012 2v1.5H8A2.5 2.5 0 005.5 11v2A2.5 2.5 0 008 15.5h12V17a2 2 0 01-2 2H6.5A2.5 2.5 0 014 16.5v-9z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M18.5 8.5H8A2.5 2.5 0 005.5 11v2A2.5 2.5 0 008 15.5h10.5A1.5 1.5 0 0020 14V10a1.5 1.5 0 00-1.5-1.5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="16" cy="12" r="1" fill="currentColor" />
-    </svg>
-  );
-}
+const SettingsIcon = ({ className = "size-icon" }: { className?: string }) => <Settings className={className} aria-hidden />;
+const PlaneIcon = ({ className = "size-icon" }: { className?: string }) => <Plane className={className} aria-hidden />;
+const WalletIcon = ({ className = "size-icon" }: { className?: string }) => <Wallet className={className} aria-hidden />;
 
 function ProfileSkeleton() {
   return (

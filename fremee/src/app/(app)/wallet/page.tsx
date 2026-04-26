@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppSidebar from "@/components/common/AppSidebar";
 import AddTicketModal from "@/components/wallet/AddTicketModal";
+import { PlusIcon } from "@/components/icons";
+import { EmptyState } from "@/components/ui/EmptyState";
 import {
   listTicketsEndpoint,
   getTicketSourceSignedUrl,
@@ -65,7 +67,7 @@ export default function WalletPage() {
       <div className="relative mx-auto min-h-dvh max-w-[1440px]">
         <AppSidebar />
 
-        <main className="px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-6)] md:py-[var(--space-8)] md:pr-[var(--space-14)]">
+        <main className="px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[calc(env(safe-area-inset-top)+var(--space-6))] md:py-[var(--space-8)] md:pr-[var(--space-14)]">
           <div className="mx-auto w-full max-w-[980px]">
             <div className="flex items-center justify-between">
               <button
@@ -102,7 +104,7 @@ export default function WalletPage() {
                 <span className="text-body-sm text-muted">Cargando...</span>
               </div>
             ) : tickets.length === 0 ? (
-              <EmptyState onAdd={() => setAddOpen(true)} />
+              <WalletEmptyState onAdd={() => setAddOpen(true)} />
             ) : (
               <div className="mt-6">
                 <WalletStack tickets={tickets} onOpen={setViewTicket} />
@@ -453,24 +455,16 @@ function TicketSourceViewer({ ticket, onClose }: { ticket: PlanTicket; onClose: 
   );
 }
 
-function EmptyState({ onAdd }: { onAdd: () => void }) {
+function WalletEmptyState({ onAdd }: { onAdd: () => void }) {
   return (
-    <div className="mt-16 flex flex-col items-center gap-4 text-center">
-      <div className="flex size-16 items-center justify-center rounded-full border border-app">
-        <TicketTypeIcon type="other" className="size-7 text-muted" />
-      </div>
-      <div>
-        <p className="text-body font-[var(--fw-semibold)] text-app">Sin tickets todavía</p>
-        <p className="mt-1 text-body-sm text-muted">Añade tu primera entrada, billete o reserva.</p>
-      </div>
-      <button
-        type="button"
-        onClick={onAdd}
-        className="mt-2 rounded-full bg-[var(--accent)] px-5 py-2.5 text-body-sm font-[var(--fw-semibold)] text-white transition-opacity hover:opacity-90"
-      >
-        Añadir ticket
-      </button>
-    </div>
+    <EmptyState
+      icon={<TicketTypeIcon type="other" className="size-7 text-muted" />}
+      title="Sin tickets todavía"
+      description="Añade tu primera entrada, billete o reserva."
+      actionLabel="Añadir ticket"
+      onAction={onAdd}
+      className="mt-16"
+    />
   );
 }
 
@@ -567,11 +561,3 @@ function QrStamp() {
   );
 }
 
-function PlusIcon({ className = "size-[18px]" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <path d="M12 5V19" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      <path d="M5 12H19" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  );
-}

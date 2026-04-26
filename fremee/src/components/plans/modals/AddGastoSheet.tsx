@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import {
   createGastoEndpoint,
@@ -12,62 +11,11 @@ import {
 import { fetchSubplanes, type SubplanRow } from "@/services/api/endpoints/subplanes.endpoint";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import type { OcrResult, OcrItem } from "@/app/api/receipts/ocr/route";
+import { todayISO, limitDecimals, adjustNumericString } from "@/lib/form-helpers";
+import { Avatar } from "@/components/ui/Avatar";
+import { FIELD_LINE_CLS } from "@/lib/styles";
 
 type CategoriaGasto = { id: number; nombre: string; icono: string | null; color: string | null };
-
-// ── helpers ───────────────────────────────────────────────────────────────────
-
-function todayISO() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function limitDecimals(value: string, decimals = 2): string {
-  const dot = value.indexOf(".");
-  if (dot === -1) return value;
-  return value.slice(0, dot + 1 + decimals);
-}
-
-function clampNumber(value: number, min?: number, max?: number) {
-  if (typeof min === "number" && value < min) return min;
-  if (typeof max === "number" && value > max) return max;
-  return value;
-}
-
-function adjustNumericString(
-  current: string,
-  delta: number,
-  { min, max, decimals = 0 }: { min?: number; max?: number; decimals?: number } = {},
-) {
-  const base = Number.parseFloat(current || "0");
-  const next = clampNumber((Number.isFinite(base) ? base : 0) + delta, min, max);
-  return decimals > 0 ? next.toFixed(decimals) : String(next);
-}
-
-function Avatar({ foto, nombre, size = 32 }: { foto: string | null; nombre: string | null; size?: number }) {
-  const initials = (nombre ?? "?").slice(0, 1).toUpperCase();
-  if (foto) {
-    return (
-      <Image
-        src={foto}
-        alt={nombre ?? ""}
-        width={size}
-        height={size}
-        style={{ width: size, height: size }}
-        className="rounded-full border border-app object-cover"
-        unoptimized
-      />
-    );
-  }
-  return (
-    <div
-      style={{ width: size, height: size, fontSize: size * 0.4 }}
-      className="flex items-center justify-center rounded-full border border-app bg-primary-token/20 font-[var(--fw-semibold)] text-primary-token"
-    >
-      {initials}
-    </div>
-  );
-}
 
 function StepperButtons({ onIncrement, onDecrement }: { onIncrement: () => void; onDecrement: () => void }) {
   return (
@@ -331,7 +279,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
   }
 
   const meta = STEP_META[step - 1];
-  const fieldLineCls = "border-b-2 border-app pb-[var(--space-2)] transition-colors focus-within:border-primary-token";
+  const fieldLineCls = FIELD_LINE_CLS;
 
   // ── shared dropdown renderer ──
   function Dropdown({ btnRef, open, onClose: closeDropdown, items: dropdownItems }: {
@@ -520,7 +468,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                     onClick={() => { setPagadorOpen(o => !o); setPagadorSearch(""); }}
                     className="flex w-full items-center gap-3 py-2 outline-none"
                   >
-                    {(() => { const m = miembros.find(m => m.user_id === pagadoPor); return <Avatar foto={m?.foto ?? null} nombre={m?.nombre ?? null} size={28} />; })()}
+                    {(() => { const m = miembros.find(m => m.user_id === pagadoPor); return <Avatar src={m?.foto ?? null} name={m?.nombre ?? "?"} px={28} topMargin="" />; })()}
                     <span className="flex-1 text-left text-body text-app">{miembros.find(m => m.user_id === pagadoPor)?.nombre ?? "Seleccionar"}</span>
                     <svg className={`shrink-0 text-muted transition-transform duration-200 ${pagadorOpen ? "rotate-180" : ""}`} width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   </button>
@@ -537,7 +485,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                           <div className="max-h-48 overflow-y-auto">
                             {filtered.map(m => (
                               <button key={m.user_id} type="button" onClick={() => { setPagadoPor(m.user_id); setPagadorOpen(false); }} className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-surface-2 ${pagadoPor === m.user_id ? "text-primary-token font-[var(--fw-semibold)]" : "text-app"}`}>
-                                <Avatar foto={m.foto} nombre={m.nombre} size={24} />
+                                <Avatar src={m.foto} name={m.nombre ?? "?"} px={24} topMargin="" />
                                 <span className="text-body-sm">{m.nombre ?? m.user_id.slice(0, 8)}</span>
                               </button>
                             ))}
@@ -602,7 +550,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                           return (
                             <button key={m.user_id} type="button" onClick={() => setSeleccionados((prev) => { const next = new Set(prev); if (next.has(m.user_id)) next.delete(m.user_id); else next.add(m.user_id); return next; })} className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors ${checked ? "bg-primary-token/5" : "hover:bg-[var(--surface-inset)]"}`}>
                               <div className={`flex size-4 shrink-0 items-center justify-center rounded border ${checked ? "border-primary-token bg-primary-token" : "border-app"}`}>{checked && <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}</div>
-                              <Avatar foto={m.foto} nombre={m.nombre} size={24} />
+                              <Avatar src={m.foto} name={m.nombre ?? "?"} px={24} topMargin="" />
                               <span className={`min-w-0 flex-1 truncate text-body-sm ${checked ? "text-app font-[var(--fw-medium)]" : "text-muted"}`}>{m.nombre ?? m.user_id.slice(0, 8)}</span>
                               {checked && totalNum > 0 && <span className="shrink-0 text-caption text-primary-token font-[var(--fw-semibold)]">{part.toFixed(2)} {moneda}</span>}
                             </button>
@@ -644,7 +592,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                                 }} className={`flex size-4 shrink-0 items-center justify-center rounded border ${checked ? "border-primary-token bg-primary-token" : "border-app"}`}>
                                   {checked && <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                                 </button>
-                                <Avatar foto={m.foto} nombre={m.nombre} size={24} />
+                                <Avatar src={m.foto} name={m.nombre ?? "?"} px={24} topMargin="" />
                                 <span className="min-w-0 flex-1 truncate text-body-sm text-app">{m.nombre ?? m.user_id.slice(0, 8)}</span>
                                 {pct > 0 && totalNum > 0 && <span className="shrink-0 text-caption text-primary-token font-[var(--fw-semibold)]">{amount.toFixed(2)} {moneda}</span>}
                                 <div className="flex shrink-0 items-center gap-1">
@@ -683,7 +631,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                             const hasVal = parseFloat(val) > 0;
                             return (
                               <div key={m.user_id} className={`flex items-center gap-3 px-3 py-2.5 ${!hasVal ? "opacity-50" : ""}`}>
-                                <Avatar foto={m.foto} nombre={m.nombre} size={24} />
+                                <Avatar src={m.foto} name={m.nombre ?? "?"} px={24} topMargin="" />
                                 <span className="min-w-0 flex-1 truncate text-body-sm text-app">{m.nombre ?? m.user_id.slice(0, 8)}</span>
                                 <div className="flex shrink-0 items-center gap-1">
                                   <input type="number" min="0" step="0.01" value={val} onChange={(e) => setCantidades((prev) => ({ ...prev, [m.user_id]: limitDecimals(e.target.value) }))} placeholder="0.00" inputMode="decimal" className="w-[52px] bg-transparent text-right text-body-sm text-app outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
@@ -744,7 +692,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                             <div className="flex items-center gap-2 flex-wrap">
                               {miembros.filter(m => item.asignados[m.user_id]).map(m => (
                                 <button key={m.user_id} type="button" title={m.nombre ?? undefined} onClick={() => toggleItemUser(idx, m.user_id)} className="relative shrink-0 group">
-                                  <Avatar foto={m.foto} nombre={m.nombre} size={26} />
+                                  <Avatar src={m.foto} name={m.nombre ?? "?"} px={26} topMargin="" />
                                   <span className="absolute -top-0.5 -right-0.5 hidden group-hover:flex size-3.5 items-center justify-center rounded-full bg-[var(--error,#dc2626)] text-white"><svg width="7" height="7" viewBox="0 0 8 8" fill="none"><path d="M1 1l6 6M7 1L1 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></span>
                                 </button>
                               ))}
@@ -775,7 +723,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                                             return (
                                               <button key={m.user_id} type="button" onClick={() => toggleItemUser(idx, m.user_id)} className="flex w-full items-center gap-2.5 px-3 py-2 text-left hover:bg-[var(--surface-2)] transition-colors">
                                                 <div className={`flex size-4 shrink-0 items-center justify-center rounded border ${checked ? "border-primary-token bg-primary-token" : "border-app"}`}>{checked && <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}</div>
-                                                <Avatar foto={m.foto} nombre={m.nombre} size={20} />
+                                                <Avatar src={m.foto} name={m.nombre ?? "?"} px={20} topMargin="" />
                                                 <span className="min-w-0 flex-1 truncate text-body-sm text-app">{m.nombre ?? m.user_id.slice(0, 8)}</span>
                                               </button>
                                             );
