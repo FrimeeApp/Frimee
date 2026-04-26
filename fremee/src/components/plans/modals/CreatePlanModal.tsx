@@ -8,6 +8,7 @@ import { Globe, Lock, Plane, User, Users } from "lucide-react";
 import LocationAutocomplete from "@/components/plans/LocationAutocomplete";
 import { fetchActiveFriends, type PublicUserProfileRow } from "@/services/api/endpoints/users.endpoint";
 import { listChats, type ChatListItem } from "@/services/api/repositories/chat.repository";
+import { FIELD_LINE_CLS } from "@/lib/styles";
 
 export type CreatePlanPayload = {
   title: string;
@@ -568,7 +569,7 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
           {/* ── Step 3: Nombre + portada ── */}
           {step === 3 && (
             <div className="space-y-[var(--space-5)]">
-              <div className="flex items-center gap-[var(--space-3)] border-b-2 border-app pb-[var(--space-2)]">
+              <div className={`flex items-center gap-[var(--space-3)] ${FIELD_LINE_CLS}`}>
                 <Plane className="size-5 shrink-0 text-muted" strokeWidth={1.5} aria-hidden="true" />
                 <input
                   value={title}

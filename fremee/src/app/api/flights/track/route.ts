@@ -5,6 +5,7 @@ export const dynamic = "force-static";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { AIRPORTS, flightProgressFromPosition, flightProgressFromTime } from "@/lib/airports";
+import { buildOpenSkyStatesUrl } from "@/config/external";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -35,10 +36,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "callsign required" }, { status: 400 });
   }
 
-  // OpenSky expects callsign padded to 8 chars with spaces
-  const padded = callsign.padEnd(8, " ");
-
-  const url = `https://opensky-network.org/api/states/all?callsign=${encodeURIComponent(padded)}`;
+  const url = buildOpenSkyStatesUrl(callsign);
 
   let osRes: Response;
   try {

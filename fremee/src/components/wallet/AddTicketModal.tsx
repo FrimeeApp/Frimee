@@ -12,6 +12,8 @@ import {
 import { TicketTypeIcon } from "@/app/(app)/wallet/page";
 import type { TicketOcrResult } from "@/app/api/tickets/ocr/route";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
+import { Upload, Loader2, Check, FileText, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { FIELD_LINE_CLS } from "@/lib/styles";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -139,9 +141,7 @@ function InlineDayCalendar({
           disabled={desktopPage === 0}
           className="mt-[54px] flex size-8 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-surface disabled:opacity-20"
         >
-          <svg viewBox="0 0 24 24" fill="none" className="size-4">
-            <path d="M15 19l-7-7 7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+          <ChevronLeft className="size-4" aria-hidden />
         </button>
         <div className="grid flex-1 grid-cols-2 gap-[var(--space-8)]">
           {desktopMonths.map(({ year, month }) => renderMonth(year, month))}
@@ -151,9 +151,7 @@ function InlineDayCalendar({
           onClick={() => setDesktopPage(p => p + 1)}
           className="mt-[54px] flex size-8 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-surface"
         >
-          <svg viewBox="0 0 24 24" fill="none" className="size-4">
-            <path d="M9 5l7 7-7 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+          <ChevronRight className="size-4" aria-hidden />
         </button>
       </div>
     </div>
@@ -356,13 +354,9 @@ export default function AddTicketModal({
             aria-label={step === 1 ? "Cerrar" : "Volver"}
           >
             {step === 1 ? (
-              <svg viewBox="0 0 24 24" fill="none" className="size-[18px]">
-                <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-              </svg>
+              <X className="size-[18px]" aria-hidden />
             ) : (
-              <svg viewBox="0 0 24 24" fill="none" className="size-[18px]">
-                <path d="M15 19l-7-7 7-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
+              <ChevronLeft className="size-[18px]" aria-hidden />
             )}
           </button>
           <span className="text-caption font-[var(--fw-medium)] text-muted">{step} de {TOTAL_STEPS}</span>
@@ -437,7 +431,7 @@ export default function AddTicketModal({
               </div>
 
               {/* Title */}
-              <div className="flex items-center gap-[var(--space-3)] border-b-2 border-app pb-[var(--space-2)] transition-colors focus-within:border-primary-token">
+              <div className={`flex items-center gap-[var(--space-3)] ${FIELD_LINE_CLS}`}>
                 <TicketTypeIcon type={type} className="size-5 shrink-0 text-muted" />
                 <input
                   value={title}
@@ -463,7 +457,7 @@ export default function AddTicketModal({
               <div className="grid shrink-0 grid-cols-2 gap-[var(--space-4)]">
                 <div>
                   <p className="mb-[var(--space-2)] text-[13px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Hora de inicio</p>
-                  <div className="border-b-2 border-app pb-[var(--space-2)] transition-colors focus-within:border-primary-token">
+                  <div className={FIELD_LINE_CLS}>
                     <input
                       type="time"
                       value={timeStr}
@@ -474,7 +468,7 @@ export default function AddTicketModal({
                 </div>
                 <div>
                   <p className="mb-[var(--space-2)] text-[13px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Hora de fin (opcional)</p>
-                  <div className="border-b-2 border-app pb-[var(--space-2)] transition-colors focus-within:border-primary-token">
+                  <div className={FIELD_LINE_CLS}>
                     <input
                       type="time"
                       value={endTimeStr}
@@ -499,7 +493,7 @@ export default function AddTicketModal({
                 <div className="grid grid-cols-2 gap-[var(--space-5)]">
                   <div>
                     <p className="mb-[var(--space-2)] text-[13px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Origen</p>
-                    <div className="border-b-2 border-app pb-[var(--space-2)] transition-colors focus-within:border-primary-token">
+                    <div className={FIELD_LINE_CLS}>
                       <input
                         type="text"
                         value={fromLabel}
@@ -513,7 +507,7 @@ export default function AddTicketModal({
                   </div>
                   <div>
                     <p className="mb-[var(--space-2)] text-[13px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Destino</p>
-                    <div className="border-b-2 border-app pb-[var(--space-2)] transition-colors focus-within:border-primary-token">
+                    <div className={FIELD_LINE_CLS}>
                       <input
                         type="text"
                         value={toLabel}
@@ -530,7 +524,7 @@ export default function AddTicketModal({
                   <p className="mb-[var(--space-2)] text-[13px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
                     {type === "hotel" ? "Nombre del hotel" : "Lugar / recinto"}
                   </p>
-                  <div className="border-b-2 border-app pb-[var(--space-2)] transition-colors focus-within:border-primary-token">
+                  <div className={FIELD_LINE_CLS}>
                     <input
                       type="text"
                       value={placeLabel}
@@ -550,7 +544,7 @@ export default function AddTicketModal({
 
               <div>
                 <p className="mb-[var(--space-2)] text-[13px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Localizador / código de reserva</p>
-                <div className="border-b-2 border-app pb-[var(--space-2)] transition-colors focus-within:border-primary-token">
+                <div className={FIELD_LINE_CLS}>
                   <input
                     type="text"
                     value={bookingCode}
@@ -572,7 +566,7 @@ export default function AddTicketModal({
                     <p className="mb-[var(--space-2)] text-[13px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
                       {type === "concert" || type === "match" ? "Sector / zona" : "Asiento"}
                     </p>
-                    <div className="border-b-2 border-app pb-[var(--space-2)] transition-colors focus-within:border-primary-token">
+                    <div className={FIELD_LINE_CLS}>
                       <input
                         type="text"
                         value={seatLabel}
@@ -585,7 +579,7 @@ export default function AddTicketModal({
                   {isRouteType(type) && (
                     <div>
                       <p className="mb-[var(--space-2)] text-[13px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Puerta</p>
-                      <div className="border-b-2 border-app pb-[var(--space-2)] transition-colors focus-within:border-primary-token">
+                      <div className={FIELD_LINE_CLS}>
                         <input
                           type="text"
                           value={gateLabel}
@@ -602,7 +596,7 @@ export default function AddTicketModal({
               {type === "flight" && (
                 <div>
                   <p className="mb-[var(--space-2)] text-[13px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Terminal</p>
-                  <div className="border-b-2 border-app pb-[var(--space-2)] transition-colors focus-within:border-primary-token">
+                  <div className={FIELD_LINE_CLS}>
                     <input
                       type="text"
                       value={terminalLabel}
@@ -616,7 +610,7 @@ export default function AddTicketModal({
 
               <div>
                 <p className="mb-[var(--space-2)] text-[13px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Nombre del titular</p>
-                <div className="border-b-2 border-app pb-[var(--space-2)] transition-colors focus-within:border-primary-token">
+                <div className={FIELD_LINE_CLS}>
                   <input
                     type="text"
                     value={passengerName}
@@ -741,9 +735,7 @@ function UploadStep({
             onClick={onClear}
             className="absolute right-3 top-3 flex size-8 items-center justify-center rounded-full bg-black/50 text-white transition-colors hover:bg-black/70"
           >
-            <svg viewBox="0 0 24 24" fill="none" className="size-4">
-              <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-            </svg>
+            <X className="size-4" aria-hidden />
           </button>
         </div>
       )}
@@ -785,37 +777,14 @@ function UploadStep({
 }
 
 function UploadIcon({ className = "size-6" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <path d="M12 16V8M12 8L9 11M12 8L15 11" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  );
+  return <Upload className={className} aria-hidden />;
 }
-
 function SpinnerIcon({ className = "size-4" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" strokeDasharray="28 56" strokeLinecap="round" />
-    </svg>
-  );
+  return <Loader2 className={`${className} animate-spin`} aria-hidden />;
 }
-
 function CheckIcon({ className = "size-4" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <path d="M5 13L9 17L19 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
+  return <Check className={className} aria-hidden />;
 }
-
 function PdfIcon({ className = "size-6" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M14 2v6h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M9 13h1.5a1 1 0 010 2H9v-4h1.5a1 1 0 010 2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M14 11h1.5a1.5 1.5 0 010 3H14v-3z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
+  return <FileText className={className} aria-hidden />;
 }

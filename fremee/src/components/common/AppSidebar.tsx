@@ -6,15 +6,26 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import { useRouter, usePathname } from "next/navigation";
 import { Capacitor } from "@capacitor/core";
 import { useAuth } from "@/providers/AuthProvider";
-import CreatePlanModal, { type CreatePlanPayload } from "@/components/plans/CreatePlanModal";
+import CreatePlanModal, { type CreatePlanPayload } from "@/components/plans/modals/CreatePlanModal";
 import { createPlan } from "@/services/api/repositories/plans.repository";
 import { countNotificacionesNoLeidas, insertNotificacion } from "@/services/api/repositories/notifications.repository";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { searchUsers, type PublicUserProfileDto } from "@/services/api/repositories/users.repository";
 import NotificationsPanel from "@/components/notifications/NotificationsPanel";
+import { Home, Map, CreditCard, Send, Plus, User, Search, Bell, X } from "lucide-react";
 type IconProps = {
   className?: string;
 };
+
+const HomeIcon = ({ className }: IconProps = {}) => <Home className={className} aria-hidden />;
+const PlansIcon = ({ className }: IconProps = {}) => <Map className={className} aria-hidden />;
+const CardIcon = ({ className }: IconProps = {}) => <CreditCard className={className} aria-hidden />;
+const SendIcon = ({ className }: IconProps = {}) => <Send className={className} aria-hidden />;
+const PlusIcon = ({ className }: IconProps = {}) => <Plus className={className} aria-hidden />;
+const ProfileIcon = ({ className }: IconProps = {}) => <User className={className} aria-hidden />;
+const SearchIcon = ({ className }: IconProps = {}) => <Search className={className} aria-hidden />;
+const CloseIcon = ({ className }: IconProps = {}) => <X className={className} aria-hidden />;
+const BellIcon = ({ className }: IconProps = {}) => <Bell className={className} aria-hidden />;
 
 const items = [
   { key: "home", label: "Inicio", icon: HomeIcon, href: "/feed" },
@@ -395,7 +406,7 @@ export default function AppSidebar({ onCreatePlan, hideMobileNav }: AppSidebarPr
               <div className="overflow-hidden rounded-avatar border border-strong bg-[var(--text-primary)] p-0 text-contrast-token">
                 <div className="flex avatar-lg items-center justify-center overflow-hidden rounded-avatar">
                   {profile?.profile_image ? (
-                    <Image src={profile.profile_image} alt="Foto de perfil" width={44} height={44} className="h-full w-full object-cover" referrerPolicy="no-referrer" unoptimized />
+                    <Image src={profile.profile_image} alt="Foto de perfil" width={44} height={44} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
                   ) : (
                     <ProfileIcon className="size-[calc(var(--icon-size)+8px)]" />
                   )}
@@ -502,7 +513,7 @@ export default function AppSidebar({ onCreatePlan, hideMobileNav }: AppSidebarPr
 
 function SearchUserAvatar({ name, image }: { name: string; image: string | null }) {
   if (image) {
-    return <Image src={image} alt={name} width={36} height={36} className="size-9 shrink-0 rounded-full object-cover" referrerPolicy="no-referrer" unoptimized />;
+    return <Image src={image} alt={name} width={36} height={36} className="size-9 shrink-0 rounded-full object-cover" unoptimized referrerPolicy="no-referrer" />;
   }
 
   return (
@@ -512,95 +523,3 @@ function SearchUserAvatar({ name, image }: { name: string; image: string | null 
   );
 }
 
-function HomeIcon({ className = "size-icon" }: IconProps = {}) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <path
-        d="M3.5 10.3L12 3.5L20.5 10.3V19A1 1 0 0 1 19.5 20H4.5A1 1 0 0 1 3.5 19V10.3Z"
-        stroke="currentColor"
-        strokeWidth="1.8"
-      />
-      <path d="M9 20V13H15V20" stroke="currentColor" strokeWidth="1.8" />
-    </svg>
-  );
-}
-
-function PlansIcon({ className = "size-icon" }: IconProps = {}) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <path d="M9 3L3 6V21L9 18L15 21L21 18V3L15 6L9 3Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-      <path d="M9 3V18M15 6V21" stroke="currentColor" strokeWidth="1.8" />
-    </svg>
-  );
-}
-
-function CardIcon({ className = "size-icon" }: IconProps = {}) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <rect x="2.8" y="4.5" width="18.4" height="15" rx="2.2" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M2.8 10.2H21.2" stroke="currentColor" strokeWidth="1.8" />
-    </svg>
-  );
-}
-
-function SendIcon({ className = "size-icon" }: IconProps = {}) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <path d="M21 3L10 14" stroke="currentColor" strokeWidth="1.8" />
-      <path
-        d="M21 3L14.5 21L10 14L3 9.5L21 3Z"
-        stroke="currentColor"
-        strokeLinejoin="round"
-        strokeWidth="1.8"
-      />
-    </svg>
-  );
-}
-
-function PlusIcon({ className = "size-icon" }: IconProps = {}) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <path d="M12 4V20M4 12H20" stroke="currentColor" strokeWidth="1.8" />
-    </svg>
-  );
-}
-
-function ProfileIcon({ className = "size-icon" }: IconProps = {}) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <circle cx="12" cy="8" r="3.2" stroke="currentColor" strokeWidth="1.6" />
-      <path d="M5.8 19C7 15.9 9.1 14.4 12 14.4C14.9 14.4 17 15.9 18.2 19" stroke="currentColor" strokeWidth="1.6" />
-    </svg>
-  );
-}
-
-function SearchIcon({ className = "size-icon" }: IconProps = {}) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M16 16L20.5 20.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function CloseIcon({ className = "size-icon" }: IconProps = {}) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function BellIcon({ className = "size-icon" }: IconProps = {}) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <path
-        d="M6 10.5C6 7.46 8.24 5 12 5s6 2.46 6 5.5v3l1.5 2.5H4.5L6 13.5v-3Z"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinejoin="round"
-      />
-      <path d="M10 17.5a2 2 0 0 0 4 0" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  );
-}

@@ -5,6 +5,8 @@ import Link from "next/link";
 import GoogleAuthButton from "@/components/auth/GoogleAuthButton";
 import { AUTH_EMAIL_REGEX, focusInput, getAuthErrorMessage } from "@/components/auth/AuthFormUtils";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
+import { Input } from "@/components/ui/Input";
+import { EyeIcon } from "@/components/icons";
 import { useRouter, useSearchParams } from "next/navigation";
 
 export default function LoginPage() {
@@ -120,44 +122,40 @@ function LoginPageInner() {
           </div>
 
           <form className="space-y-[var(--space-3)]" onSubmit={onSubmit} noValidate>
-            <div className={`h-input rounded-input border bg-[var(--input-bg)] px-[var(--input-padding-x)] transition-[border-color] duration-[var(--duration-fast)] [transition-timing-function:var(--ease-standard)] ${invalidField === "email" ? "border-error-token focus-within:border-error-token" : "border-app focus-within:border-[var(--input-border-focus)]"}`}>
-              <input
-                ref={emailRef}
-                type="email"
-                className="h-full w-full bg-transparent text-body text-app outline-none placeholder:text-muted focus-visible:shadow-none"
-                aria-label="Correo electrónico"
-                placeholder="Email*"
-                autoComplete="email"
-                value={email}
+            <Input
+              ref={emailRef}
+              type="email"
+              error={invalidField === "email"}
+              aria-label="Correo electrónico"
+              placeholder="Email*"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (invalidField === "email") {
+                  setInvalidField(null);
+                  setErrorMsg(null);
+                }
+              }}
+            />
+
+            <div>
+              <Input
+                ref={passwordRef}
+                type={showPassword ? "text" : "password"}
+                error={invalidField === "password"}
+                aria-label="Contraseña"
+                placeholder="Contraseña*"
+                autoComplete="current-password"
+                value={password}
                 onChange={(e) => {
-                  setEmail(e.target.value);
-                  if (invalidField === "email") {
+                  setPassword(e.target.value);
+                  if (invalidField === "password") {
                     setInvalidField(null);
                     setErrorMsg(null);
                   }
                 }}
-              />
-            </div>
-
-            <div>
-              <div className={`h-input rounded-input border bg-[var(--input-bg)] px-[var(--input-padding-x)] transition-[border-color] duration-[var(--duration-fast)] [transition-timing-function:var(--ease-standard)] ${invalidField === "password" ? "border-error-token focus-within:border-error-token" : "border-app focus-within:border-[var(--input-border-focus)]"}`}>
-                <div className="flex h-full items-center gap-[var(--space-3)]">
-                  <input
-                    ref={passwordRef}
-                    type={showPassword ? "text" : "password"}
-                    className="w-full bg-transparent text-body text-app outline-none placeholder:text-muted focus-visible:shadow-none"
-                    aria-label="Contraseña"
-                    placeholder="Contraseña*"
-                    autoComplete="current-password"
-                    value={password}
-                    onChange={(e) => {
-                      setPassword(e.target.value);
-                      if (invalidField === "password") {
-                        setInvalidField(null);
-                        setErrorMsg(null);
-                      }
-                    }}
-                  />
+                trailing={
                   <button
                     type="button"
                     className="text-muted"
@@ -166,8 +164,8 @@ function LoginPageInner() {
                   >
                     <EyeIcon open={showPassword} />
                   </button>
-                </div>
-              </div>
+                }
+              />
 
               <div className="pt-[var(--space-2)] text-right">
                 <Link href="/forgot" className="auth-link auth-link-muted text-body-sm text-muted">
@@ -207,22 +205,3 @@ function LoginPageInner() {
   );
 }
 
-function EyeIcon({ open }: { open: boolean }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      className="size-5"
-      aria-hidden="true"
-    >
-      <path
-        d="M2 12C3.8 8.6 7.4 6.5 12 6.5C16.6 6.5 20.2 8.6 22 12C20.2 15.4 16.6 17.5 12 17.5C7.4 17.5 3.8 15.4 2 12Z"
-        stroke="currentColor"
-        strokeWidth="1.7"
-      />
-      <circle cx="12" cy="12" r="3.2" stroke="currentColor" strokeWidth="1.7" />
-      {!open && <path d="M4 4L20 20" stroke="currentColor" strokeWidth="1.7" />}
-    </svg>
-  );
-}

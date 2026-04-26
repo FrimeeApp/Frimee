@@ -4,6 +4,8 @@ import "../styles/globals.css";
 import { AuthProvider } from "@/providers/AuthProvider";
 import NativeDeepLinks from "@/components/common/NativeDeepLinks";
 import NativeSystemUi from "@/components/common/NativeSystemUi";
+import { APP_DESCRIPTION, APP_ICON_PATHS, APP_NAME } from "@/config/app";
+import { STORAGE_KEYS } from "@/config/storage";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -20,16 +22,16 @@ const instrumentSerif = Instrument_Serif({
 });
 
 export const metadata: Metadata = {
-  title: "Frimee",
-  description: "Organiza planes, viajes y grupos",
+  title: APP_NAME,
+  description: APP_DESCRIPTION,
   icons: {
     icon: [
-      { url: "/logo_app_frimee.png" },
-      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
-      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+      { url: APP_ICON_PATHS.primary },
+      { url: APP_ICON_PATHS.icon192, sizes: "192x192", type: "image/png" },
+      { url: APP_ICON_PATHS.icon512, sizes: "512x512", type: "image/png" },
     ],
-    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
-    shortcut: ["/logo_app_frimee.png"],
+    apple: [{ url: APP_ICON_PATHS.appleTouch, sizes: "180x180", type: "image/png" }],
+    shortcut: [APP_ICON_PATHS.primary],
   },
 };
 
@@ -45,7 +47,10 @@ export const viewport: Viewport = {
 const themeInitScript = `
 (() => {
   try {
-    const stored = localStorage.getItem("fremee.theme");
+    document.documentElement.dataset.platform =
+      window.Capacitor?.isNativePlatform?.() ? "native" : "web";
+
+    const stored = localStorage.getItem("${STORAGE_KEYS.themePreference}");
     const theme = stored === "DARK" || stored === "LIGHT" || stored === "SYSTEM" ? stored : "SYSTEM";
     const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
     const useDark = theme === "DARK" || (theme === "SYSTEM" && prefersDark);

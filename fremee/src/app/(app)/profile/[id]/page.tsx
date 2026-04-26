@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import ProfileClient from "./ProfileClient";
 
 export const dynamic = "auto";
@@ -9,5 +10,9 @@ export async function generateStaticParams() {
 }
 
 export default async function ProfilePage() {
-  return <ProfileClient />;
+  return (
+    <Suspense>
+      <ProfileClient />
+    </Suspense>
+  );
 }

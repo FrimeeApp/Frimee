@@ -3,25 +3,11 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { SubplanRow } from "@/services/api/endpoints/subplanes.endpoint";
 import { TIPOS_TRANSPORTE } from "@/services/api/endpoints/subplanes.endpoint";
+import { loadGoogleMapsScript } from "@/lib/googleMaps";
 
 type Props = { subplanes: SubplanRow[] };
 
 function isoDateOnly(iso: string) { return iso.slice(0, 10); }
-
-function loadGoogleMaps(): Promise<void> {
-  return new Promise((resolve) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if ((window as any).google?.maps) { resolve(); return; }
-    const existing = document.getElementById("google-maps-script");
-    if (existing) { existing.addEventListener("load", () => resolve()); return; }
-    const script = document.createElement("script");
-    script.id = "google-maps-script";
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&v=weekly&libraries=places,geometry`;
-    script.async = true;
-    script.onload = () => resolve();
-    document.head.appendChild(script);
-  });
-}
 
 async function geocode(address: string): Promise<{ lat: number; lng: number } | null> {
   return new Promise((resolve) => {
@@ -216,7 +202,7 @@ export default function TripOverviewMap({ subplanes }: Props) {
     setError(null);
 
     try {
-      await loadGoogleMaps();
+      await loadGoogleMapsScript();
       if (abortedRef.current || !mapRef.current) return;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const google = (window as any).google;

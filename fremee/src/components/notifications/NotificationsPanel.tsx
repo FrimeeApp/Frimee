@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/providers/AuthProvider";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
+import { ChevronLeft, X, Bell } from "lucide-react";
 import {
   listNotificaciones,
   marcarNotificacionesLeidas,
@@ -107,7 +108,7 @@ function groupByPeriod(notifs: NotificacionDto[]): { label: string; items: Notif
 function Avatar({ src, name }: { src: string | null; name: string | null }) {
   const letter = (name ?? "?")[0].toUpperCase();
   if (src) {
-    return <Image src={src} alt={name ?? ""} width={40} height={40} className="size-10 rounded-full border border-app object-cover shrink-0" unoptimized />;
+    return <Image src={src} alt={name ?? ""} width={40} height={40} className="size-10 rounded-full border border-app object-cover shrink-0" unoptimized referrerPolicy="no-referrer" />;
   }
   return (
     <div className="size-10 rounded-full border border-app bg-[var(--surface-2)] flex items-center justify-center text-body-sm font-[var(--fw-medium)] shrink-0">
@@ -365,9 +366,7 @@ export default function NotificationsPanel({ open, onClose, onRead, desktopPosit
             aria-label="Volver"
             className="flex size-[36px] items-center justify-center rounded-full transition-colors hover:bg-surface md:hidden"
           >
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[18px]">
-              <path d="M15 19l-7-7 7-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
+            <ChevronLeft className="size-[18px]" aria-hidden />
           </button>
           <h1 className="flex-1 text-[var(--font-h2)] font-[var(--fw-regular)] leading-[1.15] text-app">Notificaciones</h1>
           <button
@@ -376,9 +375,7 @@ export default function NotificationsPanel({ open, onClose, onRead, desktopPosit
             aria-label="Cerrar"
             className="hidden text-muted hover:text-app transition-colors md:block"
           >
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-5">
-              <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-            </svg>
+            <X className="size-5" aria-hidden />
           </button>
         </div>
 
@@ -390,10 +387,7 @@ export default function NotificationsPanel({ open, onClose, onRead, desktopPosit
             </div>
           ) : notifs.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-3 py-20 px-6 text-center">
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-12 opacity-20">
-                <path d="M6 10.5C6 7.46 8.24 5 12 5s6 2.46 6 5.5v3l1.5 2.5H4.5L6 13.5v-3Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-                <path d="M10 17.5a2 2 0 0 0 4 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-              </svg>
+              <Bell className="size-12 opacity-20" aria-hidden />
               <p className="text-body-sm text-muted">No tienes notificaciones aún</p>
             </div>
           ) : (

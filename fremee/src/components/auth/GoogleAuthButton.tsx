@@ -3,6 +3,7 @@
 import { Capacitor } from "@capacitor/core";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { signInWithGoogleCapacitor } from "@/services/auth/google";
+import { GOOGLE_CALENDAR_SCOPE } from "@/config/external";
 
 type Props = {
   label?: string;
@@ -29,7 +30,7 @@ export default function GoogleAuthButton({
         provider: "google",
         options: {
           redirectTo,
-          scopes: "https://www.googleapis.com/auth/calendar",
+          scopes: GOOGLE_CALENDAR_SCOPE,
           queryParams: {
             access_type: "offline",
             prompt: "consent",

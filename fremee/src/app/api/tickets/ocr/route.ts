@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "crypto";
+import { OPENAI_API_BASE_URL } from "@/config/external";
+import { createSupabaseServerClient } from "@/services/supabase/server";
 
 export type TicketOcrResult = {
   source_path: string;            // path en Supabase Storage (plan-tickets bucket)
@@ -26,12 +28,24 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    // ── 0. Verificar sesión ────────────────────────────────────────────────
+    const authClient = await createSupabaseServerClient();
+    const { data: { user: sessionUser } } = await authClient.auth.getUser();
+    if (!sessionUser) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+    }
+
     const formData = await req.formData();
     const file   = formData.get("file")    as File   | null;
     const userId = formData.get("user_id") as string | null;
 
     if (!file || !userId) {
       return NextResponse.json({ error: "Faltan parámetros: file, user_id" }, { status: 400 });
+    }
+
+    // Asegurar que el userId del formulario coincide con la sesión activa
+    if (userId !== sessionUser.id) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 403 });
     }
 
     // ── Subir a plan-tickets bucket ────────────────────────────────────────────
@@ -91,7 +105,7 @@ Si no puedes extraer algún campo con certeza, pon null. No inventes datos.`;
       ];
     }
 
-    const openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+    const openaiRes = await fetch(`${OPENAI_API_BASE_URL}/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({ model: "gpt-4o", max_tokens: 800, messages: [{ role: "user", content: messageContent }] }),

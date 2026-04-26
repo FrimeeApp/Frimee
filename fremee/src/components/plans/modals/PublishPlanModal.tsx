@@ -11,6 +11,8 @@ import { getPlanFotos, type PlanFotoDto } from "@/services/api/repositories/plan
 import { listGastosForPlanEndpoint, fetchPlanMiembrosEndpoint, type GastoRow, type PlanMiembro } from "@/services/api/endpoints/gastos.endpoint";
 import type { SubplanRow } from "@/services/api/endpoints/subplanes.endpoint";
 import type { PublicationConfig, ItinerarySnapshotItem, ExpensesSnapshot, ParticipantsSnapshot } from "@/services/api/dtos/plan.dto";
+import { XIcon } from "@/components/icons";
+import { CheckCircle, Loader2, Check, MapPin, Calendar, ChevronRight as ChevronRightLucide, ChevronLeft as ChevronLeftLucide } from "lucide-react";
 
 type Props = {
   plan: PlanByIdRow;
@@ -46,65 +48,13 @@ function buildExpensesSnapshot(gastos: GastoRow[]): ExpensesSnapshot {
 
 // ── Icons ──────────────────────────────────────────────────────────────────────
 
-function CloseIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" className="size-5">
-      <path d="M6 6L18 18M6 18L18 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <svg viewBox="0 0 52 52" fill="none" className="size-[52px]">
-      <circle cx="26" cy="26" r="25" stroke="currentColor" strokeWidth="2" />
-      <path d="M14 27L22 35L38 18" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function CheckSmall() {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" className="size-4">
-      <path d="M3 8L6.5 11.5L13 4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function MapPinSmall() {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" className="size-3.5 shrink-0">
-      <path d="M8 1.5C5.79 1.5 4 3.29 4 5.5C4 8.5 8 14 8 14C8 14 12 8.5 12 5.5C12 3.29 10.21 1.5 8 1.5Z" stroke="currentColor" strokeWidth="1.2" />
-      <circle cx="8" cy="5.5" r="1.5" stroke="currentColor" strokeWidth="1.2" />
-    </svg>
-  );
-}
-
-function CalSmall() {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" className="size-3.5 shrink-0">
-      <rect x="2" y="3" width="12" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
-      <path d="M5 2V4M11 2V4M2 7H14" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function ChevronRight() {
-  return (
-    <svg viewBox="0 0 20 20" fill="none" className="size-4">
-      <path d="M7.5 5L12.5 10L7.5 15" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function SpinnerIcon() {
-  return (
-    <svg className="size-5 animate-spin" viewBox="0 0 24 24" fill="none">
-      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2.5" strokeOpacity="0.25" />
-      <path d="M12 2 A10 10 0 0 1 22 12" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-    </svg>
-  );
-}
+const CloseIcon = () => <XIcon className="size-5" />;
+const CheckIcon = () => <CheckCircle className="size-[52px]" aria-hidden />;
+const CheckSmall = () => <Check className="size-4" aria-hidden />;
+const MapPinSmall = () => <MapPin className="size-3.5 shrink-0" aria-hidden />;
+const CalSmall = () => <Calendar className="size-3.5 shrink-0" aria-hidden />;
+const ChevronRight = () => <ChevronRightLucide className="size-4" aria-hidden />;
+const SpinnerIcon = () => <Loader2 className="size-5 animate-spin" aria-hidden />;
 
 // ── Toggle Row ─────────────────────────────────────────────────────────────────
 
@@ -421,9 +371,7 @@ export default function PublishPlanModal({ plan, onClose }: Props) {
                   onClick={() => setStep("compose")}
                   className="flex items-center justify-center size-8 rounded-full text-muted hover:text-app hover:bg-app-hover transition-colors"
                 >
-                  <svg viewBox="0 0 20 20" fill="none" className="size-4">
-                    <path d="M12.5 5L7.5 10L12.5 15" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
+                  <ChevronLeftLucide className="size-4" aria-hidden />
                 </button>
                 <span className="text-[15px] font-[700] text-app tracking-[-0.01em]">¿Qué quieres mostrar?</span>
               </div>

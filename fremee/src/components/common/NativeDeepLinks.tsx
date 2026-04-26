@@ -4,12 +4,13 @@ import { useEffect } from "react";
 import { App } from "@capacitor/app";
 import { Capacitor } from "@capacitor/core";
 import { useRouter } from "next/navigation";
+import { APP_DEEP_LINK_SCHEME } from "@/config/app";
 
 function resolveNativePath(url: string): string | null {
   try {
     const parsed = new URL(url);
 
-    if (parsed.protocol !== "fremee:") return null;
+    if (parsed.protocol !== `${APP_DEEP_LINK_SCHEME}:`) return null;
     if (parsed.hostname !== "plans") return null;
 
     const queryPlanId = parsed.searchParams.get("id");

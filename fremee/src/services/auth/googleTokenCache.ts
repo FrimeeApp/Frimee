@@ -1,5 +1,7 @@
-const GOOGLE_TOKEN_CACHE_KEY = "fremee_google_token_cache_v1";
-const GOOGLE_TOKEN_TTL_MS = 50 * 60 * 1000;
+import { STORAGE_KEYS, STORAGE_TTLS } from "@/config/storage";
+
+const GOOGLE_TOKEN_CACHE_KEY = STORAGE_KEYS.googleTokenCache;
+const GOOGLE_TOKEN_TTL_MS = STORAGE_TTLS.googleTokenCacheMs;
 
 type CachedGoogleToken = {
   token: string;
