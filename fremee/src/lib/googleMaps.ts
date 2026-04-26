@@ -1,14 +1,20 @@
 import { GOOGLE_MAPS_SCRIPT_ID, buildGoogleMapsScriptUrl } from "@/config/external";
 
+type GoogleMapsWindow = Window & typeof globalThis & {
+  google?: typeof google;
+};
+
+export function getGoogleMaps(): typeof google.maps {
+  const maps = (window as GoogleMapsWindow).google?.maps;
+  if (!maps) {
+    throw new Error("Google Maps no está disponible");
+  }
+  return maps;
+}
+
 export function loadGoogleMapsScript(): Promise<void> {
   return new Promise((resolve) => {
-    const googleMaps = (
-      window as Window & {
-        google?: {
-          maps?: unknown;
-        };
-      }
-    ).google?.maps;
+    const googleMaps = (window as GoogleMapsWindow).google?.maps;
 
     if (googleMaps) {
       resolve();

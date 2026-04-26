@@ -963,7 +963,7 @@ function FeedChatPanel({ currentUserId }: { currentUserId: string | null }) {
                           <video src={msg.image_url} controls playsInline className="max-w-[200px] rounded-card" style={{ maxHeight: 200 }} />
                         ) : (
                           <a href={msg.image_url} target="_blank" rel="noopener noreferrer">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            { }
                             <NextImage src={msg.image_url} alt="Imagen" width={200} height={200} className="max-w-[200px] rounded-card object-cover" style={{ maxHeight: 200 }} unoptimized referrerPolicy="no-referrer" />
                           </a>
                         )

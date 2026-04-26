@@ -3,7 +3,7 @@
 import NextImage from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-interface CameraModalProps {
+type CameraModalProps = {
   onCapture: (file: File) => void;
   onClose: () => void;
 }
@@ -79,7 +79,7 @@ export function CameraModal({ onCapture, onClose }: CameraModalProps) {
 
   const handleSendPhoto = () => {
     if (!captured) return;
-    const byteString = atob(captured.split(",")[1]!);
+    const byteString = atob(captured.split(",")[1]);
     const buffer = new Uint8Array(byteString.length);
     for (let i = 0; i < byteString.length; i++) buffer[i] = byteString.charCodeAt(i);
     onCapture(new File([buffer], `foto_${Date.now()}.jpg`, { type: "image/jpeg" }));
@@ -115,7 +115,7 @@ export function CameraModal({ onCapture, onClose }: CameraModalProps) {
         <>
           <div className="relative flex-1 overflow-hidden">
             {captured ? (
-              // eslint-disable-next-line @next/next/no-img-element
+               
               <NextImage src={captured} alt="Captura" width={1200} height={900} className="h-full w-full object-contain" unoptimized />
             ) : (
               <video src={capturedVideoUrl ?? undefined} controls autoPlay className="h-full w-full object-contain" />

@@ -14,7 +14,7 @@ export const createBrowserSupabaseClient = () => {
   // is guaranteed to be initialized before we decide which storage to use.
   const isNative = Capacitor.isNativePlatform();
 
-  browserClient = createClient(supabaseUrl!, supabaseAnonKey!, {
+  browserClient = createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
       flowType: "pkce",
       persistSession: true,

@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, RefreshCw, ArrowLeft } from "lucide-react";
 
-interface Props {
+type Props = {
   error: Error & { digest?: string };
   reset: () => void;
 }

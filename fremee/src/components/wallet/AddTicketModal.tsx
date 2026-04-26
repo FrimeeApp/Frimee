@@ -46,23 +46,25 @@ function InlineDayCalendar({
 }) {
   const todayStr = toDateInputValue(new Date());
   const now = new Date();
+  const baseYear = now.getFullYear();
+  const baseMonth = now.getMonth();
   const [monthCount, setMonthCount] = useState(4);
   const [desktopPage, setDesktopPage] = useState(0);
 
   const mobileMonths = useMemo(() =>
     Array.from({ length: monthCount }, (_, i) => {
-      const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+      const d = new Date(baseYear, baseMonth + i, 1);
       return { year: d.getFullYear(), month: d.getMonth() };
     }),
-    [monthCount]
+    [baseMonth, baseYear, monthCount]
   );
 
   const desktopMonths = useMemo(() =>
     [0, 1].map((offset) => {
-      const d = new Date(now.getFullYear(), now.getMonth() + desktopPage * 2 + offset, 1);
+      const d = new Date(baseYear, baseMonth + desktopPage * 2 + offset, 1);
       return { year: d.getFullYear(), month: d.getMonth() };
     }),
-    [desktopPage]
+    [baseMonth, baseYear, desktopPage]
   );
 
   function renderMonth(year: number, month: number) {
@@ -206,13 +208,17 @@ export default function AddTicketModal({
   const [notes, setNotes]                 = useState("");
   const [hasQr, setHasQr]                 = useState(false);
 
+  function isTicketType(value: string): value is TicketType {
+    return TICKET_TYPES.includes(value as TicketType);
+  }
+
   const canContinue = useMemo(() => {
     if (step === 1) return !ocrLoading; // esperar a que termine el OCR
     if (step === 2) return title.trim().length > 0;
     if (step === 3) return dateStr !== "";
     if (step === 4) return isRouteType(type) ? fromLabel.trim().length > 0 && toLabel.trim().length > 0 : true;
     return true;
-  }, [step, title, dateStr, type, fromLabel, toLabel]);
+  }, [dateStr, fromLabel, ocrLoading, step, title, toLabel, type]);
 
   async function runOcr(file: File) {
     setOcrLoading(true);
@@ -227,9 +233,19 @@ export default function AddTicketModal({
         const bitmap = await createImageBitmap(file);
         const canvas = document.createElement("canvas");
         canvas.width = bitmap.width; canvas.height = bitmap.height;
-        canvas.getContext("2d")!.drawImage(bitmap, 0, 0);
+        const context = canvas.getContext("2d");
+        if (!context) throw new Error("No se pudo preparar la imagen");
+        context.drawImage(bitmap, 0, 0);
         bitmap.close();
-        fileToSend = await new Promise<Blob>(res => canvas.toBlob(b => res(b!), "image/jpeg", 0.92));
+        fileToSend = await new Promise<Blob>((resolve, reject) => {
+          canvas.toBlob((blob) => {
+            if (!blob) {
+              reject(new Error("No se pudo convertir la imagen"));
+              return;
+            }
+            resolve(blob);
+          }, "image/jpeg", 0.92);
+        });
       }
 
       const fd = new FormData();
@@ -242,7 +258,7 @@ export default function AddTicketModal({
 
       // Pre-fill fields
       if (data.source_path)    setSourcePath(data.source_path);
-      if (data.type && TICKET_TYPES.includes(data.type as TicketType)) setType(data.type as TicketType);
+      if (data.type && isTicketType(data.type)) setType(data.type);
       if (data.title)          setTitle(data.title);
       if (data.from_label)     setFromLabel(data.from_label);
       if (data.to_label)       setToLabel(data.to_label);

@@ -94,7 +94,7 @@ function DetailCard({ label, value }: { label: string; value: string }) {
 
 // ── Modal ─────────────────────────────────────────────────────────────────────
 
-interface ExpenseDetailModalProps {
+type ExpenseDetailModalProps = {
   item: ExpenseItem | null;
   profileName: string;
   actingId: number | null;

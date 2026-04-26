@@ -221,8 +221,7 @@ export default function AppSidebar({ onCreatePlan, hideMobileNav }: AppSidebarPr
     }
 
     setCreateModalOpen(false);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const isCapacitor = typeof window !== "undefined" && !!(window as any).Capacitor?.isNativePlatform?.();
+    const isCapacitor = Capacitor.isNativePlatform();
     router.push(isCapacitor ? `/plans/static?id=${created.id}` : `/plans/${created.id}`);
   };
 
@@ -522,4 +521,3 @@ function SearchUserAvatar({ name, image }: { name: string; image: string | null 
     </div>
   );
 }
-

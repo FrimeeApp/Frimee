@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-interface PollCreatorModalProps {
+type PollCreatorModalProps = {
   onClose: () => void;
   onCreate: (question: string, options: string[]) => void;
 }

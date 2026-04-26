@@ -2,13 +2,13 @@
 
 import { useRef, useEffect, useState, useCallback } from "react";
 
-export interface TabDef {
+export type TabDef = {
   value: string;
   label: string;
   badge?: React.ReactNode;
 }
 
-interface TabsProps {
+type TabsProps = {
   tabs: TabDef[];
   value: string;
   onChange: (value: string) => void;

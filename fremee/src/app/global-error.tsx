@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 
-interface Props {
+type Props = {
   error: Error & { digest?: string };
   reset: () => void;
 }

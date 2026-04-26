@@ -3,14 +3,11 @@
 export const dynamic = "force-static";
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { AIRPORTS, flightProgressFromPosition, flightProgressFromTime } from "@/lib/airports";
 import { buildOpenSkyStatesUrl } from "@/config/external";
+import { createSupabaseServiceClient } from "@/services/supabase/server";
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+const supabaseAdmin = createSupabaseServiceClient();
 
 export type FlightTrackResult = {
   callsign:         string;
