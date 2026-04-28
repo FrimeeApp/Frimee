@@ -2008,7 +2008,7 @@ function FeedCard({
             <div className="flex items-center gap-5">
               {/* Image */}
               <div
-                className="relative flex shrink-0 items-center justify-center overflow-hidden rounded-2xl"
+                className="relative flex shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-black"
                 style={{
                   width: "min(50dvw, 620px)",
                   height: "min(calc(100dvh - 160px), 820px)",
@@ -2016,21 +2016,26 @@ function FeedCard({
                   minHeight: "420px",
                 }}
               >
-                {!imgLoaded && <div className="skeleton-shimmer absolute inset-0 rounded-2xl" aria-hidden="true" />}
+                {!imgLoaded && <div className="skeleton-shimmer absolute inset-0" aria-hidden="true" />}
                 <NextImage
                   src={post.coverImage}
                   alt="Imagen del plan"
                   width={1600}
                   height={1600}
-                  className="block max-h-full max-w-full rounded-2xl object-contain transition-opacity duration-300"
+                  className="block max-h-full max-w-full object-contain transition-opacity duration-300"
                   style={{ opacity: imgLoaded ? 1 : 0 }}
                   unoptimized
                   onLoad={() => setImgLoaded(true)}
                   onError={() => setImgLoaded(true)}
                 />
 
+                {/* Top gradient */}
+                <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-36 rounded-t-2xl bg-gradient-to-b from-black/65 to-transparent" />
+                {/* Bottom gradient */}
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-40 rounded-b-2xl bg-gradient-to-t from-black/70 to-transparent" />
+
                 {/* Top overlay: avatar + name + follow */}
-                <div className="absolute inset-x-0 top-0 px-4 pb-8 pt-4" style={{ filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.45))" }}>
+                <div className="absolute inset-x-0 top-0 z-20 px-4 pb-8 pt-4" style={{ filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.45))" }}>
                   <div className="flex items-center gap-2.5">
                     <Link href={`/profile/${post.plan.ownerUserId}`} className="flex items-center gap-2.5 min-w-0">
                       <div className="flex size-[34px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/30 bg-white/10">
@@ -2064,7 +2069,7 @@ function FeedCard({
                 </div>
 
                 {/* Bottom: title + location */}
-                <div className="absolute inset-x-0 bottom-0 z-20 px-4 pb-6" style={{ filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.45))" }}>
+                <div className="absolute inset-x-0 bottom-0 z-20 px-4 pb-6 pt-10" style={{ filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.45))" }}>
                   <div className="min-w-0">
                     {post.plan.title && (
                       <p className="text-[16px] font-[800] leading-tight text-white">{post.plan.title}</p>
