@@ -26,12 +26,13 @@ export const metadata: Metadata = {
   description: APP_DESCRIPTION,
   icons: {
     icon: [
-      { url: APP_ICON_PATHS.primary },
+      { url: "/favicoon-frimee-black.svg", type: "image/svg+xml", media: "(prefers-color-scheme: light)" },
+      { url: "/favicoon-frimee-white.svg", type: "image/svg+xml", media: "(prefers-color-scheme: dark)" },
       { url: APP_ICON_PATHS.icon192, sizes: "192x192", type: "image/png" },
       { url: APP_ICON_PATHS.icon512, sizes: "512x512", type: "image/png" },
     ],
-    apple: [{ url: APP_ICON_PATHS.appleTouch, sizes: "180x180", type: "image/png" }],
-    shortcut: [APP_ICON_PATHS.primary],
+    apple: [{ url: "/logo-frimee.png", sizes: "180x180", type: "image/png" }],
+    shortcut: ["/favicoon-frimee-black.svg"],
   },
 };
 

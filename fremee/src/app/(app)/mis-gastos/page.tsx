@@ -236,11 +236,11 @@ function MisGastosContent() {
             {(kpis.owedToYou > 0 || kpis.youOwe > 0) && (
               <p className="mt-[var(--space-2)] mb-[var(--space-8)] text-caption text-muted">
                 {kpis.owedToYou > 0 && (
-                  <>Te deben <span className="font-[var(--fw-medium)] text-[var(--success,#15803d)] opacity-60">{formatAmount(kpis.owedToYou)}</span></>
+                  <>Te deben <span className="font-[var(--fw-medium)] text-app opacity-60">{formatAmount(kpis.owedToYou)}</span></>
                 )}
                 {kpis.owedToYou > 0 && kpis.youOwe > 0 && " · "}
                 {kpis.youOwe > 0 && (
-                  <>Debes <span className="font-[var(--fw-medium)] text-[var(--warning,#b45309)] opacity-60">{formatAmount(kpis.youOwe)}</span></>
+                  <>Debes <span className="font-[var(--fw-medium)] text-app opacity-60">{formatAmount(kpis.youOwe)}</span></>
                 )}
               </p>
             )}
@@ -383,9 +383,7 @@ function MisGastosContent() {
                           ) : (
                             <div className="flex items-center gap-[var(--space-3)]">
                               <p
-                                className={`text-body-sm font-[var(--fw-semibold)] ${
-                                  incoming ? "text-[var(--success,#15803d)]" : "text-[var(--warning,#b45309)]"
-                                }`}
+                                className="text-body-sm font-[var(--fw-semibold)] text-app"
                               >
                                 {incoming ? "+" : "-"}{formatAmount(item.amount)}
                               </p>
