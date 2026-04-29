@@ -218,9 +218,10 @@ function NotifItem({
                 type="button"
                 disabled={acting}
                 onClick={() => void (isFriendRequest ? handleFriend(false) : handlePlanInvite(false))}
-                className="rounded-full border border-[var(--border)] px-3 py-1 text-[14px] font-[var(--fw-semibold)] transition-colors hover:bg-[var(--surface)] disabled:opacity-50"
+                aria-label="Rechazar"
+                className="flex size-8 items-center justify-center rounded-full text-muted transition-colors hover:text-app disabled:opacity-50"
               >
-                Rechazar
+                <X className="size-5" aria-hidden />
               </button>
             </div>
           )}

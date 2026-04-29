@@ -317,7 +317,7 @@ function MisGastosContent() {
               ) : filteredVisibleItems.length === 0 ? (
                 <GastosEmptyState tab={activeTab} selectedPlanName={selectedPlanName} />
               ) : (
-                filteredVisibleItems.map((item, index) => {
+                filteredVisibleItems.map((item) => {
                   const incoming = item.direction === "incoming";
                   const senderName = incoming ? item.counterparty : `${profile?.nombre ?? "Tú"} (Tú)`;
                   const senderImage = incoming ? item.counterpartyImage : profile?.profile_image ?? null;
@@ -330,8 +330,6 @@ function MisGastosContent() {
                     .join(" · ");
 
                   const needsAction = incoming && item.estado === "EN_REVISION";
-                  const isLast = index === filteredVisibleItems.length - 1;
-
                   return (
                     <article
                       key={item.id}
@@ -348,7 +346,7 @@ function MisGastosContent() {
                     >
                       <ExpenseAvatar name={senderName} image={senderImage} />
 
-                      <div className={`flex min-w-0 flex-1 items-center gap-2 py-[var(--space-4)] ${!isLast ? "border-b border-app" : ""}`}>
+                      <div className="flex min-w-0 flex-1 items-center gap-2 py-[var(--space-4)]">
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-body-sm font-[var(--fw-semibold)] text-app">{senderName}</p>
                           <p className="truncate text-caption text-muted">{secondaryLine}</p>

@@ -7,7 +7,8 @@ import { useRouter, usePathname } from "next/navigation";
 import { Capacitor } from "@capacitor/core";
 import { useAuth } from "@/providers/AuthProvider";
 import CreatePlanModal, { type CreatePlanPayload } from "@/components/plans/modals/CreatePlanModal";
-import { createPlan } from "@/services/api/repositories/plans.repository";
+import { createPlan, listUserRelatedPlans } from "@/services/api/repositories/plans.repository";
+import type { FeedPlanItemDto } from "@/services/api/dtos/plan.dto";
 import { countNotificacionesNoLeidas, insertNotificacion } from "@/services/api/repositories/notifications.repository";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { searchUsers, type PublicUserProfileDto } from "@/services/api/repositories/users.repository";
@@ -33,9 +34,11 @@ const items = [
   { key: "cards", label: "Mis gastos", icon: CardIcon, href: "/mis-gastos" },
   { key: "send", label: "Mensajes", icon: SendIcon, href: "/messages" },
 ];
+const mobileItems = [items[0], items[2], items[1], items[3]];
 
 type AppSidebarProps = {
   onCreatePlan?: () => void;
+  onCreateConversation?: () => void;
   hideMobileNav?: boolean;
 };
 type MobileNavStyle = CSSProperties & { "--mobile-nav-base-height": string };
@@ -45,7 +48,7 @@ function dateInputToIso(dateInput: string, hour = 12) {
   return new Date(year ?? 0, (month ?? 1) - 1, day ?? 1, hour, 0, 0).toISOString();
 }
 
-export default function AppSidebar({ onCreatePlan, hideMobileNav }: AppSidebarProps) {
+export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMobileNav }: AppSidebarProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [createPlanModalOpen, setCreatePlanModalOpen] = useState(false);
@@ -60,6 +63,10 @@ export default function AppSidebar({ onCreatePlan, hideMobileNav }: AppSidebarPr
   }, []);
   const [hovered, setHovered] = useState(false);
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [mobileFabOpen, setMobileFabOpen] = useState(false);
+  const [expensePickerOpen, setExpensePickerOpen] = useState(false);
+  const [expensePlans, setExpensePlans] = useState<FeedPlanItemDto[]>([]);
+  const [expensePlansLoading, setExpensePlansLoading] = useState(false);
   const [notifPanelOpen, setNotifPanelOpen] = useState(false);
   const [searchPopoverOpen, setSearchPopoverOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
@@ -68,6 +75,7 @@ export default function AppSidebar({ onCreatePlan, hideMobileNav }: AppSidebarPr
   const [unreadNotifs, setUnreadNotifs] = useState(0);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchPanelRef = useRef<HTMLDivElement>(null);
+  const mobileFabRef = useRef<HTMLDivElement>(null);
 
   const { user, profile } = useAuth();
 
@@ -94,7 +102,19 @@ export default function AppSidebar({ onCreatePlan, hideMobileNav }: AppSidebarPr
   useEffect(() => {
     setSearchPopoverOpen(false);
     setNotifPanelOpen(false);
+    setMobileFabOpen(false);
   }, [pathname]);
+
+  useEffect(() => {
+    if (!mobileFabOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (mobileFabRef.current && !mobileFabRef.current.contains(e.target as Node)) {
+        setMobileFabOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [mobileFabOpen]);
 
   useEffect(() => {
     if (!searchPopoverOpen) return;
@@ -172,11 +192,49 @@ export default function AppSidebar({ onCreatePlan, hideMobileNav }: AppSidebarPr
     router.push(isCapacitor ? `/profile/static?id=${user.id}` : `/profile/${user.id}`);
   };
   const openCreatePlan = () => {
+    setMobileFabOpen(false);
+    setExpensePickerOpen(false);
     if (onCreatePlan) {
       onCreatePlan();
       return;
     }
     setCreateModalOpen(true);
+  };
+
+  const openCreateExpense = async () => {
+    setMobileFabOpen(false);
+    setExpensePickerOpen(true);
+
+    if (!user?.id) {
+      setExpensePlans([]);
+      return;
+    }
+
+    setExpensePlansLoading(true);
+    try {
+      const plans = await listUserRelatedPlans({ userId: user.id, limit: 100 });
+      const now = Date.now();
+      setExpensePlans(
+        plans
+          .filter((plan) => new Date(plan.endsAt).getTime() >= now)
+          .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())
+      );
+    } catch {
+      setExpensePlans([]);
+    } finally {
+      setExpensePlansLoading(false);
+    }
+  };
+
+  const openCreateConversation = () => {
+    setMobileFabOpen(false);
+    onCreateConversation?.();
+  };
+
+  const openExpenseForPlan = (planId: number) => {
+    setExpensePickerOpen(false);
+    const isCapacitor = Capacitor.isNativePlatform();
+    router.push(isCapacitor ? `/plans/static?id=${planId}&tab=gastos&createGasto=1` : `/plans/${planId}?tab=gastos&createGasto=1`);
   };
 
   const handleCreatePlan = async (payload: CreatePlanPayload) => {
@@ -284,7 +342,7 @@ export default function AppSidebar({ onCreatePlan, hideMobileNav }: AppSidebarPr
           hideMobileNav || createPlanModalOpen ? "translate-y-full" : "translate-y-0"
         }`}
       >
-        {items.slice(0, 2).map((item) => (
+        {mobileItems.map((item) => (
           <Link
             key={item.key}
             href={item.href}
@@ -294,28 +352,116 @@ export default function AppSidebar({ onCreatePlan, hideMobileNav }: AppSidebarPr
             <item.icon className="size-[clamp(25px,6.4vw,28px)]" />
           </Link>
         ))}
-
         <button
           type="button"
-          aria-label="Crear plan"
-          onClick={openCreatePlan}
-          className="text-app transition-opacity duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] active:opacity-[var(--disabled-opacity)]"
+          aria-label="Perfil"
+          onClick={openProfile}
+          className={`${pathname.startsWith("/profile") ? "text-[var(--primary)]" : "text-app"} flex size-[clamp(34px,8vw,38px)] items-center justify-center transition-opacity duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] active:opacity-[var(--disabled-opacity)]`}
         >
-          <PlusIcon className="size-[clamp(25px,6.4vw,28px)]" />
+          {profile?.profile_image ? (
+            <span className="block size-[clamp(31px,7.4vw,34px)] overflow-hidden rounded-full border border-strong">
+              <Image src={profile.profile_image} alt="Foto de perfil" width={34} height={34} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
+            </span>
+          ) : (
+            <ProfileIcon className="size-[clamp(29px,7.2vw,32px)]" />
+          )}
         </button>
 
-        {items.slice(2).map((item) => (
-          <Link
-            key={item.key}
-            href={item.href}
-            aria-label={item.label}
-            className={`${isActive(item.href) ? "text-[var(--primary)]" : "text-app"} transition-opacity duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] active:opacity-[var(--disabled-opacity)]`}
-          >
-            <item.icon className="size-[clamp(25px,6.4vw,28px)]" />
-          </Link>
-        ))}
-
       </nav>
+
+      {!hideMobileNav && !createPlanModalOpen && (
+        <div
+          ref={mobileFabRef}
+          className="fixed right-[max(16px,env(safe-area-inset-right))] bottom-[calc(clamp(56px,8dvh,64px)+env(safe-area-inset-bottom)+16px)] z-[70] flex flex-col items-end gap-3 md:hidden"
+        >
+          <div className={`flex flex-col items-end gap-2 transition-all duration-200 ease-out ${mobileFabOpen ? "pointer-events-auto translate-y-0 opacity-100" : "pointer-events-none translate-y-2 opacity-0"}`}>
+            <button
+              type="button"
+              onClick={openCreatePlan}
+              aria-label="Crear plan"
+              className="flex items-center"
+            >
+              <span className="flex size-14 items-center justify-center rounded-full border border-app bg-surface text-app shadow-elev-3">
+                <PlansIcon className="size-6" />
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => void openCreateExpense()}
+              aria-label="Crear gasto"
+              className="flex items-center"
+            >
+              <span className="flex size-14 items-center justify-center rounded-full border border-app bg-surface text-app shadow-elev-3">
+                <CardIcon className="size-6" />
+              </span>
+            </button>
+            {onCreateConversation && (
+              <button
+                type="button"
+                onClick={openCreateConversation}
+                aria-label="Crear conversación"
+                className="flex items-center"
+              >
+                <span className="flex size-14 items-center justify-center rounded-full border border-app bg-surface text-app shadow-elev-3">
+                  <SendIcon className="size-6" />
+                </span>
+              </button>
+            )}
+          </div>
+          <button
+            type="button"
+            aria-label={mobileFabOpen ? "Cerrar crear" : "Crear"}
+            aria-expanded={mobileFabOpen}
+            onClick={() => setMobileFabOpen((open) => !open)}
+            className="flex size-14 items-center justify-center rounded-full bg-primary-token text-[var(--contrast)] shadow-[0_16px_32px_rgba(0,0,0,0.24)] transition-transform duration-200 active:scale-95"
+          >
+            <PlusIcon className={`size-7 transition-transform duration-200 ${mobileFabOpen ? "rotate-45" : "rotate-0"}`} />
+          </button>
+        </div>
+      )}
+
+      {expensePickerOpen && (
+        <div className="fixed inset-0 z-[1200] flex items-end bg-black/40 px-safe pb-safe md:hidden" onClick={() => setExpensePickerOpen(false)}>
+          <div className="w-full rounded-t-[22px] border border-app bg-app p-4 shadow-elev-4" onClick={(e) => e.stopPropagation()}>
+            <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted/30" />
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-[18px] font-[var(--fw-semibold)] text-app">Crear gasto</h2>
+              <button type="button" onClick={() => setExpensePickerOpen(false)} className="flex size-9 items-center justify-center rounded-full text-muted hover:bg-surface">
+                <CloseIcon className="size-5" />
+              </button>
+            </div>
+            {expensePlansLoading ? (
+              <p className="py-8 text-center text-body-sm text-muted">Cargando planes...</p>
+            ) : expensePlans.length > 0 ? (
+              <div className="max-h-[45dvh] space-y-2 overflow-y-auto pb-2">
+                {expensePlans.map((plan) => (
+                  <button
+                    key={plan.id}
+                    type="button"
+                    onClick={() => openExpenseForPlan(plan.id)}
+                    className="flex w-full items-center gap-3 rounded-[14px] border border-app bg-surface px-3 py-3 text-left transition-colors active:bg-surface-2"
+                  >
+                    <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary-token/12 text-primary-token">
+                      <CardIcon className="size-5" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-body-sm font-[var(--fw-semibold)] text-app">{plan.title}</span>
+                      <span className="block truncate text-caption text-muted">{plan.locationName}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="pb-2">
+                <p className="py-6 text-center text-body-sm text-muted">No tienes planes activos para añadir un gasto.</p>
+                <button type="button" onClick={openCreatePlan} className="flex h-11 w-full items-center justify-center rounded-full bg-primary-token text-body-sm font-[var(--fw-semibold)] text-[var(--contrast)]">
+                  Crear plan
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Desktop sidebar */}
       <aside
@@ -394,30 +540,6 @@ export default function AppSidebar({ onCreatePlan, hideMobileNav }: AppSidebarPr
             {expanded && <span className="-ml-[14px] whitespace-nowrap pr-[var(--space-4)] text-body font-[var(--fw-medium)]">Crear plan</span>}
           </button>
 
-          {/* Profile button */}
-          <button
-            type="button"
-            aria-label="Perfil"
-            onClick={openProfile}
-            className="mt-auto flex items-center transition-opacity duration-150 hover:opacity-80"
-          >
-            <div className="flex w-[102px] shrink-0 items-center justify-center">
-              <div className="overflow-hidden rounded-avatar border border-strong bg-[var(--text-primary)] p-0 text-contrast-token">
-                <div className="flex avatar-lg items-center justify-center overflow-hidden rounded-avatar">
-                  {profile?.profile_image ? (
-                    <Image src={profile.profile_image} alt="Foto de perfil" width={44} height={44} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
-                  ) : (
-                    <ProfileIcon className="size-[calc(var(--icon-size)+8px)]" />
-                  )}
-                </div>
-              </div>
-            </div>
-            {expanded && (
-              <span className="min-w-0 truncate -ml-[14px] whitespace-nowrap pr-[var(--space-4)] text-body font-[var(--fw-medium)] text-app">
-                {profile?.nombre || "Perfil"}
-              </span>
-            )}
-          </button>
         </div>
       </aside>
 

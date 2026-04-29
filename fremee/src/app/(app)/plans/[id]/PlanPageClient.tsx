@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Maximize2, X, ChevronLeft, ChevronDown, UserPlus, Share2, Pencil, MapPin, Calendar, ArrowRight, Plus, ExternalLink, Upload, Check, FileText, Download, QrCode } from "lucide-react";
 import { useAuth } from "@/providers/AuthProvider";
 import { useCallContext } from "@/providers/CallProvider";
@@ -119,6 +119,7 @@ export default function PlanDetailPage() {
   const { startCall, joinCall, callState } = useCallContext();
   const reloadCallMessagesRef = useRef<(() => void) | null>(null);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { id: paramId } = useParams<{ id: string }>();
   // In Capacitor static export we navigate to /plans/static?id=18.
   // Read the real id from query params and store it in state so effects re-run.
@@ -168,6 +169,22 @@ export default function PlanDetailPage() {
   const [inviteSendingIds, setInviteSendingIds] = useState<Set<string>>(new Set());
   const [inviteLinkCopied, setInviteLinkCopied] = useState(false);
   const [showQr, setShowQr] = useState(false);
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    const createGasto = searchParams.get("createGasto");
+
+    if (tab === "itinerario" || tab === "gastos" || tab === "fotos" || tab === "chat") {
+      setActiveTab(tab);
+    }
+
+    if (createGasto === "1") {
+      setActiveTab("gastos");
+      if (plan && !isPast) {
+        setShowAddGastoSheet(true);
+      }
+    }
+  }, [searchParams, plan, isPast]);
   const routeSectionRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -630,22 +647,33 @@ export default function PlanDetailPage() {
             {/* Back button */}
             <button
               onClick={() => router.back()}
-              className="absolute left-[var(--page-margin-x)] top-[calc(env(safe-area-inset-top)+var(--space-4))] md:top-[var(--space-6)] flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-sm transition-colors hover:bg-white/30"
+              className="absolute left-[var(--page-margin-x)] top-[calc(env(safe-area-inset-top)+var(--space-4))] flex h-9 w-9 items-center justify-center rounded-full border border-app bg-surface text-app shadow-elev-3 transition-colors hover:bg-surface-2 md:top-[var(--space-6)]"
             >
               <BackIcon className="size-[20px]" />
             </button>
 
+            {!isPast && isAdmin && (
+              <button
+                type="button"
+                aria-label="Editar plan"
+                onClick={() => setShowEditModal(true)}
+                className="absolute right-[var(--page-margin-x)] top-[calc(env(safe-area-inset-top)+var(--space-4))] flex h-9 w-9 items-center justify-center rounded-full border border-app bg-surface text-app shadow-elev-3 transition-colors hover:bg-surface-2 md:top-[var(--space-6)]"
+              >
+                <EditIcon className="size-[18px]" />
+              </button>
+            )}
+
             {/* Title & meta */}
             <div className="absolute bottom-0 left-0 right-0 px-[var(--page-margin-x)] pb-[var(--space-6)]">
-              <h1 className="[font-family:var(--font-display-face)] text-[clamp(24px,5vw,36px)] font-[var(--fw-medium)] leading-[1.1] tracking-[-0.01em] text-white">
+              <h1 className="[font-family:var(--font-display-face)] text-[clamp(24px,5vw,36px)] font-[var(--fw-medium)] leading-[1.1] tracking-[-0.01em] text-white md:max-w-[70%]">
                 {plan.titulo}
               </h1>
               {plan.descripcion && (
-                <p className="mt-[var(--space-1)] text-body-sm text-white/75 line-clamp-2">
+                <p className="mt-[var(--space-1)] max-w-[min(100%,560px)] truncate text-body-sm text-white/75 md:max-w-[70%] md:whitespace-normal md:line-clamp-2">
                   {plan.descripcion}
                 </p>
               )}
-              <div className="mt-[var(--space-2)] flex flex-wrap items-center gap-[var(--space-3)] text-white/85">
+              <div className="mt-[var(--space-2)] flex flex-col gap-[6px] pr-[132px] text-white/85 md:flex-row md:flex-wrap md:items-center md:gap-[var(--space-3)] md:pr-[220px]">
                 <span className="flex items-center gap-[5px] text-body-sm">
                   <CalendarSmallIcon className="size-[14px]" />
                   {formatDateRange(plan.inicio_at, plan.fin_at)}
@@ -666,26 +694,20 @@ export default function PlanDetailPage() {
                 {!isPast && isAdmin && (
                   <button
                     onClick={() => setShowPublishModal(true)}
-                    className="flex h-9 items-center gap-1.5 rounded-full bg-white/20 px-3.5 text-[14px] font-[600] text-white backdrop-blur-sm transition-colors hover:bg-white/30"
+                    className="flex h-9 items-center gap-1.5 rounded-full border border-app bg-surface px-3.5 text-[14px] font-[600] text-app shadow-elev-3 transition-colors hover:bg-surface-2"
                   >
                     <Upload className="size-[15px]" aria-hidden />
-                    Publicar
+                    <span className="hidden min-[390px]:inline">Publicar</span>
                   </button>
                 )}
-                {!isPast && isAdmin && (
-                  <button onClick={() => void openInviteModal()} className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-sm transition-colors hover:bg-white/30">
-                    <InviteIcon className="size-[18px]" />
-                  </button>
-                )}
-                <button className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-sm transition-colors hover:bg-white/30">
-                  <ShareIcon className="size-[18px]" />
-                </button>
                 {!isPast && isAdmin && (
                   <button
-                    onClick={() => setShowEditModal(true)}
-                    className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-sm transition-colors hover:bg-white/30"
+                    type="button"
+                    aria-label="Agregar amigos"
+                    onClick={() => void openInviteModal()}
+                    className="flex h-9 w-9 items-center justify-center rounded-full border border-app bg-surface text-app shadow-elev-3 transition-colors hover:bg-surface-2"
                   >
-                    <EditIcon className="size-[18px]" />
+                    <InviteIcon className="size-[18px]" />
                   </button>
                 )}
               </div>

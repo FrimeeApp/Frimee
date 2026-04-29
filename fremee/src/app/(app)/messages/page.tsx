@@ -320,20 +320,9 @@ export default function MessagesPage() {
     </div>
   ) : (
     <div className="flex h-full flex-col">
-      {/* Header + compose */}
+      {/* Header */}
       <div className="flex items-center justify-between px-[var(--space-4)] pb-[var(--space-2)] pt-mobile-safe-top md:py-[var(--space-3)]">
         <h1 className="text-[26px] font-[800] tracking-[-0.02em] leading-tight text-app">Mensajes</h1>
-        <button
-          type="button"
-          onClick={() => void openFriendPicker()}
-          className="flex items-center gap-1.5 rounded-[10px] bg-[var(--primary)] px-3 py-[7px] text-[13px] font-[700] text-white transition-opacity hover:opacity-80"
-          aria-label="Nueva conversación"
-        >
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[14px]">
-            <path d="M12 4V20M4 12H20" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-          </svg>
-          Nueva
-        </button>
       </div>
 
       {/* Search bar */}
@@ -440,7 +429,7 @@ export default function MessagesPage() {
   return (
     <div className="h-dvh bg-app text-app">
       <div className="relative h-full">
-        <AppSidebar hideMobileNav={isInChat} />
+        <AppSidebar hideMobileNav={isInChat} onCreateConversation={() => void openFriendPicker()} />
 
         {/* Sliding two-panel layout */}
         <div className="h-full overflow-hidden md:ml-[102px]">
@@ -489,4 +478,3 @@ function ChatPreviewAvatar({ name, image, isGroup }: { name: string; image: stri
     </div>
   );
 }
-
