@@ -163,7 +163,6 @@
 
   .pt-safe { padding-top: env(safe-area-inset-top); }
   .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
-  .pt-mobile-safe-top { padding-top: env(safe-area-inset-top); }
 
   .px-safe {
     padding-left: max(var(--page-margin-x), env(safe-area-inset-left));
@@ -207,6 +206,10 @@
   }
 
   @media (max-width: 767px) {
+    .pt-mobile-safe-top {
+      padding-top: env(safe-area-inset-top);
+    }
+
     html[data-platform="web"] .pt-mobile-safe-top {
       padding-top: calc(env(safe-area-inset-top) + var(--space-4));
     }

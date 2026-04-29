@@ -19,6 +19,7 @@ import {
 // ─── helpers ────────────────────────────────────────────────────────────────
 
 const TIPO_LABELS: Record<string, string> = {
+  follow: "empezó a seguirte.",
   like: "le dio me gusta a tu plan.",
   comment: "comentó tu plan.",
   friend_request: "te envió una solicitud de amistad.",

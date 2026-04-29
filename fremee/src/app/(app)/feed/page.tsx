@@ -97,9 +97,6 @@ function removeRecent(id: string) {
 
 const FEED_CACHE_KEY = STORAGE_KEYS.feedCache;
 const FEED_CACHE_TTL_MS = STORAGE_TTLS.feedCacheMs;
-const FRIENDS_CACHE_KEY = STORAGE_KEYS.friendsCache;
-const FRIENDS_CACHE_TTL_MS = STORAGE_TTLS.friendsCacheMs;
-
 function readFeedCache(userId: string): FeedItemDto[] | null {
   try {
     const raw = localStorage.getItem(`${FEED_CACHE_KEY}:${userId}`);
@@ -113,22 +110,6 @@ function readFeedCache(userId: string): FeedItemDto[] | null {
 function writeFeedCache(userId: string, items: FeedItemDto[]) {
   try {
     localStorage.setItem(`${FEED_CACHE_KEY}:${userId}`, JSON.stringify({ items, savedAt: Date.now() }));
-  } catch { /* ignorar errores de storage */ }
-}
-
-function readFriendsCache(userId: string): Set<string> | null {
-  try {
-    const raw = localStorage.getItem(`${FRIENDS_CACHE_KEY}:${userId}`);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as { ids: string[]; savedAt: number };
-    if (Date.now() - parsed.savedAt > FRIENDS_CACHE_TTL_MS) return null;
-    return new Set(parsed.ids);
-  } catch { return null; }
-}
-
-function writeFriendsCache(userId: string, ids: string[]) {
-  try {
-    localStorage.setItem(`${FRIENDS_CACHE_KEY}:${userId}`, JSON.stringify({ ids, savedAt: Date.now() }));
   } catch { /* ignorar errores de storage */ }
 }
 
@@ -155,10 +136,6 @@ export default function FeedPage() {
   const [tabIndicator, setTabIndicator] = useState({ left: 0, width: 0, ready: false });
   const [unreadNotifs, setUnreadNotifs] = useState(0);
   const [notifPanelOpen, setNotifPanelOpen] = useState(false);
-  const [friendIds, setFriendIds] = useState<Set<string>>(() => {
-    if (typeof window === "undefined") return new Set();
-    return new Set();
-  });
   const [followedIds, setFollowedIds] = useState<Set<string>>(new Set());
   const [savedPlanIds, setSavedPlanIds] = useState<Set<number>>(new Set());
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
@@ -177,10 +154,6 @@ export default function FeedPage() {
       setLoadingFeed(false);
       return;
     }
-
-    // Cargar caché de amigos inmediatamente
-    const cachedFriends = readFriendsCache(currentUserId);
-    if (cachedFriends) setFriendIds(cachedFriends);
 
     let cancelled = false;
 
@@ -204,10 +177,7 @@ export default function FeedPage() {
         const posts = feedResult.posts;
         if (cancelled) return;
 
-        const newFriendIds = new Set(friends.map((f) => f.id));
-        setFriendIds(newFriendIds);
         setSuggestedProfiles(friends.slice(0, 12));
-        writeFriendsCache(currentUserId, [...newFriendIds]);
 
         const firstWithImage = posts.find((p) => p.coverImage);
         if (!firstWithImage) setFirstImageReady(true);
@@ -728,15 +698,15 @@ export default function FeedPage() {
                   </>
                 ) : (() => {
                   const visiblePosts = activeFeedTab === "following"
-                    ? uiPosts.filter((p) => p.plan.ownerUserId && friendIds.has(p.plan.ownerUserId))
+                    ? uiPosts.filter((p) => p.plan.ownerUserId && followedIds.has(p.plan.ownerUserId))
                     : uiPosts;
                   const mobileViewportStyle: MobileFeedViewportStyle = {
                     "--mobile-feed-viewport-height": mobileFeedViewportHeight,
                   };
                   return visiblePosts.length === 0 ? (
-                    <div className="rounded-modal border border-app bg-surface p-[var(--space-5)] text-body text-muted shadow-elev-1">
+                      <div className="rounded-modal border border-app bg-surface p-[var(--space-5)] text-body text-muted shadow-elev-1">
                       {activeFeedTab === "following"
-                        ? "Aún no hay publicaciones de tus amigos."
+                        ? "Aún no hay publicaciones de las personas que sigues."
                         : "Aun no hay publicaciones para mostrar."}
                     </div>
                   ) : (
@@ -750,7 +720,23 @@ export default function FeedPage() {
                           className="h-[var(--mobile-feed-viewport-height)] snap-start snap-always md:h-full"
                           style={mobileViewportStyle}
                         >
-                          <FeedCard post={post} currentUserId={currentUserId} currentUserName={profile?.nombre ?? null} currentUserProfileImage={profile?.profile_image ?? null} nextPostHasImage={visiblePosts[idx + 1]?.hasImage ?? true} initialFollowing={followedIds.has(post.plan.ownerUserId ?? "")} initialSaved={savedPlanIds.has(post.plan.id)} />
+                          <FeedCard
+                            post={post}
+                            currentUserId={currentUserId}
+                            currentUserName={profile?.nombre ?? null}
+                            currentUserProfileImage={profile?.profile_image ?? null}
+                            nextPostHasImage={visiblePosts[idx + 1]?.hasImage ?? true}
+                            initialFollowing={followedIds.has(post.plan.ownerUserId ?? "")}
+                            initialSaved={savedPlanIds.has(post.plan.id)}
+                            onFollowingChange={(ownerUserId, nextFollowing) => {
+                              setFollowedIds((prev) => {
+                                const next = new Set(prev);
+                                if (nextFollowing) next.add(ownerUserId);
+                                else next.delete(ownerUserId);
+                                return next;
+                              });
+                            }}
+                          />
                         </div>
                       ))}
                     </div>
@@ -1097,7 +1083,25 @@ function FeedSkeleton() {
   );
 }
 
-function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImage, nextPostHasImage, initialFollowing, initialSaved }: { post: FeedItemDto; currentUserId: string | null; currentUserName: string | null; currentUserProfileImage: string | null; nextPostHasImage: boolean; initialFollowing: boolean; initialSaved: boolean }) {
+function FeedCard({
+  post,
+  currentUserId,
+  currentUserName,
+  currentUserProfileImage,
+  nextPostHasImage,
+  initialFollowing,
+  initialSaved,
+  onFollowingChange,
+}: {
+  post: FeedItemDto;
+  currentUserId: string | null;
+  currentUserName: string | null;
+  currentUserProfileImage: string | null;
+  nextPostHasImage: boolean;
+  initialFollowing: boolean;
+  initialSaved: boolean;
+  onFollowingChange?: (ownerUserId: string, nextFollowing: boolean) => void;
+}) {
   const [liked, setLiked] = useState(post.initiallyLiked);
   const [likeCount, setLikeCount] = useState(post.initialLikeCount);
   const [likeLoading, setLikeLoading] = useState(false);
@@ -1230,7 +1234,12 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
   const { following, showUnfollowDialog, setShowUnfollowDialog, onPress: onFollowPress, handleUnfollow } = useFollow(
     post.plan.ownerUserId,
     currentUserId,
-    initialFollowing
+    initialFollowing,
+    (nextFollowing) => {
+      const ownerUserId = post.plan.ownerUserId;
+      if (!ownerUserId) return;
+      onFollowingChange?.(ownerUserId, nextFollowing);
+    }
   );
   const [expandedReplies, setExpandedReplies] = useState<Record<string, number>>({});
   const commentInputRef = useRef<HTMLInputElement | null>(null);
@@ -1999,7 +2008,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
             <div className="flex items-center gap-5">
               {/* Image */}
               <div
-                className="relative flex shrink-0 items-center justify-center overflow-hidden rounded-2xl"
+                className="relative flex shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-black"
                 style={{
                   width: "min(50dvw, 620px)",
                   height: "min(calc(100dvh - 160px), 820px)",
@@ -2007,21 +2016,26 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                   minHeight: "420px",
                 }}
               >
-                {!imgLoaded && <div className="skeleton-shimmer absolute inset-0 rounded-2xl" aria-hidden="true" />}
+                {!imgLoaded && <div className="skeleton-shimmer absolute inset-0" aria-hidden="true" />}
                 <NextImage
                   src={post.coverImage}
                   alt="Imagen del plan"
                   width={1600}
                   height={1600}
-                  className="block max-h-full max-w-full rounded-2xl object-contain transition-opacity duration-300"
+                  className="block max-h-full max-w-full object-contain transition-opacity duration-300"
                   style={{ opacity: imgLoaded ? 1 : 0 }}
                   unoptimized
                   onLoad={() => setImgLoaded(true)}
                   onError={() => setImgLoaded(true)}
                 />
 
+                {/* Top gradient */}
+                <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-36 rounded-t-2xl bg-gradient-to-b from-black/65 to-transparent" />
+                {/* Bottom gradient */}
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-40 rounded-b-2xl bg-gradient-to-t from-black/70 to-transparent" />
+
                 {/* Top overlay: avatar + name + follow */}
-                <div className="absolute inset-x-0 top-0 px-4 pb-8 pt-4" style={{ filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.45))" }}>
+                <div className="absolute inset-x-0 top-0 z-20 px-4 pb-8 pt-4" style={{ filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.45))" }}>
                   <div className="flex items-center gap-2.5">
                     <Link href={`/profile/${post.plan.ownerUserId}`} className="flex items-center gap-2.5 min-w-0">
                       <div className="flex size-[34px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/30 bg-white/10">
@@ -2055,7 +2069,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                 </div>
 
                 {/* Bottom: title + location */}
-                <div className="absolute inset-x-0 bottom-0 z-20 px-4 pb-6" style={{ filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.45))" }}>
+                <div className="absolute inset-x-0 bottom-0 z-20 px-4 pb-6 pt-10" style={{ filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.45))" }}>
                   <div className="min-w-0">
                     {post.plan.title && (
                       <p className="text-[16px] font-[800] leading-tight text-white">{post.plan.title}</p>
