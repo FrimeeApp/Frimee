@@ -182,6 +182,7 @@ export default function SettingsPage() {
   const router = useRouter();
   const { user, profile, settings, signOut, refreshProfile, setUserSnapshot } = useAuth();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const hasLoadedRef = useRef(false);
 
   const [settingsLoading, setSettingsLoading] = useState(true);
   const [busyAction, setBusyAction] = useState<BusyAction>(null);
@@ -203,20 +204,39 @@ export default function SettingsPage() {
 
   const avatarFallback = displayName[0]?.toUpperCase() ?? "U";
 
+  const userId = user?.id;
+
   useEffect(() => {
+    if (!userId) {
+      setSettingsLoading(false);
+      return;
+    }
+
+    const CACHE_KEY = `settings_form_${userId}`;
+
+    // Show cached data immediately to avoid skeleton flash on re-navigation
+    const cached = sessionStorage.getItem(CACHE_KEY);
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached) as SettingsForm;
+        setForm(parsed);
+        setInitialForm(parsed);
+        applyThemeToDocument(parsed.theme);
+        setSettingsLoading(false);
+        hasLoadedRef.current = true;
+      } catch {
+        // ignore corrupt cache
+      }
+    }
+
     let cancelled = false;
 
     const loadSettings = async () => {
-      if (!user?.id) {
-        setSettingsLoading(false);
-        return;
-      }
-
-      setSettingsLoading(true);
+      if (!hasLoadedRef.current) setSettingsLoading(true);
       setErrorMsg(null);
 
       try {
-        const latestSettings = await getUserSettings(user.id);
+        const latestSettings = await getUserSettings(userId);
         const mapped = mergeProfileAndSettings({
           profile: profile
             ? {
@@ -227,14 +247,18 @@ export default function SettingsPage() {
             : null,
           settings: latestSettings ?? settings,
         });
-        setForm(mapped);
-        setInitialForm(mapped);
-        applyThemeToDocument(mapped.theme);
-        cacheThemePreference(mapped.theme);
+        if (!cancelled) {
+          setForm(mapped);
+          setInitialForm(mapped);
+          applyThemeToDocument(mapped.theme);
+          cacheThemePreference(mapped.theme);
+          sessionStorage.setItem(CACHE_KEY, JSON.stringify(mapped));
+          hasLoadedRef.current = true;
+        }
       } catch (error) {
         if (cancelled) return;
         console.warn("[settings] load error:", error);
-        setErrorMsg("No se pudieron cargar los ajustes.");
+        if (!hasLoadedRef.current) setErrorMsg("No se pudieron cargar los ajustes.");
       } finally {
         if (!cancelled) setSettingsLoading(false);
       }
@@ -245,7 +269,8 @@ export default function SettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [user?.id, profile, settings]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
 
   useEffect(() => {
     if (settingsLoading) return;
@@ -421,6 +446,7 @@ export default function SettingsPage() {
       }
       if (typeof window !== "undefined") {
         window.localStorage.setItem(STORAGE_KEYS.profileUpdatedAt, String(Date.now()));
+        sessionStorage.setItem(`settings_form_${user.id}`, JSON.stringify(mapped));
       }
       await refreshProfile();
       setSaveMsg("Ajustes guardados.");
