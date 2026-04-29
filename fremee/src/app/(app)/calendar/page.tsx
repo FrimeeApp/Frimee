@@ -84,6 +84,7 @@ function CalendarPageInner() {
   const [viewMode, setViewMode] = useState<CalendarViewMode>("month");
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(true);
+  const [stripWeekOffset, setStripWeekOffset] = useState(0);
   const [pinnedPlanIds, setPinnedPlanIds] = useState<number[]>(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEYS.pinnedPlans);
@@ -429,14 +430,23 @@ function CalendarPageInner() {
   const stripWeeks = useMemo(() => {
     const today = startOfDay(new Date());
     const dayOfWeek = today.getDay();
-    const weekStart = addDays(today, -dayOfWeek);
+    const weekStart = addDays(today, -dayOfWeek + stripWeekOffset);
     return [0, 1].map((weekOffset) =>
       Array.from({ length: 7 }, (_, i) => {
         const date = addDays(weekStart, weekOffset * 7 + i);
-        return { key: toDayKey(date), date, day: date.getDate(), isCurrentMonth: date.getMonth() === today.getMonth() };
+        return { key: toDayKey(date), date, day: date.getDate(), isCurrentMonth: true };
       })
     );
-  }, []);
+  }, [stripWeekOffset]);
+
+  const stripRangeLabel = useMemo(() => {
+    const first = stripWeeks[0]?.[0]?.date;
+    const last = stripWeeks[1]?.[6]?.date;
+    if (!first || !last) return "";
+    const firstLabel = first.toLocaleDateString("es-ES", { day: "numeric", month: "short" });
+    const lastLabel = last.toLocaleDateString("es-ES", { day: "numeric", month: "short" });
+    return `${firstLabel} - ${lastLabel}`;
+  }, [stripWeeks]);
 
   const stripCalendarWeeks = useMemo((): CalendarWeek[] =>
     stripWeeks.map((days, i) => ({ key: `strip-week-${i}`, days })),
@@ -492,15 +502,37 @@ function CalendarPageInner() {
               {!loading && (
                 <div className="md:hidden md:col-start-2 md:row-start-1 mb-[var(--space-2)]">
                   <div className="mb-[var(--space-3)] flex items-center justify-between">
-                    <span className="text-[11px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
-                      {monthLabel}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setStripWeekOffset((offset) => offset - 14)}
+                        aria-label="Ver dos semanas anteriores"
+                        className="flex size-8 items-center justify-center rounded-full text-muted transition-colors active:bg-surface-2 active:text-app"
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" className="size-[15px]" aria-hidden="true">
+                          <path d="M15 19L8 12L15 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </button>
+                      <span className="min-w-[96px] text-center text-[11px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
+                        {stripRangeLabel}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setStripWeekOffset((offset) => offset + 14)}
+                        aria-label="Ver dos semanas siguientes"
+                        className="flex size-8 items-center justify-center rounded-full text-muted transition-colors active:bg-surface-2 active:text-app"
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" className="size-[15px]" aria-hidden="true">
+                          <path d="M9 5L16 12L9 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </button>
+                    </div>
                     <button
                       type="button"
                       onClick={() => setCalendarModalOpen(true)}
-                      className="flex items-center gap-[5px] text-caption font-[var(--fw-medium)] text-[var(--primary)]"
+                      aria-label="Ver calendario completo"
+                      className="flex size-8 items-center justify-center rounded-full text-muted transition-colors active:bg-surface-2 active:text-app"
                     >
-                      Ver todo
                       <svg viewBox="0 0 24 24" fill="none" className="size-[13px]" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                         <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
                       </svg>
@@ -731,8 +763,7 @@ function CalendarPageInner() {
                   <>
                     {/* Mobile: lista con divisores */}
                     <div className="flex flex-col md:hidden">
-                      {filteredPlans.map((plan, index) => {
-                        const isLast = index === filteredPlans.length - 1;
+                      {filteredPlans.map((plan) => {
                         return (
                           <article
                             key={`plan-mobile-${plan.id}`}
@@ -745,7 +776,7 @@ function CalendarPageInner() {
                               role="img"
                               aria-label={plan.title}
                             />
-                            <div className={`flex min-w-0 flex-1 items-start gap-2 py-[var(--space-3)] ${!isLast ? "border-b border-app" : ""}`}>
+                            <div className="flex min-w-0 flex-1 items-start gap-2 py-[var(--space-3)]">
                               <div className="min-w-0 flex-1">
                                 <p className="truncate text-body-sm font-[var(--fw-semibold)] text-app">{plan.title}</p>
                                 <p className="mt-[2px] text-caption text-muted">{formatDateRange(plan.startsAt, plan.endsAt)}</p>

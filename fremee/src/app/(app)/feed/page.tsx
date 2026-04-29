@@ -142,6 +142,7 @@ export default function FeedPage() {
   const [mobileSearchValue, setMobileSearchValue] = useState("");
   const [mobileSearchResults, setMobileSearchResults] = useState<PublicUserProfileDto[]>([]);
   const [mobileSearchLoading, setMobileSearchLoading] = useState(false);
+  const [createPlanModalOpen, setCreatePlanModalOpen] = useState(false);
   const [suggestedProfiles, setSuggestedProfiles] = useState<PublicUserProfileDto[]>([]);
   const [recentProfiles, setRecentProfiles] = useState<RecentProfile[]>([]);
   const mobileSearchInputRef = useRef<HTMLInputElement>(null);
@@ -256,6 +257,17 @@ export default function FeedPage() {
       window.removeEventListener("pageshow", checkProfileUpdate);
       document.removeEventListener("visibilitychange", onVisibility);
     };
+  }, []);
+
+  useEffect(() => {
+    const syncCreatePlanOpen = () => {
+      setCreatePlanModalOpen(document.body.hasAttribute("data-create-plan-open"));
+    };
+
+    syncCreatePlanOpen();
+    const observer = new MutationObserver(syncCreatePlanOpen);
+    observer.observe(document.body, { attributes: true, attributeFilter: ["data-create-plan-open"] });
+    return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
@@ -400,7 +412,7 @@ export default function FeedPage() {
               <div className="mx-auto w-full max-w-[760px] md:ml-[72px] xl:mx-0 xl:ml-[72px]">
               <div
                 ref={mobileHeaderRef}
-                className="sticky top-0 z-[100] bg-app pb-[clamp(6px,1.6dvh,var(--space-2))] pt-mobile-safe-top pl-[max(var(--page-margin-x),env(safe-area-inset-left))] pr-[max(var(--page-margin-x),env(safe-area-inset-right))] md:hidden"
+                className={`sticky top-0 z-[100] bg-app pb-[clamp(6px,1.6dvh,var(--space-2))] pt-mobile-safe-top pl-[max(var(--page-margin-x),env(safe-area-inset-left))] pr-[max(var(--page-margin-x),env(safe-area-inset-right))] md:hidden ${createPlanModalOpen ? "hidden" : ""}`}
               >
                 <div className="relative flex items-center justify-between gap-[10px]">
                   <button
@@ -451,19 +463,6 @@ export default function FeedPage() {
                       )}
                     </button>
 
-                    <Link
-                      href={currentUserId ? `/profile/${currentUserId}` : "/settings"}
-                      aria-label="Perfil"
-                      className="flex h-[clamp(40px,5.8dvh,44px)] w-[clamp(40px,5.8dvh,44px)] shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset transition-opacity hover:opacity-80"
-                    >
-                      {profile?.profile_image ? (
-                        <NextImage src={profile.profile_image} alt="Foto de perfil" width={44} height={44} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
-                      ) : (
-                        <span className="text-[14px] font-[var(--fw-semibold)] text-app">
-                          {(profile?.nombre?.trim()[0] ?? "P").toUpperCase()}
-                        </span>
-                      )}
-                    </Link>
                   </div>
                 </div>
               </div>
@@ -1095,47 +1094,45 @@ function FeedChatPanel({ currentUserId }: { currentUserId: string | null }) {
 }
 
 function FeedSkeleton() {
+  const actionDots = [0, 1, 2];
+
   return (
-    <div className="space-y-[var(--space-3)]" aria-label="Cargando publicaciones" role="status">
-      {/* Image post skeleton */}
-      {[0, 1].map((i) => (
-        <article key={`img-${i}`} className="pb-[var(--space-2)]">
-          <div className="feed-image-container relative overflow-hidden">
-            <div className="skeleton-shimmer aspect-[4/3] w-full" />
-            {/* Top overlay shimmer — avatar + name */}
-            <div className="absolute inset-x-0 top-0 flex items-center gap-[var(--space-2)] px-[var(--space-4)] pt-[var(--space-3)]">
-              <div className="size-[32px] rounded-full bg-white/20" />
-              <div className="h-3 w-[80px] rounded-full bg-white/20" />
+    <div className="space-y-4 px-[max(12px,env(safe-area-inset-left))] py-4 md:px-0" aria-label="Cargando publicaciones" role="status">
+      {[0, 1, 2].map((i) => (
+      <article key={i} className="mx-auto flex w-full max-w-[560px] items-start gap-3 md:max-w-[520px]">
+        <div className="skeleton-shimmer mt-1 size-10 shrink-0 rounded-full" />
+        <div className="min-w-0 flex-1 overflow-hidden rounded-[18px] border border-app bg-surface">
+          <div className="flex items-start gap-3 px-4 py-[11px]">
+            <div className="min-w-0 flex-1">
+              <div className="skeleton-shimmer h-3.5 w-[118px] rounded-full" />
+              <div className="skeleton-shimmer mt-2 h-3 w-[172px] rounded-full" />
             </div>
-            {/* Bottom overlay shimmer — location + date */}
-            <div className="absolute inset-x-0 bottom-0 px-[var(--space-4)] pb-[var(--space-3)]">
-              <div className="h-4 w-[140px] rounded-full bg-white/20" />
-              <div className="mt-[6px] h-3 w-[100px] rounded-full bg-white/20" />
-            </div>
+            <div className="skeleton-shimmer mt-0.5 h-3.5 w-[56px] shrink-0 rounded-full" />
           </div>
-          {/* Actions + text shimmer */}
-          <div className="mt-[var(--space-2)] flex items-center gap-[var(--space-2)] px-[var(--space-1)]">
-            <div className="skeleton-shimmer h-[24px] w-[24px] rounded-full" />
-            <div className="skeleton-shimmer h-3 w-[120px] rounded-full" />
-          </div>
-        </article>
-      ))}
-      {/* Text-only post skeleton (Twitter style) */}
-      <article className="pb-[var(--space-2)]">
-        <div className="flex gap-[var(--space-2)] px-[var(--space-1)]">
-          <div className="skeleton-shimmer size-[32px] shrink-0 rounded-full" />
-          <div className="min-w-0 flex-1">
-            <div className="skeleton-shimmer h-3 w-[90px] rounded-full" />
-            <div className="skeleton-shimmer mt-[6px] h-3 w-[85%] rounded-full" />
-            <div className="skeleton-shimmer mt-[4px] h-3 w-[60%] rounded-full" />
-            <div className="mt-[var(--space-3)] flex items-center gap-[10px]">
-              <div className="skeleton-shimmer h-[24px] w-[24px] rounded-full" />
-              <div className="skeleton-shimmer h-[24px] w-[24px] rounded-full" />
-              <div className="skeleton-shimmer h-[24px] w-[24px] rounded-full" />
+
+          {i === 1 ? (
+            <div className="px-4 pb-4 pt-1">
+              <div className="skeleton-shimmer h-4 w-[92%] rounded-full" />
+              <div className="skeleton-shimmer mt-2 h-4 w-[78%] rounded-full" />
+              <div className="skeleton-shimmer mt-2 h-4 w-[54%] rounded-full" />
             </div>
+          ) : (
+            <div className="skeleton-shimmer aspect-[4/5] w-full border-x-0" />
+          )}
+
+          <div className="flex items-center gap-4 px-4 py-3">
+            {actionDots.map((dot) => (
+              <div key={dot} className="skeleton-shimmer size-6 rounded-full" />
+            ))}
+            <div className="skeleton-shimmer ml-auto h-3.5 w-[68px] rounded-full" />
+          </div>
+          <div className="px-4 pb-4">
+            <div className="skeleton-shimmer h-3.5 w-[72%] rounded-full" />
+            <div className="skeleton-shimmer mt-2 h-3.5 w-[48%] rounded-full" />
           </div>
         </div>
       </article>
+      ))}
     </div>
   );
 }
@@ -1659,7 +1656,7 @@ function FeedCard({
       <button
         type="button"
         onClick={(e) => { e.stopPropagation(); onFollowPress(); }}
-        className={`ml-auto flex size-[28px] shrink-0 items-center justify-center rounded-full transition-colors hover:text-primary-token ${following ? "text-primary-token" : "text-muted"}`}
+        className="ml-auto flex size-[28px] shrink-0 items-center justify-center rounded-full text-primary-token transition-colors hover:text-primary-token"
         aria-label={following ? "Siguiendo" : "Seguir"}
       >
         {following ? (
@@ -1874,11 +1871,11 @@ function FeedCard({
             <div className="w-full max-w-[560px] px-4 py-3 text-app">
               <div className="flex items-start gap-3">
                 <Link href={`/profile/${post.plan.ownerUserId}`} onClick={(e) => e.stopPropagation()} className="shrink-0">
-                  <div className="flex size-[42px] items-center justify-center overflow-hidden rounded-full bg-[#1d9bf0]">
+                  <div className="flex size-[42px] items-center justify-center overflow-hidden rounded-full border border-app">
                   {post.avatarImage ? (
                     <NextImage src={post.avatarImage} alt={post.avatarLabel} width={42} height={42} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
                   ) : (
-                    <span className="text-[15px] font-[800] text-white">{post.avatarLabel}</span>
+                    <span className="text-[15px] font-[800] text-app">{post.avatarLabel}</span>
                   )}
                   </div>
                 </Link>
@@ -1955,11 +1952,11 @@ function FeedCard({
             <div className="w-full max-w-[560px] text-app">
               <div className="flex items-start gap-3">
                 <Link href={`/profile/${post.plan.ownerUserId}`} onClick={(e) => e.stopPropagation()} className="shrink-0">
-                  <div className="flex size-[42px] items-center justify-center overflow-hidden rounded-full bg-[#1d9bf0]">
+                  <div className="flex size-[42px] items-center justify-center overflow-hidden rounded-full border border-app">
                     {post.avatarImage ? (
                       <NextImage src={post.avatarImage} alt={post.avatarLabel} width={42} height={42} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
                     ) : (
-                      <span className="text-[15px] font-[800] text-white">{post.avatarLabel}</span>
+                      <span className="text-[15px] font-[800] text-app">{post.avatarLabel}</span>
                     )}
                   </div>
                 </Link>
@@ -2143,7 +2140,7 @@ function FeedCard({
                   <button
                     type="button"
                     onClick={onFollowPress}
-                    className={`mt-[1px] shrink-0 text-[13px] font-[700] leading-tight transition-colors ${following ? "text-muted" : "text-[var(--primary)]"}`}
+                    className="mt-[1px] shrink-0 text-[13px] font-[700] leading-tight text-primary-token transition-colors"
                   >
                     {following ? "Siguiendo" : "Seguir"}
                   </button>
@@ -2328,7 +2325,7 @@ function FeedCard({
                   <button
                     type="button"
                     onClick={onFollowPress}
-                    className={`mt-[1px] shrink-0 text-[14px] font-[700] leading-tight transition-opacity hover:opacity-70 ${following ? "text-[var(--text-tertiary)]" : "text-[var(--text-secondary)]"}`}
+                    className="mt-[1px] shrink-0 text-[14px] font-[700] leading-tight text-primary-token transition-opacity hover:opacity-70"
                   >
                     {following ? "Siguiendo" : "Seguir"}
                   </button>
@@ -2410,7 +2407,7 @@ function FeedCard({
                     <Link href={`/profile/${post.plan.ownerUserId}`} className="truncate font-[800] text-white">{post.userName}</Link>
                     <span className="px-2 text-white/50">•</span>
                     {!isOwnPost && (
-                      <button type="button" onClick={onFollowPress} className={`font-[700] transition-opacity hover:opacity-80 ${following ? "text-muted" : "text-primary-token"}`}>
+                      <button type="button" onClick={onFollowPress} className="font-[700] text-primary-token transition-opacity hover:opacity-80">
                         {following ? "Siguiendo" : "Seguir"}
                       </button>
                     )}
@@ -2433,7 +2430,7 @@ function FeedCard({
                     <div className="flex items-center gap-2 min-w-0">
                       <Link href={`/profile/${post.plan.ownerUserId}`} className="truncate text-[15px] font-[800] text-app">{post.userName}</Link>
                       {!isOwnPost && (
-                        <button type="button" onClick={onFollowPress} className={`shrink-0 text-[13px] font-[700] transition-opacity hover:opacity-80 ${following ? "text-muted" : "text-primary-token"}`}>
+                        <button type="button" onClick={onFollowPress} className="shrink-0 text-[13px] font-[700] text-primary-token transition-opacity hover:opacity-80">
                           {following ? "Siguiendo" : "· Seguir"}
                         </button>
                       )}

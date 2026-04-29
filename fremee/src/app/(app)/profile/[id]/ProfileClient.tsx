@@ -395,8 +395,8 @@ export default function ProfilePage() {
                     disabled={followLoading}
                     className={`rounded-full px-6 py-[6px] text-body-sm font-[var(--fw-semibold)] transition-all disabled:opacity-50 ${
                       following
-                        ? "border border-app bg-transparent text-app hover:border-red-400 hover:text-red-400"
-                        : "bg-[var(--text-primary)] text-contrast-token hover:opacity-80"
+                        ? "border border-primary-token bg-transparent text-primary-token hover:border-primary-token hover:text-primary-token md:border-app md:text-app md:hover:border-red-400 md:hover:text-red-400"
+                        : "bg-primary-token text-[var(--contrast)] hover:opacity-80 md:bg-[var(--text-primary)] md:text-contrast-token"
                     }`}
                   >
                     {following ? "Siguiendo" : "Seguir"}
