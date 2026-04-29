@@ -8,6 +8,7 @@ import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { Input } from "@/components/ui/Input";
 import { EyeIcon } from "@/components/icons";
 import { useRouter, useSearchParams } from "next/navigation";
+import LoadingScreen from "@/components/common/LoadingScreen";
 
 export default function LoginPage() {
   return (
@@ -17,6 +18,17 @@ export default function LoginPage() {
   );
 }
 
+function hasCachedSession(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return Object.keys(localStorage).some(
+      (k) => k.startsWith("sb-") && k.endsWith("-auth-token"),
+    );
+  } catch {
+    return false;
+  }
+}
+
 function LoginPageInner() {
   const [showPassword, setShowPassword] = useState(false);
   const searchParams = useSearchParams();
@@ -24,7 +36,7 @@ function LoginPageInner() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(() => hasCachedSession());
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [invalidField, setInvalidField] = useState<"email" | "password" | null>(null);
 
@@ -41,7 +53,11 @@ function LoginPageInner() {
         data: { session },
       } = await supabase.auth.getSession();
 
-      if (session) router.replace(redirectTo);
+      if (session) {
+        router.replace(redirectTo);
+      } else {
+        setLoading(false);
+      }
     };
 
     checkSession();
@@ -103,6 +119,8 @@ function LoginPageInner() {
       setPassword("");
     }
   };
+
+  if (loading && !errorMsg) return <LoadingScreen />;
 
   return (
     <div className="auth-page flex h-full w-full max-w-[420px] flex-col py-[var(--space-6)] text-app md:py-[var(--space-8)]">
