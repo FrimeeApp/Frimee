@@ -166,7 +166,7 @@ export function ExpenseDetailModal({
               <p className="text-caption font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
                 Importe
               </p>
-              <p className={`mt-[6px] text-[32px] font-[var(--fw-bold)] leading-none ${incoming ? "text-[var(--success,#15803d)]" : "text-[var(--warning,#b45309)]"}`}>
+              <p className="mt-[6px] text-[32px] font-[var(--fw-bold)] leading-none text-app">
                 {incoming ? "+" : "-"}{formatAmount(item.amount)}
               </p>
             </div>

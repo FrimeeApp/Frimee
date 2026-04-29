@@ -5,7 +5,8 @@ import { insertNotificacion } from "@/services/api/repositories/notifications.re
 export function useFollow(
   targetUserId: string | null | undefined,
   currentUserId: string | null | undefined,
-  initialFollowing: boolean
+  initialFollowing: boolean,
+  onFollowingChange?: (following: boolean) => void
 ) {
   const [following, setFollowing] = useState(initialFollowing);
   const [loading, setLoading] = useState(false);
@@ -21,13 +22,18 @@ export function useFollow(
     setFollowing(true); // optimistic
     try {
       await followUser(targetUserId);
-      void insertNotificacion({
-        userId: targetUserId,
-        tipo: "follow",
-        actorId: currentUserId,
-        entityId: currentUserId,
-        entityType: "user",
-      });
+      if (targetUserId !== currentUserId) {
+        void insertNotificacion({
+          userId: targetUserId,
+          tipo: "follow",
+          actorId: currentUserId,
+          entityId: currentUserId,
+          entityType: "user",
+        }).catch((error) => {
+          console.error("[useFollow] Error insertando notificación follow:", error);
+        });
+      }
+      onFollowingChange?.(true);
     } catch {
       setFollowing(false);
     } finally {
@@ -42,6 +48,7 @@ export function useFollow(
     setFollowing(false); // optimistic
     try {
       await unfollowUser(targetUserId);
+      onFollowingChange?.(false);
     } catch {
       setFollowing(true);
     } finally {
