@@ -6,10 +6,15 @@ import type { NextConfig } from "next";
 // Regular dev/web builds keep API routes fully functional.
 const isCapacitorBuild = process.env.BUILD_TARGET === "capacitor";
 
+const isDockerBuild = process.env.BUILD_TARGET === "docker";
+
 const nextConfig: NextConfig = {
   ...(isCapacitorBuild && {
     output: "export",
     trailingSlash: true,
+  }),
+  ...(isDockerBuild && {
+    output: "standalone",
   }),
   turbopack: {
     root: path.resolve(__dirname),
