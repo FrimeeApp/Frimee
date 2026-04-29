@@ -32,6 +32,50 @@
   }
 }
 
+@keyframes feed-dialog-overlay-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes feed-dialog-overlay-out {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes feed-dialog-box-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes feed-dialog-box-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+}
+
 /* Snap feed scroll container — hide scrollbar on mobile */
 .scrollbar-hide {
   -ms-overflow-style: none;
@@ -64,6 +108,22 @@
 
   .comments-modal-panel {
     animation: comments-panel-in-mobile 220ms var(--ease-standard);
+  }
+
+  .feed-dialog-overlay {
+    animation: feed-dialog-overlay-in 160ms var(--ease-standard) both;
+  }
+
+  .feed-dialog-overlay[data-closing="true"] {
+    animation: feed-dialog-overlay-out 140ms var(--ease-standard) both;
+  }
+
+  .feed-dialog-box {
+    animation: feed-dialog-box-in 180ms var(--ease-standard) both;
+  }
+
+  .feed-dialog-overlay[data-closing="true"] .feed-dialog-box {
+    animation: feed-dialog-box-out 140ms var(--ease-standard) both;
   }
 
   @media (min-width: 768px) {

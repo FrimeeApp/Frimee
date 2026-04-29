@@ -321,17 +321,18 @@ export default function MessagesPage() {
   ) : (
     <div className="flex h-full flex-col">
       {/* Header + compose */}
-      <div className="flex items-center justify-between px-[var(--space-4)] pb-[var(--space-3)] pt-mobile-safe-top md:py-[var(--space-3)]">
-        <h1 className="text-[var(--font-h2)] font-[var(--fw-regular)] leading-[1.15] text-app md:text-[var(--font-h1)]">Mensajes</h1>
+      <div className="flex items-center justify-between px-[var(--space-4)] pb-[var(--space-2)] pt-mobile-safe-top md:py-[var(--space-3)]">
+        <h1 className="text-[26px] font-[800] tracking-[-0.02em] leading-tight text-app">Mensajes</h1>
         <button
           type="button"
           onClick={() => void openFriendPicker()}
-          className="flex size-[36px] shrink-0 items-center justify-center rounded-full bg-[var(--primary)] text-white transition-opacity hover:opacity-80"
+          className="flex items-center gap-1.5 rounded-[10px] bg-[var(--primary)] px-3 py-[7px] text-[13px] font-[700] text-white transition-opacity hover:opacity-80"
           aria-label="Nueva conversación"
         >
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[18px]">
-            <path d="M12 4V20M4 12H20" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[14px]">
+            <path d="M12 4V20M4 12H20" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
           </svg>
+          Nueva
         </button>
       </div>
 
@@ -361,32 +362,35 @@ export default function MessagesPage() {
             </p>
           </div>
         ) : (
-          <div className="flex flex-col">
-            {filteredChats.map((chat, index) => {
+          <div className="flex flex-col px-2">
+            {filteredChats.map((chat) => {
               const name = resolveChatName(chat, user?.id ?? "");
               const avatar = resolveChatAvatar(chat, user?.id ?? "");
               const hasUnread = chat.unread_count > 0;
-              const isLast = index === filteredChats.length - 1;
+              const isSelected = chat.chat_id === selectedChatId;
+              const lastMsg = (() => { const m = chat.last_message ?? ""; try { return JSON.parse(m)?.type === "poll" ? "📊 Encuesta" : m; } catch { return m; } })();
               return (
                 <button
                   key={chat.chat_id}
                   type="button"
                   onClick={() => setSelectedChatId(chat.chat_id)}
-                  className="flex w-full items-center gap-3 px-[var(--space-4)] pt-[var(--space-3)] text-left transition-colors hover:bg-surface focus:outline-none"
+                  className={`flex w-full items-center gap-3 rounded-[14px] px-3 py-[10px] text-left transition-colors focus:outline-none ${isSelected ? "bg-surface" : "hover:bg-surface"}`}
                 >
-                  <div className="relative shrink-0 self-start">
+                  <div className="relative shrink-0 self-start mt-[1px]">
                     <ChatPreviewAvatar name={name} image={avatar} isGroup={chat.tipo === "GRUPO"} />
                     {hasUnread && (
-                      <span className="absolute -right-[2px] -top-[2px] size-[10px] rounded-full border-2 border-[var(--bg)] bg-[#ff6a3d]" />
+                      <span className="absolute -right-[3px] -top-[3px] flex min-w-[18px] h-[18px] items-center justify-center rounded-full border-2 border-[var(--bg)] bg-[var(--primary)] px-[3px] text-[10px] font-[700] text-white leading-none">
+                        {chat.unread_count > 9 ? "9+" : chat.unread_count}
+                      </span>
                     )}
                   </div>
-                  <div className={`min-w-0 flex-1 pb-[var(--space-3)] ${!isLast ? "border-b border-app" : ""}`}>
-                    <div className="flex items-baseline justify-between gap-[var(--space-2)]">
-                      <p className="truncate text-body-sm font-[var(--fw-semibold)] text-app">{name}</p>
-                      <span className="shrink-0 text-[14px] text-muted">{formatChatTime(chat.last_message_at)}</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2 mb-[2px]">
+                      <p className={`truncate text-[15px] ${hasUnread ? "font-[700]" : "font-[600]"} text-app`}>{name}</p>
+                      <span className="shrink-0 text-[12px] text-muted tabular-nums">{formatChatTime(chat.last_message_at)}</span>
                     </div>
-                    <p className={`truncate text-caption leading-[1.4] min-h-[1.4em] ${hasUnread ? "font-[var(--fw-medium)] text-app" : "text-muted"}`}>
-                      {(() => { const m = chat.last_message ?? ""; try { return JSON.parse(m)?.type === "poll" ? "📊 Encuesta" : m; } catch { return m; } })()}
+                    <p className={`truncate text-[13px] leading-[1.4] ${hasUnread ? "font-[600] text-app" : "text-muted"}`}>
+                      {lastMsg}
                     </p>
                   </div>
                 </button>
@@ -473,15 +477,15 @@ export default function MessagesPage() {
 function ChatPreviewAvatar({ name, image, isGroup }: { name: string; image: string | null; isGroup: boolean }) {
   if (image) {
     return (
-      <div className="relative mt-0.5 size-11 shrink-0 overflow-hidden rounded-full border border-app">
-        <Image src={image} alt={name} fill sizes="44px" className="object-cover" unoptimized referrerPolicy="no-referrer" />
+      <div className="relative size-12 shrink-0 overflow-hidden rounded-full border border-app">
+        <Image src={image} alt={name} fill sizes="48px" className="object-cover" unoptimized referrerPolicy="no-referrer" />
       </div>
     );
   }
 
   return (
-    <div className="mt-0.5 flex size-11 shrink-0 items-center justify-center rounded-full border border-app bg-surface-2 text-body-sm font-[var(--fw-semibold)] text-muted">
-      {isGroup ? <GroupIcon className="size-[18px] text-muted" /> : (name.trim()[0] || "U").toUpperCase()}
+    <div className="flex size-12 shrink-0 items-center justify-center rounded-full border border-app bg-surface-2 text-[15px] font-[700] text-muted">
+      {isGroup ? <GroupIcon className="size-[20px] text-muted" /> : (name.trim()[0] || "U").toUpperCase()}
     </div>
   );
 }

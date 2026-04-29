@@ -1714,7 +1714,9 @@ export function ChatConversation({
               const isMe = msg.sender_id === currentUserId;
               const isBot = msg.tipo === "bot";
               const prevMsg = messages[idx - 1];
+              const nextMsg = messages[idx + 1];
               const isFirstInGroup = !prevMsg || prevMsg.sender_id !== msg.sender_id;
+              const isLastInGroup = !nextMsg || nextMsg.sender_id !== msg.sender_id;
               const time = formatChatTime(msg.created_at);
               const isMediaMessage = Boolean(msg.image_url) || isResumenViaje(msg.texto);
               const reaction = localReactions[msg.id];
@@ -1740,12 +1742,19 @@ export function ChatConversation({
                   <div className="relative max-w-[75%]">
                     {isFirstInGroup && !isMediaMessage && (
                       isMe ? (
-                        <div className="absolute -right-[5px] top-[8px] h-0 w-0 border-y-[5px] border-l-[5px] border-y-transparent" style={{ borderLeftColor: "var(--text-primary)" }} />
+                        <div className="absolute -right-[5px] top-[8px] h-0 w-0 border-y-[5px] border-l-[5px] border-y-transparent" style={{ borderLeftColor: "var(--primary)" }} />
                       ) : (
                         <div className="absolute -left-[5px] top-[8px] h-0 w-0 border-y-[5px] border-r-[5px] border-y-transparent" style={{ borderRightColor: isBot ? "var(--surface)" : "var(--surface-inset)" }} />
                       )
                     )}
-                    <div className={`break-words ${isMediaMessage ? "bg-transparent p-0" : "rounded-card px-3 py-2"} ${!isMediaMessage ? (isMe ? "bg-[var(--text-primary)] text-contrast-token" : isBot ? "bg-surface" : "bg-surface-inset") : ""} ${contextMenu?.msg.id === msg.id ? "opacity-75" : ""}`}>
+                    <div
+                      className={`break-words ${isMediaMessage ? "bg-transparent p-0" : "px-3 py-2"} ${!isMediaMessage ? (isMe ? "bg-[var(--primary)] text-white" : isBot ? "bg-surface text-app" : "bg-surface-inset text-app") : ""} ${contextMenu?.msg.id === msg.id ? "opacity-75" : ""}`}
+                      style={isMediaMessage ? undefined : {
+                        borderRadius: isMe
+                          ? `${isFirstInGroup ? "18px" : "8px"} 18px ${isLastInGroup ? "4px" : "8px"} 18px`
+                          : `18px ${isFirstInGroup ? "18px" : "8px"} 18px ${isLastInGroup ? "4px" : "8px"}`,
+                      }}
+                    >
                       {!isMe && (chat.tipo === "GRUPO" || isBot) && isFirstInGroup && (
                         <p className={`mb-[2px] text-[14px] font-[var(--fw-semibold)] ${isBot ? "text-primary-token" : "text-muted"}`}>{isBot ? "Frimee" : msg.sender_nombre}</p>
                       )}
@@ -1753,12 +1762,12 @@ export function ChatConversation({
                         <button
                           type="button"
                           onClick={(e) => { e.stopPropagation(); scrollToMessage(msg.reply_to_id!); }}
-                          className={`mb-[6px] w-full rounded-card border-l-[3px] px-2 py-[4px] text-left transition-opacity hover:opacity-80 ${isMe ? "border-contrast-token/50 bg-black/20" : "border-[var(--text-primary)] bg-black/8"}`}
+                          className={`mb-[6px] w-full rounded-card border-l-[3px] px-2 py-[4px] text-left transition-opacity hover:opacity-80 ${isMe ? "border-white/50 bg-black/20" : "border-[var(--primary)] bg-black/8"}`}
                         >
-                          <p className={`truncate text-[14px] font-[var(--fw-semibold)] ${isMe ? "text-contrast-token/80" : "text-[var(--text-primary)]"}`}>
+                          <p className={`truncate text-[14px] font-[var(--fw-semibold)] ${isMe ? "text-white/80" : "text-[var(--text-primary)]"}`}>
                             {msg.reply_sender_nombre ?? "Usuario"}
                           </p>
-                          <p className={`truncate text-[14px] ${isMe ? "text-contrast-token/70" : "text-muted"}`}>
+                          <p className={`truncate text-[14px] ${isMe ? "text-white/70" : "text-muted"}`}>
                             {msg.reply_texto && isPollMessage(msg.reply_texto)
                               ? `📊 ${(JSON.parse(msg.reply_texto) as { question: string }).question}`
                               : msg.reply_texto}
@@ -1783,7 +1792,7 @@ export function ChatConversation({
                       ) : (
                         <p className={`text-body-sm${isBot ? " whitespace-pre-line" : ""}`}>{msg.texto}</p>
                       )}
-                      {!isMediaMessage && <div className={`mt-[2px] flex items-center justify-end gap-[4px] text-[14px] ${isMe ? "text-contrast-token/60" : "text-muted"}`}>
+                      {!isMediaMessage && <div className={`mt-[2px] flex items-center justify-end gap-[4px] text-[11px] ${isMe ? "text-white/60" : "text-muted"}`}>
                         {isStarred && <span>★</span>}
                         <span>{time}</span>
                         {!isBot && <button
@@ -1896,7 +1905,7 @@ export function ChatConversation({
               <button
                 type="button"
                 onClick={handleSendRecording}
-                className="flex size-[36px] shrink-0 items-center justify-center rounded-full bg-[var(--text-primary)] text-contrast-token transition-opacity hover:opacity-80"
+                className="flex size-[36px] shrink-0 items-center justify-center rounded-full bg-[var(--primary)] text-white transition-opacity hover:opacity-80"
                 aria-label="Enviar nota de voz"
               >
                 <SendMsgIcon className="size-[16px]" />
@@ -1930,7 +1939,7 @@ export function ChatConversation({
                 type="button"
                 onClick={() => void onSend()}
                 disabled={!text.trim() || sending}
-                className="flex size-[36px] shrink-0 items-center justify-center rounded-full bg-[var(--text-primary)] text-contrast-token transition-opacity hover:opacity-80 disabled:opacity-30"
+                className="flex size-[36px] shrink-0 items-center justify-center rounded-full bg-[var(--primary)] text-white transition-opacity hover:opacity-80 disabled:opacity-30"
                 aria-label="Enviar"
               >
                 <SendMsgIcon className="size-[16px]" />
@@ -2649,13 +2658,13 @@ function PollBubble({ msg, isMe, onVote }: { msg: MensajeRow; isMe: boolean; onV
                   )}
                   <span className="text-body-sm">{opt}</span>
                 </div>
-                <span className={`text-[14px] ${isMe ? "text-contrast-token/60" : "text-muted"}`}>{pct}%</span>
+                <span className={`text-[14px] ${isMe ? "text-white/60" : "text-muted"}`}>{pct}%</span>
               </div>
             </button>
           );
         })}
       </div>
-      <p className={`mt-[8px] text-[14px] ${isMe ? "text-contrast-token/60" : "text-muted"}`}>
+      <p className={`mt-[8px] text-[14px] ${isMe ? "text-white/60" : "text-muted"}`}>
         {poll.closed ? `Cerrada · ${total} ${total === 1 ? "voto" : "votos"}` : `${total} ${total === 1 ? "voto" : "votos"}`}
       </p>
     </div>

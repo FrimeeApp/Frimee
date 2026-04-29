@@ -393,11 +393,11 @@ export default function FeedPage() {
         <AppSidebar />
 
         <main
-          className={`pt-0 pb-0 md:px-safe md:pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] md:py-[var(--space-8)] md:pr-[var(--space-14)] transition-[padding] duration-[var(--duration-slow)] [transition-timing-function:var(--ease-standard)]`}
+          className={`pt-0 pb-0 md:px-safe md:pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] md:py-[var(--space-8)] md:pl-[102px] md:pr-[var(--space-14)] transition-[padding] duration-[var(--duration-slow)] [transition-timing-function:var(--ease-standard)]`}
         >
           <div className="mx-auto max-w-[1160px]">
             <div className="md:border-b md:border-[#262626]">
-              <div className="mx-auto w-full max-w-[760px] xl:mx-0">
+              <div className="mx-auto w-full max-w-[760px] md:ml-[72px] xl:mx-0 xl:ml-[72px]">
               <div
                 ref={mobileHeaderRef}
                 className="sticky top-0 z-[100] bg-app pb-[clamp(6px,1.6dvh,var(--space-2))] pt-mobile-safe-top pl-[max(var(--page-margin-x),env(safe-area-inset-left))] pr-[max(var(--page-margin-x),env(safe-area-inset-right))] md:hidden"
@@ -623,7 +623,7 @@ export default function FeedPage() {
                   ref={exploreTabRef}
                   type="button"
                   onClick={() => setActiveFeedTab("explore")}
-                  className={`-mb-[2px] pb-0 font-[700] transition-colors duration-[var(--duration-base)] ${
+                  className={`-mb-[2px] shrink-0 whitespace-nowrap pb-0 font-[700] transition-colors duration-[var(--duration-base)] ${
                     activeFeedTab === "explore" ? "text-app" : "hover:text-app"
                   }`}
                 >
@@ -633,7 +633,7 @@ export default function FeedPage() {
                   ref={followingTabRef}
                   type="button"
                   onClick={() => setActiveFeedTab("following")}
-                  className={`-mb-[2px] pb-0 font-[700] transition-colors duration-[var(--duration-base)] ${
+                  className={`-mb-[2px] shrink-0 whitespace-nowrap pb-0 font-[700] transition-colors duration-[var(--duration-base)] ${
                     activeFeedTab === "following" ? "text-app" : "hover:text-app"
                   }`}
                 >
@@ -897,31 +897,53 @@ function FeedChatPanel({ currentUserId }: { currentUserId: string | null }) {
     const chatAvatar = resolveChatAvatar(openChat, currentUserId);
 
     return (
-      <div className="pt-[var(--space-10)]">
-        <div className="flex items-center gap-[var(--space-2)]">
-          <button type="button" onClick={() => { setOpenChatId(null); setText(""); void listChats().then(setChats); }}
-            className="flex size-[28px] items-center justify-center rounded-full transition-colors hover:bg-surface" aria-label="Volver">
+      <div className="pt-[var(--space-8)]">
+        {/* Header conversación */}
+        <div className="flex items-center gap-2 pb-3 border-b border-app">
+          <button
+            type="button"
+            onClick={() => { setOpenChatId(null); setText(""); void listChats().then(setChats); }}
+            className="flex size-[30px] shrink-0 items-center justify-center rounded-full transition-colors hover:bg-surface"
+            aria-label="Volver"
+          >
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[16px]">
-              <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
-          <div className="flex size-[32px] items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-[14px] font-[var(--fw-semibold)] text-app">
-            {chatAvatar ? <NextImage src={chatAvatar} alt={chatName} width={32} height={32} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" /> : (chatName[0] ?? "?").toUpperCase()}
+          <div className="flex size-[36px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-[14px] font-[var(--fw-semibold)] text-app">
+            {chatAvatar
+              ? <NextImage src={chatAvatar} alt={chatName} width={36} height={36} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
+              : (chatName[0] ?? "?").toUpperCase()}
           </div>
-          <span className="min-w-0 truncate text-body-sm font-[var(--fw-semibold)]">{chatName}</span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[14px] font-[700] text-app leading-tight">{chatName}</p>
+            {openChat.tipo === "GRUPO" && (
+              <p className="text-[12px] text-muted">{openChat.miembros.length} miembros</p>
+            )}
+          </div>
+          <Link href="/messages" className="shrink-0 flex size-[28px] items-center justify-center rounded-full text-muted transition-colors hover:bg-surface" aria-label="Abrir en mensajes">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[14px]">
+              <path d="M7 17L17 7M17 7H7M17 7V17" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </Link>
         </div>
 
-        <div ref={scrollContainerRef} className="scrollbar-thin mt-[var(--space-4)] max-h-[340px] overflow-x-hidden overflow-y-auto overscroll-contain">
+        <div ref={scrollContainerRef} className="scrollbar-thin mt-3 max-h-[320px] overflow-x-hidden overflow-y-auto overscroll-contain">
           {msgLoading ? (
-            <p className="py-4 text-center text-body-sm text-muted">Cargando...</p>
+            <p className="py-4 text-center text-[13px] text-muted">Cargando...</p>
           ) : (
-            <div className="space-y-[1px]">
+            <div className="space-y-[2px] py-1">
               {messages.map((msg, idx, arr) => {
                 const isMe = msg.sender_id === currentUserId;
                 const prevMsg = arr[idx - 1];
+                const nextMsg = arr[idx + 1];
                 const isFirstInGroup = !prevMsg || prevMsg.sender_id !== msg.sender_id;
+                const isLastInGroup = !nextMsg || nextMsg.sender_id !== msg.sender_id;
+                const br = isMe
+                  ? `${isFirstInGroup ? "20px" : "8px"} 20px 4px ${isLastInGroup ? "20px" : "8px"}`
+                  : `20px ${isFirstInGroup ? "20px" : "8px"} ${isLastInGroup ? "20px" : "8px"} 4px`;
                 return (
-                  <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"} ${isFirstInGroup ? "mt-[var(--space-2)]" : "mt-[2px]"}`}>
+                  <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"} ${isFirstInGroup ? "mt-3" : "mt-[2px]"}`}>
                     {!isMe && openChat.tipo === "GRUPO" && (
                       <div className="mr-[6px] w-[20px] shrink-0">
                         {isFirstInGroup && (
@@ -933,9 +955,12 @@ function FeedChatPanel({ currentUserId }: { currentUserId: string | null }) {
                         )}
                       </div>
                     )}
-                    <div className={`max-w-[85%] rounded-[14px] px-3 py-[6px] ${isMe ? "bg-[var(--text-primary)] text-contrast-token" : "bg-surface-inset"}`}>
+                    <div
+                      className={`max-w-[85%] px-3 py-[6px] ${isMe ? "bg-[var(--primary)] text-white" : "bg-surface-inset text-app"}`}
+                      style={{ borderRadius: br }}
+                    >
                       {!isMe && openChat.tipo === "GRUPO" && isFirstInGroup && (
-                        <p className="mb-[2px] text-[14px] font-[var(--fw-semibold)] text-muted">{msg.sender_nombre}</p>
+                        <p className="mb-[2px] text-[11px] font-[600] text-muted">{msg.sender_nombre}</p>
                       )}
                       {msg.audio_url ? (
                         <AudioPlayer src={msg.audio_url} />
@@ -971,7 +996,9 @@ function FeedChatPanel({ currentUserId }: { currentUserId: string | null }) {
                           );
                         })()
                       : (() => { try { const p = JSON.parse(msg.texto); if (p?.type === "poll") return <div className="flex items-center gap-[6px] py-[2px] opacity-80"><span className="text-[16px]">📊</span><span className="text-[14px]">{p.question as string}</span></div>; } catch { /* noop */ } return <p className="break-all text-body-sm">{msg.texto}</p>; })()}
-                      <p className={`mt-[2px] text-right text-[14px] ${isMe ? "text-contrast-token/60" : "text-muted"}`}>{formatChatTime(msg.created_at)}</p>
+                      {isLastInGroup && (
+                        <p className={`mt-[2px] text-right text-[11px] ${isMe ? "text-white/55" : "text-muted"}`}>{formatChatTime(msg.created_at)}</p>
+                      )}
                     </div>
                   </div>
                 );
@@ -981,16 +1008,25 @@ function FeedChatPanel({ currentUserId }: { currentUserId: string | null }) {
           )}
         </div>
 
-        <div className="mt-[var(--space-3)] flex items-center gap-[var(--space-2)]">
-          <input type="text" value={text} onChange={(e) => setText(e.target.value)}
+        <div className="mt-3 flex items-center gap-2">
+          <input
+            type="text"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void onSend(); } }}
             placeholder="Escribe un mensaje..."
-            className="min-w-0 flex-1 rounded-full border border-app bg-surface px-3 py-[6px] text-body-sm text-app outline-none transition-colors focus:border-[var(--border-strong)]" />
-          <button type="button" onClick={() => void onSend()} disabled={!text.trim() || sending}
-            className="flex size-[30px] shrink-0 items-center justify-center rounded-full bg-[var(--text-primary)] text-contrast-token transition-opacity hover:opacity-80 disabled:opacity-30" aria-label="Enviar">
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[14px]">
-              <path d="M22 2L11 13" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-              <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+            className="min-w-0 flex-1 rounded-full border border-app bg-surface-inset px-4 py-[8px] text-[13px] text-app outline-none transition-colors focus:border-[var(--border-strong)] placeholder:text-muted"
+          />
+          <button
+            type="button"
+            onClick={() => void onSend()}
+            disabled={!text.trim() || sending}
+            className="flex size-[34px] shrink-0 items-center justify-center rounded-full bg-[var(--primary)] text-white transition-all hover:opacity-85 disabled:opacity-30 active:scale-90"
+            aria-label="Enviar"
+          >
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[15px] translate-x-[1px]">
+              <path d="M22 2L11 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
             </svg>
           </button>
         </div>
@@ -999,35 +1035,56 @@ function FeedChatPanel({ currentUserId }: { currentUserId: string | null }) {
   }
 
   return (
-    <div className="pt-[var(--space-10)]">
-      <div className="flex items-center justify-between">
-        <h3 className="text-[20px] font-[var(--fw-medium)] tracking-[0.03em] leading-[1.3]">Chats recientes</h3>
-        <Link href="/messages" className="text-[14px] text-muted transition-opacity hover:opacity-70">Ver todos</Link>
+    <div className="pt-[var(--space-8)]">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-[17px] font-[800] tracking-[-0.01em] text-app">Mensajes</h3>
+        <Link
+          href="/messages"
+          className="flex items-center gap-1 text-[13px] font-[600] text-muted transition-all hover:text-app"
+        >
+          Ver todos
+          <svg viewBox="0 0 24 24" fill="none" className="size-[11px]" aria-hidden="true">
+            <path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </Link>
       </div>
-      <div className="mt-[var(--space-4)] space-y-[2px]">
+      <div className="space-y-[1px]">
         {chats.length === 0 ? (
-          <p className="text-body-sm text-muted">No tienes conversaciones aún</p>
+          <p className="py-3 text-[13px] text-muted">No tienes conversaciones aún</p>
         ) : (
           chats.slice(0, 4).map((chat) => {
             const name = resolveChatName(chat, currentUserId ?? "");
             const avatar = resolveChatAvatar(chat, currentUserId ?? "");
             const hasUnread = chat.unread_count > 0;
+            const lastMsg = (() => { const m = chat.last_message ?? ""; try { return JSON.parse(m)?.type === "poll" ? "📊 Encuesta" : m; } catch { return m; } })();
             return (
-              <button key={chat.chat_id} type="button" onClick={() => setOpenChatId(chat.chat_id)}
-                className="flex w-full items-center gap-[var(--space-3)] rounded-[10px] px-2 py-[10px] text-left transition-colors hover:bg-surface">
+              <button
+                key={chat.chat_id}
+                type="button"
+                onClick={() => setOpenChatId(chat.chat_id)}
+                className="flex w-full items-center gap-3 rounded-[12px] px-2.5 py-[9px] text-left transition-colors hover:bg-surface"
+              >
                 <div className="relative shrink-0">
-                  <div className="flex size-[42px] items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">
-                    {avatar ? <NextImage src={avatar} alt={name} width={42} height={42} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
-                      : chat.tipo === "GRUPO" ? <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[16px] text-muted"><circle cx="9" cy="7" r="3" stroke="currentColor" strokeWidth="1.6" /><path d="M2 19c1-3 3.5-4.5 7-4.5s6 1.5 7 4.5" stroke="currentColor" strokeWidth="1.6" /></svg>
-                      : (name[0] ?? "?").toUpperCase()}
+                  <div className="flex size-[44px] items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-[15px] font-[700] text-app">
+                    {avatar
+                      ? <NextImage src={avatar} alt={name} width={44} height={44} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
+                      : chat.tipo === "GRUPO"
+                        ? <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[18px] text-muted"><circle cx="9" cy="7" r="3" stroke="currentColor" strokeWidth="1.6" /><path d="M2 19c1-3 3.5-4.5 7-4.5s6 1.5 7 4.5" stroke="currentColor" strokeWidth="1.6" /></svg>
+                        : (name[0] ?? "?").toUpperCase()}
                   </div>
-                  {hasUnread && <span className="absolute -right-[2px] -top-[2px] size-[10px] rounded-full border-2 border-[var(--bg)] bg-[#ff6a3d]" />}
+                  {hasUnread && (
+                    <span className="absolute -right-[3px] -top-[3px] flex min-w-[18px] items-center justify-center rounded-full border-2 border-[var(--bg)] bg-[var(--primary)] px-[3px] text-[10px] font-[700] text-white leading-none h-[18px]">
+                      {chat.unread_count > 9 ? "9+" : chat.unread_count}
+                    </span>
+                  )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className={`truncate text-body-sm ${hasUnread ? "font-[var(--fw-semibold)]" : ""} text-app`}>{name}</p>
-                  <p className={`truncate text-[14px] leading-[16px] ${hasUnread ? "font-[var(--fw-medium)] text-app" : "text-muted"}`}>{(() => { const m = chat.last_message ?? ""; try { return JSON.parse(m)?.type === "poll" ? "📊 Encuesta" : m; } catch { return m; } })()}</p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className={`truncate text-[14px] ${hasUnread ? "font-[700]" : "font-[600]"} text-app`}>{name}</p>
+                    <span className="shrink-0 text-[11px] text-muted">{formatChatTime(chat.last_message_at)}</span>
+                  </div>
+                  <p className={`truncate text-[13px] leading-[18px] ${hasUnread ? "font-[600] text-app" : "text-muted"}`}>{lastMsg}</p>
                 </div>
-                <span className="shrink-0 text-[14px] text-muted">{formatChatTime(chat.last_message_at)}</span>
               </button>
             );
           })
@@ -1114,6 +1171,7 @@ function FeedCard({
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [authorAvatars, setAuthorAvatars] = useState<Record<string, string | null>>({});
   const [imgLoaded, setImgLoaded] = useState(false);
+  const [coverAspect, setCoverAspect] = useState<number | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<{ commentId: string; userName: string } | null>(null);
   const [saved, setSaved] = useState(initialSaved);
@@ -1149,7 +1207,6 @@ function FeedCard({
   }
   const slidesLen = slides.length;
   const clampedIndex = Math.min(slideIndex, slidesLen - 1);
-  const currentSlide = slides[clampedIndex];
 
   const goNext = useCallback(() => setSlideIndex((p) => Math.min(p + 1, slidesLen - 1)), [slidesLen]);
   const goPrev = useCallback(() => setSlideIndex((p) => Math.max(p - 1, 0)), []);
@@ -1197,10 +1254,6 @@ function FeedCard({
     return m[tipo] ?? "📌";
   }
 
-  function fmtSlideTime(iso: string): string {
-    return new Date(iso).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
-  }
-
   function renderImageSlide(imageUrl: string, alt: string, active: boolean, key: string) {
     const base = "absolute inset-0 transition-opacity duration-200 ease-out will-change-[opacity] " + (active ? "opacity-100 z-[1]" : "opacity-0 z-0");
     return (
@@ -1241,6 +1294,41 @@ function FeedCard({
       onFollowingChange?.(ownerUserId, nextFollowing);
     }
   );
+  const [unfollowDialogClosing, setUnfollowDialogClosing] = useState(false);
+  const unfollowCloseTimeoutRef = useRef<number | null>(null);
+  const unfollowDialogVisible = showUnfollowDialog || unfollowDialogClosing;
+
+  const closeUnfollowDialog = useCallback(() => {
+    if (unfollowDialogClosing) return;
+    setUnfollowDialogClosing(true);
+    unfollowCloseTimeoutRef.current = window.setTimeout(() => {
+      setShowUnfollowDialog(false);
+      setUnfollowDialogClosing(false);
+      unfollowCloseTimeoutRef.current = null;
+    }, 140);
+  }, [setShowUnfollowDialog, unfollowDialogClosing]);
+
+  const confirmUnfollow = useCallback(() => {
+    if (unfollowDialogClosing) return;
+    setUnfollowDialogClosing(true);
+    unfollowCloseTimeoutRef.current = window.setTimeout(() => {
+      void handleUnfollow();
+      setUnfollowDialogClosing(false);
+      unfollowCloseTimeoutRef.current = null;
+    }, 140);
+  }, [handleUnfollow, unfollowDialogClosing]);
+
+  useEffect(() => {
+    if (showUnfollowDialog) setUnfollowDialogClosing(false);
+  }, [showUnfollowDialog]);
+
+  useEffect(() => {
+    return () => {
+      if (unfollowCloseTimeoutRef.current !== null) {
+        window.clearTimeout(unfollowCloseTimeoutRef.current);
+      }
+    };
+  }, []);
   const [expandedReplies, setExpandedReplies] = useState<Record<string, number>>({});
   const commentInputRef = useRef<HTMLInputElement | null>(null);
   const emojiPickerRef = useRef<HTMLDivElement | null>(null);
@@ -1545,6 +1633,51 @@ function FeedCard({
     return `${day} ${months[d.getMonth()]}`;
   };
 
+  const formatMobileDate = (iso: string) => {
+    const d = new Date(iso);
+    return `${d.getDate()}/${d.getMonth() + 1}`;
+  };
+
+  const getLocationFirstPart = (location: string | null | undefined) => {
+    return location?.split(",")[0]?.trim() ?? "";
+  };
+
+  const desktopDateLabel = formatDate(post.plan.startsAt) === formatDate(post.plan.endsAt)
+    ? formatDate(post.plan.startsAt)
+    : `${formatDate(post.plan.startsAt)} – ${formatDate(post.plan.endsAt)}`;
+  const mobileDateLabel = formatMobileDate(post.plan.startsAt) === formatMobileDate(post.plan.endsAt)
+    ? formatMobileDate(post.plan.startsAt)
+    : `${formatMobileDate(post.plan.startsAt)}-${formatMobileDate(post.plan.endsAt)}`;
+  const mobileLocationLabel = getLocationFirstPart(post.plan.locationName);
+  const mobileActionButtonClass = "flex min-w-[52px] items-center gap-1.5 text-muted transition-colors hover:text-primary-token disabled:opacity-40";
+  const mobileSaveButtonClass = "flex min-w-[52px] items-center gap-1.5 text-muted transition-colors hover:text-primary-token";
+
+  const renderMobileFollowButton = () => {
+    if (isOwnPost) return null;
+
+    return (
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); onFollowPress(); }}
+        className={`ml-auto flex size-[28px] shrink-0 items-center justify-center rounded-full transition-colors hover:text-primary-token ${following ? "text-primary-token" : "text-muted"}`}
+        aria-label={following ? "Siguiendo" : "Seguir"}
+      >
+        {following ? (
+          <svg viewBox="0 0 24 24" fill="none" className="size-[19px]" aria-hidden="true">
+            <path d="M9 11.5L11.2 13.7L15.5 9.4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="1.8" />
+          </svg>
+        ) : (
+          <svg viewBox="0 0 24 24" fill="none" className="size-[19px]" aria-hidden="true">
+            <circle cx="10" cy="8" r="3.2" stroke="currentColor" strokeWidth="1.8" />
+            <path d="M4.5 19C5.25 15.8 7.25 14.2 10 14.2C12.75 14.2 14.75 15.8 15.5 19" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            <path d="M18 8V14M15 11H21" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          </svg>
+        )}
+      </button>
+    );
+  };
+
   const formatRelativeTime = (iso: string | null) => {
     if (!iso) return "";
     const diff = Date.now() - new Date(iso).getTime();
@@ -1692,8 +1825,8 @@ function FeedCard({
       >
         {/* Progress bars — rendered below the header row, see header section below */}
 
-        {/* Backgrounds — all rendered at once so images preload in parallel */}
-        {slides.map((slide, i) => {
+        {/* Backgrounds for text-only posts */}
+        {!post.hasImage && slides.map((slide, i) => {
           const active = i === clampedIndex;
           if (slide.type === "cover") {
             return post.hasImage && post.coverImage ? (
@@ -1735,330 +1868,74 @@ function FeedCard({
           return null;
         })}
 
-        {/* Text content (only for text-only posts) — same layout as desktop */}
+        {/* Text content (only for text-only posts) */}
         {!post.hasImage && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center px-[max(var(--page-margin-x),env(safe-area-inset-left))]">
-            <div className="w-full max-w-[420px] rounded-2xl border border-[var(--border)] p-6">
-              <div className="flex items-center gap-3 mb-5">
-                <Link href={`/profile/${post.plan.ownerUserId}`} onClick={(e) => e.stopPropagation()}>
-                  <div className="flex size-[40px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-raised)]">
-                    {post.avatarImage ? (
-                      <NextImage src={post.avatarImage} alt={post.avatarLabel} width={40} height={40} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
-                    ) : (
-                      <span className="text-[14px] font-[700] text-[var(--text-primary)]">{post.avatarLabel}</span>
-                    )}
-                  </div>
-                </Link>
-                <div className="min-w-0 flex-1">
-                  <Link href={`/profile/${post.plan.ownerUserId}`} onClick={(e) => e.stopPropagation()} className="text-[15px] font-[800] text-[var(--text-primary)]">{post.userName}</Link>
-                  {post.plan.locationName && (
-                    <p className="text-[14px] text-[var(--text-tertiary)] mt-[1px]">{post.plan.locationName}</p>
+          <div className="absolute inset-0 z-10 flex items-center justify-center px-[max(12px,env(safe-area-inset-left))]">
+            <div className="w-full max-w-[560px] px-4 py-3 text-app">
+              <div className="flex items-start gap-3">
+                <Link href={`/profile/${post.plan.ownerUserId}`} onClick={(e) => e.stopPropagation()} className="shrink-0">
+                  <div className="flex size-[42px] items-center justify-center overflow-hidden rounded-full bg-[#1d9bf0]">
+                  {post.avatarImage ? (
+                    <NextImage src={post.avatarImage} alt={post.avatarLabel} width={42} height={42} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
+                  ) : (
+                    <span className="text-[15px] font-[800] text-white">{post.avatarLabel}</span>
                   )}
-                </div>
-                {!isOwnPost && (
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); onFollowPress(); }}
-                    className={`shrink-0 text-[14px] font-[700] transition-opacity hover:opacity-70 ${following ? "text-[var(--text-tertiary)]" : "text-[var(--text-secondary)]"}`}
-                  >
-                    {following ? "Siguiendo" : "Seguir"}
-                  </button>
-                )}
-              </div>
-              {post.plan.title && (
-                <p className="text-[20px] font-[800] leading-tight text-[var(--text-primary)]">{post.plan.title}</p>
-              )}
-              {post.text && (
-                <p className="mt-3 text-[17px] leading-[1.55] text-[var(--text-primary)]">{post.text}</p>
-              )}
-              <p className="mt-3 text-[14px] font-[600] text-[var(--text-tertiary)]">
-                {formatDate(post.plan.startsAt) === formatDate(post.plan.endsAt)
-                  ? formatDate(post.plan.startsAt)
-                  : `${formatDate(post.plan.startsAt)} – ${formatDate(post.plan.endsAt)}`}
-              </p>
-              <div className="mt-4 flex items-center gap-3">
-                <button
-                  type="button"
-                  className="flex items-center gap-1.5 text-[var(--text-secondary)] disabled:opacity-40 transition-opacity hover:opacity-70"
-                  onClick={(e) => { e.stopPropagation(); onLikeToggle(); }}
-                  disabled={!currentUserId || likeLoading}
-                  aria-label={liked ? "Quitar like" : "Dar like"}
-                >
-                  <PlaneIcon liked={liked} animating={likeAnimating} size={24} className={liked ? "text-primary-token" : ""} />
-                  <span className={`text-[14px] font-[700] ${likeCount > 0 ? "" : "invisible"}`}>{likeCount || 0}</span>
-                </button>
-                <button
-                  type="button"
-                  className="flex items-center gap-1.5 text-[var(--text-secondary)] transition-opacity hover:opacity-70"
-                  onClick={(e) => { e.stopPropagation(); openCommentsModal(); }}
-                  aria-label="Comentarios"
-                >
-                  <svg viewBox="0 0 24 24" fill="currentColor" className="size-[24px]" aria-hidden="true">
-                    <path d="M12 4C7.582 4 4 6.91 4 10.5C4 12.31 4.913 13.947 6.39 15.109C6.272 16.213 5.79 17.343 4.98 18.316C4.787 18.549 5.02 18.88 5.315 18.785C7.005 18.243 8.357 17.471 9.235 16.86C10.115 17.113 11.04 17.25 12 17.25C16.418 17.25 20 14.34 20 10.75C20 7.16 16.418 4 12 4Z" />
-                  </svg>
-                  <span className={`text-[14px] font-[700] ${commentsSection.length > 0 ? "" : "invisible"}`}>{commentsSection.length || 0}</span>
-                </button>
-                <button
-                  type="button"
-                  className={`transition-opacity hover:opacity-70 ${saved ? "text-primary-token" : "text-[var(--text-secondary)]"}`}
-                  onClick={(e) => { e.stopPropagation(); handleToggleSave(); }}
-                  aria-label={saved ? "Quitar guardado" : "Guardar"}
-                >
-                  <BookmarkIcon size={24} />
-                </button>
-                <Link
-                  href={`/plan/${post.plan.id}`}
-                  onClick={(e) => e.stopPropagation()}
-                  className="ml-auto flex items-center gap-1 text-[14px] font-[700] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
-                >
-                  Ver plan
-                  <svg viewBox="0 0 24 24" fill="none" className="size-[12px]" aria-hidden="true">
-                    <path d="M13 3L21 12M21 12L13 21M21 12H3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </Link>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Top: avatar + name + follow + progress bars (image posts only) */}
-        {post.hasImage && <div className="absolute inset-x-0 top-0 z-20 flex flex-col pt-[var(--feed-mobile-header-top)]" style={{ filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.45))" }}>
-          {/* Progress bars row */}
-          {slides.length > 1 && (
-            <div className="flex items-center gap-[3px] px-[var(--feed-mobile-side-inset)] pb-2">
-              {slides.map((_, i) => (
-                <div
-                  key={i}
-                  className="h-[2.5px] rounded-full transition-all duration-300"
-                  style={{ flex: 1, background: i === clampedIndex ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.28)" }}
-                />
-              ))}
-            </div>
-          )}
-          {/* Avatar + name row */}
-          <div className="flex items-center gap-2.5 px-[var(--feed-mobile-side-inset)]">
-          <Link
-            href={`/profile/${post.plan.ownerUserId}`}
-            onClick={(e) => e.stopPropagation()}
-            className="flex items-center gap-2 min-w-0"
-          >
-            <div className="flex size-[var(--feed-mobile-avatar-size)] shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-raised)]">
-              {post.avatarImage ? (
-                <NextImage src={post.avatarImage} alt={post.avatarLabel} width={34} height={34} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
-              ) : (
-                <span className="text-[14px] font-[700] text-white">{post.avatarLabel}</span>
-              )}
-            </div>
-            <span className="text-[15px] font-[800] text-white truncate">{post.userName}</span>
-          </Link>
-          {!isOwnPost && (
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); onFollowPress(); }}
-              className={`ml-1 shrink-0 text-[14px] font-[700] transition-opacity ${following ? "text-white/50" : "text-white"}`}
-            >
-              {following ? "· Siguiendo" : "· Seguir"}
-            </button>
-          )}
-          <Link
-            href={`/plan/${post.plan.id}`}
-            onClick={(e) => e.stopPropagation()}
-            className="ml-auto shrink-0 flex items-center gap-1 text-[14px] font-[700] text-white transition-opacity hover:opacity-70"
-          >
-            Ver plan
-            <svg viewBox="0 0 24 24" fill="none" className="size-[11px]" aria-hidden="true">
-              <path d="M13 3L21 12M21 12L13 21M21 12H3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </Link>
-          </div>{/* end avatar row */}
-        </div>}{/* end header */}
-
-        {/* Right: actions (image posts only) */}
-        {post.hasImage && <div
-          className="absolute bottom-0 right-[var(--feed-mobile-side-inset)] z-20 flex flex-col items-center gap-[var(--feed-mobile-actions-gap)]"
-          style={{ paddingBottom: 'var(--feed-mobile-actions-bottom)', filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.4))" }}
-        >
-          <button
-            type="button"
-            className="flex flex-col items-center gap-1 text-white disabled:opacity-40 active:scale-90 transition-transform"
-            onClick={(e) => { e.stopPropagation(); onLikeToggle(); }}
-            disabled={!currentUserId || likeLoading}
-            aria-label={liked ? "Quitar like" : "Dar like"}
-          >
-            <PlaneIcon liked={liked} animating={likeAnimating} size={34} className={liked ? "text-primary-token" : "text-white"} style={{ width: "var(--feed-mobile-icon-size)", height: "var(--feed-mobile-icon-size)" }} />
-            <span className={`text-[13px] font-[700] leading-none ${likeCount > 0 ? "text-white" : "invisible"}`}>{likeCount || 0}</span>
-          </button>
-          <button
-            type="button"
-            className="flex flex-col items-center gap-1 text-white active:scale-90 transition-transform"
-            onClick={(e) => { e.stopPropagation(); openCommentsModal(); }}
-            aria-label="Comentarios"
-          >
-            <svg viewBox="0 0 24 24" fill="currentColor" className="size-[34px]" style={{ width: "var(--feed-mobile-icon-size)", height: "var(--feed-mobile-icon-size)" }} aria-hidden="true">
-              <path d="M12 4C7.582 4 4 6.91 4 10.5C4 12.31 4.913 13.947 6.39 15.109C6.272 16.213 5.79 17.343 4.98 18.316C4.787 18.549 5.02 18.88 5.315 18.785C7.005 18.243 8.357 17.471 9.235 16.86C10.115 17.113 11.04 17.25 12 17.25C16.418 17.25 20 14.34 20 10.75C20 7.16 16.418 4 12 4Z" />
-            </svg>
-            <span className={`text-[13px] font-[700] leading-none ${commentsSection.length > 0 ? "text-white" : "invisible"}`}>{commentsSection.length || 0}</span>
-          </button>
-        </div>}
-
-        {post.hasImage && !isOwnPost && (
-          <button
-            type="button"
-            className="absolute bottom-0 right-[var(--feed-mobile-side-inset)] z-20 flex items-center justify-center text-white active:scale-90 transition-transform"
-            style={{ paddingBottom: 'var(--feed-mobile-footer-bottom)', filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.4))" }}
-            onClick={(e) => { e.stopPropagation(); handleToggleSave(); }}
-            aria-label={saved ? "Quitar guardado" : "Guardar"}
-          >
-            <svg width={34} height={34} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className={saved ? "text-primary-token" : "text-white"} style={{ width: "var(--feed-mobile-icon-size)", height: "var(--feed-mobile-icon-size)" }}>
-              <path d="M7 4.5H17C17.55 4.5 18 4.95 18 5.5V20L12 16.2L6 20V5.5C6 4.95 6.45 4.5 7 4.5Z" />
-            </svg>
-          </button>
-        )}
-
-        {/* Bottom: info (image posts only) */}
-        {post.hasImage && <div
-          className="absolute inset-x-0 bottom-0 z-20 px-[var(--feed-mobile-side-inset)] pr-[76px]"
-          style={{ paddingBottom: 'var(--feed-mobile-footer-bottom)', filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.45))" }}
-        >
-          {currentSlide.type === "summary" ? (
-            /* Summary slide: mini itinerary + expenses (sombra en contenedor padre) */
-            <div className="space-y-4">
-              {post.itinerarySnapshot && post.itinerarySnapshot.length > 0 && (() => {
-                const items = post.itinerarySnapshot.slice(0, 4);
-                const hasMore = post.itinerarySnapshot.length > 4;
-                return (
-                  <div>
-                    <p className="text-[10px] font-[700] text-white/45 uppercase tracking-[0.14em] mb-2.5">
-                      {post.itinerarySnapshot.length} {post.itinerarySnapshot.length === 1 ? "actividad" : "actividades"}
-                    </p>
-                    <div className="relative pl-6">
-                      {/* vertical line */}
-                      <div className="absolute left-[8px] top-1 bottom-1 w-px bg-white/15" />
-                      <div className="space-y-2.5">
-                        {items.map((item, i) => (
-                          <div key={i} className="relative flex items-start gap-2.5">
-                            {/* node */}
-                            <div
-                              className="absolute -left-6 top-[3px] size-[17px] rounded-full flex items-center justify-center text-[9px] leading-none border border-white/15"
-                              style={{ background: "rgba(255,255,255,0.08)" }}
-                            >
-                              {getSlideActivityEmoji(item.tipo)}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-[13px] font-[700] text-white leading-snug truncate">{item.titulo}</p>
-                              {item.ubicacion_nombre && (
-                                <p className="text-[11px] text-white/45 truncate mt-0.5">{item.ubicacion_nombre}</p>
-                              )}
-                            </div>
-                            <span className="text-[11px] text-white/40 shrink-0 tabular-nums mt-0.5 font-[500]">{fmtSlideTime(item.inicio_at)}</span>
-                          </div>
-                        ))}
-                        {hasMore && (
-                          <div className="relative flex items-center gap-2">
-                            <div className="absolute -left-6 size-[17px] flex items-center justify-center">
-                              <div className="flex flex-col gap-[3px] items-center">
-                                <div className="size-[3px] rounded-full bg-white/25" />
-                                <div className="size-[3px] rounded-full bg-white/25" />
-                                <div className="size-[3px] rounded-full bg-white/25" />
-                              </div>
-                            </div>
-                            <p className="text-[12px] text-white/35 font-[500]">+{post.itinerarySnapshot.length - 4} más</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
                   </div>
-                );
-              })()}
-              {post.expensesSnapshot && (
-                <div className="flex items-baseline gap-2">
-                  <p className="text-[11px] font-[600] text-white/45 uppercase tracking-[0.1em]">Total</p>
-                  <p className="text-[22px] font-[800] text-white tracking-tight leading-none">
-                    {post.expensesSnapshot.currency} {Math.round(post.expensesSnapshot.total).toLocaleString("es-ES")}
-                  </p>
-                </div>
-              )}
-            </div>
-          ) : (
-            /* Cover / photo slides: title + location */
-            <div className="min-w-0">
-              {post.plan.title && (
-                <p className="text-[var(--feed-mobile-title-size)] font-[800] leading-tight text-white">{post.plan.title}</p>
-              )}
-              <p className="mt-[2px] text-[var(--feed-mobile-meta-size)] font-[600] text-white/80">
-                {[
-                  post.plan.locationName,
-                  formatDate(post.plan.startsAt) === formatDate(post.plan.endsAt)
-                    ? formatDate(post.plan.startsAt)
-                    : `${formatDate(post.plan.startsAt)} – ${formatDate(post.plan.endsAt)}`
-                ].filter(Boolean).join(" · ")}
-              </p>
-            </div>
-          )}
-        </div>}
-      </div>
+                </Link>
 
-      {/* ── DESKTOP: TikTok-style full-screen ── */}
-      <div className="hidden md:flex h-full items-center justify-center overflow-hidden">
+                <div className="min-w-0 flex-1">
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <div className="flex min-w-0 items-baseline gap-1.5">
+                      <Link href={`/profile/${post.plan.ownerUserId}`} onClick={(e) => e.stopPropagation()} className="truncate text-[15px] font-[800] leading-tight text-app">{post.userName}</Link>
+                      {[mobileLocationLabel, mobileDateLabel].filter(Boolean).map((meta) => (
+                        <span key={meta} className="min-w-0 truncate text-[14px] text-muted">
+                          <span className="px-1.5">·</span>{meta}
+                        </span>
+                      ))}
+                    </div>
+                    {renderMobileFollowButton()}
+                  </div>
 
-        {/* Content: image centered, no side column */}
-        <div className="flex h-full w-full items-center justify-center px-8 py-8">
-
-          {post.hasImage && post.coverImage ? (
-            <div className="flex items-center gap-5">
-              {/* Image */}
-              <div
-                className="relative flex shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-black"
-                style={{
-                  width: "min(50dvw, 620px)",
-                  height: "min(calc(100dvh - 160px), 820px)",
-                  minWidth: "340px",
-                  minHeight: "420px",
-                }}
-              >
-                {!imgLoaded && <div className="skeleton-shimmer absolute inset-0" aria-hidden="true" />}
-                <NextImage
-                  src={post.coverImage}
-                  alt="Imagen del plan"
-                  width={1600}
-                  height={1600}
-                  className="block max-h-full max-w-full object-contain transition-opacity duration-300"
-                  style={{ opacity: imgLoaded ? 1 : 0 }}
-                  unoptimized
-                  onLoad={() => setImgLoaded(true)}
-                  onError={() => setImgLoaded(true)}
-                />
-
-                {/* Top gradient */}
-                <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-36 rounded-t-2xl bg-gradient-to-b from-black/65 to-transparent" />
-                {/* Bottom gradient */}
-                <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-40 rounded-b-2xl bg-gradient-to-t from-black/70 to-transparent" />
-
-                {/* Top overlay: avatar + name + follow */}
-                <div className="absolute inset-x-0 top-0 z-20 px-4 pb-8 pt-4" style={{ filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.45))" }}>
-                  <div className="flex items-center gap-2.5">
-                    <Link href={`/profile/${post.plan.ownerUserId}`} className="flex items-center gap-2.5 min-w-0">
-                      <div className="flex size-[34px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/30 bg-white/10">
-                        {post.avatarImage ? (
-                          <NextImage src={post.avatarImage} alt={post.avatarLabel} width={34} height={34} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
-                        ) : (
-                          <span className="text-[14px] font-[700] text-white">{post.avatarLabel}</span>
-                        )}
-                      </div>
-                      <span className="text-[14px] font-[800] text-white truncate">{post.userName}</span>
-                    </Link>
-                    {!isOwnPost && (
-                      <button
-                        type="button"
-                        onClick={onFollowPress}
-                        className={`ml-1 shrink-0 text-[14px] font-[700] transition-opacity hover:opacity-70 ${following ? "text-white/45" : "text-white/80"}`}
-                      >
-                        {following ? "Siguiendo" : "· Seguir"}
-                      </button>
-                    )}
+                  {post.plan.title && (
+                    <p className="mt-1 text-[15px] font-[700] leading-snug text-app">{post.plan.title}</p>
+                  )}
+                  {post.text && (
+                    <p className="mt-0.5 text-[15px] leading-snug text-app">{post.text}</p>
+                  )}
+                  <div className="mt-3 flex items-center justify-between gap-3 text-muted">
+                    <button
+                      type="button"
+                      className={mobileActionButtonClass}
+                      onClick={(e) => { e.stopPropagation(); onLikeToggle(); }}
+                      disabled={!currentUserId || likeLoading}
+                      aria-label={liked ? "Quitar like" : "Dar like"}
+                    >
+                      <PlaneIcon liked={liked} animating={likeAnimating} size={18} className={liked ? "text-primary-token" : ""} />
+                      <span className={`text-[13px] ${likeCount > 0 ? "" : "invisible"}`}>{likeCount || 0}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={mobileActionButtonClass}
+                      onClick={(e) => { e.stopPropagation(); openCommentsModal(); }}
+                      aria-label="Comentarios"
+                    >
+                      <svg viewBox="0 0 24 24" fill="currentColor" className="size-[18px]" aria-hidden="true">
+                        <path d="M12 4C7.582 4 4 6.91 4 10.5C4 12.31 4.913 13.947 6.39 15.109C6.272 16.213 5.79 17.343 4.98 18.316C4.787 18.549 5.02 18.88 5.315 18.785C7.005 18.243 8.357 17.471 9.235 16.86C10.115 17.113 11.04 17.25 12 17.25C16.418 17.25 20 14.34 20 10.75C20 7.16 16.418 4 12 4Z" />
+                      </svg>
+                      <span className={`text-[13px] ${commentsSection.length > 0 ? "" : "invisible"}`}>{commentsSection.length || 0}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`${mobileSaveButtonClass} ${saved ? "text-primary-token" : ""}`}
+                      onClick={(e) => { e.stopPropagation(); handleToggleSave(); }}
+                      aria-label={saved ? "Quitar guardado" : "Guardar"}
+                    >
+                      <BookmarkIcon size={18} />
+                    </button>
                     <Link
                       href={`/plan/${post.plan.id}`}
-                      className="ml-auto shrink-0 flex items-center gap-1 text-[14px] font-[700] text-white transition-opacity hover:opacity-70"
+                      onClick={(e) => e.stopPropagation()}
+                      className="flex items-center gap-1 text-[13px] font-[700] text-muted transition-colors hover:text-primary-token"
                     >
                       Ver plan
                       <svg viewBox="0 0 24 24" fill="none" className="size-[11px]" aria-hidden="true">
@@ -2067,87 +1944,391 @@ function FeedCard({
                     </Link>
                   </div>
                 </div>
-
-                {/* Bottom: title + location */}
-                <div className="absolute inset-x-0 bottom-0 z-20 px-4 pb-6 pt-10" style={{ filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.45))" }}>
-                  <div className="min-w-0">
-                    {post.plan.title && (
-                      <p className="text-[16px] font-[800] leading-tight text-white">{post.plan.title}</p>
-                    )}
-                    <p className="mt-[2px] text-[14px] font-[600] text-white/85">
-                      {[
-                        post.plan.locationName,
-                        formatDate(post.plan.startsAt) === formatDate(post.plan.endsAt)
-                          ? formatDate(post.plan.startsAt)
-                          : `${formatDate(post.plan.startsAt)} – ${formatDate(post.plan.endsAt)}`
-                      ].filter(Boolean).join(" · ")}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Actions column — lateral derecho, centrado verticalmente */}
-              <div className="flex shrink-0 flex-col items-center justify-center gap-6" style={{ filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.35))" }}>
-                <button
-                  type="button"
-                  className="flex flex-col items-center gap-1 disabled:opacity-40 active:scale-90 transition-transform"
-                  onClick={onLikeToggle}
-                  disabled={!currentUserId || likeLoading}
-                  aria-label={liked ? "Quitar like" : "Dar like"}
-                >
-                  <PlaneIcon liked={liked} animating={likeAnimating} size={34} className={liked ? "text-primary-token" : "text-white"} />
-                  <span className={`text-[13px] font-[700] leading-none text-white ${likeCount > 0 ? "" : "invisible"}`}>{likeCount || 0}</span>
-                </button>
-                <button
-                  type="button"
-                  className="flex flex-col items-center gap-1 text-white active:scale-90 transition-transform"
-                  onClick={openCommentsModal}
-                  aria-label="Comentarios"
-                >
-                  <svg viewBox="0 0 24 24" fill="currentColor" className="size-[34px]" aria-hidden="true">
-                    <path d="M12 4C7.582 4 4 6.91 4 10.5C4 12.31 4.913 13.947 6.39 15.109C6.272 16.213 5.79 17.343 4.98 18.316C4.787 18.549 5.02 18.88 5.315 18.785C7.005 18.243 8.357 17.471 9.235 16.86C10.115 17.113 11.04 17.25 12 17.25C16.418 17.25 20 14.34 20 10.75C20 7.16 16.418 4 12 4Z" />
-                  </svg>
-                  <span className={`text-[13px] font-[700] leading-none text-white ${commentsSection.length > 0 ? "" : "invisible"}`}>{commentsSection.length || 0}</span>
-                </button>
-                {!isOwnPost && (
-                  <button
-                    type="button"
-                    className="flex flex-col items-center gap-1 active:scale-90 transition-transform"
-                    onClick={handleToggleSave}
-                    aria-label={saved ? "Quitar guardado" : "Guardar"}
-                  >
-                    <svg width={34} height={34} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className={saved ? "text-primary-token" : "text-white"}>
-                      <path d="M7 4.5H17C17.55 4.5 18 4.95 18 5.5V20L12 16.2L6 20V5.5C6 4.95 6.45 4.5 7 4.5Z" />
-                    </svg>
-                    <span className="invisible text-[13px] font-[700] leading-none">0</span>
-                  </button>
-                )}
               </div>
             </div>
-          ) : (
-            /* Text-only post */
-            <div className="w-full max-w-[500px] rounded-2xl border border-[var(--border)] p-8">
-              <div className="flex items-center gap-3 mb-5">
-                <Link href={`/profile/${post.plan.ownerUserId}`}>
-                  <div className="flex size-[40px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-raised)] transition-opacity hover:opacity-80">
+          </div>
+        )}
+
+        {/* Image post in Twitter-like mobile layout */}
+        {post.hasImage && post.coverImage && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center overflow-y-auto bg-app px-[max(12px,env(safe-area-inset-left))] py-4">
+            <div className="w-full max-w-[560px] text-app">
+              <div className="flex items-start gap-3">
+                <Link href={`/profile/${post.plan.ownerUserId}`} onClick={(e) => e.stopPropagation()} className="shrink-0">
+                  <div className="flex size-[42px] items-center justify-center overflow-hidden rounded-full bg-[#1d9bf0]">
                     {post.avatarImage ? (
-                      <NextImage src={post.avatarImage} alt={post.avatarLabel} width={40} height={40} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
+                      <NextImage src={post.avatarImage} alt={post.avatarLabel} width={42} height={42} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
                     ) : (
-                      <span className="text-[14px] font-[700] text-[var(--text-primary)]">{post.avatarLabel}</span>
+                      <span className="text-[15px] font-[800] text-white">{post.avatarLabel}</span>
                     )}
                   </div>
                 </Link>
+
                 <div className="min-w-0 flex-1">
-                  <Link href={`/profile/${post.plan.ownerUserId}`} className="text-[15px] font-[800] text-[var(--text-primary)]">{post.userName}</Link>
-                  {post.plan.locationName && (
-                    <p className="text-[14px] text-[var(--text-tertiary)] mt-[1px]">{post.plan.locationName}</p>
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <div className="flex min-w-0 items-baseline gap-1.5">
+                      <Link href={`/profile/${post.plan.ownerUserId}`} onClick={(e) => e.stopPropagation()} className="truncate text-[15px] font-[800] leading-tight text-app">{post.userName}</Link>
+                      {[mobileLocationLabel, mobileDateLabel].filter(Boolean).map((meta) => (
+                        <span key={meta} className="min-w-0 truncate text-[14px] text-muted">
+                          <span className="px-1.5">·</span>{meta}
+                        </span>
+                      ))}
+                    </div>
+                    {renderMobileFollowButton()}
+                  </div>
+
+                  {post.plan.title && (
+                    <p className="mt-1 text-[15px] font-[700] leading-snug text-app">{post.plan.title}</p>
                   )}
+                  {post.text && (
+                    <p className="mt-0.5 text-[15px] leading-snug text-app">{post.text}</p>
+                  )}
+
+                  <div
+                    className="relative mt-3 w-full overflow-hidden rounded-[14px] border border-app bg-surface-inset"
+                    style={{ aspectRatio: coverAspect ? String(coverAspect) : "4/5" }}
+                  >
+                    {!imgLoaded && <div className="skeleton-shimmer absolute inset-0 z-[2]" aria-hidden="true" />}
+                    {slides.map((slide, i) => {
+                      const active = i === clampedIndex;
+                      const base = "absolute inset-0 transition-opacity duration-300 ease-out";
+                      if (slide.type === "cover") return (
+                        <div key="mobile-twitter-cover" className={`${base} bg-surface-inset ${active ? "z-[1] opacity-100" : "z-0 opacity-0"}`}>
+                          <NextImage
+                            src={post.coverImage!}
+                            alt="Imagen del plan"
+                            fill
+                            className="object-contain"
+                            style={{ opacity: imgLoaded ? 1 : 0, transition: "opacity 0.3s" }}
+                            unoptimized
+                            onLoad={(e) => {
+                              const img = e.currentTarget as HTMLImageElement;
+                              if (img.naturalWidth && img.naturalHeight) {
+                                setCoverAspect(img.naturalWidth / img.naturalHeight);
+                              }
+                              setImgLoaded(true);
+                            }}
+                            onError={() => setImgLoaded(true)}
+                          />
+                        </div>
+                      );
+                      if (slide.type === "photo") return (
+                        <div key={`mobile-twitter-photo-${i}`} className={`${base} bg-surface-inset ${active ? "z-[1] opacity-100" : "z-0 opacity-0"}`}>
+                          <NextImage src={slide.url} alt="" fill className="object-contain" unoptimized />
+                        </div>
+                      );
+                      if (slide.type === "summary") return (
+                        <div key="mobile-twitter-summary" className={`${base} bg-[#0d0e12] ${active ? "z-[1] opacity-100" : "z-0 opacity-0"}`}>
+                          <NextImage src={post.coverImage!} alt="" fill className="scale-110 object-cover opacity-15 blur-xl" unoptimized />
+                          <div className="absolute inset-0 bg-black/60" />
+                          <div className="absolute inset-0 z-10 flex flex-col justify-end gap-3 p-5">
+                            {post.itinerarySnapshot && post.itinerarySnapshot.length > 0 && (
+                              <div className="space-y-[4px]">
+                                {post.itinerarySnapshot.slice(0, 4).map((item, idx) => (
+                                  <div key={idx} className="flex items-center gap-2">
+                                    <span className="text-[12px]">{getSlideActivityEmoji(item.tipo)}</span>
+                                    <span className="truncate text-[13px] font-[600] text-white/90">{item.titulo}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {post.expensesSnapshot && (
+                              <p className="text-[24px] font-[800] tracking-tight text-white">{post.expensesSnapshot.currency} {Math.round(post.expensesSnapshot.total).toLocaleString("es-ES")}</p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                      return null;
+                    })}
+                    {slidesLen > 1 && (
+                      <div className="absolute inset-x-0 bottom-3 z-20 flex items-center justify-center gap-[5px]">
+                        {slides.map((_, i) => (
+                          <div
+                            key={i}
+                            className="rounded-full transition-all duration-200"
+                            style={{
+                              width: i === clampedIndex ? "16px" : "6px",
+                              height: "6px",
+                              background: i === clampedIndex ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.45)",
+                            }}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-between gap-3 text-muted">
+                    <button
+                      type="button"
+                      className={mobileActionButtonClass}
+                      onClick={(e) => { e.stopPropagation(); onLikeToggle(); }}
+                      disabled={!currentUserId || likeLoading}
+                      aria-label={liked ? "Quitar like" : "Dar like"}
+                    >
+                      <PlaneIcon liked={liked} animating={likeAnimating} size={18} className={liked ? "text-primary-token" : ""} />
+                      <span className={`text-[13px] ${likeCount > 0 ? "" : "invisible"}`}>{likeCount || 0}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={mobileActionButtonClass}
+                      onClick={(e) => { e.stopPropagation(); openCommentsModal(); }}
+                      aria-label="Comentarios"
+                    >
+                      <svg viewBox="0 0 24 24" fill="currentColor" className="size-[18px]" aria-hidden="true">
+                        <path d="M12 4C7.582 4 4 6.91 4 10.5C4 12.31 4.913 13.947 6.39 15.109C6.272 16.213 5.79 17.343 4.98 18.316C4.787 18.549 5.02 18.88 5.315 18.785C7.005 18.243 8.357 17.471 9.235 16.86C10.115 17.113 11.04 17.25 12 17.25C16.418 17.25 20 14.34 20 10.75C20 7.16 16.418 4 12 4Z" />
+                      </svg>
+                      <span className={`text-[13px] ${commentsSection.length > 0 ? "" : "invisible"}`}>{commentsSection.length || 0}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`${mobileSaveButtonClass} ${saved ? "text-primary-token" : ""}`}
+                      onClick={(e) => { e.stopPropagation(); handleToggleSave(); }}
+                      aria-label={saved ? "Quitar guardado" : "Guardar"}
+                    >
+                      <BookmarkIcon size={18} />
+                    </button>
+                    <Link
+                      href={`/plan/${post.plan.id}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="flex items-center gap-1 text-[13px] font-[700] text-muted transition-colors hover:text-primary-token"
+                    >
+                      Ver plan
+                      <svg viewBox="0 0 24 24" fill="none" className="size-[11px]" aria-hidden="true">
+                        <path d="M13 3L21 12M21 12L13 21M21 12H3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── DESKTOP: Instagram-style card ── */}
+      <div className="hidden md:flex h-full items-center justify-center overflow-hidden">
+        <div className="flex h-full w-full items-center justify-center px-8 py-6">
+
+          {post.hasImage && post.coverImage ? (
+            /* ── Card Instagram ── */
+            <div className="flex items-start gap-3 w-full max-w-[520px]">
+              {/* Avatar outside card — top left */}
+              <Link href={`/profile/${post.plan.ownerUserId}`} className="shrink-0 mt-1">
+                <div className="flex size-10 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset">
+                  {post.avatarImage ? (
+                    <NextImage src={post.avatarImage} alt={post.avatarLabel} width={40} height={40} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
+                  ) : (
+                    <span className="text-[13px] font-[700] text-app">{post.avatarLabel}</span>
+                  )}
+                </div>
+              </Link>
+
+              {/* Card */}
+              <div className="min-w-0 flex-1 overflow-hidden rounded-[18px] border border-app bg-surface">
+
+              {/* Header */}
+              <div className="flex items-start gap-3 px-4 py-[11px]">
+                <div className="min-w-0 flex-1">
+                  <Link href={`/profile/${post.plan.ownerUserId}`} className="text-[14px] font-[700] text-app hover:underline">{post.userName}</Link>
+                  <p className="text-[12px] text-muted leading-tight">
+                    {[
+                      post.plan.locationName,
+                      formatDate(post.plan.startsAt) === formatDate(post.plan.endsAt)
+                        ? formatDate(post.plan.startsAt)
+                        : `${formatDate(post.plan.startsAt)} – ${formatDate(post.plan.endsAt)}`
+                    ].filter(Boolean).join(" · ")}
+                  </p>
                 </div>
                 {!isOwnPost && (
                   <button
                     type="button"
                     onClick={onFollowPress}
-                    className={`shrink-0 text-[14px] font-[700] transition-opacity hover:opacity-70 ${following ? "text-[var(--text-tertiary)]" : "text-[var(--text-secondary)]"}`}
+                    className={`mt-[1px] shrink-0 text-[13px] font-[700] leading-tight transition-colors ${following ? "text-muted" : "text-[var(--primary)]"}`}
+                  >
+                    {following ? "Siguiendo" : "Seguir"}
+                  </button>
+                )}
+              </div>
+
+              {/* Image / Slides section — ratio from cover image */}
+              <div
+                className="relative w-full bg-black"
+                style={{ aspectRatio: coverAspect ? String(coverAspect) : "4/5" }}
+              >
+                {/* Skeleton while loading */}
+                {!imgLoaded && <div className="skeleton-shimmer absolute inset-0 z-[2]" aria-hidden="true" />}
+
+                {/* All slides */}
+                {slides.map((slide, i) => {
+                  const active = i === clampedIndex;
+                  const base = "absolute inset-0 transition-opacity duration-300 ease-out";
+                  if (slide.type === "cover") return (
+                    <div key="cover" className={`${base} bg-black ${active ? "opacity-100 z-[1]" : "opacity-0 z-0"}`}>
+                      <NextImage
+                        src={post.coverImage!}
+                        alt="Imagen del plan"
+                        fill
+                        className="object-contain"
+                        style={{ opacity: imgLoaded ? 1 : 0, transition: "opacity 0.3s" }}
+                        unoptimized
+                        onLoad={(e) => {
+                          const img = e.currentTarget as HTMLImageElement;
+                          if (img.naturalWidth && img.naturalHeight) {
+                            setCoverAspect(img.naturalWidth / img.naturalHeight);
+                          }
+                          setImgLoaded(true);
+                        }}
+                        onError={() => setImgLoaded(true)}
+                      />
+                    </div>
+                  );
+                  if (slide.type === "photo") return (
+                    <div key={`photo-${i}`} className={`${base} bg-black ${active ? "opacity-100 z-[1]" : "opacity-0 z-0"}`}>
+                      <NextImage src={slide.url} alt="" fill className="object-contain" unoptimized />
+                    </div>
+                  );
+                  if (slide.type === "summary") return (
+                    <div key="summary" className={`${base} bg-[#0d0e12] ${active ? "opacity-100 z-[1]" : "opacity-0 z-0"}`}>
+                      <NextImage src={post.coverImage!} alt="" fill className="object-cover opacity-15 scale-110 blur-xl" unoptimized />
+                      <div className="absolute inset-0 bg-black/60" />
+                      <div className="absolute inset-0 z-10 flex flex-col justify-end p-5 gap-3">
+                        {post.itinerarySnapshot && post.itinerarySnapshot.length > 0 && (
+                          <div className="space-y-[4px]">
+                            {post.itinerarySnapshot.slice(0, 4).map((item, idx) => (
+                              <div key={idx} className="flex items-center gap-2">
+                                <span className="text-[12px]">{getSlideActivityEmoji(item.tipo)}</span>
+                                <span className="text-[13px] font-[600] text-white/90 truncate">{item.titulo}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {post.expensesSnapshot && (
+                          <p className="text-[24px] font-[800] text-white tracking-tight">{post.expensesSnapshot.currency} {Math.round(post.expensesSnapshot.total).toLocaleString("es-ES")}</p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                  return null;
+                })}
+
+                {/* Carousel arrows — solo fotos/slides reales */}
+                {slidesLen > 1 && clampedIndex > 0 && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); goPrev(); }}
+                    className="absolute left-2.5 top-1/2 -translate-y-1/2 z-30 flex size-8 items-center justify-center text-white transition-all active:scale-90" style={{ filter: "drop-shadow(0 1px 3px rgba(0,0,0,0.6))" }}
+                    aria-label="Foto anterior"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" className="size-4" aria-hidden="true"><path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                  </button>
+                )}
+                {slidesLen > 1 && clampedIndex < slidesLen - 1 && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); goNext(); }}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 z-30 flex size-8 items-center justify-center text-white transition-all active:scale-90" style={{ filter: "drop-shadow(0 1px 3px rgba(0,0,0,0.6))" }}
+                    aria-label="Foto siguiente"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" className="size-4" aria-hidden="true"><path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                  </button>
+                )}
+
+                {/* Dots inside image — bottom center */}
+                {slidesLen > 1 && (
+                  <div className="absolute bottom-3 inset-x-0 z-20 flex items-center justify-center gap-[5px]">
+                    {slides.map((_, i) => (
+                      <div
+                        key={i}
+                        className="rounded-full transition-all duration-200"
+                        style={{
+                          width: i === clampedIndex ? "16px" : "6px",
+                          height: "6px",
+                          background: i === clampedIndex ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.45)",
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Action bar */}
+              <div className="flex items-center gap-4 px-4 pt-3 pb-[10px]">
+                <button
+                  type="button"
+                  className="flex items-center gap-1.5 disabled:opacity-40 active:scale-90 transition-transform"
+                  onClick={onLikeToggle}
+                  disabled={!currentUserId || likeLoading}
+                  aria-label={liked ? "Quitar like" : "Dar like"}
+                >
+                  <PlaneIcon liked={liked} animating={likeAnimating} size={24} className={liked ? "text-primary-token" : "text-app"} />
+                  {likeCount > 0 && <span className="text-[13px] font-[700] text-app">{likeCount}</span>}
+                </button>
+                <button
+                  type="button"
+                  className="flex items-center gap-1.5 text-app active:scale-90 transition-transform"
+                  onClick={openCommentsModal}
+                  aria-label="Comentarios"
+                >
+                  <svg viewBox="0 0 24 24" fill="currentColor" className="size-6" aria-hidden="true">
+                    <path d="M12 4C7.582 4 4 6.91 4 10.5C4 12.31 4.913 13.947 6.39 15.109C6.272 16.213 5.79 17.343 4.98 18.316C4.787 18.549 5.02 18.88 5.315 18.785C7.005 18.243 8.357 17.471 9.235 16.86C10.115 17.113 11.04 17.25 12 17.25C16.418 17.25 20 14.34 20 10.75C20 7.16 16.418 4 12 4Z" />
+                  </svg>
+                  {commentsSection.length > 0 && <span className="text-[13px] font-[700] text-app">{commentsSection.length}</span>}
+                </button>
+                {!isOwnPost && (
+                  <button
+                    type="button"
+                    className="active:scale-90 transition-transform text-app"
+                    onClick={handleToggleSave}
+                    aria-label={saved ? "Quitar guardado" : "Guardar"}
+                  >
+                    <span className={saved ? "text-primary-token" : ""}><BookmarkIcon size={24} /></span>
+                  </button>
+                )}
+              </div>
+
+              {/* Caption */}
+              {(post.plan.title || post.text) && (
+                <div className="px-4 pb-4 space-y-[2px]">
+                  {post.plan.title && (
+                    <p className="text-[15px] font-[800] text-app leading-snug">{post.plan.title}</p>
+                  )}
+                  {post.text && (
+                    <p className="text-[14px] text-app leading-snug">
+                      <span className="font-[600] mr-1">{post.userName}</span>{post.text}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+            </div>
+          ) : (
+            /* Text-only post */
+            <div className="flex items-start gap-3 w-full max-w-[540px]">
+              {/* Avatar outside card — top left */}
+              <Link href={`/profile/${post.plan.ownerUserId}`} className="shrink-0 mt-1">
+                <div className="flex size-10 items-center justify-center overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-raised)] transition-opacity hover:opacity-80">
+                  {post.avatarImage ? (
+                    <NextImage src={post.avatarImage} alt={post.avatarLabel} width={40} height={40} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
+                  ) : (
+                    <span className="text-[14px] font-[700] text-[var(--text-primary)]">{post.avatarLabel}</span>
+                  )}
+                </div>
+              </Link>
+
+              {/* Card */}
+              <div className="min-w-0 flex-1 rounded-2xl border border-[var(--border)] p-8">
+              <div className="mb-5 flex items-start gap-3">
+                <div className="min-w-0 flex-1">
+                  <Link href={`/profile/${post.plan.ownerUserId}`} className="text-[15px] font-[800] text-[var(--text-primary)]">{post.userName}</Link>
+                  <p className="mt-[1px] truncate text-[14px] text-[var(--text-tertiary)]">
+                    {[post.plan.locationName, desktopDateLabel].filter(Boolean).join(" · ")}
+                  </p>
+                </div>
+                {!isOwnPost && (
+                  <button
+                    type="button"
+                    onClick={onFollowPress}
+                    className={`mt-[1px] shrink-0 text-[14px] font-[700] leading-tight transition-opacity hover:opacity-70 ${following ? "text-[var(--text-tertiary)]" : "text-[var(--text-secondary)]"}`}
                   >
                     {following ? "Siguiendo" : "Seguir"}
                   </button>
@@ -2156,11 +2337,6 @@ function FeedCard({
               {post.text && (
                 <p className="text-[17px] leading-[1.55] text-[var(--text-primary)]">{post.text}</p>
               )}
-              <p className="mt-4 text-[14px] font-[600] text-[var(--text-tertiary)]">
-                {formatDate(post.plan.startsAt) === formatDate(post.plan.endsAt)
-                  ? formatDate(post.plan.startsAt)
-                  : `${formatDate(post.plan.startsAt)} – ${formatDate(post.plan.endsAt)}`}
-              </p>
               <div className="mt-4 flex items-center gap-3">
                 <button
                   type="button"
@@ -2201,6 +2377,7 @@ function FeedCard({
                   </svg>
                 </Link>
               </div>
+            </div>
             </div>
           )}
 
@@ -2369,21 +2546,49 @@ function FeedCard({
           </div>
         </div>
       )}
-      {showUnfollowDialog && (
-        <div className="fixed inset-0 z-[1200] flex items-end justify-center pb-[max(var(--space-6),env(safe-area-inset-bottom))] sm:items-center" onClick={() => setShowUnfollowDialog(false)}>
-          <div className="w-full max-w-[340px] rounded-modal border border-app bg-surface p-[var(--space-5)] shadow-elev-2 mx-[var(--space-4)]" onClick={(e) => e.stopPropagation()}>
-            <p className="text-body font-[var(--fw-semibold)] text-app">¿Dejar de seguir a {post.userName}?</p>
-            <p className="mt-[var(--space-1)] text-body-sm text-muted">Dejará de aparecer en tu feed.</p>
-            <div className="mt-[var(--space-4)] flex gap-[var(--space-2)]">
-              <button type="button" onClick={() => setShowUnfollowDialog(false)} className="flex-1 rounded-button border border-app py-[10px] text-body-sm font-[var(--fw-medium)] text-app transition-colors hover:bg-[var(--interactive-hover-surface)]">
-                Cancelar
-              </button>
-              <button type="button" onClick={handleUnfollow} className="flex-1 rounded-button bg-[var(--error-token,#ef4444)] py-[10px] text-body-sm font-[var(--fw-medium)] text-white transition-opacity hover:opacity-80">
+      {unfollowDialogVisible && (
+        <dialog
+          open
+          data-closing={unfollowDialogClosing ? "true" : "false"}
+          className="feed-dialog-overlay fixed inset-0 z-[1200] m-0 flex h-dvh w-dvw max-w-none items-center justify-center bg-black/55 p-[var(--space-4)] text-app backdrop:bg-black/55"
+          onCancel={(e) => { e.preventDefault(); closeUnfollowDialog(); }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) closeUnfollowDialog();
+          }}
+        >
+          <div className="feed-dialog-box w-full max-w-[380px] rounded-[20px] border border-app bg-surface p-[var(--space-5)] shadow-elev-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3">
+              <div className="flex size-[44px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset">
+                {post.avatarImage ? (
+                  <NextImage src={post.avatarImage} alt={post.avatarLabel} width={44} height={44} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
+                ) : (
+                  <span className="text-[15px] font-[800] text-app">{post.avatarLabel}</span>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-[18px] font-[600] leading-tight text-app">Dejar de seguir a {post.userName}</h3>
+              </div>
+            </div>
+            <div className="mt-5 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={confirmUnfollow}
+                className="w-full rounded-[10px] bg-[var(--error-token,#ef4444)] px-4 py-[11px] text-[14px] font-[600] text-white transition-opacity hover:opacity-90"
+              >
                 Dejar de seguir
               </button>
+              <form method="dialog">
+                <button
+                  type="button"
+                  onClick={closeUnfollowDialog}
+                  className="w-full rounded-[10px] border border-app px-4 py-[11px] text-[14px] font-[500] text-app transition-colors hover:border-app hover:bg-black/[0.04] dark:hover:bg-white/[0.08]"
+                >
+                  Cancelar
+                </button>
+              </form>
             </div>
           </div>
-        </div>
+        </dialog>
       )}
     </article>
   );
