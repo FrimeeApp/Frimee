@@ -13,7 +13,9 @@ import { countNotificacionesNoLeidas, insertNotificacion } from "@/services/api/
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { searchUsers, type PublicUserProfileDto } from "@/services/api/repositories/users.repository";
 import NotificationsPanel from "@/components/notifications/NotificationsPanel";
-import { Home, Map, CreditCard, Send, Plus, User, Search, Bell, X } from "lucide-react";
+import { Home, Map, CreditCard, Send, Plus, User, Search, Bell } from "lucide-react";
+import { CloseX } from "@/components/ui/CloseX";
+import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
 type IconProps = {
   className?: string;
 };
@@ -25,7 +27,7 @@ const SendIcon = ({ className }: IconProps = {}) => <Send className={className} 
 const PlusIcon = ({ className }: IconProps = {}) => <Plus className={className} aria-hidden />;
 const ProfileIcon = ({ className }: IconProps = {}) => <User className={className} aria-hidden />;
 const SearchIcon = ({ className }: IconProps = {}) => <Search className={className} aria-hidden />;
-const CloseIcon = ({ className }: IconProps = {}) => <X className={className} aria-hidden />;
+const CloseIcon = ({ className }: IconProps = {}) => <CloseX className={className} />;
 const BellIcon = ({ className }: IconProps = {}) => <Bell className={className} aria-hidden />;
 
 const items = [
@@ -64,7 +66,9 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
   const [hovered, setHovered] = useState(false);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [mobileFabOpen, setMobileFabOpen] = useState(false);
+  const [desktopCreateMenuOpen, setDesktopCreateMenuOpen] = useState(false);
   const [expensePickerOpen, setExpensePickerOpen] = useState(false);
+  const { isClosing: expensePickerClosing, requestClose: closeExpensePicker } = useModalCloseAnimation(() => setExpensePickerOpen(false), expensePickerOpen);
   const [expensePlans, setExpensePlans] = useState<FeedPlanItemDto[]>([]);
   const [expensePlansLoading, setExpensePlansLoading] = useState(false);
   const [notifPanelOpen, setNotifPanelOpen] = useState(false);
@@ -76,6 +80,7 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchPanelRef = useRef<HTMLDivElement>(null);
   const mobileFabRef = useRef<HTMLDivElement>(null);
+  const desktopCreateRef = useRef<HTMLDivElement>(null);
 
   const { user, profile } = useAuth();
 
@@ -103,6 +108,7 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
     setSearchPopoverOpen(false);
     setNotifPanelOpen(false);
     setMobileFabOpen(false);
+    setDesktopCreateMenuOpen(false);
   }, [pathname]);
 
   useEffect(() => {
@@ -115,6 +121,17 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [mobileFabOpen]);
+
+  useEffect(() => {
+    if (!desktopCreateMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (desktopCreateRef.current && !desktopCreateRef.current.contains(e.target as Node)) {
+        setDesktopCreateMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [desktopCreateMenuOpen]);
 
   useEffect(() => {
     if (!searchPopoverOpen) return;
@@ -193,6 +210,7 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
   };
   const openCreatePlan = () => {
     setMobileFabOpen(false);
+    setDesktopCreateMenuOpen(false);
     setExpensePickerOpen(false);
     if (onCreatePlan) {
       onCreatePlan();
@@ -203,6 +221,7 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
 
   const openCreateExpense = async () => {
     setMobileFabOpen(false);
+    setDesktopCreateMenuOpen(false);
     setExpensePickerOpen(true);
 
     if (!user?.id) {
@@ -421,25 +440,39 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
       )}
 
       {expensePickerOpen && (
-        <div className="fixed inset-0 z-[1200] flex items-end bg-black/40 px-safe pb-safe md:hidden" onClick={() => setExpensePickerOpen(false)}>
-          <div className="w-full rounded-t-[22px] border border-app bg-app p-4 shadow-elev-4" onClick={(e) => e.stopPropagation()}>
+        <div
+          data-closing={expensePickerClosing ? "true" : "false"}
+          className="app-modal-overlay fixed inset-0 z-[1200] flex items-end justify-center px-safe pb-safe md:items-center md:p-4"
+          onClick={closeExpensePicker}
+          role="presentation"
+        >
+          <div
+            className="app-modal-panel max-h-[72dvh] w-full overflow-hidden rounded-t-[22px] border border-app bg-app p-4 shadow-elev-4 md:max-h-[min(620px,82dvh)] md:max-w-[430px] md:rounded-[20px] md:p-5"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Seleccionar plan para crear gasto"
+          >
             <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted/30" />
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-[18px] font-[var(--fw-semibold)] text-app">Crear gasto</h2>
-              <button type="button" onClick={() => setExpensePickerOpen(false)} className="flex size-9 items-center justify-center rounded-full text-muted hover:bg-surface">
+              <div>
+                <h2 className="text-[18px] font-[var(--fw-semibold)] text-app">Crear gasto</h2>
+                <p className="mt-1 text-body-sm text-muted">Elige el plan al que pertenece.</p>
+              </div>
+              <button type="button" onClick={closeExpensePicker} className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted hover:bg-surface" aria-label="Cerrar">
                 <CloseIcon className="size-5" />
               </button>
             </div>
             {expensePlansLoading ? (
               <p className="py-8 text-center text-body-sm text-muted">Cargando planes...</p>
             ) : expensePlans.length > 0 ? (
-              <div className="max-h-[45dvh] space-y-2 overflow-y-auto pb-2">
+              <div className="max-h-[45dvh] space-y-2 overflow-y-auto pb-2 md:max-h-[420px]">
                 {expensePlans.map((plan) => (
                   <button
                     key={plan.id}
                     type="button"
                     onClick={() => openExpenseForPlan(plan.id)}
-                    className="flex w-full items-center gap-3 rounded-[14px] border border-app bg-surface px-3 py-3 text-left transition-colors active:bg-surface-2"
+                    className="flex w-full items-center gap-3 rounded-[14px] border border-app bg-surface px-3 py-3 text-left transition-colors hover:bg-surface-2 active:bg-surface-2"
                   >
                     <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary-token/12 text-primary-token">
                       <CardIcon className="size-5" />
@@ -478,7 +511,8 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
           </div>
 
           {/* Nav items — icon always at same position */}
-          <nav className="mt-[calc(var(--space-24)+var(--space-8))] flex w-full flex-col gap-[var(--space-8)]">
+          <div className="flex flex-1 flex-col justify-center">
+          <nav className="flex w-full flex-col gap-[var(--space-8)]">
             {items.slice(0, 1).map((item) =>
               renderSidebarRow({
                 key: item.key,
@@ -528,18 +562,43 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
           </nav>
 
           {/* Create button */}
-          <button
-            type="button"
-            aria-label="Crear plan"
-            onClick={openCreatePlan}
-            className="mt-[var(--space-14)] flex h-[24px] items-center text-app transition-opacity duration-150 hover:opacity-70"
-          >
-            <div className="flex w-[102px] shrink-0 items-center justify-center">
-              <PlusIcon className="size-[26px]" />
-            </div>
-            {expanded && <span className="-ml-[14px] whitespace-nowrap pr-[var(--space-4)] text-body font-[var(--fw-medium)]">Crear plan</span>}
-          </button>
+          <div ref={desktopCreateRef} className="relative mt-[var(--space-14)]">
+            <button
+              type="button"
+              aria-label="Crear"
+              aria-expanded={desktopCreateMenuOpen}
+              onClick={() => setDesktopCreateMenuOpen((open) => !open)}
+              className={`flex h-[32px] items-center rounded-[8px] text-app transition-colors duration-150 hover:bg-surface ${desktopCreateMenuOpen ? "bg-surface" : ""}`}
+            >
+              <div className="flex w-[102px] shrink-0 items-center justify-center">
+                <PlusIcon className="size-[26px]" />
+              </div>
+              {expanded && <span className="-ml-[14px] whitespace-nowrap pr-[var(--space-4)] text-body font-[var(--fw-medium)]">Crear</span>}
+            </button>
 
+            {desktopCreateMenuOpen && (
+              <div className="absolute left-[14px] top-[calc(100%+8px)] z-[80] w-[184px] overflow-hidden rounded-[8px] border border-app bg-app shadow-elev-3">
+                <button
+                  type="button"
+                  onClick={openCreatePlan}
+                  className="flex h-[44px] w-full items-center justify-between gap-3 border-b border-app px-4 text-left text-body-sm text-app transition-colors hover:bg-surface"
+                >
+                  <span>Crear plan</span>
+                  <PlansIcon className="size-5 text-muted" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void openCreateExpense()}
+                  className="flex h-[44px] w-full items-center justify-between gap-3 px-4 text-left text-body-sm text-app transition-colors hover:bg-surface"
+                >
+                  <span>Crear gasto</span>
+                  <CardIcon className="size-5 text-muted" />
+                </button>
+              </div>
+            )}
+          </div>
+
+          </div>
         </div>
       </aside>
 

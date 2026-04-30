@@ -11,8 +11,10 @@ import { getPlanFotos, type PlanFotoDto } from "@/services/api/repositories/plan
 import { listGastosForPlanEndpoint, fetchPlanMiembrosEndpoint, type GastoRow, type PlanMiembro } from "@/services/api/endpoints/gastos.endpoint";
 import type { SubplanRow } from "@/services/api/endpoints/subplanes.endpoint";
 import type { PublicationConfig, ItinerarySnapshotItem, ExpensesSnapshot, ParticipantsSnapshot } from "@/services/api/dtos/plan.dto";
-import { XIcon } from "@/components/icons";
 import { CheckCircle, Loader2, Check, MapPin, Calendar, ChevronRight as ChevronRightLucide, ChevronLeft as ChevronLeftLucide } from "lucide-react";
+import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
+import { CloseX } from "@/components/ui/CloseX";
+import { ModalFeedback } from "@/components/ui/ModalFeedback";
 
 type Props = {
   plan: PlanByIdRow;
@@ -48,7 +50,7 @@ function buildExpensesSnapshot(gastos: GastoRow[]): ExpensesSnapshot {
 
 // ── Icons ──────────────────────────────────────────────────────────────────────
 
-const CloseIcon = () => <XIcon className="size-5" />;
+const CloseIcon = () => <CloseX />;
 const CheckIcon = () => <CheckCircle className="size-[52px]" aria-hidden />;
 const CheckSmall = () => <Check className="size-4" aria-hidden />;
 const MapPinSmall = () => <MapPin className="size-3.5 shrink-0" aria-hidden />;
@@ -137,6 +139,7 @@ function PillGroup<T extends string>({
 // ── Main Component ─────────────────────────────────────────────────────────────
 
 export default function PublishPlanModal({ plan, onClose }: Props) {
+  const { isClosing, requestClose } = useModalCloseAnimation(onClose);
   const { user, profile } = useAuth();
   const router = useRouter();
 
@@ -170,10 +173,10 @@ export default function PublishPlanModal({ plan, onClose }: Props) {
 
   useEffect(() => {
     if (step === "success") {
-      timerRef.current = setTimeout(() => onClose(), 4000);
+      timerRef.current = setTimeout(() => requestClose(), 4000);
     }
     return () => { if (timerRef.current) clearTimeout(timerRef.current); };
-  }, [step, onClose]);
+  }, [requestClose, step]);
 
   // Load section data when entering step 2
   useEffect(() => {
@@ -288,11 +291,12 @@ export default function PublishPlanModal({ plan, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-[90] flex items-end justify-center bg-black/60 backdrop-blur-[2px] px-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:items-center"
-      onClick={onClose}
+      data-closing={isClosing ? "true" : "false"}
+      className="app-modal-overlay fixed inset-0 z-[90] flex items-end justify-center px-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:items-center"
+      onClick={requestClose}
     >
       <div
-        className="w-full max-w-[460px] rounded-[22px] bg-app shadow-elev-4 overflow-hidden"
+        className="app-modal-panel relative w-full max-w-[460px] rounded-[22px] bg-app shadow-elev-4 overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
 
@@ -301,7 +305,7 @@ export default function PublishPlanModal({ plan, onClose }: Props) {
           <>
             <div className="flex items-center justify-between px-5 pt-5 pb-3">
               <span className="text-[15px] font-[700] text-app tracking-[-0.01em]">Publicar en el feed</span>
-              <button onClick={onClose} className="flex items-center justify-center size-8 rounded-full text-muted hover:text-app hover:bg-app-hover transition-colors">
+              <button onClick={requestClose} className="flex items-center justify-center size-8 rounded-full text-muted hover:text-app hover:bg-app-hover transition-colors">
                 <CloseIcon />
               </button>
             </div>
@@ -375,7 +379,7 @@ export default function PublishPlanModal({ plan, onClose }: Props) {
                 </button>
                 <span className="text-[15px] font-[700] text-app tracking-[-0.01em]">¿Qué quieres mostrar?</span>
               </div>
-              <button onClick={onClose} className="flex items-center justify-center size-8 rounded-full text-muted hover:text-app hover:bg-app-hover transition-colors">
+              <button onClick={requestClose} className="flex items-center justify-center size-8 rounded-full text-muted hover:text-app hover:bg-app-hover transition-colors">
                 <CloseIcon />
               </button>
             </div>
@@ -485,7 +489,13 @@ export default function PublishPlanModal({ plan, onClose }: Props) {
               </div>
             )}
 
-            {error && <p className="mx-5 mb-1 text-[13px] text-red-500">{error}</p>}
+            {error && (
+              <ModalFeedback
+                state={{ type: "error", message: error }}
+                onSuccess={() => {}}
+                onDismissError={() => setError(null)}
+              />
+            )}
 
             <div className="px-5 pt-3 pb-5">
               <button

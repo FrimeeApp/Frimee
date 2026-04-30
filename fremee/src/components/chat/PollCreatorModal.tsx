@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
 
 type PollCreatorModalProps = {
   onClose: () => void;
@@ -8,13 +9,14 @@ type PollCreatorModalProps = {
 }
 
 export function PollCreatorModal({ onClose, onCreate }: PollCreatorModalProps) {
+  const { isClosing, requestClose } = useModalCloseAnimation(onClose);
   const [question, setQuestion] = useState("");
   const [options, setOptions] = useState(["", ""]);
   const canCreate = question.trim().length > 0 && options.filter((o) => o.trim()).length >= 2;
 
   return (
-    <div className="absolute inset-0 z-50 flex items-end justify-center bg-black/40 md:items-center" onClick={onClose}>
-      <div className="w-full max-w-[420px] rounded-t-[20px] bg-app p-[var(--space-5)] md:rounded-[16px]" onClick={(e) => e.stopPropagation()}>
+    <div data-closing={isClosing ? "true" : "false"} className="app-modal-overlay absolute inset-0 z-50 flex items-end justify-center md:items-center" onClick={requestClose}>
+      <div className="app-modal-panel w-full max-w-[420px] rounded-t-[20px] bg-app p-[var(--space-5)] md:rounded-[16px]" onClick={(e) => e.stopPropagation()}>
         <p className="mb-[var(--space-4)] text-body font-[var(--fw-semibold)] text-app">Nueva encuesta</p>
         <input
           value={question}
@@ -53,7 +55,7 @@ export function PollCreatorModal({ onClose, onCreate }: PollCreatorModalProps) {
           </button>
         )}
         <div className="flex gap-[var(--space-2)]">
-          <button type="button" onClick={onClose} className="flex-1 rounded-full border border-app py-[10px] text-body-sm font-[var(--fw-semibold)] text-app transition-colors hover:bg-surface">
+          <button type="button" onClick={requestClose} className="flex-1 rounded-full border border-app py-[10px] text-body-sm font-[var(--fw-semibold)] text-app transition-colors hover:bg-surface">
             Cancelar
           </button>
           <button

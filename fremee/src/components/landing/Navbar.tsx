@@ -46,7 +46,7 @@ export default function Navbar() {
       />
       <div className="relative z-10 grid h-16 w-full grid-cols-[auto_1fr] items-center gap-4 px-4 sm:px-6 md:grid-cols-[1fr_auto_1fr] lg:px-9">
         <Link
-          href="/"
+          href="/landing"
           className="flex items-center gap-2.5 text-black transition-colors duration-200 hover:text-black/70 dark:text-white dark:hover:text-white/70"
         >
           <span className="relative h-5 w-5 shrink-0">

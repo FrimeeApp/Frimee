@@ -143,8 +143,10 @@ async function listCommentsInternal(params: {
   return comments;
 }
 
+const MAX_COMMENT_LENGTH = 1000;
+
 export async function createCommentRoute(input: CreateCommentInput): Promise<CreateCommentResult> {
-  const content = input.content.trim();
+  const content = input.content.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "").trim().slice(0, MAX_COMMENT_LENGTH);
   if (!content) {
     throw new Error("El comentario no puede estar vacio");
   }

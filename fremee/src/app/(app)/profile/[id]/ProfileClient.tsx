@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import AppSidebar from "@/components/common/AppSidebar";
+import LoadingScreen from "@/components/common/LoadingScreen";
 import { useAuth } from "@/providers/AuthProvider";
 import { getPublicUserProfile } from "@/services/api/repositories/users.repository";
 import { sendFriendRequest, getFriendshipStatuses, getFollowStatuses, removeFriend, getFollowerCount } from "@/services/api/endpoints/users.endpoint";
@@ -15,6 +16,7 @@ import {
 } from "@/services/api/repositories/settings.repository";
 import type { FeedPlanItemDto } from "@/services/api/dtos/plan.dto";
 import { Settings, Plane, Wallet, Camera, Check, Pencil, LayoutGrid, Bookmark } from "lucide-react";
+import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
 
 type ProfileData = {
   id: string;
@@ -50,6 +52,8 @@ export default function ProfilePage() {
   const [friendshipStatus, setFriendshipStatus] = useState<"none" | "pending" | "friends">("none");
   const [sendingFriendRequest, setSendingFriendRequest] = useState(false);
   const [showUnfriendDialog, setShowUnfriendDialog] = useState(false);
+  const { isClosing: unfriendClosing, requestClose: closeUnfriendDialog } = useModalCloseAnimation(() => setShowUnfriendDialog(false), showUnfriendDialog);
+  const { isClosing: unfollowClosing, requestClose: closeUnfollowDialog } = useModalCloseAnimation(() => setShowUnfollowDialog(false), showUnfollowDialog);
 
   const handleAddFriend = async () => {
     if (friendshipStatus !== "none" || sendingFriendRequest) return;
@@ -65,7 +69,7 @@ export default function ProfilePage() {
   };
 
   const handleRemoveFriend = async () => {
-    setShowUnfriendDialog(false);
+    closeUnfriendDialog();
     try {
       await removeFriend(id);
       setFriendshipStatus("none");
@@ -487,8 +491,8 @@ export default function ProfilePage() {
                   <PlanGrid plans={plans} onPlanClick={(planId) => router.push(`/plans/${planId}`)} />
                 )
               ) : loadingSaved ? (
-                <div className="py-[var(--space-6)] flex justify-center">
-                  <div className="size-[20px] animate-spin rounded-full border-2 border-[var(--text-primary)] border-t-transparent" />
+                <div className="flex justify-center py-[var(--space-6)]">
+                  <LoadingScreen fullscreen={false} compact size="sm" />
                 </div>
               ) : savedPlans.length === 0 ? (
                 <p className="py-[var(--space-6)] text-center text-body-sm text-muted">
@@ -513,8 +517,8 @@ export default function ProfilePage() {
 
         {/* Unfriend dialog */}
         {showUnfriendDialog && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 px-4" onClick={() => setShowUnfriendDialog(false)}>
-            <div className="w-full max-w-[320px] rounded-card bg-[var(--bg)] p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+          <div data-closing={unfriendClosing ? "true" : "false"} className="app-modal-overlay fixed inset-0 z-[200] flex items-center justify-center px-4" onClick={closeUnfriendDialog}>
+            <div className="app-modal-panel w-full max-w-[320px] rounded-card bg-[var(--bg)] p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
               <p className="text-center text-body font-[var(--fw-semibold)]">
                 ¿Eliminar a {profileData.nombre} como amigo?
               </p>
@@ -524,7 +528,7 @@ export default function ProfilePage() {
               <div className="mt-5 flex gap-3">
                 <button
                   type="button"
-                  onClick={() => setShowUnfriendDialog(false)}
+                  onClick={closeUnfriendDialog}
                   className="flex-1 rounded-full border border-app py-2 text-body-sm font-[var(--fw-semibold)] transition-colors hover:bg-surface"
                 >
                   Cancelar
@@ -543,8 +547,8 @@ export default function ProfilePage() {
 
         {/* Unfollow dialog */}
         {showUnfollowDialog && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 px-4" onClick={() => setShowUnfollowDialog(false)}>
-            <div className="w-full max-w-[320px] rounded-card bg-[var(--bg)] p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+          <div data-closing={unfollowClosing ? "true" : "false"} className="app-modal-overlay fixed inset-0 z-[200] flex items-center justify-center px-4" onClick={closeUnfollowDialog}>
+            <div className="app-modal-panel w-full max-w-[320px] rounded-card bg-[var(--bg)] p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
               <p className="text-center text-body font-[var(--fw-semibold)]">
                 ¿Dejar de seguir a {profileData.nombre}?
               </p>
@@ -554,7 +558,7 @@ export default function ProfilePage() {
               <div className="mt-5 flex gap-3">
                 <button
                   type="button"
-                  onClick={() => setShowUnfollowDialog(false)}
+                  onClick={closeUnfollowDialog}
                   className="flex-1 rounded-full border border-app py-2 text-body-sm font-[var(--fw-semibold)] transition-colors hover:bg-surface"
                 >
                   Cancelar
@@ -623,30 +627,31 @@ const WalletIcon = ({ className = "size-icon" }: { className?: string }) => <Wal
 
 function ProfileSkeleton() {
   return (
-    <div className="flex flex-col items-center" aria-label="Cargando perfil" role="status">
-      {/* Avatar */}
-      <div className="skeleton-shimmer size-[96px] rounded-full" />
-      {/* Name */}
-      <div className="skeleton-shimmer mt-[var(--space-3)] h-5 w-[140px] rounded-full" />
-      {/* Subtitle */}
-      <div className="skeleton-shimmer mt-[var(--space-2)] h-3 w-[90px] rounded-full" />
-      {/* Stats */}
-      <div className="mt-[var(--space-5)] flex gap-[var(--space-8)]">
-        {[0, 1, 2].map((i) => (
-          <div key={i} className="flex flex-col items-center gap-[6px]">
-            <div className="skeleton-shimmer h-5 w-[28px] rounded-full" />
-            <div className="skeleton-shimmer h-3 w-[50px] rounded-full" />
-          </div>
-        ))}
+    <div aria-label="Cargando perfil" role="status">
+      <div className="flex flex-col items-center">
+        <div className="skeleton-shimmer size-[96px] rounded-full" />
+        <div className="skeleton-shimmer mt-[var(--space-3)] h-5 w-[140px] rounded-full" />
+        <div className="skeleton-shimmer mt-[var(--space-2)] h-3 w-[96px] rounded-full" />
+
+        <div className="mt-[var(--space-5)] flex gap-[var(--space-8)]">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="flex flex-col items-center gap-[6px]">
+              <div className="skeleton-shimmer h-4 w-[28px] rounded-full" />
+              <div className="skeleton-shimmer h-3 w-[48px] rounded-full opacity-70" />
+            </div>
+          ))}
+        </div>
       </div>
-      {/* Divider */}
-      <div className="skeleton-shimmer mt-[var(--space-6)] h-[1px] w-full" />
-      {/* Grid */}
-      <div className="mt-[var(--space-5)] w-full columns-2 gap-[var(--space-3)] sm:columns-3">
-        {[120, 160, 130, 150, 140, 170].map((h, i) => (
-          <div key={i} className="mb-[var(--space-3)] break-inside-avoid">
-            <div className="skeleton-shimmer w-full rounded-[12px]" style={{ height: `${h}px` }} />
-          </div>
+
+      <div className="mt-[var(--space-6)]">
+        <div className="flex justify-center py-[var(--space-3)]">
+          <div className="skeleton-shimmer h-5 w-5 rounded-[6px]" />
+        </div>
+      </div>
+
+      <div className="mt-[var(--space-5)] grid w-full grid-cols-2 gap-[var(--space-3)] sm:grid-cols-3">
+        {[1, 2].map((i) => (
+          <div key={i} className="skeleton-shimmer aspect-[4/5] w-full rounded-card" />
         ))}
       </div>
     </div>

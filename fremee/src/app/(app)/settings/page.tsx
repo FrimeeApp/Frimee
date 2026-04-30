@@ -7,7 +7,7 @@ import { Capacitor } from "@capacitor/core";
 import { ArrowLeftIcon, ChevronRightIcon } from "@/components/icons";
 import {
   Pencil, User, Shield, Calendar, Bell, Moon, Globe, Clock,
-  Mail, MessageSquare, LogOut, Trash2,
+  Mail, MessageSquare, LogOut, Trash2, KeyRound, Eye, EyeOff,
 } from "lucide-react";
 import { App } from "@capacitor/app";
 import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
@@ -23,7 +23,7 @@ import {
 } from "@/services/api/repositories/settings.repository";
 import { STORAGE_KEYS } from "@/config/storage";
 
-type BusyAction = "save" | "signout" | "delete" | "upload-image" | null;
+type BusyAction = "save" | "signout" | "delete" | "upload-image" | "change-password" | null;
 type ThemeOption = UserSettingsTheme;
 type VisibilityOption = UserSettingsVisibility;
 
@@ -191,6 +191,16 @@ export default function SettingsPage() {
 
   const [form, setForm] = useState<SettingsForm>(DEFAULT_SETTINGS);
   const [initialForm, setInitialForm] = useState<SettingsForm>(DEFAULT_SETTINGS);
+
+  const [showPasswordSection, setShowPasswordSection] = useState(false);
+  const [pwdCurrent, setPwdCurrent] = useState("");
+  const [pwdNew, setPwdNew] = useState("");
+  const [pwdConfirm, setPwdConfirm] = useState("");
+  const [showPwd, setShowPwd] = useState(false);
+  const [pwdMsg, setPwdMsg] = useState<{ type: "ok" | "error"; text: string } | null>(null);
+
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
 
   const hasChanges = useMemo(
     () => JSON.stringify(form) !== JSON.stringify(initialForm),
@@ -476,8 +486,71 @@ export default function SettingsPage() {
     }
   };
 
+  const onChangePassword = async () => {
+    if (!user?.email || busyAction !== null) return;
+    setPwdMsg(null);
+
+    if (!pwdCurrent || !pwdNew || !pwdConfirm) {
+      setPwdMsg({ type: "error", text: "Rellena todos los campos." });
+      return;
+    }
+    if (pwdNew.length < 8) {
+      setPwdMsg({ type: "error", text: "La nueva contraseña debe tener al menos 8 caracteres." });
+      return;
+    }
+    if (pwdNew !== pwdConfirm) {
+      setPwdMsg({ type: "error", text: "Las contraseñas no coinciden." });
+      return;
+    }
+
+    const supabase = createBrowserSupabaseClient();
+    setBusyAction("change-password");
+
+    try {
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: pwdCurrent,
+      });
+      if (signInError) {
+        setPwdMsg({ type: "error", text: "La contraseña actual no es correcta." });
+        return;
+      }
+
+      const { error: updateError } = await supabase.auth.updateUser({ password: pwdNew });
+      if (updateError) throw updateError;
+
+      setPwdMsg({ type: "ok", text: "Contraseña actualizada correctamente." });
+      setPwdCurrent("");
+      setPwdNew("");
+      setPwdConfirm("");
+      setShowPasswordSection(false);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "No se pudo cambiar la contraseña.";
+      setPwdMsg({ type: "error", text: message });
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
   const onDeleteAccount = async () => {
-    setErrorMsg("Eliminar cuenta estará disponible próximamente.");
+    if (busyAction !== null) return;
+    setBusyAction("delete");
+    setErrorMsg(null);
+
+    try {
+      const res = await fetch("/api/account/delete", { method: "DELETE" });
+      if (!res.ok) {
+        const body = await res.json() as { error?: string };
+        throw new Error(body.error ?? "Error al eliminar la cuenta.");
+      }
+      await signOut();
+      router.replace("/login");
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "No se pudo eliminar la cuenta.");
+      setBusyAction(null);
+      setShowDeleteConfirm(false);
+      setDeleteConfirmText("");
+    }
   };
 
   const disableEditing = settingsLoading || busyAction === "save" || busyAction === "upload-image";
@@ -700,9 +773,71 @@ export default function SettingsPage() {
               </div>
             </SettingsSection>
 
-            <SettingsSection
-              title="Cuenta"
-                         >
+            <SettingsSection title="Seguridad">
+              <div className="mt-[var(--space-2)] border-t border-app">
+                <SettingsRow
+                  icon={<KeyRoundIcon />}
+                  label="Contraseña"
+                  description="Cambia la contraseña de tu cuenta."
+                  right={
+                    <button
+                      type="button"
+                      onClick={() => { setShowPasswordSection((v) => !v); setPwdMsg(null); }}
+                      className="rounded-chip border border-app bg-surface px-[var(--space-3)] py-[var(--space-2)] text-body-sm transition-colors hover:bg-surface-2"
+                    >
+                      {showPasswordSection ? "Cancelar" : "Cambiar"}
+                    </button>
+                  }
+                />
+                {showPasswordSection && (
+                  <div className="pb-[var(--space-4)]">
+                    <div className="flex flex-col gap-[var(--space-3)]">
+                      {(["current", "new", "confirm"] as const).map((field) => {
+                        const value = field === "current" ? pwdCurrent : field === "new" ? pwdNew : pwdConfirm;
+                        const setter = field === "current" ? setPwdCurrent : field === "new" ? setPwdNew : setPwdConfirm;
+                        const label = field === "current" ? "Contraseña actual" : field === "new" ? "Nueva contraseña" : "Confirmar nueva contraseña";
+                        return (
+                          <div key={field} className="relative">
+                            <input
+                              type={showPwd ? "text" : "password"}
+                              value={value}
+                              onChange={(e) => setter(e.target.value)}
+                              placeholder={label}
+                              autoComplete={field === "current" ? "current-password" : "new-password"}
+                              className="w-full rounded-input border border-app bg-surface px-[var(--space-3)] py-[var(--space-2)] pr-10 text-body-sm outline-none focus:border-primary-token"
+                            />
+                            {field === "confirm" && (
+                              <button
+                                type="button"
+                                onClick={() => setShowPwd((v) => !v)}
+                                className="absolute right-[var(--space-3)] top-1/2 -translate-y-1/2 text-muted"
+                                aria-label={showPwd ? "Ocultar contraseñas" : "Mostrar contraseñas"}
+                              >
+                                {showPwd ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {pwdMsg && (
+                        <p className={`text-body-sm ${pwdMsg.type === "ok" ? "text-success-token" : "text-error-token"}`}>
+                          {pwdMsg.text}
+                        </p>
+                      )}
+                      <div className="flex justify-end">
+                        <PrimaryButton
+                          label={busyAction === "change-password" ? "Guardando..." : "Guardar contraseña"}
+                          onClick={() => void onChangePassword()}
+                          disabled={busyAction !== null}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </SettingsSection>
+
+            <SettingsSection title="Cuenta">
               <div className="mt-[var(--space-3)] flex flex-col gap-[var(--space-4)] lg:flex-row lg:items-center lg:justify-between">
                 <div className="min-w-0">
                   {saveMsg && <p className="text-body-sm text-success-token">{saveMsg}</p>}
@@ -717,13 +852,46 @@ export default function SettingsPage() {
                   />
                   <SettingsButton
                     icon={<TrashIcon />}
-                    label={busyAction === "delete" ? "Eliminando cuenta..." : "Eliminar cuenta"}
-                    onClick={onDeleteAccount}
+                    label="Eliminar cuenta"
+                    onClick={() => { setShowDeleteConfirm(true); setDeleteConfirmText(""); }}
                     disabled={busyAction !== null}
                     danger
                   />
                 </div>
               </div>
+              {showDeleteConfirm && (
+                <div className="mt-[var(--space-4)] rounded-[var(--radius-card)] border border-error-token bg-surface p-[var(--space-4)]">
+                  <p className="text-body font-[var(--fw-semibold)] text-error-token">¿Seguro que quieres eliminar tu cuenta?</p>
+                  <p className="mt-[var(--space-1)] text-body-sm text-muted">
+                    Esta acción es permanente e irreversible. Se borrarán todos tus datos.
+                    Escribe <strong>ELIMINAR</strong> para confirmar.
+                  </p>
+                  <input
+                    type="text"
+                    value={deleteConfirmText}
+                    onChange={(e) => setDeleteConfirmText(e.target.value)}
+                    placeholder="ELIMINAR"
+                    className="mt-[var(--space-3)] w-full rounded-input border border-app bg-surface px-[var(--space-3)] py-[var(--space-2)] text-body-sm outline-none focus:border-error-token"
+                  />
+                  <div className="mt-[var(--space-3)] flex gap-[var(--space-2)]">
+                    <button
+                      type="button"
+                      onClick={() => { setShowDeleteConfirm(false); setDeleteConfirmText(""); }}
+                      className="rounded-input border border-app bg-surface px-[var(--space-4)] py-[var(--space-2)] text-body-sm transition-colors hover:bg-surface-2"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={deleteConfirmText !== "ELIMINAR" || busyAction !== null}
+                      onClick={() => void onDeleteAccount()}
+                      className="rounded-input border border-error-token bg-error-token px-[var(--space-4)] py-[var(--space-2)] text-body-sm font-[var(--fw-semibold)] text-white transition-opacity disabled:opacity-[var(--disabled-opacity)]"
+                    >
+                      {busyAction === "delete" ? "Eliminando..." : "Sí, eliminar cuenta"}
+                    </button>
+                  </div>
+                </div>
+              )}
             </SettingsSection>
           </section>
           <input
@@ -1003,3 +1171,4 @@ const MailIcon = Mail;
 const ChatIcon = MessageSquare;
 const LogOutIcon = LogOut;
 const TrashIcon = Trash2;
+const KeyRoundIcon = KeyRound;

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/providers/AuthProvider";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { ChevronLeft, X, Bell } from "lucide-react";
+import { CloseX } from "@/components/ui/CloseX";
 import {
   listNotificaciones,
   marcarNotificacionesLeidas,
@@ -377,7 +378,7 @@ export default function NotificationsPanel({ open, onClose, onRead, desktopPosit
             aria-label="Cerrar"
             className="hidden text-muted hover:text-app transition-colors md:block"
           >
-            <X className="size-5" aria-hidden />
+            <CloseX />
           </button>
         </div>
 

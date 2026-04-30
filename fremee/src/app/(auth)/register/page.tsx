@@ -120,7 +120,7 @@ export default function RegisterPage() {
 
   if (registrationComplete) {
     return (
-      <div className="auth-page flex h-full w-full max-w-[420px] flex-col justify-center text-app">
+      <div className="auth-page flex min-h-full w-full max-w-[420px] flex-col justify-center text-app">
         <div className="space-y-[var(--space-4)] rounded-modal border border-app bg-surface p-[var(--space-6)] shadow-elev-1">
           <h1 className="font-sans text-[var(--font-h2)] font-[var(--fw-semibold)] tracking-tight text-app">Registro completado</h1>
           <p className="text-body text-app">
@@ -146,15 +146,15 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="auth-page flex h-full w-full max-w-[420px] flex-col py-[var(--space-6)] text-app md:py-[var(--space-8)]">
-      <div className="flex flex-1 items-center">
+    <div className="auth-page flex min-h-full w-full max-w-[420px] flex-col py-[var(--space-3)] text-app min-[800px]:py-[var(--space-8)]">
+      <div className="flex flex-1 items-start min-[800px]:items-center">
         <div className="w-full">
           <h1 className="auth-title font-sans font-[var(--fw-semibold)] text-app">
             Empecemos
           </h1>
           <h3 className="font-sans mt-[var(--space-1)] text-body text-muted">Crea una cuenta</h3>
 
-          <GoogleAuthButton className="auth-neutral-button mt-[var(--space-6)] flex h-btn-primary w-full items-center justify-center gap-[var(--button-gap)] rounded-button border border-app bg-[var(--input-bg)] text-button-md font-[var(--fw-medium)] text-app transition-colors duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)]" />
+          <GoogleAuthButton className="auth-neutral-button mt-[var(--space-4)] flex h-btn-primary w-full items-center justify-center gap-[var(--button-gap)] rounded-button border border-app bg-[var(--input-bg)] text-button-md font-[var(--fw-medium)] text-app transition-colors duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] min-[800px]:mt-[var(--space-6)]" />
 
           <div className="flex items-center gap-[var(--space-4)] py-[var(--space-3)]">
             <div className="flex-1 border-t border-app" />
@@ -262,7 +262,7 @@ export default function RegisterPage() {
             </button>
           </form>
 
-          <p className="pt-[var(--space-4)] text-center text-body text-muted">
+          <p className="pt-[var(--space-3)] text-center text-body text-muted min-[800px]:pt-[var(--space-4)]">
             ¿Ya tienes una cuenta?{" "}
             <Link href="/login" className="auth-link auth-link-primary font-[var(--fw-semibold)]">
               Iniciar sesión
@@ -271,7 +271,7 @@ export default function RegisterPage() {
         </div>
       </div>
 
-      <p className="mt-auto pb-[max(var(--space-2),env(safe-area-inset-bottom))] pt-[var(--space-6)] text-center text-caption text-tertiary md:pt-[var(--space-8)]">
+      <p className="mt-auto pb-[max(var(--space-2),env(safe-area-inset-bottom))] pt-[var(--space-4)] text-center text-caption text-tertiary min-[800px]:pt-[var(--space-8)]">
         Al continuar, aceptas los{" "}
         <span className="font-[var(--fw-semibold)] text-muted">Términos y</span>
         <br />

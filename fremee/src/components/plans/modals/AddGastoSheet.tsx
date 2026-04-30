@@ -14,6 +14,9 @@ import type { OcrResult, OcrItem } from "@/app/api/receipts/ocr/route";
 import { todayISO, limitDecimals, adjustNumericString } from "@/lib/form-helpers";
 import { Avatar } from "@/components/ui/Avatar";
 import { FIELD_LINE_CLS } from "@/lib/styles";
+import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
+import { CloseX } from "@/components/ui/CloseX";
+import { ModalFeedback, type ModalFeedbackState } from "@/components/ui/ModalFeedback";
 
 type CategoriaGasto = { id: number; nombre: string; icono: string | null; color: string | null };
 
@@ -58,11 +61,11 @@ type Props = {
 // ── component ─────────────────────────────────────────────────────────────────
 
 export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Props) {
+  const { isClosing, requestClose } = useModalCloseAnimation(onClose);
   const [step, setStep] = useState(1);
 
   // ── form state ──
   const [titulo, setTitulo] = useState("");
-  const [descripcion, setDescripcion] = useState("");
   const [total, setTotal] = useState("");
   const [moneda, setMoneda] = useState("EUR");
   const [fechaGasto, setFechaGasto] = useState(todayISO());
@@ -97,6 +100,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
   // ── UI ──
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [feedbackState, setFeedbackState] = useState<ModalFeedbackState | null>(null);
   const [participantesExpanded, setParticipantesExpanded] = useState(true);
   const [participantesSearch, setParticipantesSearch] = useState("");
   const [pagadorOpen, setPagadorOpen] = useState(false);
@@ -247,6 +251,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
     if (participantes.length === 0) { setError("Selecciona al menos un participante"); return; }
     setSaving(true);
     setError(null);
+    setFeedbackState({ type: "loading" });
     try {
       await createGastoEndpoint({
         plan_id: planId,
@@ -257,16 +262,15 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
         moneda,
         metodo_reparto: metodo,
         participantes,
-        descripcion: descripcion.trim() || undefined,
+        descripcion: undefined,
         items: metodo === "POR_ITEMS" ? buildItems() : undefined,
         receipt_url: receiptUrl ?? undefined,
         categoria_id: categoriaId,
         subplan_id: subplanId ?? undefined,
       });
-      onCreated();
-      onClose();
+      setFeedbackState({ type: "success", label: "Gasto creado" });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al guardar el gasto");
+      setFeedbackState({ type: "error", message: err instanceof Error ? err.message : "Error al guardar el gasto" });
     } finally {
       setSaving(false);
     }
@@ -306,15 +310,23 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
 
   return (
     <>
-      <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm" />
+      <div data-closing={isClosing ? "true" : "false"} className="app-modal-overlay fixed inset-0 z-40" />
       <div
         className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-[var(--space-4)]"
-        onClick={(e) => { if (e.target !== e.currentTarget) return; if (window.matchMedia("(min-width: 768px)").matches) onClose(); }}
+        onClick={(e) => { if (e.target !== e.currentTarget) return; if (window.matchMedia("(min-width: 768px)").matches) requestClose(); }}
       >
         <div
-          className="flex h-full w-full flex-col overflow-hidden bg-app md:h-auto md:max-h-[92dvh] md:max-w-[620px] md:rounded-[22px] md:border md:border-app md:shadow-elev-4"
+          data-closing={isClosing ? "true" : "false"}
+          className="app-modal-panel relative flex h-full w-full flex-col overflow-hidden bg-app md:h-auto md:max-h-[92dvh] md:max-w-[620px] md:rounded-[22px] md:border md:border-app md:shadow-elev-4"
           onClick={(e) => e.stopPropagation()}
         >
+          {feedbackState && (
+            <ModalFeedback
+              state={feedbackState}
+              onSuccess={() => { onCreated(); requestClose(); }}
+              onDismissError={() => setFeedbackState(null)}
+            />
+          )}
           {/* Progress bar */}
           <div className="h-[3px] w-full shrink-0 bg-[var(--surface-2)]">
             <div className="h-full bg-primary-token transition-all duration-[400ms] [transition-timing-function:var(--ease-standard)]" style={{ width: `${(step / TOTAL_STEPS) * 100}%` }} />
@@ -322,21 +334,21 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
 
           {/* Top nav */}
           <div className="flex shrink-0 items-center justify-between px-[var(--space-5)] py-[var(--space-3)]">
-            <button
-              type="button"
-              onClick={step === 1 ? onClose : () => setStep(s => s - 1)}
-              className="flex size-9 items-center justify-center rounded-full text-app transition-colors hover:bg-surface"
-              aria-label={step === 1 ? "Cerrar" : "Volver"}
-            >
-              {step === 1 ? (
-                <svg viewBox="0 0 24 24" fill="none" className="size-[18px]"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
-              ) : (
+            {step > 1 ? (
+              <button
+                type="button"
+                onClick={() => setStep(s => s - 1)}
+                className="flex size-9 items-center justify-center rounded-full text-app transition-colors hover:bg-surface"
+                aria-label="Volver"
+              >
                 <svg viewBox="0 0 24 24" fill="none" className="size-[18px]"><path d="M15 19l-7-7 7-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
-              )}
-            </button>
+              </button>
+            ) : (
+              <div className="size-9" aria-hidden="true" />
+            )}
             <span className="text-caption font-[var(--fw-medium)] text-muted">{step} de {TOTAL_STEPS}</span>
             {/* OCR button — only on step 1 */}
-            {step === 1 ? (
+            {false ? (
               <div>
                 <input ref={fileInputRef} type="file" accept="image/*,.pdf" className="hidden" onChange={handleFileChange} />
                 <button
@@ -351,28 +363,52 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                 </button>
               </div>
             ) : (
-              <div className="size-9" aria-hidden="true" />
+              <button
+                type="button"
+                onClick={requestClose}
+                className="flex size-9 items-center justify-center rounded-full text-app transition-colors hover:bg-surface"
+                aria-label="Cerrar"
+              >
+                <CloseX />
+              </button>
             )}
           </div>
 
           {/* Content */}
           <div className="flex-1 overflow-y-auto scrollbar-thin px-[var(--space-6)] pb-[var(--space-8)] pt-[var(--space-2)]">
             {/* Step header */}
-            <div className="mb-[var(--space-8)]">
-              <h2 className="font-[var(--fw-bold)] leading-tight text-app" style={{ fontSize: "clamp(22px, 5vw, 28px)" }}>{meta.title}</h2>
-              <p className="mt-[var(--space-1)] text-body-sm text-muted">{meta.subtitle}</p>
+            <div className="mb-[var(--space-8)] flex items-start justify-between gap-[var(--space-4)]">
+              <div className="min-w-0">
+                <h2 className="font-[var(--fw-bold)] leading-tight text-app" style={{ fontSize: "clamp(22px, 5vw, 28px)" }}>{meta.title}</h2>
+                <p className="mt-[var(--space-1)] text-body-sm text-muted">{meta.subtitle}</p>
+              </div>
+              {step === 1 && (
+                <div className="shrink-0 pt-1">
+                  <input ref={fileInputRef} type="file" accept="image/*,.pdf" className="hidden" onChange={handleFileChange} />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={ocrLoading}
+                    title="Leer ticket o factura"
+                    className={`inline-flex items-center justify-center gap-1.5 rounded-[10px] border border-app px-3 py-1.5 text-caption font-[var(--fw-medium)] transition-colors disabled:opacity-60 ${receiptUrl && !notAReceipt ? "bg-surface text-app" : "bg-neutral-100 text-muted hover:bg-neutral-200 hover:text-app dark:bg-neutral-800 dark:hover:bg-neutral-700"}`}
+                  >
+                    {ocrLoading ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" /> : receiptUrl && !notAReceipt ? <svg viewBox="0 0 24 24" fill="none" className="size-3.5" stroke="currentColor" strokeWidth="2"><path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round"/></svg> : <svg viewBox="0 0 24 24" fill="none" className="size-3.5" stroke="currentColor" strokeWidth="1.8"><path d="M12 16v-8M8 12l4-4 4 4" strokeLinecap="round" strokeLinejoin="round"/><rect x="3" y="3" width="18" height="18" rx="3"/></svg>}
+                    {ocrLoading ? "Analizando..." : receiptUrl && !notAReceipt ? "Leido" : "Leer factura"}
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* ── Step 1: Concepto + importe ── */}
             {step === 1 && (
               <div className="space-y-[var(--space-6)]">
-                <div className={fieldLineCls}>
+                <div className={`flex items-center gap-[var(--space-3)] ${fieldLineCls}`}>
                   <input
                     value={titulo}
                     onChange={(e) => setTitulo(e.target.value)}
                     placeholder="Concepto"
                     autoFocus
-                    className="w-full bg-transparent text-[22px] font-[var(--fw-semibold)] text-app outline-none placeholder:text-muted"
+                    className="min-w-0 flex-1 bg-transparent text-[22px] font-[var(--fw-semibold)] text-app outline-none placeholder:text-muted"
                   />
                 </div>
 
@@ -440,12 +476,12 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                   );
                 })()}
 
+                {false && (
                 <div>
                   <p className="mb-[var(--space-2)] text-[13px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Descripción <span className="font-normal normal-case tracking-normal opacity-60">(opcional)</span></p>
-                  <div className={fieldLineCls}>
-                    <input value={descripcion} onChange={(e) => setDescripcion(e.target.value)} placeholder="Notas sobre el gasto" className="w-full bg-transparent text-body text-app outline-none placeholder:text-muted" />
-                  </div>
                 </div>
+
+                )}
 
                 {notAReceipt && (
                   <div className="flex items-start gap-[var(--space-2)] rounded-[12px] border border-[var(--warning,#f59e0b)]/30 bg-[var(--warning,#f59e0b)]/10 px-[var(--space-3)] py-[var(--space-2)]">
@@ -749,12 +785,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-between border-t border-app px-[var(--page-margin-x)] py-[var(--space-4)]">
-            {step < TOTAL_STEPS ? (
-              <span className="text-caption text-muted">{STEP_META[step].title}</span>
-            ) : (
-              <span />
-            )}
+          <div className="flex items-center justify-end border-t border-app px-[var(--page-margin-x)] py-[var(--space-4)]">
             <button
               type="button"
               onClick={handleNext}

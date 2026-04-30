@@ -2,59 +2,40 @@
 
 import type { ReactNode } from "react";
 import Image from "next/image";
-import { MapPin } from "lucide-react";
 
 export function AuthSplitLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="fixed inset-0 w-full bg-surface">
-      <div className="grid h-full grid-cols-4 gap-0 overflow-hidden min-[1025px]:grid-cols-12">
+    <div className="min-h-[100dvh] w-full bg-surface min-[1025px]:fixed min-[1025px]:inset-0">
+      <div className="grid min-h-[100dvh] grid-cols-4 gap-0 overflow-hidden min-[1025px]:h-full min-[1025px]:grid-cols-12">
         <section className="relative hidden overflow-hidden bg-primary-token text-contrast-token min-[1025px]:col-span-6 min-[1025px]:block min-[1025px]:h-full">
           <div className="pointer-events-none absolute inset-0">
-            <div className="absolute left-[-12%] top-[-8%] h-[260px] w-[260px] rounded-full bg-white/10 blur-3xl" />
-            <div className="absolute right-[-14%] top-[18%] h-[220px] w-[220px] rounded-full bg-[#111827]/18 blur-3xl" />
-            <div className="absolute inset-x-0 bottom-0 h-[34%] bg-gradient-to-t from-[#0a1510]/22 to-transparent" />
+            <div className="absolute inset-0 bg-[linear-gradient(145deg,rgba(255,255,255,0.16),transparent_42%),linear-gradient(0deg,rgba(10,21,16,0.18),transparent_48%)]" />
           </div>
 
           <div className="relative z-20 flex h-full flex-col px-[clamp(28px,4vw,56px)] pb-[var(--space-24)] pt-[var(--space-6)] md:px-[clamp(40px,5vw,72px)] md:pt-[var(--space-8)] lg:px-[clamp(52px,5.5vw,88px)]">
             <div className="shrink-0 pb-[var(--space-6)]">
               <div className="invisible w-full max-w-[420px] text-center text-[1.5rem] leading-none">Frimee</div>
             </div>
-            <div className="flex flex-1 items-start">
+            <div className="flex flex-1 items-center">
               <div className="w-full px-[clamp(36px,7vw,88px)]">
-                <div className="mx-auto flex min-h-[320px] max-w-[430px] flex-col justify-start md:min-h-[360px] lg:min-h-[400px]">
-                  <div className="relative left-1/2 w-[min(540px,calc(100%+112px))] -translate-x-1/2">
-                    <h1 className="[font-family:var(--font-display-face)] text-[clamp(2.3rem,4vw,4rem)] leading-[1.02] tracking-[-0.015em] text-white dark:text-[#102018]">
-                      Organiza mejor.
-                      <span className="mt-[22px] block font-sans text-[clamp(1.2rem,1.8vw,1.55rem)] font-[var(--fw-medium)] leading-[1.28] tracking-[-0.02em] text-white/88 dark:text-[#102018]/82">
-                        Comparte planes, gastos y decisiones sin fricción.
-                      </span>
-                    </h1>
+                <div className="mx-auto flex w-full max-w-[520px] flex-col items-center justify-center gap-[clamp(2px,0.5vh,6px)]">
+                  <div className="relative w-full px-[clamp(16px,3vw,32px)]">
+                    <Image
+                      src="/Frimee_personaje.png"
+                      alt="Personaje de Frimee preparando un plan"
+                      width={650}
+                      height={780}
+                      className="relative z-10 mx-auto h-auto max-h-[min(54vh,500px)] w-auto object-contain drop-shadow-[0_18px_28px_rgba(0,0,0,0.18)]"
+                      priority
+                      unoptimized
+                    />
                   </div>
-                  <div className="mt-[calc(var(--space-8)+96px)]">
-                    <div className="relative left-1/2 w-[min(540px,calc(100%+112px))] -translate-x-1/2 pb-[34px]">
-                      <div className="overflow-hidden rounded-[16px] border border-white/18 shadow-[0_24px_60px_rgba(0,0,0,0.18)]">
-                        <Image
-                          src="/mapa.png"
-                          alt="Mapa de ruta del plan"
-                          width={798}
-                          height={580}
-                          className="h-auto w-full object-cover"
-                          priority
-                        />
-                      </div>
 
-                      <div className="absolute bottom-0 left-1/2 w-[calc(100%-40px)] -translate-x-1/2 rounded-[18px] bg-[linear-gradient(90deg,rgba(255,255,255,0.88),rgba(255,255,255,0.76)_56%,rgba(84,215,255,0.52))] px-[20px] py-[14px] font-sans text-[#111827] shadow-[0_18px_40px_rgba(0,0,0,0.18)] backdrop-blur-md dark:bg-[linear-gradient(90deg,rgba(243,248,245,0.94),rgba(243,248,245,0.86)_56%,rgba(84,215,255,0.34))]">
-                        <div className="flex items-center gap-[14px]">
-                          <div className="flex items-center justify-center text-[#111827]">
-                            <MapPin className="size-[20px]" strokeWidth={2.2} />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-[1.02rem] font-[var(--fw-semibold)] leading-none">Tu siguiente plan empieza YA.</p>
-                            <p className="mt-[3px] text-[0.78rem] leading-none text-[#111827]/68">Creado por Frimee</p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                  <div className="mt-[clamp(-72px,-5.5vh,-34px)] w-full text-center">
+                    <h1 className="font-sans text-[clamp(1.55rem,2.45vw,2.55rem)] font-[var(--fw-bold)] leading-[1.12] text-white dark:text-[#102018]">
+                      Organiza tus planes
+                      <span className="block">sin perder el hilo</span>
+                    </h1>
                   </div>
                 </div>
               </div>
@@ -63,13 +44,22 @@ export function AuthSplitLayout({ children }: { children: ReactNode }) {
 
         </section>
 
-        <main className="col-span-full flex flex-col overflow-hidden bg-surface pt-[env(safe-area-inset-top)] min-[1025px]:col-span-6">
-          <div className="shrink-0 flex justify-center px-[max(var(--space-5),env(safe-area-inset-left))] pt-[var(--space-4)] pb-[var(--space-4)] min-[800px]:pt-[var(--space-6)] min-[800px]:pb-[var(--space-5)] lg:px-[clamp(44px,4vw,72px)]">
-            <div className="w-full max-w-[420px] text-center [font-family:var(--font-display-face)] text-[1.95rem] leading-none text-primary-token">
-              Frimee
+        <main className="col-span-full flex min-h-[100dvh] flex-col bg-surface pt-[env(safe-area-inset-top)] min-[1025px]:col-span-6 min-[1025px]:h-full min-[1025px]:overflow-hidden">
+          <div className="shrink-0 flex justify-center px-[max(var(--space-5),env(safe-area-inset-left))] pb-[var(--space-2)] pt-[var(--space-3)] min-[800px]:pt-[var(--space-6)] min-[800px]:pb-[var(--space-5)] lg:px-[clamp(44px,4vw,72px)]">
+            <div className="flex w-full max-w-[420px] items-center justify-center gap-[8px] text-center [font-family:var(--font-display-face)] text-[1.45rem] leading-none text-primary-token min-[800px]:text-[1.7rem]">
+              <Image
+                src="/Frimee_personaje.png"
+                alt=""
+                width={52}
+                height={62}
+                className="h-[36px] w-auto object-contain min-[800px]:h-[40px] min-[1025px]:hidden"
+                priority
+                unoptimized
+              />
+              <span>Frimee</span>
             </div>
           </div>
-          <div className="flex flex-1 items-center justify-center overflow-y-auto px-[max(var(--space-5),env(safe-area-inset-left))] pb-[var(--space-6)] min-[800px]:pb-[var(--space-8)] lg:px-[clamp(44px,4vw,72px)]">
+          <div className="flex flex-1 items-start justify-center overflow-y-auto px-[max(var(--space-5),env(safe-area-inset-left))] pb-[max(var(--space-5),env(safe-area-inset-bottom))] pt-[var(--space-2)] min-[800px]:items-center min-[800px]:pb-[var(--space-8)] min-[800px]:pt-0 lg:px-[clamp(44px,4vw,72px)]">
             {children}
           </div>
         </main>

@@ -2,18 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { Client, TravelMode, UnitSystem, Language } from "@googlemaps/google-maps-services-js";
 import { getGoogleMapsServerKey } from "@/config/env";
 import { createSupabaseServerClient, createSupabaseServiceClient } from "@/services/supabase/server";
+import { sanitizeLatLng } from "@/lib/sanitize";
+import { checkRateLimit, rateLimitedResponse } from "@/lib/rate-limit";
 
 const client = new Client({});
 
 // Round coords to 4 decimal places (~11m) for cache key stability
 function r(n: number) { return Math.round(n * 1e4) / 1e4; }
 
-type LatLng = { lat: number; lng: number };
-
 type DirectionsRequestBody = {
   waypoints: string[];
-  originCoords?: LatLng;
-  destCoords?: LatLng;
   travelMode?: string;
 };
 
@@ -25,21 +23,18 @@ type ApiErrorLike = {
   };
 };
 
-function isLatLng(value: unknown): value is LatLng {
-  if (typeof value !== "object" || value === null) return false;
-  const candidate = value as Record<string, unknown>;
-  return typeof candidate.lat === "number" && typeof candidate.lng === "number";
-}
+const MAX_WAYPOINTS = 25;
+const MAX_WAYPOINT_LENGTH = 500;
 
 function isDirectionsRequestBody(value: unknown): value is DirectionsRequestBody {
   if (typeof value !== "object" || value === null) return false;
   const candidate = value as Record<string, unknown>;
-  const { waypoints, originCoords, destCoords, travelMode } = candidate;
+  const { waypoints, travelMode } = candidate;
   return (
     Array.isArray(waypoints) &&
-    waypoints.every((item) => typeof item === "string") &&
-    (originCoords === undefined || isLatLng(originCoords)) &&
-    (destCoords === undefined || isLatLng(destCoords)) &&
+    waypoints.length >= 2 &&
+    waypoints.length <= MAX_WAYPOINTS &&
+    waypoints.every((item) => typeof item === "string" && item.trim().length > 0 && item.length <= MAX_WAYPOINT_LENGTH) &&
     (travelMode === undefined || typeof travelMode === "string")
   );
 }
@@ -54,12 +49,25 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await authClient.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
+  const rl = await checkRateLimit(`directions:${user.id}`, 60, 60_000);
+  if (rl.limited) return rateLimitedResponse(rl.retryAfter);
+
   try {
     const body = await req.json() as unknown;
     if (!isDirectionsRequestBody(body)) {
       return NextResponse.json({ error: "Body inválido" }, { status: 400 });
     }
-    const { waypoints, originCoords, destCoords, travelMode } = body;
+    const rawBody = body as Record<string, unknown>;
+    const { waypoints, travelMode } = body;
+    const originCoords = sanitizeLatLng(rawBody.originCoords);
+    const destCoords = sanitizeLatLng(rawBody.destCoords);
+
+    if (rawBody.originCoords != null && !originCoords) {
+      return NextResponse.json({ error: "originCoords inválidas" }, { status: 400 });
+    }
+    if (rawBody.destCoords != null && !destCoords) {
+      return NextResponse.json({ error: "destCoords inválidas" }, { status: 400 });
+    }
 
     const TRAVEL_MODE_MAP: Record<string, TravelMode> = {
       APIE:  TravelMode.walking,
@@ -70,10 +78,6 @@ export async function POST(req: NextRequest) {
       TREN:  TravelMode.transit,
     };
     const mode = (travelMode && TRAVEL_MODE_MAP[travelMode]) ? TRAVEL_MODE_MAP[travelMode] : TravelMode.driving;
-
-    if (!waypoints || waypoints.length < 2) {
-      return NextResponse.json({ error: "Se necesitan al menos 2 ubicaciones" }, { status: 400 });
-    }
 
     // ── Cache lookup (only when both endpoints have stored coords) ──
     if (originCoords && destCoords) {

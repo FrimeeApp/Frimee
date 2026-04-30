@@ -4,6 +4,8 @@ import { randomUUID } from "crypto";
 import { publicEnv, getSupabaseServiceRoleKey } from "@/config/env";
 import { OPENAI_API_BASE_URL } from "@/config/external";
 import { createSupabaseServerClient } from "@/services/supabase/server";
+import { sanitizePlanId, validateUploadFile } from "@/lib/sanitize";
+import { checkRateLimit, rateLimitedResponse } from "@/lib/rate-limit";
 
 // Tipos que devuelve el OCR al frontend
 export type OcrResult = {
@@ -37,20 +39,32 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
 
+    const rl = await checkRateLimit(`ocr-receipt:${sessionUser.id}`, 5, 60_000);
+    if (rl.limited) return rateLimitedResponse(rl.retryAfter);
+
     // ── 1. Leer el archivo del formulario ──────────────────────────────────
     const formData = await req.formData();
-    const file = formData.get("file") as File | null;
-    const planId = formData.get("plan_id") as string | null;
+    const fileRaw = formData.get("file") as File | null;
+    const planId = sanitizePlanId(formData.get("plan_id"));
     const userId = formData.get("user_id") as string | null;
 
-    if (!file || !planId || !userId) {
-      return NextResponse.json({ error: "Faltan parámetros: file, plan_id, user_id" }, { status: 400 });
+    if (!planId) {
+      return NextResponse.json({ error: "plan_id inválido o requerido" }, { status: 400 });
+    }
+    if (!userId) {
+      return NextResponse.json({ error: "Faltan parámetros: user_id" }, { status: 400 });
     }
 
     // Asegurar que el userId del formulario coincide con la sesión activa
     if (userId !== sessionUser.id) {
       return NextResponse.json({ error: "No autorizado" }, { status: 403 });
     }
+
+    const fileCheck = validateUploadFile(fileRaw);
+    if (!fileCheck.ok) {
+      return NextResponse.json({ error: fileCheck.error }, { status: 400 });
+    }
+    const file = fileCheck.file;
 
     // ── 2. Subir a Supabase Storage ────────────────────────────────────────
     // Usamos service role para saltarnos RLS en el servidor (la política de Storage

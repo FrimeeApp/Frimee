@@ -64,8 +64,8 @@ export default function ForgotPage() {
   };
 
   return (
-    <div className="auth-page flex h-full w-full max-w-[420px] flex-col py-[var(--space-6)] text-app md:py-[var(--space-8)]">
-      <div className="flex flex-1 items-center">
+    <div className="auth-page flex min-h-full w-full max-w-[420px] flex-col py-[var(--space-3)] text-app min-[800px]:py-[var(--space-8)]">
+      <div className="flex flex-1 items-start min-[800px]:items-center">
         <div className="w-full">
           <h1 className="auth-title font-sans font-[var(--fw-semibold)] text-app">
             Recuperar
@@ -74,7 +74,7 @@ export default function ForgotPage() {
             Te enviaremos un enlace para restablecer tu contraseña
           </h3>
 
-          <form className="mt-[var(--space-6)] space-y-[var(--space-3)]" onSubmit={onSubmit} noValidate>
+          <form className="mt-[var(--space-4)] space-y-[var(--space-3)] min-[800px]:mt-[var(--space-6)]" onSubmit={onSubmit} noValidate>
             <div className={`h-input rounded-input border bg-[var(--input-bg)] px-[var(--input-padding-x)] transition-[border-color] duration-[var(--duration-fast)] [transition-timing-function:var(--ease-standard)] ${invalidField === "email" ? "border-error-token focus-within:border-error-token" : "border-app focus-within:border-[var(--input-border-focus)]"}`}>
               <input
                 ref={emailRef}
@@ -109,7 +109,7 @@ export default function ForgotPage() {
             </button>
           </form>
 
-          <p className="pt-[var(--space-4)] text-center text-body text-muted">
+          <p className="pt-[var(--space-3)] text-center text-body text-muted min-[800px]:pt-[var(--space-4)]">
             ¿Ya la recordaste?{" "}
             <Link href="/login" className="auth-link auth-link-primary font-[var(--fw-semibold)]">
               Volver a iniciar sesión
@@ -118,7 +118,7 @@ export default function ForgotPage() {
         </div>
       </div>
 
-      <p className="mt-auto pb-[max(var(--space-2),env(safe-area-inset-bottom))] pt-[var(--space-6)] text-center text-caption text-tertiary md:pt-[var(--space-8)]">
+      <p className="mt-auto pb-[max(var(--space-2),env(safe-area-inset-bottom))] pt-[var(--space-4)] text-center text-caption text-tertiary min-[800px]:pt-[var(--space-8)]">
         Al continuar, aceptas los{" "}
         <span className="font-[var(--fw-semibold)] text-muted">Términos y</span>
         <br />

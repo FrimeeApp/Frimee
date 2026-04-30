@@ -86,7 +86,10 @@
 
   .auth-link {
     color: var(--auth-link-color);
-    text-decoration-color: color-mix(in srgb, currentColor 32%, transparent);
+    text-decoration-line: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+    text-decoration-color: transparent;
     transition:
       color var(--duration-fast) var(--ease-standard),
       text-decoration-color var(--duration-fast) var(--ease-standard);
@@ -112,7 +115,6 @@
 
   .auth-link-primary {
     color: var(--primary);
-    text-decoration-color: color-mix(in srgb, var(--primary) 34%, transparent);
   }
 
   .auth-link-primary:hover {
