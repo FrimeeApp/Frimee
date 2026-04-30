@@ -4,6 +4,8 @@ import "../styles/globals.css";
 import { AuthProvider } from "@/providers/AuthProvider";
 import NativeDeepLinks from "@/components/common/NativeDeepLinks";
 import NativeSystemUi from "@/components/common/NativeSystemUi";
+import { ToastProvider } from "@/components/ui/Toaster";
+import OfflineBanner from "@/components/common/OfflineBanner";
 import { APP_DESCRIPTION, APP_NAME } from "@/config/app";
 import { STORAGE_KEYS } from "@/config/storage";
 
@@ -22,12 +24,16 @@ const instrumentSerif = Instrument_Serif({
 });
 
 export const metadata: Metadata = {
-  title: APP_NAME,
+  title: { default: APP_NAME, template: `%s · ${APP_NAME}` },
   description: APP_DESCRIPTION,
   icons: {
     icon: [{ url: "/favicoon-frimee-black.svg", type: "image/svg+xml" }],
     apple: [{ url: "/logo-frimee.png", sizes: "180x180", type: "image/png" }],
     shortcut: ["/favicoon-frimee-black.svg"],
+  },
+  openGraph: {
+    siteName: APP_NAME,
+    images: [{ url: "/logo-frimee.png", width: 512, height: 512 }],
   },
 };
 
@@ -89,7 +95,10 @@ export default function RootLayout({
       <body className={`${inter.variable} ${instrumentSerif.variable} antialiased`}>
         <NativeSystemUi />
         <NativeDeepLinks />
-        <AuthProvider>{children}</AuthProvider>
+        <OfflineBanner />
+        <AuthProvider>
+          <ToastProvider>{children}</ToastProvider>
+        </AuthProvider>
       </body>
     </html>
   );

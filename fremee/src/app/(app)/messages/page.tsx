@@ -17,12 +17,14 @@ import {
   type ChatListItem,
 } from "@/services/api/repositories/chat.repository";
 import { fetchActiveFriends, type PublicUserProfileRow } from "@/services/api/endpoints/users.endpoint";
+import { useToast } from "@/components/ui/Toaster";
 import { createGrupoEndpoint } from "@/services/api/endpoints/grupos.endpoint";
 import { ChatConversation, BackIcon, GroupIcon } from "@/components/chat/ChatConversation";
 import { SearchInput } from "@/components/ui/SearchInput";
 
 export default function MessagesPage() {
   const { user, loading } = useAuth();
+  const { toastError } = useToast();
   const { startCall, joinCall, callState } = useCallContext();
   const prevCallStatusRef = useRef(callState.status);
   const reloadCallMessagesRef = useRef<(() => void) | null>(null);
@@ -62,6 +64,7 @@ export default function MessagesPage() {
       setFriends(data);
     } catch (e) {
       console.error("[messages] Error cargando amigos:", e);
+      toastError("No se pudieron cargar tus amigos.");
     } finally {
       setFriendsLoading(false);
     }
@@ -77,6 +80,7 @@ export default function MessagesPage() {
       setSelectedChatId(chatId);
     } catch (e) {
       console.error("[messages] Error iniciando chat:", e);
+      toastError("No se pudo iniciar la conversación.");
     } finally {
       setStartingChatWith(null);
     }
@@ -112,6 +116,7 @@ export default function MessagesPage() {
       setSelectedChatId(chatId);
     } catch (e) {
       console.error("[messages] Error creando grupo:", e);
+      toastError("No se pudo crear el grupo.");
     } finally {
       setCreatingGroup(false);
     }
@@ -321,7 +326,7 @@ export default function MessagesPage() {
   ) : (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between px-[var(--space-4)] pb-[var(--space-2)] pt-mobile-safe-top md:py-[var(--space-3)]">
+      <div className="flex items-center justify-between px-[var(--space-4)] pb-[var(--space-8)] pt-mobile-safe-top md:pb-[var(--space-8)] md:pt-[var(--space-3)]">
         <h1 className="text-[var(--font-h2)] font-[var(--fw-regular)] leading-[1.15] text-app md:text-[var(--font-h1)]">Mensajes</h1>
       </div>
 

@@ -17,6 +17,7 @@ import { FIELD_LINE_CLS } from "@/lib/styles";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
 import { CloseX } from "@/components/ui/CloseX";
 import { ModalFeedback, type ModalFeedbackState } from "@/components/ui/ModalFeedback";
+import { DiscardChangesDialog } from "@/components/ui/DiscardChangesDialog";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -181,6 +182,7 @@ export default function AddTicketModal({
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [feedbackState, setFeedbackState] = useState<ModalFeedbackState | null>(null);
+  const [discardOpen, setDiscardOpen] = useState(false);
 
   // Step 1 — source file + OCR
   const [sourceFile, setSourceFile]             = useState<File | null>(null);
@@ -346,12 +348,32 @@ export default function AddTicketModal({
   const meta = STEP_META[step - 1];
   const desktopMaxWidth = step === 3 ? "840px" : "540px";
   const primaryBtnCls = "rounded-[14px] bg-[var(--text-primary)] px-[var(--space-8)] py-[12px] text-body-sm font-[var(--fw-semibold)] text-contrast-token transition-opacity hover:opacity-85 disabled:opacity-[var(--disabled-opacity)]";
+  const hasProgress =
+    step > 1 ||
+    sourceFile !== null ||
+    sourcePath !== null ||
+    title.trim().length > 0 ||
+    fromLabel.trim().length > 0 ||
+    toLabel.trim().length > 0 ||
+    placeLabel.trim().length > 0 ||
+    bookingCode.trim().length > 0 ||
+    notes.trim().length > 0;
+
+  function requestDismiss() {
+    if (saving || ocrLoading) return;
+    if (hasProgress) {
+      setDiscardOpen(true);
+      return;
+    }
+    requestClose();
+  }
 
   return (
+    <>
     <div
       data-closing={isClosing ? "true" : "false"}
       className="app-modal-overlay fixed inset-0 z-[60] flex items-end justify-center md:items-center"
-      onClick={saving ? undefined : requestClose}
+      onClick={saving ? undefined : requestDismiss}
       role="presentation"
     >
       <div
@@ -380,7 +402,7 @@ export default function AddTicketModal({
         <div className="flex shrink-0 items-center justify-between px-[var(--space-5)] py-[var(--space-3)]">
           <button
             type="button"
-            onClick={step === 1 ? requestClose : handleBack}
+            onClick={step === 1 ? requestDismiss : handleBack}
             disabled={saving}
             className="flex size-9 items-center justify-center rounded-full text-app transition-colors hover:bg-surface disabled:opacity-50"
             aria-label={step === 1 ? "Cerrar" : "Volver"}
@@ -696,6 +718,15 @@ export default function AddTicketModal({
         </div>
       </div>
     </div>
+    <DiscardChangesDialog
+      open={discardOpen}
+      onCancel={() => setDiscardOpen(false)}
+      onDiscard={() => {
+        setDiscardOpen(false);
+        requestClose();
+      }}
+    />
+    </>
   );
 }
 

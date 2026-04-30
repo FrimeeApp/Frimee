@@ -21,11 +21,20 @@ export default function LoadingScreen({ fullscreen = true, compact = false, size
         <div className={styles.loader} aria-hidden="true">
           <div className={styles.ring} />
           <Image
-            src="/Frimee_personaje.png"
+            src="/logo-frimee-black.png"
             alt=""
-            width={92}
-            height={110}
-            className={styles.avatar}
+            width={96}
+            height={96}
+            className={`${styles.avatar} ${styles.logoLight}`}
+            priority
+            unoptimized
+          />
+          <Image
+            src="/logo-frimee.png"
+            alt=""
+            width={96}
+            height={96}
+            className={`${styles.avatar} ${styles.logoDark}`}
             priority
             unoptimized
           />

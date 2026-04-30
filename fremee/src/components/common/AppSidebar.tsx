@@ -7,13 +7,14 @@ import { useRouter, usePathname } from "next/navigation";
 import { Capacitor } from "@capacitor/core";
 import { useAuth } from "@/providers/AuthProvider";
 import CreatePlanModal, { type CreatePlanPayload } from "@/components/plans/modals/CreatePlanModal";
+import AddGastoSheet from "@/components/plans/modals/AddGastoSheet";
 import { createPlan, listUserRelatedPlans } from "@/services/api/repositories/plans.repository";
 import type { FeedPlanItemDto } from "@/services/api/dtos/plan.dto";
 import { countNotificacionesNoLeidas, insertNotificacion } from "@/services/api/repositories/notifications.repository";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { searchUsers, type PublicUserProfileDto } from "@/services/api/repositories/users.repository";
 import NotificationsPanel from "@/components/notifications/NotificationsPanel";
-import { Home, Map, CreditCard, Send, Plus, User, Search, Bell } from "lucide-react";
+import { Home, Map, CreditCard, Send, Plus, Search, Bell } from "lucide-react";
 import { CloseX } from "@/components/ui/CloseX";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
 type IconProps = {
@@ -25,7 +26,6 @@ const PlansIcon = ({ className }: IconProps = {}) => <Map className={className} 
 const CardIcon = ({ className }: IconProps = {}) => <CreditCard className={className} aria-hidden />;
 const SendIcon = ({ className }: IconProps = {}) => <Send className={className} aria-hidden />;
 const PlusIcon = ({ className }: IconProps = {}) => <Plus className={className} aria-hidden />;
-const ProfileIcon = ({ className }: IconProps = {}) => <User className={className} aria-hidden />;
 const SearchIcon = ({ className }: IconProps = {}) => <Search className={className} aria-hidden />;
 const CloseIcon = ({ className }: IconProps = {}) => <CloseX className={className} />;
 const BellIcon = ({ className }: IconProps = {}) => <Bell className={className} aria-hidden />;
@@ -53,14 +53,33 @@ function dateInputToIso(dateInput: string, hour = 12) {
 export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMobileNav }: AppSidebarProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const [createPlanModalOpen, setCreatePlanModalOpen] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
 
-  // Hide bottom nav whenever CreatePlanModal is open (from any page)
+  // Hide bottom nav whenever any shared app modal is open.
   useEffect(() => {
+    const syncModalState = () => {
+      const hasModalOverlay = document.querySelector(".app-modal-overlay") !== null;
+      if (document.body.hasAttribute("data-modal-open") && !hasModalOverlay) {
+        document.body.removeAttribute("data-modal-open");
+        document.body.style.overflow = "";
+        document.body.style.position = "";
+        document.body.style.top = "";
+        document.body.style.width = "";
+        document.body.style.paddingRight = "";
+        document.documentElement.style.overscrollBehavior = "";
+      }
+
+      setModalOpen(
+        document.body.hasAttribute("data-modal-open") ||
+        document.body.hasAttribute("data-create-plan-open")
+      );
+    };
+
+    syncModalState();
     const observer = new MutationObserver(() => {
-      setCreatePlanModalOpen(document.body.hasAttribute("data-create-plan-open"));
+      syncModalState();
     });
-    observer.observe(document.body, { attributes: true, attributeFilter: ["data-create-plan-open"] });
+    observer.observe(document.body, { attributes: true, attributeFilter: ["data-modal-open", "data-create-plan-open"] });
     return () => observer.disconnect();
   }, []);
   const [hovered, setHovered] = useState(false);
@@ -68,6 +87,7 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
   const [mobileFabOpen, setMobileFabOpen] = useState(false);
   const [desktopCreateMenuOpen, setDesktopCreateMenuOpen] = useState(false);
   const [expensePickerOpen, setExpensePickerOpen] = useState(false);
+  const [selectedExpensePlanId, setSelectedExpensePlanId] = useState<number | null>(null);
   const { isClosing: expensePickerClosing, requestClose: closeExpensePicker } = useModalCloseAnimation(() => setExpensePickerOpen(false), expensePickerOpen);
   const [expensePlans, setExpensePlans] = useState<FeedPlanItemDto[]>([]);
   const [expensePlansLoading, setExpensePlansLoading] = useState(false);
@@ -85,6 +105,8 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
   const { user, profile } = useAuth();
 
   const expanded = hovered;
+  const loggedUserProfileImage = profile?.profile_image ?? null;
+  const loggedUserInitial = (profile?.nombre?.trim()[0] || user?.email?.trim()[0] || "U").toUpperCase();
 
   useEffect(() => {
     void countNotificacionesNoLeidas().then(setUnreadNotifs).catch(() => setUnreadNotifs(0));
@@ -252,8 +274,15 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
 
   const openExpenseForPlan = (planId: number) => {
     setExpensePickerOpen(false);
-    const isCapacitor = Capacitor.isNativePlatform();
-    router.push(isCapacitor ? `/plans/static?id=${planId}&tab=gastos&createGasto=1` : `/plans/${planId}?tab=gastos&createGasto=1`);
+    setSelectedExpensePlanId(planId);
+  };
+
+  const handleExpenseCreated = () => {
+    const planId = selectedExpensePlanId;
+    if (planId != null) {
+      window.dispatchEvent(new CustomEvent("frimee:gasto-created", { detail: { planId } }));
+    }
+    router.refresh();
   };
 
   const handleCreatePlan = async (payload: CreatePlanPayload) => {
@@ -358,7 +387,7 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
       <nav
         style={mobileNavStyle}
         className={`fixed inset-x-0 bottom-0 z-sticky flex h-[calc(var(--mobile-nav-base-height)+env(safe-area-inset-bottom))] items-center justify-around border-t border-strong bg-app px-[clamp(var(--space-4),5vw,var(--space-5))] pb-safe transition-transform duration-[var(--duration-slow)] [transition-timing-function:var(--ease-decelerate)] md:hidden ${
-          hideMobileNav || createPlanModalOpen ? "translate-y-full" : "translate-y-0"
+          hideMobileNav || modalOpen ? "translate-y-full" : "translate-y-0"
         }`}
       >
         {mobileItems.map((item) => (
@@ -377,18 +406,20 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
           onClick={openProfile}
           className={`${pathname.startsWith("/profile") ? "text-[var(--primary)]" : "text-app"} flex size-[clamp(34px,8vw,38px)] items-center justify-center transition-opacity duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] active:opacity-[var(--disabled-opacity)]`}
         >
-          {profile?.profile_image ? (
+          {loggedUserProfileImage ? (
             <span className="block size-[clamp(31px,7.4vw,34px)] overflow-hidden rounded-full border border-strong">
-              <Image src={profile.profile_image} alt="Foto de perfil" width={34} height={34} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
+              <Image src={loggedUserProfileImage} alt="Foto de perfil" width={34} height={34} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
             </span>
           ) : (
-            <ProfileIcon className="size-[clamp(29px,7.2vw,32px)]" />
+            <span className="flex size-[clamp(31px,7.4vw,34px)] items-center justify-center rounded-full border border-strong bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">
+              {loggedUserInitial}
+            </span>
           )}
         </button>
 
       </nav>
 
-      {!hideMobileNav && !createPlanModalOpen && (
+      {!hideMobileNav && !modalOpen && (
         <div
           ref={mobileFabRef}
           className="fixed right-[max(16px,env(safe-area-inset-right))] bottom-[calc(clamp(56px,8dvh,64px)+env(safe-area-inset-bottom)+16px)] z-[70] flex flex-col items-end gap-3 md:hidden"
@@ -505,6 +536,15 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
         </div>
       )}
 
+      {selectedExpensePlanId != null && user?.id && (
+        <AddGastoSheet
+          planId={selectedExpensePlanId}
+          userId={user.id}
+          onClose={() => setSelectedExpensePlanId(null)}
+          onCreated={handleExpenseCreated}
+        />
+      )}
+
       {/* Desktop sidebar */}
       <aside
         onMouseEnter={() => setHovered(true)}
@@ -607,6 +647,26 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
             )}
           </div>
 
+          <button
+            type="button"
+            aria-label="Perfil"
+            onClick={openProfile}
+            className={`mt-[var(--space-8)] flex h-[32px] items-center rounded-[8px] transition-colors duration-150 hover:bg-surface ${pathname.startsWith("/profile") ? "text-[var(--primary)]" : "text-app"}`}
+          >
+            <div className="flex w-[102px] shrink-0 items-center justify-center">
+              {loggedUserProfileImage ? (
+                <span className="block size-[28px] overflow-hidden rounded-full border border-strong">
+                  <Image src={loggedUserProfileImage} alt="Foto de perfil" width={28} height={28} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
+                </span>
+              ) : (
+                <span className="flex size-[28px] items-center justify-center rounded-full border border-strong bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">
+                  {loggedUserInitial}
+                </span>
+              )}
+            </div>
+            {expanded && <span className="-ml-[14px] whitespace-nowrap pr-[var(--space-4)] text-body font-[var(--fw-medium)]">Perfil</span>}
+          </button>
+
           </div>
         </div>
       </aside>
@@ -632,7 +692,7 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
         }`}
       >
         <div className="px-5 pb-3 pt-5">
-          <div className="flex h-[44px] items-center gap-[10px] rounded-[8px] bg-[var(--search-field-bg)] px-[14px]">
+          <div className="flex h-[44px] items-center gap-[10px] rounded-full border border-app bg-[var(--search-field-bg)] px-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
             <SearchIcon className="size-[18px] shrink-0 text-muted" />
             <input
               ref={searchInputRef}

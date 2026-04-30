@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Maximize2, X, ChevronLeft, ChevronDown, UserPlus, Share2, Pencil, MapPin, Calendar, ArrowRight, Plus, ExternalLink, Upload, Check, FileText, Download, QrCode } from "lucide-react";
 import { useAuth } from "@/providers/AuthProvider";
 import { useCallContext } from "@/providers/CallProvider";
@@ -121,6 +121,7 @@ export default function PlanDetailPage() {
   const { startCall, joinCall, callState } = useCallContext();
   const reloadCallMessagesRef = useRef<(() => void) | null>(null);
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const { id: paramId } = useParams<{ id: string }>();
   // In Capacitor static export we navigate to /plans/static?id=18.
@@ -191,9 +192,13 @@ export default function PlanDetailPage() {
       setActiveTab("gastos");
       if (plan && !isPast) {
         setShowAddGastoSheet(true);
+        const nextParams = new URLSearchParams(searchParams.toString());
+        nextParams.delete("createGasto");
+        const nextQuery = nextParams.toString();
+        router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
       }
     }
-  }, [searchParams, plan, isPast]);
+  }, [searchParams, plan, isPast, pathname, router]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -310,10 +315,16 @@ export default function PlanDetailPage() {
   }, [routeHasRoute, routeStops]);
 
   useEffect(() => {
-    if (!showMapFullscreen) return;
-
     const previousBodyOverflow = document.body.style.overflow;
     const previousHtmlOverflow = document.documentElement.style.overflow;
+
+    if (!showMapFullscreen) {
+      if (!document.body.hasAttribute("data-modal-open")) {
+        document.body.style.overflow = "";
+        document.documentElement.style.overflow = "";
+      }
+      return;
+    }
 
     document.body.style.overflow = "hidden";
     document.documentElement.style.overflow = "hidden";
@@ -585,6 +596,17 @@ export default function PlanDetailPage() {
 
   useEffect(() => { loadGastos(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { loadBalances(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const handleGastoCreated = (event: Event) => {
+      const detail = (event as CustomEvent<{ planId?: number }>).detail;
+      if (detail?.planId !== Number(id)) return;
+      loadGastos();
+      loadBalances();
+    };
+
+    window.addEventListener("frimee:gasto-created", handleGastoCreated);
+    return () => window.removeEventListener("frimee:gasto-created", handleGastoCreated);
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     setMobileCreateOpen(false);
   }, [activeTab, showAddSheet, showAddGastoSheet]);
@@ -931,7 +953,7 @@ export default function PlanDetailPage() {
                                   return (
                                     <div key={s.id}>
                                     <div className="relative flex gap-0 pb-[var(--space-2)]">
-                                      <div className="w-[82px] shrink-0 pr-[var(--space-2)] pt-[2px] text-right">
+                                      <div className="w-[54px] sm:w-[82px] shrink-0 pr-[var(--space-2)] pt-[2px] text-right">
                                         {s.all_day ? (
                                           <span className="block text-[14px] font-[var(--fw-medium)] leading-[1.1] tracking-[0.01em] text-muted">
                                             Todo el día
@@ -950,10 +972,10 @@ export default function PlanDetailPage() {
 
                                       <div className="relative flex w-[28px] shrink-0 justify-center">
                                         {idx > 0 && (
-                                          <div className="absolute left-1/2 top-[-16px] h-[18px] w-[1.5px] -translate-x-1/2 bg-[var(--border)]" />
+                                          <div className="absolute left-1/2 top-0 h-[14px] w-[1.5px] -translate-x-1/2 bg-[var(--border)]" />
                                         )}
-                                        {!isLast && (
-                                          <div className="absolute left-1/2 top-[26px] bottom-[-10px] w-[1.5px] -translate-x-1/2 bg-[var(--border)]" />
+                                        {(!isLast || (isAdmin && !isPast)) && (
+                                          <div className="absolute left-1/2 top-[14px] bottom-[-8px] w-[1.5px] -translate-x-1/2 bg-[var(--border)]" />
                                         )}
                                         <div className="relative z-10 mt-[2px] flex h-[24px] w-[24px] items-center justify-center rounded-full border-[2px] border-primary-token bg-app">
                                           <div className="h-[8px] w-[8px] rounded-full bg-primary-token" />
@@ -1010,17 +1032,17 @@ export default function PlanDetailPage() {
                                     </div>
                                     {/* Transport connector between activities */}
                                     {!isLast && (
-                                      <div className="relative flex items-center gap-0 pb-[var(--space-4)]">
-                                        <div className="w-[82px] shrink-0 pr-[var(--space-2)]" />
-                                        <div className="relative flex w-[28px] shrink-0 justify-center">
-                                          <div className="absolute left-1/2 top-0 bottom-0 w-[1.5px] -translate-x-1/2 bg-[var(--border)]" />
+                                      <div className="relative flex gap-0 pb-[var(--space-4)]">
+                                        <div className="w-[54px] sm:w-[82px] shrink-0 pr-[var(--space-2)]" />
+                                        <div className="relative flex w-[28px] shrink-0 items-center justify-center">
+                                          <div className="absolute left-1/2 top-0 bottom-[-16px] w-[1.5px] -translate-x-1/2 bg-[var(--border)]" />
                                           {nextTransporte ? (
                                             <div className="relative z-10 flex h-[24px] w-[24px] items-center justify-center rounded-full border border-app bg-app text-muted">
                                               <nextTransporte.Icon className="size-[14px]" />
                                             </div>
                                           ) : null}
                                         </div>
-                                        <div className="min-w-0 flex-1 pl-[var(--space-3)]">
+                                        <div className="min-w-0 flex-1 self-center pl-[var(--space-3)]">
                                         {!isPast && nextItem && editingTransporteId === nextItem.id ? (
                                           <div className="flex flex-wrap gap-[var(--space-2)]">
                                             {TRANSPORT_LLEGADA.map((t) => (
@@ -1118,12 +1140,12 @@ export default function PlanDetailPage() {
                                       setAddSheetInitialDate(dateKey);
                                       setShowAddSheet(true);
                                     }}
-                                    className="group relative flex w-full gap-0 pb-[var(--space-2)] pt-[var(--space-2)] text-left"
+                                    className="group relative flex w-full gap-0 bg-app pb-[var(--space-2)] pt-[var(--space-2)] text-left"
                                     aria-label={`Añadir actividad en ${fmtDayHeader(items[0].inicio_at)}`}
                                   >
-                                    <div className="w-[82px] shrink-0 pr-[var(--space-2)]" />
+                                    <div className="w-[54px] sm:w-[82px] shrink-0 pr-[var(--space-2)]" />
                                     <div className="relative flex w-[28px] shrink-0 justify-center">
-                                      <div className="absolute left-1/2 top-[-40px] h-[42px] w-[1.5px] -translate-x-1/2 bg-[var(--border)]" />
+                                      <div className="absolute left-1/2 top-[-8px] h-[10px] w-[1.5px] -translate-x-1/2 bg-[var(--border)]" />
                                       <div className="relative z-10 mt-[2px] flex h-[22px] w-[22px] items-center justify-center rounded-full border border-primary-token/35 bg-primary-token/10 text-primary-token transition-colors group-hover:border-primary-token/55 group-hover:bg-primary-token/16">
                                         <PlusIcon className="size-[12px]" />
                                       </div>

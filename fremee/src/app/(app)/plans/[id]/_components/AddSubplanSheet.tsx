@@ -17,6 +17,7 @@ import { isoDateOnly, timeToMin, getOccupiedIntervals } from "./plan-utils";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
 import { CloseX } from "@/components/ui/CloseX";
 import { ModalFeedback, type ModalFeedbackState } from "@/components/ui/ModalFeedback";
+import { DiscardChangesDialog } from "@/components/ui/DiscardChangesDialog";
 
 // ── Transport & activity constants ────────────────────────────────────────────
 
@@ -310,6 +311,7 @@ export function AddSubplanSheet({
   );
   const [transporteLlegada,  setTransporteLlegada]  = useState<string | null>(initialSubplan?.transporte_llegada ?? null);
   const [feedbackState,      setFeedbackState]      = useState<ModalFeedbackState | null>(null);
+  const [discardOpen,        setDiscardOpen]        = useState(false);
   const [wizardStep,         setWizardStep]         = useState(1);
   const [error,              setError]              = useState<string | null>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
@@ -323,12 +325,6 @@ export function AddSubplanSheet({
 
   const hayActividadEseDia = subplanes.some((s) => s.id !== initialSubplan?.id && isoDateOnly(s.inicio_at) === fecha);
   const esTransporte = TIPOS_TRANSPORTE.includes(tipo);
-
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = prev; };
-  }, []);
 
   const clampedHoraInicio = (() => {
     if (planIsAllDay) return horaInicio;
@@ -448,6 +444,48 @@ export function AddSubplanSheet({
   const canContinueWizard = wizardStep === 3 ? titulo.trim().length > 0 : true;
   const isLastStep = wizardStep === TOTAL_STEPS;
   const meta = STEP_META[wizardStep - 1];
+  const initialSnapshot = useMemo(() => JSON.stringify({
+    titulo: initialSubplan?.titulo ?? initialTitulo ?? "",
+    descripcion: initialSubplan?.descripcion ?? "",
+    fecha: defaultDate,
+    fechaFin: initialEndDate && initialEndDate !== defaultDate ? initialEndDate : null,
+    horaInicio: defaultHoraInicio,
+    horaFin: defaultHoraFin,
+    tipo: initialSubplan?.tipo ?? "ACTIVIDAD",
+    ubicacion: initialSubplan?.ubicacion_nombre ?? "",
+    ubicacionCoords: initialSubplan?.ubicacion_lat != null && initialSubplan?.ubicacion_lng != null
+      ? { lat: initialSubplan.ubicacion_lat, lng: initialSubplan.ubicacion_lng }
+      : null,
+    ubicacionFin: initialSubplan?.ubicacion_fin_nombre ?? "",
+    ubicacionFinCoords: initialSubplan?.ubicacion_fin_lat != null && initialSubplan?.ubicacion_fin_lng != null
+      ? { lat: initialSubplan.ubicacion_fin_lat, lng: initialSubplan.ubicacion_fin_lng }
+      : null,
+    transporteLlegada: initialSubplan?.transporte_llegada ?? null,
+  }), [defaultDate, defaultHoraFin, defaultHoraInicio, initialEndDate, initialSubplan, initialTitulo]);
+  const currentSnapshot = JSON.stringify({
+    titulo,
+    descripcion,
+    fecha,
+    fechaFin,
+    horaInicio,
+    horaFin,
+    tipo,
+    ubicacion,
+    ubicacionCoords,
+    ubicacionFin,
+    ubicacionFinCoords,
+    transporteLlegada,
+  });
+  const hasProgress = wizardStep > 1 || currentSnapshot !== initialSnapshot;
+
+  function requestDismiss() {
+    if (isSaving) return;
+    if (hasProgress) {
+      setDiscardOpen(true);
+      return;
+    }
+    requestClose();
+  }
 
   const handleAdvance = () => {
     if (!canContinueWizard || isSaving) return;
@@ -469,8 +507,8 @@ export function AddSubplanSheet({
 
   return (
     <>
-      <div data-closing={isClosing ? "true" : "false"} className="app-modal-overlay fixed inset-0 z-40" onClick={isSaving ? undefined : requestClose} />
-      <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center" onClick={isSaving ? undefined : requestClose}>
+      <div data-closing={isClosing ? "true" : "false"} className="app-modal-overlay fixed inset-0 z-40" onClick={isSaving ? undefined : requestDismiss} />
+      <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center" onClick={isSaving ? undefined : requestDismiss}>
         <div
           ref={sheetRef}
           data-closing={isClosing ? "true" : "false"}
@@ -522,7 +560,7 @@ export function AddSubplanSheet({
             <span className="text-caption font-[var(--fw-medium)] text-muted">{wizardStep} de {TOTAL_STEPS}</span>
             <button
               type="button"
-              onClick={requestClose}
+              onClick={requestDismiss}
               disabled={isSaving}
               className="flex size-9 items-center justify-center rounded-full text-app transition-colors hover:bg-surface disabled:opacity-50"
               aria-label="Cerrar"
@@ -692,6 +730,14 @@ export function AddSubplanSheet({
           </div>
         </div>
       </div>
+      <DiscardChangesDialog
+        open={discardOpen}
+        onCancel={() => setDiscardOpen(false)}
+        onDiscard={() => {
+          setDiscardOpen(false);
+          requestClose();
+        }}
+      />
     </>
   );
 }
