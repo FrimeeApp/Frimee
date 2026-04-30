@@ -772,12 +772,12 @@ function CalendarPageInner() {
                             onClick={() => navigateToPlan(plan.id)}
                           >
                             <div
-                              className="size-[68px] shrink-0 self-start rounded-[8px] bg-cover bg-center bg-no-repeat my-[var(--space-3)]"
+                              className="size-[68px] shrink-0 self-start rounded-[8px] bg-cover bg-center bg-no-repeat my-[var(--space-2)]"
                               style={{ backgroundImage: `url(${plan.coverImage ?? DEFAULT_PLAN_COVER_IMAGE.mobile})` }}
                               role="img"
                               aria-label={plan.title}
                             />
-                            <div className="flex min-w-0 flex-1 items-start gap-2 py-[var(--space-3)]">
+                            <div className="flex min-w-0 flex-1 items-start gap-2 py-[var(--space-2)]">
                               <div className="min-w-0 flex-1">
                                 <p className="truncate text-body-sm font-[var(--fw-semibold)] text-app">{plan.title}</p>
                                 <p className="mt-[2px] text-caption text-muted">{formatDateRange(plan.startsAt, plan.endsAt)}</p>
@@ -792,7 +792,7 @@ function CalendarPageInner() {
                     </div>
 
                     {/* Desktop: grid sin borde */}
-                    <div className="hidden md:grid md:grid-cols-2 md:gap-x-[var(--space-5)] md:gap-y-[var(--space-8)]">
+                    <div className="hidden md:grid md:grid-cols-2 md:gap-x-[var(--space-5)] md:gap-y-[var(--space-6)]">
                       {filteredPlans.map((plan) => {
                         return (
                           <article

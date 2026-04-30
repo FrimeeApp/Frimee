@@ -469,8 +469,8 @@ export function AddSubplanSheet({
 
   return (
     <>
-      <div data-closing={isClosing ? "true" : "false"} className="app-modal-overlay fixed inset-0 z-40" onClick={requestClose} />
-      <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center" onClick={requestClose}>
+      <div data-closing={isClosing ? "true" : "false"} className="app-modal-overlay fixed inset-0 z-40" onClick={isSaving ? undefined : requestClose} />
+      <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center" onClick={isSaving ? undefined : requestClose}>
         <div
           ref={sheetRef}
           data-closing={isClosing ? "true" : "false"}
@@ -480,6 +480,8 @@ export function AddSubplanSheet({
               : "md:max-w-[520px]"
           }`}
           onClick={(e) => e.stopPropagation()}
+          role="dialog"
+          aria-modal="true"
         >
           {feedbackState && (
             <ModalFeedback
@@ -504,15 +506,29 @@ export function AddSubplanSheet({
 
           {/* Top nav */}
           <div className="flex shrink-0 items-center justify-between px-[var(--space-5)] py-[var(--space-3)]">
+            {wizardStep > 1 ? (
+              <button
+                type="button"
+                onClick={() => setWizardStep((s) => s - 1)}
+                disabled={isSaving}
+                className="flex size-9 items-center justify-center rounded-full text-app transition-colors hover:bg-surface disabled:opacity-50"
+                aria-label="Volver"
+              >
+                <ChevronLeft className="size-[18px]" aria-hidden />
+              </button>
+            ) : (
+              <div className="size-9" aria-hidden="true" />
+            )}
+            <span className="text-caption font-[var(--fw-medium)] text-muted">{wizardStep} de {TOTAL_STEPS}</span>
             <button
               type="button"
-              onClick={wizardStep === 1 ? requestClose : () => setWizardStep((s) => s - 1)}
-              className="flex size-9 items-center justify-center rounded-full text-app transition-colors hover:bg-surface"
+              onClick={requestClose}
+              disabled={isSaving}
+              className="flex size-9 items-center justify-center rounded-full text-app transition-colors hover:bg-surface disabled:opacity-50"
+              aria-label="Cerrar"
             >
-              {wizardStep === 1 ? <CloseX /> : <ChevronLeft className="size-[18px]" aria-hidden />}
+              <CloseX />
             </button>
-            <span className="text-caption font-[var(--fw-medium)] text-muted">{wizardStep} de {TOTAL_STEPS}</span>
-            <div className="size-9" aria-hidden="true" />
           </div>
 
           {/* Content */}

@@ -398,8 +398,11 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
               type="button"
               onClick={openCreatePlan}
               aria-label="Crear plan"
-              className="flex items-center"
+              className="flex items-center gap-[var(--space-2)]"
             >
+              <span className="rounded-full border border-app bg-app px-[var(--space-3)] py-[7px] text-caption font-[var(--fw-semibold)] text-app shadow-elev-2">
+                Crear plan
+              </span>
               <span className="flex size-14 items-center justify-center rounded-full border border-app bg-surface text-app shadow-elev-3">
                 <PlansIcon className="size-6" />
               </span>
@@ -408,8 +411,11 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
               type="button"
               onClick={() => void openCreateExpense()}
               aria-label="Crear gasto"
-              className="flex items-center"
+              className="flex items-center gap-[var(--space-2)]"
             >
+              <span className="rounded-full border border-app bg-app px-[var(--space-3)] py-[7px] text-caption font-[var(--fw-semibold)] text-app shadow-elev-2">
+                Crear gasto
+              </span>
               <span className="flex size-14 items-center justify-center rounded-full border border-app bg-surface text-app shadow-elev-3">
                 <CardIcon className="size-6" />
               </span>
@@ -419,8 +425,11 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
                 type="button"
                 onClick={openCreateConversation}
                 aria-label="Crear conversación"
-                className="flex items-center"
+                className="flex items-center gap-[var(--space-2)]"
               >
+                <span className="rounded-full border border-app bg-app px-[var(--space-3)] py-[7px] text-caption font-[var(--fw-semibold)] text-app shadow-elev-2">
+                  Crear conversación
+                </span>
                 <span className="flex size-14 items-center justify-center rounded-full border border-app bg-surface text-app shadow-elev-3">
                   <SendIcon className="size-6" />
                 </span>
