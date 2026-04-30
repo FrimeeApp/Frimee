@@ -406,7 +406,7 @@ function TicketSourceViewer({ ticket, onClose }: { ticket: PlanTicket; onClose: 
     >
       {/* Top bar */}
       <div
-        className="flex shrink-0 items-center justify-between px-5 py-4"
+        className="flex shrink-0 items-center justify-between px-5 pb-4 pt-[max(1rem,calc(env(safe-area-inset-top)+0.5rem))]"
         onClick={e => e.stopPropagation()}
       >
         <div>

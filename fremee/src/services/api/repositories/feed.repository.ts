@@ -39,7 +39,7 @@ function entryToFeedItem(entry: FeedPostEntry): FeedItemDto {
     avatarLabel: (userName.trim()[0] || "U").toUpperCase(),
     avatarImage: creator?.profileImage ?? null,
     subtitle: entry.title,
-    text: entry.caption ?? entry.description,
+    text: entry.caption ?? "",
     caption: entry.caption,
     hasImage: Boolean(entry.coverImage),
     coverImage: entry.coverImage,

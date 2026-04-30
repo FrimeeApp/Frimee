@@ -493,7 +493,7 @@ function CalendarPageInner() {
                 value={planSearch}
                 onChange={setPlanSearch}
                 placeholder="Buscar"
-                className="h-[40px] w-full px-[12px] md:max-w-[220px]"
+                className="h-[40px] w-full md:max-w-[260px]"
               />
             </div>
 

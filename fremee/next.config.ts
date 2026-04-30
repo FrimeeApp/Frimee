@@ -1,5 +1,6 @@
 import path from "node:path";
 import type { NextConfig } from "next";
+import { withSentryConfig } from "@sentry/nextjs";
 
 // Use static export only for Capacitor mobile builds.
 // Run with: BUILD_TARGET=capacitor next build
@@ -39,4 +40,14 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withSentryConfig(nextConfig, {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  silent: true,
+  widenClientFileUpload: true,
+  hideSourceMaps: true,
+  disableLogger: true,
+  // Don't instrument static Capacitor builds
+  autoInstrumentServerFunctions: !isCapacitorBuild,
+  autoInstrumentMiddleware: !isCapacitorBuild,
+});

@@ -1,6 +1,7 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   createGastoEndpoint,
   fetchPlanMiembrosEndpoint,
@@ -17,6 +18,7 @@ import { FIELD_LINE_CLS } from "@/lib/styles";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
 import { CloseX } from "@/components/ui/CloseX";
 import { ModalFeedback, type ModalFeedbackState } from "@/components/ui/ModalFeedback";
+import { DiscardChangesDialog } from "@/components/ui/DiscardChangesDialog";
 
 type CategoriaGasto = { id: number; nombre: string; icono: string | null; color: string | null };
 
@@ -101,6 +103,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [feedbackState, setFeedbackState] = useState<ModalFeedbackState | null>(null);
+  const [discardOpen, setDiscardOpen] = useState(false);
   const [participantesExpanded, setParticipantesExpanded] = useState(true);
   const [participantesSearch, setParticipantesSearch] = useState("");
   const [pagadorOpen, setPagadorOpen] = useState(false);
@@ -120,12 +123,6 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
   useEffect(() => {
     fetchSubplanes(planId).then(setSubplanes).catch(() => {});
   }, [planId]);
-
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = prev; };
-  }, []);
 
   useEffect(() => {
     fetchPlanMiembrosEndpoint(planId)
@@ -284,6 +281,23 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
 
   const meta = STEP_META[step - 1];
   const fieldLineCls = FIELD_LINE_CLS;
+  const hasProgress =
+    step > 1 ||
+    titulo.trim().length > 0 ||
+    total.trim().length > 0 ||
+    receiptUrl !== null ||
+    items.length > 0 ||
+    subplanId !== null ||
+    metodo !== "IGUAL";
+
+  function requestDismiss() {
+    if (saving || ocrLoading) return;
+    if (hasProgress) {
+      setDiscardOpen(true);
+      return;
+    }
+    requestClose();
+  }
 
   // ── shared dropdown renderer ──
   function Dropdown({ btnRef, open, onClose: closeDropdown, items: dropdownItems }: {
@@ -294,17 +308,25 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
   }) {
     if (!open) return null;
     const r = btnRef.current?.getBoundingClientRect();
-    return (
+    const maxH = 224;
+    const spaceBelow = r ? window.innerHeight - r.bottom - 8 : 0;
+    const showAbove = spaceBelow < maxH && (r?.top ?? 0) > maxH;
+    const top = showAbove ? undefined : (r ? r.bottom + 4 : 0);
+    const bottom = showAbove ? (r ? window.innerHeight - r.top + 4 : 0) : undefined;
+    const width = r?.width ?? 300;
+    const left = r ? Math.min(r.left, window.innerWidth - width - 8) : 0;
+    return createPortal(
       <>
-        <div className="fixed inset-0 z-40" onClick={closeDropdown} />
-        <div className="fixed z-50 mt-1 max-h-56 overflow-y-auto rounded-xl border border-app bg-[var(--surface)] shadow-elev-3" style={{ top: r ? r.bottom + 4 : 0, left: r?.left ?? 0, width: r?.width ?? 300 }}>
+        <div className="fixed inset-0 z-[9998]" onClick={closeDropdown} />
+        <div className="fixed z-[9999] max-h-56 overflow-y-auto rounded-xl border border-app bg-[var(--surface)] shadow-elev-3" style={{ top, bottom, left, width }}>
           {dropdownItems.map(item => (
             <button key={item.key} type="button" onClick={item.onClick} className={`flex w-full items-center px-4 py-2.5 text-left text-body-sm transition-colors hover:bg-surface-2 ${item.active ? "text-[var(--primary,#298e7d)] font-[var(--fw-semibold)]" : "text-app"}`}>
               {item.label}
             </button>
           ))}
         </div>
-      </>
+      </>,
+      document.body
     );
   }
 
@@ -313,7 +335,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
       <div data-closing={isClosing ? "true" : "false"} className="app-modal-overlay fixed inset-0 z-40" />
       <div
         className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-[var(--space-4)]"
-        onClick={(e) => { if (e.target !== e.currentTarget) return; if (window.matchMedia("(min-width: 768px)").matches) requestClose(); }}
+        onClick={(e) => { if (e.target !== e.currentTarget) return; if (window.matchMedia("(min-width: 768px)").matches) requestDismiss(); }}
       >
         <div
           data-closing={isClosing ? "true" : "false"}
@@ -365,7 +387,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
             ) : (
               <button
                 type="button"
-                onClick={requestClose}
+                onClick={requestDismiss}
                 className="flex size-9 items-center justify-center rounded-full text-app transition-colors hover:bg-surface"
                 aria-label="Cerrar"
               >
@@ -516,7 +538,9 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                         <div className="fixed inset-0 z-40" onClick={() => setPagadorOpen(false)} />
                         <div className="fixed z-50 mt-1 rounded-xl border border-app bg-[var(--surface)] shadow-elev-3" style={{ top: r ? r.bottom + 4 : 0, left: r?.left ?? 0, width: r?.width ?? 300 }}>
                           <div className="border-b border-app px-3 py-2">
+                            <div className="flex h-9 items-center rounded-full border border-app bg-[var(--search-field-bg)] px-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
                             <input autoFocus value={pagadorSearch} onChange={e => setPagadorSearch(e.target.value)} placeholder="Buscar..." className="w-full bg-transparent text-body-sm text-app outline-none placeholder:text-muted" />
+                            </div>
                           </div>
                           <div className="max-h-48 overflow-y-auto">
                             {filtered.map(m => (
@@ -577,7 +601,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                         {participantesExpanded ? <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg> : <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>}
                       </button>
                     </div>
-                    {participantesExpanded && <div className="border-b border-[var(--surface-2)] px-3 py-2"><input value={participantesSearch} onChange={e => setParticipantesSearch(e.target.value)} placeholder="Buscar participante..." className="w-full bg-transparent text-body-sm text-app outline-none placeholder:text-muted" /></div>}
+                    {participantesExpanded && <div className="border-b border-[var(--surface-2)] px-3 py-2"><div className="flex h-9 items-center rounded-full border border-app bg-[var(--search-field-bg)] px-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"><input value={participantesSearch} onChange={e => setParticipantesSearch(e.target.value)} placeholder="Buscar participante..." className="w-full bg-transparent text-body-sm text-app outline-none placeholder:text-muted" /></div></div>}
                     {participantesExpanded && (
                       <div className="max-h-[220px] overflow-y-auto divide-y divide-[var(--surface-2)]">
                         {miembros.filter(m => !participantesSearch || (m.nombre ?? "").toLowerCase().includes(participantesSearch.toLowerCase())).map((m) => {
@@ -610,7 +634,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                           {participantesExpanded ? <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg> : <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>}
                         </button>
                       </div>
-                      {participantesExpanded && <div className="border-b border-[var(--surface-2)] px-3 py-2"><input value={participantesSearch} onChange={e => setParticipantesSearch(e.target.value)} placeholder="Buscar participante..." className="w-full bg-transparent text-body-sm text-app outline-none placeholder:text-muted" /></div>}
+                      {participantesExpanded && <div className="border-b border-[var(--surface-2)] px-3 py-2"><div className="flex h-9 items-center rounded-full border border-app bg-[var(--search-field-bg)] px-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"><input value={participantesSearch} onChange={e => setParticipantesSearch(e.target.value)} placeholder="Buscar participante..." className="w-full bg-transparent text-body-sm text-app outline-none placeholder:text-muted" /></div></div>}
                       {participantesExpanded && (
                         <div className="max-h-[220px] overflow-y-auto divide-y divide-[var(--surface-2)]">
                           {miembros.filter(m => !participantesSearch || (m.nombre ?? "").toLowerCase().includes(participantesSearch.toLowerCase())).map((m) => {
@@ -659,7 +683,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                           {participantesExpanded ? <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg> : <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>}
                         </button>
                       </div>
-                      {participantesExpanded && <div className="border-b border-[var(--surface-2)] px-3 py-2"><input value={participantesSearch} onChange={e => setParticipantesSearch(e.target.value)} placeholder="Buscar participante..." className="w-full bg-transparent text-body-sm text-app outline-none placeholder:text-muted" /></div>}
+                      {participantesExpanded && <div className="border-b border-[var(--surface-2)] px-3 py-2"><div className="flex h-9 items-center rounded-full border border-app bg-[var(--search-field-bg)] px-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"><input value={participantesSearch} onChange={e => setParticipantesSearch(e.target.value)} placeholder="Buscar participante..." className="w-full bg-transparent text-body-sm text-app outline-none placeholder:text-muted" /></div></div>}
                       {participantesExpanded && (
                         <div className="max-h-[220px] overflow-y-auto divide-y divide-[var(--surface-2)]">
                           {miembros.filter(m => !participantesSearch || (m.nombre ?? "").toLowerCase().includes(participantesSearch.toLowerCase())).map((m) => {
@@ -750,7 +774,9 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                                       <div className="fixed inset-0 z-40" onClick={() => setItemPopoverIdx(null)} />
                                       <div className="fixed z-50 rounded-xl border border-app bg-[var(--surface)] shadow-elev-3" style={{ top, bottom, left, width: 210 }}>
                                         <div className="flex items-center justify-between border-b border-app px-3 py-2 gap-2">
+                                          <div className="flex h-9 min-w-0 flex-1 items-center rounded-full border border-app bg-[var(--search-field-bg)] px-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
                                           <input autoFocus value={itemPopoverSearch} onChange={e => setItemPopoverSearch(e.target.value)} placeholder="Buscar..." className="min-w-0 flex-1 bg-transparent text-body-sm text-app outline-none placeholder:text-muted" />
+                                          </div>
                                           <button type="button" onClick={() => { const patch: Record<string, boolean> = {}; miembros.forEach(m => { patch[m.user_id] = !allChecked; }); updateItem(idx, { asignados: patch }); }} className="shrink-0 text-caption text-muted hover:text-primary-token transition-colors">{allChecked ? "Ninguno" : "Todos"}</button>
                                         </div>
                                         <div className="max-h-[200px] overflow-y-auto divide-y divide-[var(--surface-2)]">
@@ -797,6 +823,14 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
           </div>
         </div>
       </div>
+      <DiscardChangesDialog
+        open={discardOpen}
+        onCancel={() => setDiscardOpen(false)}
+        onDiscard={() => {
+          setDiscardOpen(false);
+          requestClose();
+        }}
+      />
     </>
   );
 }

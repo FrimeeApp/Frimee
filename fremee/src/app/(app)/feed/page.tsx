@@ -4,6 +4,7 @@ import NextImage from "next/image";
 import Link from "next/link";
 import PlaneIcon from "@/components/ui/PlaneIcon";
 import { useFollow } from "@/hooks/useFollow";
+import { useToast } from "@/components/ui/Toaster";
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { CSSProperties } from "react";
 import AppSidebar from "@/components/common/AppSidebar";
@@ -24,6 +25,9 @@ import {
 import { getPublicUserProfile, searchUsers, type PublicUserProfileDto } from "@/services/api/repositories/users.repository";
 import { fetchActiveFriends, getFollowStatuses } from "@/services/api/endpoints/users.endpoint";
 import { savePlan, unsavePlan, getSavedStatuses } from "@/services/api/endpoints/saved.endpoint";
+import { listActiveFriendFlightsEndpoint } from "@/services/api/endpoints/wallet.endpoint";
+import type { PlanTicket } from "@/services/api/endpoints/wallet.endpoint";
+import FeedFlightCarousel from "@/components/feed/FeedFlightCarousel";
 import {
   listChats,
   listMensajes,
@@ -146,6 +150,7 @@ export default function FeedPage() {
   const [mobileSearchLoading, setMobileSearchLoading] = useState(false);
   const [createPlanModalOpen, setCreatePlanModalOpen] = useState(false);
   const [suggestedProfiles, setSuggestedProfiles] = useState<PublicUserProfileDto[]>([]);
+  const [friendFlights, setFriendFlights] = useState<PlanTicket[]>([]);
   const [recentProfiles, setRecentProfiles] = useState<RecentProfile[]>([]);
   const mobileSearchInputRef = useRef<HTMLInputElement>(null);
   const mobileHeaderRef = useRef<HTMLDivElement | null>(null);
@@ -173,6 +178,7 @@ export default function FeedPage() {
 
       try {
         // 2. Posts + amigos en paralelo — ninguno bloquea al otro
+        listActiveFriendFlightsEndpoint().then(data => { if (!cancelled) setFriendFlights(data); }).catch(() => {});
         const [feedResult, friends] = await Promise.all([
           getFeedPostsOnly({ limit: 20 }),
           fetchActiveFriends(),
@@ -416,39 +422,30 @@ export default function FeedPage() {
                 ref={mobileHeaderRef}
                 className={`sticky top-0 z-[100] bg-app pb-[clamp(6px,1.6dvh,var(--space-2))] pt-mobile-safe-top pl-[max(var(--page-margin-x),env(safe-area-inset-left))] pr-[max(var(--page-margin-x),env(safe-area-inset-right))] md:hidden ${createPlanModalOpen ? "hidden" : ""}`}
               >
-                <div className="relative flex items-center justify-between gap-[10px]">
-                  <button
-                    type="button"
-                    onClick={() => setMobileSearchOpen(true)}
-                    aria-label="Buscar"
-                    className="flex h-[clamp(40px,5.8dvh,44px)] min-w-[112px] max-w-[38vw] items-center gap-[10px] rounded-[8px] bg-[var(--search-field-bg)] px-[clamp(12px,3.4vw,14px)] text-muted transition-opacity hover:opacity-80"
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[clamp(20px,5.6vw,22px)] shrink-0">
-                      <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.8" />
-                      <path d="M16 16L20.5 20.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                    </svg>
-                    <span className="truncate text-[clamp(14px,4vw,15px)]">Buscar</span>
-                  </button>
+                <div className="relative flex flex-col items-center gap-[10px]">
+                  <div className="relative flex w-full items-center justify-center">
+                    <button
+                      type="button"
+                      onClick={() => setMobileSearchOpen(true)}
+                      aria-label="Buscar"
+                      className={`flex h-[40px] items-center gap-[9px] rounded-full border border-app bg-[var(--search-field-bg)] px-4 text-muted shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-[width,opacity,transform,background-color] duration-300 ease-out hover:opacity-90 active:scale-[0.98] ${
+                        mobileSearchOpen ? "w-[calc(100%-44px)]" : "w-[min(66vw,300px)]"
+                      }`}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[19px] shrink-0">
+                        <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.8" />
+                        <path d="M16 16L20.5 20.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                      </svg>
+                      <span className="truncate text-[14px] font-[500]">Buscar</span>
+                    </button>
 
-                  <button
-                    type="button"
-                    onClick={() => setActiveFeedTab((prev) => (prev === "explore" ? "following" : "explore"))}
-                    className="absolute left-1/2 flex h-[clamp(40px,5.8dvh,44px)] -translate-x-1/2 items-center gap-[8px] px-[4px] text-body-sm font-[700] text-app"
-                  >
-                    <span>{activeFeedTab === "explore" ? "Explorar" : "Siguiendo"}</span>
-                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[18px]">
-                      <path d="M7 10L12 15L17 10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  </button>
-
-                  <div className="ml-auto flex items-center gap-[10px]">
                     <button
                       type="button"
                       onClick={() => setNotifPanelOpen(true)}
                       aria-label="Notificaciones"
-                      className="relative flex h-[clamp(40px,5.8dvh,44px)] w-[clamp(40px,5.8dvh,44px)] shrink-0 items-center justify-center text-app transition-opacity hover:opacity-70"
+                      className="absolute right-0 top-1/2 flex size-[34px] -translate-y-1/2 items-center justify-center text-app transition-opacity hover:opacity-70"
                     >
-                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[clamp(24px,7vw,28px)]">
+                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[23px]">
                         <path
                           d="M6 10.5C6 7.46 8.24 5 12 5s6 2.46 6 5.5v3l1.5 2.5H4.5L6 13.5v-3Z"
                           stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"
@@ -464,7 +461,26 @@ export default function FeedPage() {
                         </span>
                       )}
                     </button>
+                  </div>
 
+                  <div className="relative flex min-h-[28px] w-full items-center justify-center">
+                    <div className="flex items-center justify-center gap-[10px] text-[13px] font-[700] leading-none">
+                      <button
+                        type="button"
+                        onClick={() => setActiveFeedTab("following")}
+                        className={`py-2 transition-colors ${activeFeedTab === "following" ? "text-app" : "text-muted"}`}
+                      >
+                        Siguiendo
+                      </button>
+                      <span className="h-[14px] w-px bg-muted/35" aria-hidden="true" />
+                      <button
+                        type="button"
+                        onClick={() => setActiveFeedTab("explore")}
+                        className={`py-2 transition-colors ${activeFeedTab === "explore" ? "text-app" : "text-muted"}`}
+                      >
+                        Explorar
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -476,18 +492,18 @@ export default function FeedPage() {
                 }`}
               >
                 {/* Search bar at the top */}
-                <div className="flex items-center gap-[8px] px-[var(--space-4)] pb-[var(--space-4)] pt-[calc(env(safe-area-inset-top)+var(--space-4))]">
+                <div className="relative flex items-center justify-center px-[max(var(--space-4),env(safe-area-inset-left))] pb-[var(--space-4)] pr-[max(var(--space-4),env(safe-area-inset-right))] pt-[calc(env(safe-area-inset-top)+var(--space-4))]">
                   <button
                     type="button"
                     onClick={closeMobileSearch}
                     aria-label="Cerrar búsqueda"
-                    className="flex h-[44px] w-[36px] shrink-0 items-center justify-center text-app transition-opacity hover:opacity-70"
+                    className="absolute left-[max(var(--space-4),env(safe-area-inset-left))] top-[calc(env(safe-area-inset-top)+var(--space-4))] flex h-[44px] w-[36px] shrink-0 items-center justify-center text-app transition-opacity hover:opacity-70"
                   >
                     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[20px]">
                       <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                   </button>
-                  <div className="flex h-[44px] min-w-0 flex-1 items-center gap-[10px] rounded-[8px] bg-[var(--search-field-bg)] px-[14px]">
+                  <div className="mobile-search-expand-field ml-[44px] flex h-[44px] min-w-0 items-center gap-[10px] rounded-full border border-app bg-[var(--search-field-bg)] px-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
                     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[20px] shrink-0 text-muted">
                       <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.8" />
                       <path d="M16 16L20.5 20.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
@@ -616,6 +632,33 @@ export default function FeedPage() {
                 </div>
               </div>
 
+              <style jsx>{`
+                @keyframes mobile-search-expand {
+                  from {
+                    width: min(66vw, 300px);
+                    transform: translateX(-22px) scale(0.98);
+                    opacity: 0.92;
+                  }
+                  to {
+                    width: calc(100% - 44px);
+                    transform: translateX(0) scale(1);
+                    opacity: 1;
+                  }
+                }
+
+                .mobile-search-expand-field {
+                  width: calc(100% - 44px);
+                  animation: mobile-search-expand 260ms var(--ease-decelerate) both;
+                  transform-origin: center center;
+                }
+
+                @media (prefers-reduced-motion: reduce) {
+                  .mobile-search-expand-field {
+                    animation: none;
+                  }
+                }
+              `}</style>
+
               <div
                 ref={tabRowRef}
                 className="relative hidden w-full gap-[var(--space-4)] pb-[var(--space-2)] text-body text-muted md:flex"
@@ -686,6 +729,7 @@ export default function FeedPage() {
             <div className="md:mt-[var(--space-5)] grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] xl:gap-[var(--space-6)]">
             <section className="w-full">
               <div className="md:ml-[72px] xl:ml-[72px]">
+                {activeFeedTab === "following" && <FeedFlightCarousel flights={friendFlights} />}
                 {loadingFeed || !firstImageReady ? (
                   <>
                     <FeedSkeleton />
@@ -1146,6 +1190,7 @@ function FeedCard({
   const { isClosing: deleteClosing, requestClose: closeDeleteConfirm } = useModalCloseAnimation(() => setConfirmDeleteId(null), !!confirmDeleteId);
   const [replyingTo, setReplyingTo] = useState<{ commentId: string; userName: string } | null>(null);
   const [saved, setSaved] = useState(initialSaved);
+  const { toastError } = useToast();
   const isOwnPost = post.plan.ownerUserId === currentUserId;
   const mobileImagePostVars: FeedMobileImageVars | undefined = post.hasImage
     ? ({
@@ -1473,6 +1518,7 @@ function FeedCard({
       setLiked(liked);
       setLikeCount((c) => newLiked ? Math.max(0, c - 1) : c + 1);
       console.error("[feed] Error toggling like:", e);
+      toastError("No se pudo actualizar el like. Inténtalo de nuevo.");
     } finally {
       setLikeLoading(false);
     }
@@ -1564,6 +1610,7 @@ function FeedCard({
       }
     } catch (e) {
       console.error("[feed] Error creating comment:", e);
+      toastError("No se pudo enviar el comentario. Inténtalo de nuevo.");
     } finally {
       setCommentSubmitting(false);
     }
@@ -1991,20 +2038,35 @@ function FeedCard({
                         <div key="mobile-twitter-summary" className={`${base} bg-[#0d0e12] ${active ? "z-[1] opacity-100" : "z-0 opacity-0"}`}>
                           <NextImage src={post.coverImage!} alt="" fill className="scale-110 object-cover opacity-15 blur-xl" unoptimized />
                           <div className="absolute inset-0 bg-black/60" />
-                          <div className="absolute inset-0 z-10 flex flex-col justify-end gap-3 p-5">
-                            {post.itinerarySnapshot && post.itinerarySnapshot.length > 0 && (
-                              <div className="space-y-[4px]">
-                                {post.itinerarySnapshot.slice(0, 4).map((item, idx) => (
-                                  <div key={idx} className="flex items-center gap-2">
-                                    <span className="text-[12px]">{getSlideActivityEmoji(item.tipo)}</span>
-                                    <span className="truncate text-[13px] font-[600] text-white/90">{item.titulo}</span>
-                                  </div>
-                                ))}
+                          <div className="absolute inset-0 z-10 flex flex-col justify-between p-5">
+                            <div>
+                              <p className="text-[12px] font-[700] uppercase tracking-[0.12em] text-white/55">Resumen del plan</p>
+                              <p className="mt-1 line-clamp-2 text-[22px] font-[800] leading-[1.05] tracking-tight text-white">{post.plan.title}</p>
+                              <p className="mt-2 truncate text-[13px] font-[600] text-white/65">{[mobileLocationLabel, mobileDateLabel].filter(Boolean).join(" · ")}</p>
+                            </div>
+                            <div className="space-y-3">
+                              {post.itinerarySnapshot && post.itinerarySnapshot.length > 0 && (
+                                <div className="space-y-[6px] rounded-[14px] bg-white/[0.08] p-3">
+                                  {post.itinerarySnapshot.slice(0, 4).map((item, idx) => (
+                                    <div key={idx} className="flex items-center gap-2">
+                                      <span className="text-[12px]">{getSlideActivityEmoji(item.tipo)}</span>
+                                      <span className="truncate text-[13px] font-[600] text-white/90">{item.titulo}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              <div className="flex flex-wrap gap-2">
+                                {post.photosSnapshot && post.photosSnapshot.length > 0 && (
+                                  <span className="rounded-full bg-white/[0.1] px-3 py-1 text-[12px] font-[700] text-white/80">{post.photosSnapshot.length} fotos</span>
+                                )}
+                                {post.participantsSnapshot && (
+                                  <span className="rounded-full bg-white/[0.1] px-3 py-1 text-[12px] font-[700] text-white/80">{post.participantsSnapshot.count} personas</span>
+                                )}
+                                {post.expensesSnapshot && (
+                                  <span className="rounded-full bg-white/[0.1] px-3 py-1 text-[12px] font-[700] text-white/80">{post.expensesSnapshot.currency} {Math.round(post.expensesSnapshot.total).toLocaleString("es-ES")}</span>
+                                )}
                               </div>
-                            )}
-                            {post.expensesSnapshot && (
-                              <p className="text-[24px] font-[800] tracking-tight text-white">{post.expensesSnapshot.currency} {Math.round(post.expensesSnapshot.total).toLocaleString("es-ES")}</p>
-                            )}
+                            </div>
                           </div>
                         </div>
                       );
@@ -2161,20 +2223,35 @@ function FeedCard({
                     <div key="summary" className={`${base} bg-[#0d0e12] ${active ? "opacity-100 z-[1]" : "opacity-0 z-0"}`}>
                       <NextImage src={post.coverImage!} alt="" fill className="object-cover opacity-15 scale-110 blur-xl" unoptimized />
                       <div className="absolute inset-0 bg-black/60" />
-                      <div className="absolute inset-0 z-10 flex flex-col justify-end p-5 gap-3">
-                        {post.itinerarySnapshot && post.itinerarySnapshot.length > 0 && (
-                          <div className="space-y-[4px]">
-                            {post.itinerarySnapshot.slice(0, 4).map((item, idx) => (
-                              <div key={idx} className="flex items-center gap-2">
-                                <span className="text-[12px]">{getSlideActivityEmoji(item.tipo)}</span>
-                                <span className="text-[13px] font-[600] text-white/90 truncate">{item.titulo}</span>
-                              </div>
-                            ))}
+                      <div className="absolute inset-0 z-10 flex flex-col justify-between p-5">
+                        <div>
+                          <p className="text-[12px] font-[700] uppercase tracking-[0.12em] text-white/55">Resumen del plan</p>
+                          <p className="mt-1 line-clamp-2 text-[24px] font-[800] leading-[1.05] tracking-tight text-white">{post.plan.title}</p>
+                          <p className="mt-2 truncate text-[13px] font-[600] text-white/65">{[post.plan.locationName, desktopDateLabel].filter(Boolean).join(" · ")}</p>
+                        </div>
+                        <div className="space-y-3">
+                          {post.itinerarySnapshot && post.itinerarySnapshot.length > 0 && (
+                            <div className="space-y-[6px] rounded-[14px] bg-white/[0.08] p-3">
+                              {post.itinerarySnapshot.slice(0, 4).map((item, idx) => (
+                                <div key={idx} className="flex items-center gap-2">
+                                  <span className="text-[12px]">{getSlideActivityEmoji(item.tipo)}</span>
+                                  <span className="truncate text-[13px] font-[600] text-white/90">{item.titulo}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <div className="flex flex-wrap gap-2">
+                            {post.photosSnapshot && post.photosSnapshot.length > 0 && (
+                              <span className="rounded-full bg-white/[0.1] px-3 py-1 text-[12px] font-[700] text-white/80">{post.photosSnapshot.length} fotos</span>
+                            )}
+                            {post.participantsSnapshot && (
+                              <span className="rounded-full bg-white/[0.1] px-3 py-1 text-[12px] font-[700] text-white/80">{post.participantsSnapshot.count} personas</span>
+                            )}
+                            {post.expensesSnapshot && (
+                              <span className="rounded-full bg-white/[0.1] px-3 py-1 text-[12px] font-[700] text-white/80">{post.expensesSnapshot.currency} {Math.round(post.expensesSnapshot.total).toLocaleString("es-ES")}</span>
+                            )}
                           </div>
-                        )}
-                        {post.expensesSnapshot && (
-                          <p className="text-[24px] font-[800] text-white tracking-tight">{post.expensesSnapshot.currency} {Math.round(post.expensesSnapshot.total).toLocaleString("es-ES")}</p>
-                        )}
+                        </div>
                       </div>
                     </div>
                   );
@@ -2390,7 +2467,7 @@ function FeedCard({
             </div>
 
             <div className="flex min-h-0 flex-col bg-app">
-              <div className="flex items-center justify-between border-b px-[22px] py-[18px]">
+              <div className="flex items-center justify-between border-b px-[22px] pb-[18px] pt-[max(18px,calc(env(safe-area-inset-top)+10px))] md:py-[18px]">
                 <div className="flex min-w-0 items-center gap-3">
                   <div className="flex size-[42px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset">
                     {post.avatarImage ? (
