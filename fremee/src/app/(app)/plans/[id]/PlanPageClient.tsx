@@ -145,13 +145,13 @@ export default function PlanDetailPage() {
   const [subplanes, setSubplanes] = useState<SubplanRow[]>([]);
   const [selectedMapDay, setSelectedMapDay] = useState<string | null>(null);
   const [showMapFullscreen, setShowMapFullscreen] = useState(false);
-  const [routeSectionVisible, setRouteSectionVisible] = useState(false);
   const [collapsedDays, setCollapsedDays] = useState<Set<string>>(new Set());
   const [showAddSheet, setShowAddSheet] = useState(false);
   const [addSheetInitialTitulo, setAddSheetInitialTitulo] = useState<string | undefined>();
   const [addSheetInitialDate, setAddSheetInitialDate] = useState<string | undefined>();
   const [editingSubplan, setEditingSubplan] = useState<SubplanRow | null>(null);
   const [showAddGastoSheet, setShowAddGastoSheet] = useState(false);
+  const [mobileCreateOpen, setMobileCreateOpen] = useState(false);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [gastos, setGastos] = useState<GastoRow[]>([]);
   const [selectedGastoId, setSelectedGastoId] = useState<number | null>(null);
@@ -194,7 +194,6 @@ export default function PlanDetailPage() {
       }
     }
   }, [searchParams, plan, isPast]);
-  const routeSectionRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -309,29 +308,6 @@ export default function PlanDetailPage() {
     if (!routeHasRoute) return null;
     return buildWazeDirectionsUrl(routeStops[routeStops.length - 1]);
   }, [routeHasRoute, routeStops]);
-
-  useEffect(() => {
-    if (activeTab !== "itinerario") {
-      setRouteSectionVisible(false);
-      return;
-    }
-
-    const target = routeSectionRef.current;
-    if (!target || typeof IntersectionObserver === "undefined") return;
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        setRouteSectionVisible(entry.isIntersecting);
-      },
-      {
-        threshold: 0.15,
-        rootMargin: "0px 0px -8% 0px",
-      },
-    );
-
-    observer.observe(target);
-    return () => observer.disconnect();
-  }, [activeTab, subplanes.length]);
 
   useEffect(() => {
     if (!showMapFullscreen) return;
@@ -610,10 +586,26 @@ export default function PlanDetailPage() {
   useEffect(() => { loadGastos(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { loadBalances(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
+    setMobileCreateOpen(false);
+  }, [activeTab, showAddSheet, showAddGastoSheet]);
+  useEffect(() => {
     if (selectedGastoId && !gastos.some((gasto) => gasto.id === selectedGastoId)) {
       setSelectedGastoId(null);
     }
   }, [gastos, selectedGastoId]);
+
+  const openCreateSubplan = () => {
+    setMobileCreateOpen(false);
+    setEditingSubplan(null);
+    setAddSheetInitialTitulo(undefined);
+    setAddSheetInitialDate(undefined);
+    setShowAddSheet(true);
+  };
+
+  const openCreateGasto = () => {
+    setMobileCreateOpen(false);
+    setShowAddGastoSheet(true);
+  };
 
   if (loading || planLoading || !membershipChecked) return <PlanDetailSkeleton />;
   if (!plan) return (
@@ -872,43 +864,41 @@ export default function PlanDetailPage() {
                         <div key={dateKey} className={collapsedDays.has(dateKey) ? "mb-[var(--space-4)]" : "mb-[var(--space-6)]"}>
                           {/* Day header */}
                           <div className={`-mx-[var(--page-margin-x)] border-b border-app px-[var(--page-margin-x)] md:mx-0 md:px-0 ${collapsedDays.has(dateKey) ? "pb-[var(--space-4)]" : "mb-[var(--space-5)] pb-[var(--space-4)]"}`}>
-                            <div className="flex items-start gap-[var(--space-3)]">
-                              <div className="min-w-0 flex items-start gap-[6px]">
+                            {(() => {
+                              const dayHeader = fmtDayHeader(items[0].inicio_at).toLocaleLowerCase("es-ES");
+                              const dayExpense = dayExpenseTotals.get(dateKey);
+                              const daySummary = [
+                                `${items.length} actividad${items.length === 1 ? "" : "es"}`,
+                                dayExpense ? formatMoney(dayExpense.total, dayExpense.currency) : "Sin gastos",
+                              ].join(" · ");
+                              return (
                                 <button
                                   type="button"
                                   onClick={() => toggleCollapsedDay(dateKey)}
-                                  className="mt-[2px] inline-flex h-[20px] w-[20px] shrink-0 items-center justify-center text-muted transition-colors hover:text-primary-token"
-                                  aria-label={collapsedDays.has(dateKey) ? `Desplegar ${fmtDayHeader(items[0].inicio_at)}` : `Plegar ${fmtDayHeader(items[0].inicio_at)}`}
+                                  className="flex w-full min-w-0 items-start gap-[6px] text-left transition-colors hover:text-primary-token"
+                                  aria-expanded={!collapsedDays.has(dateKey)}
+                                  aria-label={collapsedDays.has(dateKey) ? `Desplegar ${dayHeader}` : `Plegar ${dayHeader}`}
                                 >
-                                  <ChevronDownIcon className={`size-[15px] transition-transform ${collapsedDays.has(dateKey) ? "-rotate-90" : "rotate-0"}`} />
+                                  <span className="mt-[2px] inline-flex h-[20px] w-[20px] shrink-0 items-center justify-center text-muted">
+                                    <ChevronDownIcon className={`size-[15px] transition-transform ${collapsedDays.has(dateKey) ? "-rotate-90" : "rotate-0"}`} />
+                                  </span>
+                                  <span className="min-w-0">
+                                    <span
+                                      className="block font-[var(--fw-semibold)] text-app"
+                                      style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "var(--font-h4)", lineHeight: "1.15" }}
+                                    >
+                                      {dayHeader}
+                                    </span>
+                                    <span
+                                      className="mt-[6px] block font-[var(--fw-medium)] leading-[1.15] text-muted"
+                                      style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "var(--font-body-sm)" }}
+                                    >
+                                      {daySummary}
+                                    </span>
+                                  </span>
                                 </button>
-                                {(() => {
-                                  const dayExpense = dayExpenseTotals.get(dateKey);
-                                  const daySummary = [
-                                    `${items.length} actividad${items.length === 1 ? "" : "es"}`,
-                                    dayExpense ? formatMoney(dayExpense.total, dayExpense.currency) : "Sin gastos",
-                                  ].join(" · ");
-                                  return (
-                                    <>
-                                      <div className="min-w-0">
-                                        <h2
-                                          className="font-[var(--fw-semibold)] uppercase tracking-[0.06em] text-app"
-                                          style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "var(--font-h4)", lineHeight: "1.15" }}
-                                        >
-                                          {fmtDayHeader(items[0].inicio_at)}
-                                        </h2>
-                                        <p
-                                          className="mt-[6px] font-[var(--fw-medium)] leading-[1.15] text-muted"
-                                          style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "var(--font-body-sm)" }}
-                                        >
-                                          {daySummary}
-                                        </p>
-                                      </div>
-                                    </>
-                                  );
-                                })()}
-                              </div>
-                            </div>
+                              );
+                            })()}
                           </div>
 
                           {/* Timeline */}
@@ -924,6 +914,18 @@ export default function PlanDetailPage() {
                                 {items.map((s, idx) => {
                                   const isLast = idx === items.length - 1;
                                   const nextTransporte = !isLast ? TRANSPORT_MAP[items[idx + 1]?.transporte_llegada ?? ""] : null;
+                                  const nextItem = !isLast ? items[idx + 1] : null;
+                                  const routeOrigin = s.ubicacion_fin_nombre ?? s.ubicacion_nombre ?? "";
+                                  const routeDestination = nextItem?.ubicacion_nombre ?? "";
+                                  const connectorMapsUrl = nextTransporte && routeDestination
+                                    ? buildGoogleMapsDirectionsUrl({
+                                        origin: routeOrigin,
+                                        destination: routeDestination,
+                                        travelMode: nextTransporte.googleMode ?? "driving",
+                                      })
+                                    : "";
+                                  const connectorWazeUrl = routeDestination ? buildWazeDirectionsUrl(routeDestination) : "";
+                                  const hasTravelMeta = !!(nextItem?.duracion_viaje || nextItem?.distancia_viaje);
                                   const startTimeLabel = fmtTime(s.inicio_at);
                                   const endTimeLabel = fmtTime(s.fin_at);
                                   return (
@@ -1019,14 +1021,14 @@ export default function PlanDetailPage() {
                                           ) : null}
                                         </div>
                                         <div className="min-w-0 flex-1 pl-[var(--space-3)]">
-                                        {!isPast && editingTransporteId === items[idx + 1].id ? (
+                                        {!isPast && nextItem && editingTransporteId === nextItem.id ? (
                                           <div className="flex flex-wrap gap-[var(--space-2)]">
                                             {TRANSPORT_LLEGADA.map((t) => (
                                               <button
                                                 key={t.value}
-                                                onClick={() => handleTransporteChange(items[idx + 1].id, t.value)}
+                                                onClick={() => handleTransporteChange(nextItem.id, t.value)}
                                                 className={`flex items-center gap-[6px] rounded-chip border px-[var(--space-2)] py-[4px] text-caption transition-colors ${
-                                                  items[idx + 1].transporte_llegada === t.value
+                                                  nextItem.transporte_llegada === t.value
                                                     ? "border-primary-token bg-primary-token/10 text-primary-token"
                                                     : "border-app bg-surface-inset text-muted"
                                                 }`}
@@ -1038,59 +1040,59 @@ export default function PlanDetailPage() {
                                             <button onClick={() => setEditingTransporteId(null)} className="text-caption text-muted px-[var(--space-2)]">✕</button>
                                           </div>
                                         ) : nextTransporte ? (
-                                          <div className="flex items-center gap-[var(--space-2)]">
+                                          <div className="flex max-w-full items-center gap-[var(--space-2)]">
                                             {isPast ? (
-                                              <span className="flex items-center gap-[6px] text-caption text-muted">
-                                                <span>{nextTransporte.label}</span>
-                                                {items[idx + 1].duracion_viaje && (
+                                              <span className={`${hasTravelMeta ? "flex" : "hidden md:flex"} min-w-0 items-center gap-[6px] rounded-full border border-app bg-surface px-[var(--space-3)] py-[7px] text-caption text-muted md:border-0 md:bg-transparent md:px-0 md:py-0`}>
+                                                <span className="hidden md:inline">{nextTransporte.label}</span>
+                                                {hasTravelMeta && (
                                                   <>
-                                                    <span className="text-muted opacity-40">·</span>
-                                                    <span>{items[idx + 1].duracion_viaje}</span>
-                                                    {items[idx + 1].distancia_viaje && (
-                                                      <span className="text-caption text-muted">{items[idx + 1].distancia_viaje}</span>
+                                                    <span className="hidden text-muted opacity-40 md:inline">·</span>
+                                                    {nextItem?.duracion_viaje && <span>{nextItem.duracion_viaje}</span>}
+                                                    {nextItem.distancia_viaje && (
+                                                      <span className="text-caption text-muted">{nextItem.distancia_viaje}</span>
                                                     )}
                                                   </>
                                                 )}
                                               </span>
                                             ) : (
                                               <button
-                                                onClick={() => setEditingTransporteId(items[idx + 1].id)}
-                                                className="flex items-center gap-[6px] text-caption text-muted transition-colors hover:text-primary-token"
+                                                onClick={() => nextItem && setEditingTransporteId(nextItem.id)}
+                                                className={`${hasTravelMeta ? "flex" : "hidden md:flex"} min-w-0 items-center gap-[6px] rounded-full border border-app bg-surface px-[var(--space-3)] py-[7px] text-caption text-muted transition-colors hover:text-primary-token md:border-0 md:bg-transparent md:px-0 md:py-0`}
                                               >
-                                                <span>{nextTransporte.label}</span>
-                                                {items[idx + 1].duracion_viaje && (
+                                                <span className="hidden md:inline">{nextTransporte.label}</span>
+                                                {hasTravelMeta && (
                                                   <>
-                                                    <span className="text-muted opacity-40">·</span>
-                                                    <span>{items[idx + 1].duracion_viaje}</span>
-                                                    {items[idx + 1].distancia_viaje && (
-                                                      <span className="text-caption text-muted">{items[idx + 1].distancia_viaje}</span>
+                                                    <span className="hidden text-muted opacity-40 md:inline">·</span>
+                                                    {nextItem?.duracion_viaje && <span>{nextItem.duracion_viaje}</span>}
+                                                    {nextItem.distancia_viaje && (
+                                                      <span className="text-caption text-muted">{nextItem.distancia_viaje}</span>
                                                     )}
                                                   </>
                                                 )}
                                               </button>
                                             )}
-                                            <a
-                                              href={buildGoogleMapsDirectionsUrl({
-                                                origin: s.ubicacion_fin_nombre ?? s.ubicacion_nombre ?? "",
-                                                destination: items[idx + 1].ubicacion_nombre ?? "",
-                                                travelMode: nextTransporte.googleMode ?? "driving",
-                                              })}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              className="inline-flex items-center text-caption text-muted transition-colors hover:text-primary-token"
-                                              title="Abrir en Google Maps"
-                                            >
-                                              <Image src="/brands/google-maps.svg" alt="Google Maps" width={14} height={14} className="size-[14px]" />
-                                            </a>
-                                            <a
-                                              href={buildWazeDirectionsUrl(items[idx + 1].ubicacion_nombre ?? "")}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              className="inline-flex items-center text-caption text-muted transition-colors hover:text-primary-token"
-                                              title="Abrir en Waze"
-                                            >
-                                              <Image src="/brands/waze-icon.svg" alt="Waze" width={14} height={14} className="size-[14px]" />
-                                            </a>
+                                            {connectorMapsUrl && (
+                                              <a
+                                                href={connectorMapsUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-app bg-surface text-muted transition-colors active:bg-surface-inset md:size-auto md:border-0 md:bg-transparent md:active:bg-transparent"
+                                                title="Abrir en Google Maps"
+                                              >
+                                                <Image src="/brands/google-maps.svg" alt="Google Maps" width={18} height={18} className="size-[18px] md:size-[14px]" />
+                                              </a>
+                                            )}
+                                            {connectorWazeUrl && (
+                                              <a
+                                                href={connectorWazeUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-app bg-surface text-muted transition-colors active:bg-surface-inset md:size-auto md:border-0 md:bg-transparent md:active:bg-transparent"
+                                                title="Abrir en Waze"
+                                              >
+                                                <Image src="/brands/waze-icon.svg" alt="Waze" width={18} height={18} className="size-[18px] md:size-[14px]" />
+                                              </a>
+                                            )}
                                           </div>
                                         ) : !isPast ? (
                                           <button
@@ -1148,7 +1150,7 @@ export default function PlanDetailPage() {
 
                   {/* Route map card */}
                   {routeShouldShowMap && (
-                    <div ref={routeSectionRef} className="mb-[var(--space-8)]">
+                    <div className="mb-[var(--space-8)]">
                       <div className="mb-[var(--space-3)] flex items-center justify-between">
                         <h3 className="text-body font-[var(--fw-semibold)]" style={{ fontFamily: "var(--font-inter), sans-serif" }}>Ruta del Día</h3>
                       </div>
@@ -1224,7 +1226,7 @@ export default function PlanDetailPage() {
                   )}
 
                   {/* Expenses summary */}
-                  <div className="rounded-[16px] border border-app bg-surface px-[var(--space-4)] py-[var(--space-4)]">
+                  <div className="hidden rounded-[16px] border border-app bg-surface px-[var(--space-4)] py-[var(--space-4)] md:block">
                     <div className="flex items-center justify-between gap-[var(--space-3)]">
                       <div className="flex min-w-0 items-center gap-[var(--space-2)]">
                         <h3 className="text-body font-[var(--fw-semibold)]" style={{ fontFamily: "var(--font-inter), sans-serif" }}>Resumen gastos</h3>
@@ -1696,33 +1698,48 @@ export default function PlanDetailPage() {
         </div>
       )}
 
-      {!isPast && isAdmin && activeTab === "itinerario" && !routeSectionVisible && !showAddSheet && (
-        <button
-          type="button"
-          onClick={() => {
-            setEditingSubplan(null);
-            setAddSheetInitialTitulo(undefined);
-            setAddSheetInitialDate(undefined);
-            setShowAddSheet(true);
-          }}
-          className="fixed bottom-[calc(var(--space-6)+env(safe-area-inset-bottom))] right-[var(--page-margin-x)] z-[65] flex h-[54px] w-[54px] items-center justify-center rounded-full bg-primary-token text-contrast-token shadow-[0_16px_32px_rgba(0,0,0,0.24)] transition-transform hover:scale-[1.03] hover:opacity-90 md:hidden"
-          aria-label="Añadir actividad"
-          title="Añadir actividad"
-        >
-          <PlusIcon className="size-[18px]" />
-        </button>
-      )}
-
-      {!isPast && activeTab === "gastos" && !showAddGastoSheet && (
-        <button
-          type="button"
-          onClick={() => setShowAddGastoSheet(true)}
-          className="fixed bottom-[calc(var(--space-6)+env(safe-area-inset-bottom))] right-[var(--page-margin-x)] z-[65] flex h-[54px] w-[54px] items-center justify-center rounded-full bg-primary-token text-contrast-token shadow-[0_16px_32px_rgba(0,0,0,0.24)] transition-transform hover:scale-[1.03] hover:opacity-90 md:hidden"
-          aria-label="Añadir gasto"
-          title="Añadir gasto"
-        >
-          <PlusIcon className="size-[18px]" />
-        </button>
+      {!isPast && activeTab !== "chat" && activeTab !== "fotos" && !showAddSheet && !showAddGastoSheet && (isAdmin || activeTab === "gastos") && (
+        <div className="fixed bottom-[calc(var(--space-6)+env(safe-area-inset-bottom))] right-[var(--page-margin-x)] z-[65] flex flex-col items-end gap-3 md:hidden">
+          <div className={`flex flex-col items-end gap-2 transition-all duration-200 ease-out ${mobileCreateOpen ? "pointer-events-auto translate-y-0 opacity-100" : "pointer-events-none translate-y-2 opacity-0"}`}>
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={openCreateSubplan}
+                aria-label="Crear subplan"
+                className="flex items-center gap-[var(--space-2)]"
+              >
+                <span className="rounded-full border border-app bg-app px-[var(--space-3)] py-[7px] text-caption font-[var(--fw-semibold)] text-app shadow-elev-2">
+                  Crear subplan
+                </span>
+                <span className="flex size-14 items-center justify-center rounded-full border border-app bg-surface text-app shadow-elev-3">
+                  <CalendarSmallIcon className="size-6" />
+                </span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={openCreateGasto}
+              aria-label="Crear gasto"
+              className="flex items-center gap-[var(--space-2)]"
+            >
+              <span className="rounded-full border border-app bg-app px-[var(--space-3)] py-[7px] text-caption font-[var(--fw-semibold)] text-app shadow-elev-2">
+                Crear gasto
+              </span>
+              <span className="flex size-14 items-center justify-center rounded-full border border-app bg-surface text-app shadow-elev-3">
+                <FileText className="size-6" aria-hidden />
+              </span>
+            </button>
+          </div>
+          <button
+            type="button"
+            aria-label={mobileCreateOpen ? "Cerrar crear" : "Crear"}
+            aria-expanded={mobileCreateOpen}
+            onClick={() => setMobileCreateOpen((open) => !open)}
+            className="flex size-14 items-center justify-center rounded-full bg-primary-token text-contrast-token shadow-[0_16px_32px_rgba(0,0,0,0.24)] transition-transform duration-200 active:scale-95"
+          >
+            <PlusIcon className={`size-7 transition-transform duration-200 ${mobileCreateOpen ? "rotate-45" : "rotate-0"}`} />
+          </button>
+        </div>
       )}
 
       {showAddSheet && plan && !isPast && isAdmin && (

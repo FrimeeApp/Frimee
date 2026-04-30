@@ -322,7 +322,7 @@ export default function MessagesPage() {
     <div className="flex h-full flex-col">
       {/* Header */}
       <div className="flex items-center justify-between px-[var(--space-4)] pb-[var(--space-2)] pt-mobile-safe-top md:py-[var(--space-3)]">
-        <h1 className="text-[26px] font-[800] tracking-[-0.02em] leading-tight text-app">Mensajes</h1>
+        <h1 className="text-[var(--font-h2)] font-[var(--fw-regular)] leading-[1.15] text-app md:text-[var(--font-h1)]">Mensajes</h1>
       </div>
 
       {/* Search bar */}
