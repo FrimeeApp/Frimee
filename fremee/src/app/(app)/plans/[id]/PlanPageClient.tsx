@@ -30,6 +30,8 @@ import { buildGoogleMapsDirectionsUrl, buildWazeDirectionsUrl } from "@/config/e
 import { PlanDetailSkeleton } from "./_components/PlanDetailSkeleton";
 import { AddSubplanSheet, TRANSPORT_MAP, TRANSPORT_LLEGADA, type AddSheetProps } from "./_components/AddSubplanSheet";
 import { isoDateOnly, groupByDay, normalizeDateKey, summarizeRecipients, getOccupiedIntervals, timeToMin, mergeIntervals, type Interval } from "./_components/plan-utils";
+import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
+import { CloseX } from "@/components/ui/CloseX";
 const ChevronDownIcon = ChevronDown;
 
 // ── local icon aliases (used throughout this file) ──────────────────────────
@@ -162,6 +164,13 @@ export default function PlanDetailPage() {
   const [pagandoId, setPagandoId] = useState<number | null>(null);
   const [editingTransporteId, setEditingTransporteId] = useState<number | null>(null);
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const { isClosing: inviteClosing, requestClose: closeInviteModal } = useModalCloseAnimation(() => setShowInviteModal(false), showInviteModal);
+  const { isClosing: invoiceClosing, requestClose: closeInvoiceModal } = useModalCloseAnimation(() => setShowInvoiceModal(false), showInvoiceModal);
+  const { isClosing: paymentClosing, requestClose: closePaymentModal } = useModalCloseAnimation(() => {
+    setPagarDeuda(null);
+    setComprobanteFile(null);
+    setComprobantePreview(null);
+  }, !!pagarDeuda);
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [inviteFriends, setInviteFriends] = useState<PublicUserProfileRow[]>([]);
   const [inviteFriendsLoading, setInviteFriendsLoading] = useState(false);
@@ -1661,7 +1670,7 @@ export default function PlanDetailPage() {
                 className="flex h-[38px] w-[38px] items-center justify-center rounded-full border border-white/12 bg-black/58 text-white shadow-[0_8px_20px_rgba(0,0,0,0.34)] backdrop-blur-sm transition-colors hover:bg-black/66"
                 aria-label="Cerrar mapa"
               >
-                <X className="size-[18px]" strokeWidth={1.9} />
+                <CloseX />
               </button>
             </div>
             {routeDayGroups.length > 1 && (
@@ -1763,13 +1772,13 @@ export default function PlanDetailPage() {
       )}
 
       {showInviteModal && (
-        <div className="fixed inset-0 z-[80] flex items-end justify-center sm:items-center bg-black/50 px-4 pb-[max(var(--space-4),env(safe-area-inset-bottom))]" onClick={() => setShowInviteModal(false)}>
-          <div className="w-full max-w-[440px] rounded-modal bg-[var(--bg)] shadow-elev-4" onClick={(e) => e.stopPropagation()}>
+        <div data-closing={inviteClosing ? "true" : "false"} className="app-modal-overlay fixed inset-0 z-[80] flex items-end justify-center px-4 pb-[max(var(--space-4),env(safe-area-inset-bottom))] sm:items-center" onClick={closeInviteModal}>
+          <div className="app-modal-panel w-full max-w-[440px] rounded-modal bg-[var(--bg)] shadow-elev-4" onClick={(e) => e.stopPropagation()}>
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-app">
               <p className="text-body font-[var(--fw-semibold)]">Invitar al plan</p>
-              <button type="button" onClick={() => setShowInviteModal(false)} className="text-muted transition-opacity hover:opacity-70">
-                <X className="size-[20px]" aria-hidden />
+              <button type="button" onClick={closeInviteModal} className="text-muted transition-opacity hover:opacity-70">
+                <CloseX />
               </button>
             </div>
 
@@ -1849,7 +1858,7 @@ export default function PlanDetailPage() {
             <div className="px-5 pb-4 pt-2">
               <button
                 type="button"
-                onClick={() => setShowInviteModal(false)}
+                onClick={closeInviteModal}
                 className="w-full rounded-full border border-app py-[10px] text-body-sm font-[var(--fw-semibold)] transition-opacity hover:opacity-70"
               >
                 Cerrar
@@ -1861,11 +1870,12 @@ export default function PlanDetailPage() {
 
       {showInvoiceModal && plan && (
         <div
-          className="fixed inset-0 z-[80] flex items-end justify-center bg-black/60 backdrop-blur-sm md:items-center"
-          onClick={() => setShowInvoiceModal(false)}
+          className="app-modal-overlay fixed inset-0 z-[80] flex items-end justify-center md:items-center"
+          data-closing={invoiceClosing ? "true" : "false"}
+          onClick={closeInvoiceModal}
         >
           <div
-            className="relative flex h-[90dvh] w-full flex-col overflow-hidden bg-[var(--bg)] md:h-[min(780px,90dvh)] md:max-w-[620px] md:rounded-[20px] md:shadow-elev-4"
+            className="app-modal-panel relative flex h-[90dvh] w-full flex-col overflow-hidden bg-[var(--bg)] md:h-[min(780px,90dvh)] md:max-w-[620px] md:rounded-[20px] md:shadow-elev-4"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
@@ -2207,8 +2217,8 @@ export default function PlanDetailPage() {
                   <Download className="size-[15px]" aria-hidden />
                   Descargar PDF
                 </button>
-                <button type="button" onClick={() => setShowInvoiceModal(false)} className="text-muted transition-opacity hover:opacity-70">
-                  <X className="size-[20px]" aria-hidden />
+                <button type="button" onClick={closeInvoiceModal} className="text-muted transition-opacity hover:opacity-70">
+                  <CloseX />
                 </button>
               </div>
             </div>
@@ -2303,10 +2313,11 @@ export default function PlanDetailPage() {
       })()}
 
       {pagarDeuda && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" onClick={() => { setPagarDeuda(null); setComprobanteFile(null); setComprobantePreview(null); }}>
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" onClick={closePaymentModal}>
+          <div data-closing={paymentClosing ? "true" : "false"} className="app-modal-overlay absolute inset-0" />
           <div
-            className="relative z-10 w-full max-w-md rounded-t-2xl sm:rounded-2xl bg-surface-1 border border-app p-6 flex flex-col gap-5"
+            data-closing={paymentClosing ? "true" : "false"}
+            className="app-modal-panel relative z-10 w-full max-w-md rounded-t-2xl sm:rounded-2xl bg-surface-1 border border-app p-6 flex flex-col gap-5"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-3">
@@ -2319,8 +2330,8 @@ export default function PlanDetailPage() {
                   a <span className="font-[var(--fw-semibold)] text-app">{pagarDeuda.to_nombre ?? "Usuario"}</span>
                 </p>
               </div>
-              <button type="button" onClick={() => { setPagarDeuda(null); setComprobanteFile(null); setComprobantePreview(null); }} className="text-muted hover:text-app">
-                <X className="size-[20px]" aria-hidden />
+              <button type="button" onClick={closePaymentModal} className="text-muted hover:text-app">
+                <CloseX />
               </button>
             </div>
 

@@ -1,6 +1,8 @@
 "use client";
 
 import { formatMoney, formatLongDate } from "@/lib/formatters";
+import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
+import { CloseX } from "@/components/ui/CloseX";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -113,6 +115,7 @@ export function ExpenseDetailModal({
   onConfirm,
   onReject,
 }: ExpenseDetailModalProps) {
+  const { isClosing, requestClose } = useModalCloseAnimation(onClose);
   if (!item) return null;
 
   const incoming = item.direction === "incoming";
@@ -122,11 +125,12 @@ export function ExpenseDetailModal({
 
   return (
     <div
-      className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center bg-black/50 px-[var(--space-4)] py-[var(--space-6)] backdrop-blur-sm"
-      onClick={onClose}
+      data-closing={isClosing ? "true" : "false"}
+      className="app-modal-overlay fixed inset-0 z-[var(--z-modal)] flex items-center justify-center px-[var(--space-4)] py-[var(--space-6)]"
+      onClick={requestClose}
     >
       <div
-        className="w-full max-w-[520px] rounded-[18px] border border-app bg-app shadow-elev-4"
+        className="app-modal-panel w-full max-w-[520px] rounded-[18px] border border-app bg-app shadow-elev-4"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-[var(--space-4)] border-b border-app px-[var(--space-5)] py-[var(--space-4)]">
@@ -150,13 +154,11 @@ export function ExpenseDetailModal({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={requestClose}
             className="flex size-9 items-center justify-center rounded-full text-muted transition-colors hover:bg-surface"
             aria-label="Cerrar detalle"
           >
-            <svg viewBox="0 0 24 24" fill="none" className="size-[18px]">
-              <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            </svg>
+            <CloseX />
           </button>
         </div>
 

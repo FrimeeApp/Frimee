@@ -337,9 +337,7 @@ export default function MessagesPage() {
       {/* Chat list */}
       <div className="flex-1 overflow-y-auto overscroll-contain">
         {chatsLoading ? (
-          <div className="flex justify-center py-[var(--space-12)]">
-            <div className="size-5 animate-spin rounded-full border-2 border-current border-t-transparent opacity-40" />
-          </div>
+          <ChatListSkeleton />
         ) : filteredChats.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-[var(--space-3)] py-[var(--space-12)] text-center">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-12 opacity-20">
@@ -459,6 +457,19 @@ export default function MessagesPage() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ChatListSkeleton() {
+  return (
+    <div className="flex flex-col gap-[var(--space-4)] px-[var(--space-4)] py-[var(--space-3)]" aria-label="Cargando conversaciones" role="status">
+      {[1, 2].map((i) => (
+        <div key={i} className="flex items-center gap-[var(--space-3)]">
+          <div className="skeleton-shimmer size-12 shrink-0 rounded-full" />
+          <div className="skeleton-shimmer h-[14px] w-[148px] rounded-full" />
+        </div>
+      ))}
     </div>
   );
 }

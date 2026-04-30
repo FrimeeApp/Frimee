@@ -435,17 +435,12 @@ function GastosEmptyState({ tab, selectedPlanName }: { tab: ExpenseTab; selected
 
 function SkeletonList() {
   return (
-    <div className="flex flex-col">
-      {[1, 2, 3, 4].map((i, index, arr) => (
-        <div key={i} className={`flex items-center gap-3 ${index < arr.length - 1 ? "border-b border-app" : ""}`}>
-          <div className="size-11 shrink-0 animate-pulse rounded-full bg-surface-2" />
-          <div className={`flex min-w-0 flex-1 items-center justify-between gap-2 py-[var(--space-4)]`}>
-            <div className="flex flex-col gap-[var(--space-2)]">
-              <div className="h-[13px] w-[120px] animate-pulse rounded-full bg-surface-2" style={{ animationDelay: `${index * 60}ms` }} />
-              <div className="h-[11px] w-[80px] animate-pulse rounded-full bg-surface-2 opacity-60" style={{ animationDelay: `${index * 60 + 30}ms` }} />
-            </div>
-            <div className="h-[13px] w-[52px] animate-pulse rounded-full bg-surface-2" style={{ animationDelay: `${index * 60}ms` }} />
-          </div>
+    <div className="flex flex-col gap-[var(--space-4)] py-[var(--space-2)]" aria-label="Cargando gastos" role="status">
+      {[1, 2].map((i) => (
+        <div key={i} className="flex items-center gap-3">
+          <div className="skeleton-shimmer size-11 shrink-0 rounded-full" />
+          <div className="skeleton-shimmer h-[14px] w-[148px] rounded-full" />
+          <div className="skeleton-shimmer ml-auto h-[14px] w-[58px] rounded-full opacity-70" />
         </div>
       ))}
     </div>

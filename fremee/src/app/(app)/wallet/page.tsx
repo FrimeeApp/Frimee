@@ -6,6 +6,7 @@ import AppSidebar from "@/components/common/AppSidebar";
 import AddTicketModal from "@/components/wallet/AddTicketModal";
 import { PlusIcon } from "@/components/icons";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { CloseX } from "@/components/ui/CloseX";
 import {
   listTicketsEndpoint,
   getTicketSourceSignedUrl,
@@ -419,9 +420,7 @@ function TicketSourceViewer({ ticket, onClose }: { ticket: PlanTicket; onClose: 
           onClick={onClose}
           className="flex size-9 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
         >
-          <svg viewBox="0 0 24 24" fill="none" className="size-[18px]">
-            <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-          </svg>
+          <CloseX />
         </button>
       </div>
 

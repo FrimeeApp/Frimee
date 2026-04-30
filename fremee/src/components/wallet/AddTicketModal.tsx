@@ -14,6 +14,9 @@ import type { TicketOcrResult } from "@/app/api/tickets/ocr/route";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { Upload, Loader2, Check, FileText, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { FIELD_LINE_CLS } from "@/lib/styles";
+import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
+import { CloseX } from "@/components/ui/CloseX";
+import { ModalFeedback, type ModalFeedbackState } from "@/components/ui/ModalFeedback";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -169,6 +172,7 @@ export default function AddTicketModal({
   onClose: () => void;
   onCreated: () => void;
 }) {
+  const { isClosing, requestClose } = useModalCloseAnimation(onClose);
   const handleNextRef   = useRef<() => void>(() => {});
   const handleSubmitRef = useRef<() => void | Promise<void>>(() => {});
   const fileInputRef    = useRef<HTMLInputElement | null>(null);
@@ -176,6 +180,7 @@ export default function AddTicketModal({
   const [step, setStep]   = useState(1);
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [feedbackState, setFeedbackState] = useState<ModalFeedbackState | null>(null);
 
   // Step 1 — source file + OCR
   const [sourceFile, setSourceFile]             = useState<File | null>(null);
@@ -293,6 +298,7 @@ export default function AddTicketModal({
     if (saving) return;
     setSaving(true);
     setErrorMsg(null);
+    setFeedbackState({ type: "loading" });
     try {
       const startsAt = `${dateStr}T${timeStr || "00:00"}:00`;
       const endsAt   = endDateStr ? `${endDateStr}T${endTimeStr || "00:00"}:00` : null;
@@ -324,10 +330,12 @@ export default function AddTicketModal({
         cover_color:      null,
         status:           "upcoming",
       });
-      onCreated();
+      setFeedbackState({ type: "success", label: "Ticket guardado" });
     } catch (e) {
       const msg = typeof e === "object" && e && "message" in e ? String((e as { message: string }).message) : "No se pudo guardar el ticket.";
       setErrorMsg(msg);
+      setFeedbackState({ type: "error", message: msg });
+    } finally {
       setSaving(false);
     }
   }
@@ -341,17 +349,25 @@ export default function AddTicketModal({
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 backdrop-blur-sm md:items-center"
-      onClick={saving ? undefined : onClose}
+      data-closing={isClosing ? "true" : "false"}
+      className="app-modal-overlay fixed inset-0 z-[60] flex items-end justify-center md:items-center"
+      onClick={saving ? undefined : requestClose}
       role="presentation"
     >
       <div
-        className="relative flex h-dvh w-full flex-col overflow-hidden bg-[var(--bg)] md:h-[min(760px,90dvh)] md:w-full md:max-w-[var(--modal-max-width)] md:rounded-[24px] md:shadow-elev-4 md:transition-[max-width] md:duration-300 md:[transition-timing-function:cubic-bezier(0.22,1,0.36,1)]"
+        className="app-modal-panel relative flex h-dvh w-full flex-col overflow-hidden bg-[var(--bg)] md:h-[min(760px,90dvh)] md:w-full md:max-w-[var(--modal-max-width)] md:rounded-[24px] md:shadow-elev-4 md:transition-[max-width] md:duration-300 md:[transition-timing-function:cubic-bezier(0.22,1,0.36,1)]"
         style={{ "--modal-max-width": desktopMaxWidth } as CSSProperties}
         onClick={e => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
       >
+        {feedbackState && (
+          <ModalFeedback
+            state={feedbackState}
+            onSuccess={() => { onCreated(); requestClose(); }}
+            onDismissError={() => setFeedbackState(null)}
+          />
+        )}
         {/* Progress bar */}
         <div className="h-[3px] w-full shrink-0 bg-[var(--surface-2)]">
           <div
@@ -364,13 +380,13 @@ export default function AddTicketModal({
         <div className="flex shrink-0 items-center justify-between px-[var(--space-5)] py-[var(--space-3)]">
           <button
             type="button"
-            onClick={step === 1 ? onClose : handleBack}
+            onClick={step === 1 ? requestClose : handleBack}
             disabled={saving}
             className="flex size-9 items-center justify-center rounded-full text-app transition-colors hover:bg-surface disabled:opacity-50"
             aria-label={step === 1 ? "Cerrar" : "Volver"}
           >
             {step === 1 ? (
-              <X className="size-[18px]" aria-hidden />
+              <CloseX />
             ) : (
               <ChevronLeft className="size-[18px]" aria-hidden />
             )}

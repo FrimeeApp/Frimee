@@ -36,6 +36,8 @@ import {
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import AudioPlayer from "@/components/common/AudioPlayer";
 import { STORAGE_KEYS, STORAGE_TTLS } from "@/config/storage";
+import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
+import { CloseX } from "@/components/ui/CloseX";
 
 const EMOJI_LIST = [
   "😀","😃","😄","😁","😆","😅","🤣","😂","🙂","😊",
@@ -1094,45 +1096,12 @@ function FeedChatPanel({ currentUserId }: { currentUserId: string | null }) {
 }
 
 function FeedSkeleton() {
-  const actionDots = [0, 1, 2];
-
   return (
-    <div className="space-y-4 px-[max(12px,env(safe-area-inset-left))] py-4 md:px-0" aria-label="Cargando publicaciones" role="status">
-      {[0, 1, 2].map((i) => (
-      <article key={i} className="mx-auto flex w-full max-w-[560px] items-start gap-3 md:max-w-[520px]">
-        <div className="skeleton-shimmer mt-1 size-10 shrink-0 rounded-full" />
-        <div className="min-w-0 flex-1 overflow-hidden rounded-[18px] border border-app bg-surface">
-          <div className="flex items-start gap-3 px-4 py-[11px]">
-            <div className="min-w-0 flex-1">
-              <div className="skeleton-shimmer h-3.5 w-[118px] rounded-full" />
-              <div className="skeleton-shimmer mt-2 h-3 w-[172px] rounded-full" />
-            </div>
-            <div className="skeleton-shimmer mt-0.5 h-3.5 w-[56px] shrink-0 rounded-full" />
-          </div>
-
-          {i === 1 ? (
-            <div className="px-4 pb-4 pt-1">
-              <div className="skeleton-shimmer h-4 w-[92%] rounded-full" />
-              <div className="skeleton-shimmer mt-2 h-4 w-[78%] rounded-full" />
-              <div className="skeleton-shimmer mt-2 h-4 w-[54%] rounded-full" />
-            </div>
-          ) : (
-            <div className="skeleton-shimmer aspect-[4/5] w-full border-x-0" />
-          )}
-
-          <div className="flex items-center gap-4 px-4 py-3">
-            {actionDots.map((dot) => (
-              <div key={dot} className="skeleton-shimmer size-6 rounded-full" />
-            ))}
-            <div className="skeleton-shimmer ml-auto h-3.5 w-[68px] rounded-full" />
-          </div>
-          <div className="px-4 pb-4">
-            <div className="skeleton-shimmer h-3.5 w-[72%] rounded-full" />
-            <div className="skeleton-shimmer mt-2 h-3.5 w-[48%] rounded-full" />
-          </div>
-        </div>
+    <div className="flex min-h-[min(620px,calc(100dvh-140px))] items-center px-[max(12px,env(safe-area-inset-left))] py-4 md:px-0" aria-label="Cargando publicaciones" role="status">
+      <article className="mx-auto flex w-full max-w-[560px] items-center gap-3 md:max-w-[520px]">
+        <div className="skeleton-shimmer size-10 shrink-0 rounded-full" />
+        <div className="skeleton-shimmer aspect-[4/5] min-w-0 flex-1 rounded-[18px]" />
       </article>
-      ))}
     </div>
   );
 }
@@ -1170,6 +1139,11 @@ function FeedCard({
   const [imgLoaded, setImgLoaded] = useState(false);
   const [coverAspect, setCoverAspect] = useState<number | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const { isClosing: commentsClosing, requestClose: closeCommentsModal } = useModalCloseAnimation(() => {
+    setCommentsModalOpen(false);
+    setEmojiPickerOpen(false);
+  }, commentsModalOpen);
+  const { isClosing: deleteClosing, requestClose: closeDeleteConfirm } = useModalCloseAnimation(() => setConfirmDeleteId(null), !!confirmDeleteId);
   const [replyingTo, setReplyingTo] = useState<{ commentId: string; userName: string } | null>(null);
   const [saved, setSaved] = useState(initialSaved);
   const isOwnPost = post.plan.ownerUserId === currentUserId;
@@ -1429,8 +1403,7 @@ function FeedCard({
     if (!commentsModalOpen) return;
     const handler = (e: globalThis.KeyboardEvent) => {
       if (e.key === "Escape") {
-        setCommentsModalOpen(false);
-        setEmojiPickerOpen(false);
+        closeCommentsModal();
       }
     };
     const previousBodyOverflow = document.body.style.overflow;
@@ -1445,7 +1418,7 @@ function FeedCard({
       document.removeEventListener("keydown", handler);
       window.cancelAnimationFrame(frame);
     };
-  }, [commentsModalOpen]);
+  }, [closeCommentsModal, commentsModalOpen]);
 
   const insertEmoji = (emoji: string) => {
     setCommentText((prev) => prev + emoji);
@@ -2382,8 +2355,8 @@ function FeedCard({
       </div>{/* end desktop wrapper */}
 
       {commentsModalOpen && (
-        <div className="comments-modal-overlay fixed inset-0 z-[1100] flex items-end justify-center bg-black/65 md:items-center md:p-[var(--space-6)]" onClick={() => { setCommentsModalOpen(false); setEmojiPickerOpen(false); }}>
-          <div className="comments-modal-panel grid h-dvh w-full overflow-hidden bg-app shadow-elev-4 md:h-[min(88dvh,760px)] md:max-w-[1120px] md:rounded-[6px] md:grid-cols-[minmax(0,1fr)_420px]" onClick={(e) => e.stopPropagation()}>
+        <div data-closing={commentsClosing ? "true" : "false"} className="app-modal-overlay fixed inset-0 z-[1100] flex items-end justify-center md:items-center md:p-[var(--space-6)]" onClick={closeCommentsModal}>
+          <div className="app-modal-panel grid h-dvh w-full overflow-hidden bg-app shadow-elev-4 md:h-[min(88dvh,760px)] md:max-w-[1120px] md:rounded-[6px] md:grid-cols-[minmax(0,1fr)_420px]" onClick={(e) => e.stopPropagation()}>
             <div className="relative hidden min-h-0 bg-[#111] md:block">
               {post.hasImage && post.coverImage ? (
                 <NextImage src={post.coverImage} alt="Imagen del plan" width={1200} height={900} className="h-full w-full object-contain" unoptimized referrerPolicy="no-referrer" />
@@ -2450,7 +2423,7 @@ function FeedCard({
                     )}
                   </div>
                 </div>
-                <button type="button" onClick={() => { setCommentsModalOpen(false); setEmojiPickerOpen(false); }} aria-label="Cerrar comentarios" className="text-muted transition-opacity hover:opacity-70">
+                <button type="button" onClick={closeCommentsModal} aria-label="Cerrar comentarios" className="text-muted transition-opacity hover:opacity-70">
                   <CloseIcon />
                 </button>
               </div>
@@ -2528,12 +2501,12 @@ function FeedCard({
 
       {/* Delete comment confirmation modal */}
       {confirmDeleteId && (
-        <div className="fixed inset-0 z-[1200] flex items-end justify-center pb-[max(var(--space-6),env(safe-area-inset-bottom))] sm:items-center" onClick={() => setConfirmDeleteId(null)}>
-          <div className="w-full max-w-[340px] rounded-modal border border-app bg-surface p-[var(--space-5)] shadow-elev-2 mx-[var(--space-4)]" onClick={(e) => e.stopPropagation()}>
+        <div data-closing={deleteClosing ? "true" : "false"} className="app-modal-overlay fixed inset-0 z-[1200] flex items-end justify-center pb-[max(var(--space-6),env(safe-area-inset-bottom))] sm:items-center" onClick={closeDeleteConfirm}>
+          <div className="app-modal-panel mx-[var(--space-4)] w-full max-w-[340px] rounded-modal border border-app bg-surface p-[var(--space-5)] shadow-elev-2" onClick={(e) => e.stopPropagation()}>
             <p className="text-body font-[var(--fw-semibold)] text-app">¿Eliminar comentario?</p>
             <p className="mt-[var(--space-1)] text-body-sm text-muted">Esta acción no se puede deshacer.</p>
             <div className="mt-[var(--space-4)] flex gap-[var(--space-2)]">
-              <button type="button" onClick={() => setConfirmDeleteId(null)} className="flex-1 rounded-button border border-app py-[10px] text-body-sm font-[var(--fw-medium)] text-app transition-colors hover:bg-[var(--interactive-hover-surface)]">
+              <button type="button" onClick={closeDeleteConfirm} className="flex-1 rounded-button border border-app py-[10px] text-body-sm font-[var(--fw-medium)] text-app transition-colors hover:bg-[var(--interactive-hover-surface)]">
                 Cancelar
               </button>
               <button type="button" onClick={() => onDeleteComment(confirmDeleteId)} className="flex-1 rounded-button bg-[var(--error-token,#ef4444)] py-[10px] text-body-sm font-[var(--fw-medium)] text-white transition-opacity hover:opacity-80">
@@ -2649,9 +2622,5 @@ function SmileyIcon() {
 }
 
 function CloseIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  );
+  return <CloseX className="size-5" />;
 }

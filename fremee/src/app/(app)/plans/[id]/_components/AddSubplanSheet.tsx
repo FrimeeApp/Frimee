@@ -5,7 +5,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   BusFront, CarFront, CarTaxiFront, ChevronLeft, CircleEllipsis,
   FerrisWheel, Footprints, Hotel, MapPin, Plane, Ship,
-  TrainFront, TramFront, UtensilsCrossed, X,
+  TrainFront, TramFront, UtensilsCrossed,
 } from "lucide-react";
 import {
   createSubplan, updateSubplan,
@@ -14,6 +14,9 @@ import {
 import LocationAutocomplete, { type Coords } from "@/components/plans/LocationAutocomplete";
 import { FIELD_LINE_CLS } from "@/lib/styles";
 import { isoDateOnly, timeToMin, getOccupiedIntervals } from "./plan-utils";
+import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
+import { CloseX } from "@/components/ui/CloseX";
+import { ModalFeedback, type ModalFeedbackState } from "@/components/ui/ModalFeedback";
 
 // ── Transport & activity constants ────────────────────────────────────────────
 
@@ -255,6 +258,7 @@ export function AddSubplanSheet({
   planId, planStartDate, planEndDate, subplanes,
   onClose, onSaved, initialTitulo, initialDate, initialSubplan,
 }: AddSheetProps) {
+  const { isClosing, requestClose } = useModalCloseAnimation(onClose);
   const TOTAL_STEPS = 3;
   const STEP_META = [
     { title: "¿Qué hacéis?",   subtitle: "Tipo y lugar de la actividad" },
@@ -305,10 +309,11 @@ export function AddSubplanSheet({
       ? { lat: initialSubplan.ubicacion_fin_lat, lng: initialSubplan.ubicacion_fin_lng } : null,
   );
   const [transporteLlegada,  setTransporteLlegada]  = useState<string | null>(initialSubplan?.transporte_llegada ?? null);
-  const [saving,             setSaving]             = useState(false);
+  const [feedbackState,      setFeedbackState]      = useState<ModalFeedbackState | null>(null);
   const [wizardStep,         setWizardStep]         = useState(1);
   const [error,              setError]              = useState<string | null>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
+  const savedResultRef = useRef<{ saved: SubplanRow; original: SubplanRow | null } | null>(null);
 
   const planMonthCount = useMemo(() => {
     const s = new Date(minDate + "T12:00:00");
@@ -347,7 +352,8 @@ export function AddSubplanSheet({
   })();
 
   const occupiedIntervals = fecha ? getOccupiedIntervals(subplanes.filter((s) => s.id !== initialSubplan?.id), fecha) : [];
-  const canSubmit = titulo.trim().length > 0 && fecha.length > 0 && fecha >= minDate && fecha <= maxDate && !saving;
+  const isSaving = feedbackState?.type === "loading";
+  const canSubmit = titulo.trim().length > 0 && fecha.length > 0 && fecha >= minDate && fecha <= maxDate && !isSaving;
 
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -363,8 +369,7 @@ export function AddSubplanSheet({
       }
     }
 
-    setSaving(true);
-    setError(null);
+    setFeedbackState({ type: "loading" });
     try {
       const inicioAt = `${fecha}T${clampedHoraInicio}:00`;
       const finAt    = `${efectivaFechaFin}T${clampedHoraFin}:00`;
@@ -401,7 +406,10 @@ export function AddSubplanSheet({
           ubicacionFinLng: normalized.ubicacion_fin_lng,
           transporteLlegada: normalized.transporte_llegada,
         });
-        onSaved({ ...initialSubplan, ...normalized, ruta_polyline: null, duracion_viaje: null, distancia_viaje: null }, initialSubplan);
+        savedResultRef.current = {
+          saved: { ...initialSubplan, ...normalized, ruta_polyline: null, duracion_viaje: null, distancia_viaje: null },
+          original: initialSubplan,
+        };
       } else {
         const newId = await createSubplan({
           planId,
@@ -419,20 +427,21 @@ export function AddSubplanSheet({
           ubicacionFinLng: normalized.ubicacion_fin_lng,
           transporteLlegada: normalized.transporte_llegada,
         });
-        onSaved({
-          id: newId, plan_id: planId, parent_subplan_id: null,
-          ...normalized,
-          ubicacion_direccion: null, ubicacion_fin_direccion: null,
-          duracion_viaje: null, distancia_viaje: null, ruta_polyline: null,
-          orden: 0, estado: "ACTIVO",
-          creado_por_user_id: "", created_at: new Date().toISOString(),
-        });
+        savedResultRef.current = {
+          saved: {
+            id: newId, plan_id: planId, parent_subplan_id: null,
+            ...normalized,
+            ubicacion_direccion: null, ubicacion_fin_direccion: null,
+            duracion_viaje: null, distancia_viaje: null, ruta_polyline: null,
+            orden: 0, estado: "ACTIVO",
+            creado_por_user_id: "", created_at: new Date().toISOString(),
+          },
+          original: null,
+        };
       }
-      onClose();
+      setFeedbackState({ type: "success", label: isEditing ? "Actividad guardada" : "Actividad creada" });
     } catch (err) {
-      setError(err instanceof Error ? err.message : `Error al ${isEditing ? "guardar" : "crear"} la actividad`);
-    } finally {
-      setSaving(false);
+      setFeedbackState({ type: "error", message: err instanceof Error ? err.message : `Error al ${isEditing ? "guardar" : "crear"} la actividad` });
     }
   };
 
@@ -441,7 +450,7 @@ export function AddSubplanSheet({
   const meta = STEP_META[wizardStep - 1];
 
   const handleAdvance = () => {
-    if (!canContinueWizard || saving) return;
+    if (!canContinueWizard || isSaving) return;
     if (isLastStep) { void handleSubmit(); }
     else { setWizardStep((s) => s + 1); }
   };
@@ -456,21 +465,35 @@ export function AddSubplanSheet({
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canContinueWizard, saving, isLastStep, wizardStep, titulo]);
+  }, [canContinueWizard, isSaving, isLastStep, wizardStep, titulo]);
 
   return (
     <>
-      <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center" onClick={onClose}>
+      <div data-closing={isClosing ? "true" : "false"} className="app-modal-overlay fixed inset-0 z-40" onClick={requestClose} />
+      <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center" onClick={requestClose}>
         <div
           ref={sheetRef}
-          className={`flex h-dvh w-full flex-col overflow-hidden bg-[var(--bg)] transition-[max-width] duration-[400ms] [transition-timing-function:var(--ease-standard)] md:h-auto md:max-h-[90dvh] md:rounded-[24px] md:shadow-elev-4 ${
+          data-closing={isClosing ? "true" : "false"}
+          className={`relative app-modal-panel flex h-dvh w-full flex-col overflow-hidden bg-[var(--bg)] transition-[max-width] duration-[400ms] [transition-timing-function:var(--ease-standard)] md:h-auto md:max-h-[90dvh] md:rounded-[24px] md:shadow-elev-4 ${
             wizardStep === 2
               ? planMonthCount === 1 ? "md:max-w-[420px]" : "md:max-w-[760px]"
               : "md:max-w-[520px]"
           }`}
           onClick={(e) => e.stopPropagation()}
         >
+          {feedbackState && (
+            <ModalFeedback
+              state={feedbackState}
+              onSuccess={() => {
+                if (savedResultRef.current) {
+                  onSaved(savedResultRef.current.saved, savedResultRef.current.original ?? undefined);
+                }
+                requestClose();
+              }}
+              onDismissError={() => setFeedbackState(null)}
+            />
+          )}
+
           {/* Progress bar */}
           <div className="h-[3px] w-full shrink-0 bg-[var(--surface-2)]">
             <div
@@ -483,10 +506,10 @@ export function AddSubplanSheet({
           <div className="flex shrink-0 items-center justify-between px-[var(--space-5)] py-[var(--space-3)]">
             <button
               type="button"
-              onClick={wizardStep === 1 ? onClose : () => setWizardStep((s) => s - 1)}
+              onClick={wizardStep === 1 ? requestClose : () => setWizardStep((s) => s - 1)}
               className="flex size-9 items-center justify-center rounded-full text-app transition-colors hover:bg-surface"
             >
-              {wizardStep === 1 ? <X className="size-[18px]" aria-hidden /> : <ChevronLeft className="size-[18px]" aria-hidden />}
+              {wizardStep === 1 ? <CloseX /> : <ChevronLeft className="size-[18px]" aria-hidden />}
             </button>
             <span className="text-caption font-[var(--fw-medium)] text-muted">{wizardStep} de {TOTAL_STEPS}</span>
             <div className="size-9" aria-hidden="true" />
@@ -643,11 +666,11 @@ export function AddSubplanSheet({
               ) : <div />}
               <button
                 type="button"
-                disabled={!canContinueWizard || (isLastStep && saving)}
+                disabled={!canContinueWizard || (isLastStep && isSaving)}
                 onClick={handleAdvance}
                 className="rounded-[14px] bg-[var(--text-primary)] px-[var(--space-8)] py-[12px] text-body-sm font-[var(--fw-semibold)] text-contrast-token transition-opacity hover:opacity-85 disabled:opacity-[var(--disabled-opacity)]"
               >
-                {isLastStep ? (saving ? "Guardando..." : isEditing ? "Guardar cambios" : "Crear actividad") : wizardStep === 2 ? "Siguiente" : "Continuar"}
+                {isLastStep ? (isSaving ? "Guardando..." : isEditing ? "Guardar cambios" : "Crear actividad") : wizardStep === 2 ? "Siguiente" : "Continuar"}
               </button>
             </div>
           </div>

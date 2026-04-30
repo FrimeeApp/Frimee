@@ -36,11 +36,13 @@ import { crearTareaEndpoint, misTareasEndpoint, todasTareasEndpoint, updateEstad
 import { createGastoEndpoint, getBalancesForPlanEndpoint } from "@/services/api/endpoints/gastos.endpoint";
 import { promoteToAdminEndpoint, demoteAdminEndpoint, kickMemberEndpoint, leavePlanEndpoint } from "@/services/api/endpoints/plans.endpoint";
 import { callFrimeeAssistant, type FrimeeHistoryEntry } from "@/services/api/endpoints/frimee.endpoint";
+import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
+import { CloseX } from "@/components/ui/CloseX";
 import {
   Trash2, Ban, AlertTriangle, LogOut, ChevronDown, Pencil, Reply, Copy,
   Smile, Forward, Pin, Star, Camera, Send as LucideSend, PlusCircle, Mic,
   File, Video, Music, BarChart2, Edit, ChevronLeft, ChevronRight, Users,
-  Phone, Check, Download, X, Plus,
+  Phone, Check, Download, Plus,
 } from "lucide-react";
 
 export function ChatConversation({
@@ -109,6 +111,7 @@ export function ChatConversation({
   const [highlightedId, setHighlightedId] = useState<number | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [forwardMsg, setForwardMsg] = useState<MensajeRow | null>(null);
+  const { isClosing: forwardClosing, requestClose: closeForwardModal } = useModalCloseAnimation(() => setForwardMsg(null), !!forwardMsg);
   const [forwardChats, setForwardChats] = useState<ChatListItem[]>([]);
   const [forwardSending, setForwardSending] = useState<string | null>(null);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
@@ -1604,8 +1607,8 @@ export function ChatConversation({
 
       {/* Forward modal */}
       {forwardMsg && (
-        <div className="absolute inset-0 z-50 flex items-end justify-center bg-black/40 md:items-center" onClick={() => setForwardMsg(null)}>
-          <div className="w-full max-w-[360px] rounded-t-[20px] bg-app p-[var(--space-5)] md:rounded-[16px]" onClick={(e) => e.stopPropagation()}>
+        <div data-closing={forwardClosing ? "true" : "false"} className="app-modal-overlay absolute inset-0 z-50 flex items-end justify-center md:items-center" onClick={closeForwardModal}>
+          <div className="app-modal-panel w-full max-w-[360px] rounded-t-[20px] bg-app p-[var(--space-5)] md:rounded-[16px]" onClick={(e) => e.stopPropagation()}>
             <p className="mb-[var(--space-3)] text-body-sm font-[var(--fw-semibold)] text-app">Reenviar a...</p>
             <div className="max-h-[280px] space-y-[1px] overflow-y-auto">
               {forwardChats.filter((c) => c.chat_id !== chat.chat_id).map((c) => {
@@ -1631,7 +1634,7 @@ export function ChatConversation({
                 <p className="py-[var(--space-4)] text-center text-body-sm text-muted">No hay otros chats</p>
               )}
             </div>
-            <button type="button" onClick={() => setForwardMsg(null)} className="mt-[var(--space-3)] w-full rounded-full border border-app py-[10px] text-body-sm font-[var(--fw-semibold)] text-app transition-colors hover:bg-surface">
+            <button type="button" onClick={closeForwardModal} className="mt-[var(--space-3)] w-full rounded-full border border-app py-[10px] text-body-sm font-[var(--fw-semibold)] text-app transition-colors hover:bg-surface">
               Cancelar
             </button>
           </div>
@@ -2037,6 +2040,7 @@ function ChatInfoPanel({
   containerClassName?: string;
 }) {
   const [confirmLeave, setConfirmLeave] = useState(false);
+  const { isClosing: confirmLeaveClosing, requestClose: closeConfirmLeave } = useModalCloseAnimation(() => setConfirmLeave(false), confirmLeave);
   const [leaving, setLeaving] = useState(false);
   const [showAllMembers, setShowAllMembers] = useState(false);
   const [showAddMembers, setShowAddMembers] = useState(false);
@@ -2320,8 +2324,8 @@ function ChatInfoPanel({
 
       {/* Confirm modal */}
       {confirmLeave && (
-        <div className="absolute inset-0 z-50 flex items-end justify-center bg-black/40 md:items-center">
-          <div className="w-full max-w-[360px] rounded-t-[20px] bg-app p-[var(--space-5)] md:rounded-[16px]">
+        <div data-closing={confirmLeaveClosing ? "true" : "false"} className="app-modal-overlay absolute inset-0 z-50 flex items-end justify-center md:items-center">
+          <div className="app-modal-panel w-full max-w-[360px] rounded-t-[20px] bg-app p-[var(--space-5)] md:rounded-[16px]">
             <p className="text-center text-body-sm font-[var(--fw-semibold)] text-app">
               {isGrupo ? "¿Salir del grupo?" : "¿Eliminar esta conversación?"}
             </p>
@@ -2339,7 +2343,7 @@ function ChatInfoPanel({
               </button>
               <button
                 type="button"
-                onClick={() => setConfirmLeave(false)}
+                onClick={closeConfirmLeave}
                 className="w-full rounded-full border border-app py-[10px] text-body-sm font-[var(--fw-semibold)] text-app transition-colors hover:bg-surface"
               >
                 Cancelar
@@ -2737,7 +2741,7 @@ function Lightbox({ url, imageUrls, onClose }: { url: string; imageUrls: string[
       {/* Header */}
       <div className="flex shrink-0 items-center justify-end p-3" onClick={(e) => e.stopPropagation()}>
         <button type="button" onClick={onClose} className="rounded-full p-2 text-white hover:bg-white/10">
-          <X className="size-6" aria-hidden />
+          <CloseX className="size-6" />
         </button>
       </div>
 

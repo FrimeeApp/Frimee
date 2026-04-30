@@ -4,11 +4,14 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEv
 import { Capacitor } from "@capacitor/core";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { Globe, Lock, Plane, User, Users } from "lucide-react";
+import { FileText, Globe, Lock, Plane, User, Users } from "lucide-react";
 import LocationAutocomplete from "@/components/plans/LocationAutocomplete";
 import { fetchActiveFriends, type PublicUserProfileRow } from "@/services/api/endpoints/users.endpoint";
 import { listChats, type ChatListItem } from "@/services/api/repositories/chat.repository";
 import { FIELD_LINE_CLS } from "@/lib/styles";
+import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
+import { CloseX } from "@/components/ui/CloseX";
+import { ModalFeedback, type ModalFeedbackState } from "@/components/ui/ModalFeedback";
 
 export type CreatePlanPayload = {
   title: string;
@@ -266,6 +269,7 @@ function InlineRangeCalendar({
 // ─── Main modal ───────────────────────────────────────────────────────────────
 
 export default function CreatePlanModal({ open, onClose, onCreate, currentUserId, initialValues, mode = "create" }: CreatePlanModalProps) {
+  const { isClosing, requestClose } = useModalCloseAnimation(onClose);
   const wasOpenRef = useRef(false);
   const coverInputRef = useRef<HTMLInputElement | null>(null);
   const handleNextRef = useRef<() => void>(() => {});
@@ -283,6 +287,7 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [feedbackState, setFeedbackState] = useState<ModalFeedbackState | null>(null);
   const [friends, setFriends] = useState<PublicUserProfileRow[]>([]);
   const [loadingFriends, setLoadingFriends] = useState(false);
   const [invitedFriendIds, setInvitedFriendIds] = useState<Set<string>>(new Set());
@@ -343,7 +348,7 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
     if (!open) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape" && !saving) {
-        onClose();
+        requestClose();
         return;
       }
 
@@ -366,7 +371,7 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [canContinue, onClose, open, saving, step]);
+  }, [canContinue, open, requestClose, saving, step]);
 
   useEffect(() => {
     if (!open) return;
@@ -452,6 +457,7 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
     }
     setErrorMsg(null);
     setSaving(true);
+    setFeedbackState({ type: "loading" });
     try {
       await onCreate({
         title: title.trim(),
@@ -468,10 +474,13 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
         inviteMode,
         invitedFriendIds: [...invitedFriendIds].filter((id) => id !== currentUserId),
       });
+      setFeedbackState({ type: "success", label: "Plan creado" });
     } catch (err) {
       const message =
         typeof err === "object" && err && "message" in err ? String(err.message) : "No se pudo crear el plan.";
       setErrorMsg(message);
+      setFeedbackState({ type: "error", message });
+    } finally {
       setSaving(false);
     }
   }
@@ -486,17 +495,25 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 backdrop-blur-sm md:items-center"
-      onClick={saving ? undefined : onClose}
+      data-closing={isClosing ? "true" : "false"}
+      className="app-modal-overlay fixed inset-0 z-[60] flex items-end justify-center md:items-center"
+      onClick={saving ? undefined : requestClose}
       role="presentation"
     >
       <div
-        className="relative flex h-dvh w-full flex-col overflow-hidden bg-[var(--bg)] pt-[env(safe-area-inset-top)] md:h-[min(760px,90dvh)] md:w-full md:max-w-[var(--create-plan-desktop-max-width)] md:rounded-[24px] md:pt-0 md:shadow-elev-4 md:transition-[max-width] md:duration-300 md:[transition-timing-function:cubic-bezier(0.22,1,0.36,1)]"
+        className="app-modal-panel relative flex h-dvh w-full flex-col overflow-hidden bg-[var(--bg)] pt-[env(safe-area-inset-top)] md:h-[min(760px,90dvh)] md:w-full md:max-w-[var(--create-plan-desktop-max-width)] md:rounded-[24px] md:pt-0 md:shadow-elev-4 md:transition-[max-width] md:duration-300 md:[transition-timing-function:cubic-bezier(0.22,1,0.36,1)]"
         style={{ "--create-plan-desktop-max-width": desktopMaxWidth } as CSSProperties}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
       >
+        {feedbackState && (
+          <ModalFeedback
+            state={feedbackState}
+            onSuccess={requestClose}
+            onDismissError={() => setFeedbackState(null)}
+          />
+        )}
         {/* ── Progress bar ── */}
         <div className="h-[3px] w-full shrink-0 bg-[var(--surface-2)]">
           <div
@@ -507,25 +524,31 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
 
         {/* ── Top nav ── */}
         <div className="flex shrink-0 items-center justify-between px-[var(--space-5)] py-[var(--space-3)]">
-          <button
-            type="button"
-            onClick={step === 1 ? onClose : handleBack}
-            disabled={saving}
-            className="flex size-9 items-center justify-center rounded-full text-app transition-colors hover:bg-surface disabled:opacity-50"
-            aria-label={step === 1 ? "Cerrar" : "Volver"}
-          >
-            {step === 1 ? (
-              <svg viewBox="0 0 24 24" fill="none" className="size-[18px]">
-                <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-              </svg>
-            ) : (
+          {step > 1 ? (
+            <button
+              type="button"
+              onClick={handleBack}
+              disabled={saving}
+              className="flex size-9 items-center justify-center rounded-full text-app transition-colors hover:bg-surface disabled:opacity-50"
+              aria-label="Volver"
+            >
               <svg viewBox="0 0 24 24" fill="none" className="size-[18px]">
                 <path d="M15 19l-7-7 7-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-            )}
-          </button>
+            </button>
+          ) : (
+            <div className="size-9" aria-hidden="true" />
+          )}
           <span className="text-caption font-[var(--fw-medium)] text-muted">{step} de {TOTAL_STEPS}</span>
-          <div className="size-9" aria-hidden="true" />
+          <button
+            type="button"
+            onClick={requestClose}
+            disabled={saving}
+            className="flex size-9 items-center justify-center rounded-full text-app transition-colors hover:bg-surface disabled:opacity-50"
+            aria-label="Cerrar"
+          >
+            <CloseX />
+          </button>
         </div>
 
         {/* ── Content ── */}
@@ -569,24 +592,6 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
           {/* ── Step 3: Nombre + portada ── */}
           {step === 3 && (
             <div className="space-y-[var(--space-5)]">
-              <div className={`flex items-center gap-[var(--space-3)] ${FIELD_LINE_CLS}`}>
-                <Plane className="size-5 shrink-0 text-muted" strokeWidth={1.5} aria-hidden="true" />
-                <input
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Verano en Italia"
-                  autoFocus
-                  className="w-full flex-1 bg-transparent text-[22px] font-[var(--fw-semibold)] text-app shadow-none outline-none ring-0 placeholder:text-muted focus:outline-none focus:ring-0 focus:shadow-none focus-visible:shadow-none"
-                />
-              </div>
-              <div className="border-b border-app pb-[var(--space-2)]">
-                <input
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Descripción breve (opcional)"
-                  className="w-full bg-transparent text-body-sm text-app shadow-none outline-none ring-0 placeholder:text-muted focus:outline-none focus:ring-0 focus:shadow-none focus-visible:shadow-none"
-                />
-              </div>
               {coverImageUrl ? (
                 <div className="relative h-[160px] w-full overflow-hidden rounded-[16px]">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -614,6 +619,26 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
                 </button>
               )}
               <input ref={coverInputRef} type="file" accept="image/*" onChange={onCoverChange} className="hidden" />
+
+              <div className={`flex items-center gap-[var(--space-3)] ${FIELD_LINE_CLS}`}>
+                <Plane className="size-5 shrink-0 text-muted" strokeWidth={1.5} aria-hidden="true" />
+                <input
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="Verano en Italia"
+                  autoFocus
+                  className="w-full flex-1 bg-transparent text-[22px] font-[var(--fw-semibold)] text-app shadow-none outline-none ring-0 placeholder:text-muted focus:outline-none focus:ring-0 focus:shadow-none focus-visible:shadow-none"
+                />
+              </div>
+              <div className={`flex items-center gap-[var(--space-3)] ${FIELD_LINE_CLS}`}>
+                <FileText className="size-5 shrink-0 text-muted" strokeWidth={1.5} aria-hidden="true" />
+                <input
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Descripción breve (opcional)"
+                  className="w-full flex-1 bg-transparent text-body-sm text-app shadow-none outline-none ring-0 placeholder:text-muted focus:outline-none focus:ring-0 focus:shadow-none focus-visible:shadow-none"
+                />
+              </div>
             </div>
           )}
 

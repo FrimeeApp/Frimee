@@ -1,9 +1,10 @@
 "use client";
 
 import Image from "next/image";
-import { X } from "lucide-react";
 import type { GastoRow } from "@/services/api/endpoints/gastos.endpoint";
 import { formatMoney, formatLongDateTime, getInitial } from "@/lib/formatters";
+import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
+import { CloseX } from "@/components/ui/CloseX";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -53,6 +54,7 @@ export function PlanGastoDetailModal({
   currentUserId,
   onClose,
 }: PlanGastoDetailModalProps) {
+  const { isClosing, requestClose } = useModalCloseAnimation(onClose);
   if (!gasto) return null;
 
   const payerName = gasto.pagado_por_nombre ?? "Usuario";
@@ -68,11 +70,12 @@ export function PlanGastoDetailModal({
 
   return (
     <div
-      className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center bg-black/50 px-[var(--space-4)] py-[var(--space-6)] backdrop-blur-sm"
-      onClick={onClose}
+      data-closing={isClosing ? "true" : "false"}
+      className="app-modal-overlay fixed inset-0 z-[var(--z-modal)] flex items-center justify-center px-[var(--space-4)] py-[var(--space-6)]"
+      onClick={requestClose}
     >
       <div
-        className="w-full max-w-[560px] rounded-[18px] border border-app bg-app shadow-elev-4"
+        className="app-modal-panel w-full max-w-[560px] rounded-[18px] border border-app bg-app shadow-elev-4"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-[var(--space-4)] border-b border-app px-[var(--space-5)] py-[var(--space-4)]">
@@ -86,11 +89,11 @@ export function PlanGastoDetailModal({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={requestClose}
             className="flex size-9 items-center justify-center rounded-full text-muted transition-colors hover:bg-surface"
             aria-label="Cerrar detalle"
           >
-            <X className="size-[18px]" strokeWidth={2} />
+            <CloseX />
           </button>
         </div>
 

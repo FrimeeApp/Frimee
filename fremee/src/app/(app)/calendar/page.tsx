@@ -21,6 +21,7 @@ import { DEFAULT_PLAN_COVER_IMAGE } from "@/config/app";
 import { STORAGE_KEYS } from "@/config/storage";
 import { ES_MONTHS_SHORT, ES_WEEK_DAYS_MIN } from "@/lib/date-labels";
 import { formatDateRange, formatTimeRange, formatDayHeading } from "@/lib/formatters";
+import { CloseX } from "@/components/ui/CloseX";
 
 type PlanTab = "active" | "done";
 type CalendarViewMode = "month" | "day" | "year";
@@ -577,14 +578,14 @@ function CalendarPageInner() {
                               {lane.length ? lane.map((segment) => (
                                 <div
                                   key={segment.key}
-                                  className="h-[14px] cursor-pointer rounded-full border border-[color-mix(in_srgb,var(--primary)_24%,var(--border)_76%)] bg-[color-mix(in_srgb,var(--primary)_22%,var(--surface)_78%)] px-1 text-[8px] font-[var(--fw-semibold)] leading-[13px] text-app transition-opacity hover:opacity-80"
+                                  className="h-[22px] cursor-pointer rounded-full border border-[color-mix(in_srgb,var(--primary)_24%,var(--border)_76%)] bg-[color-mix(in_srgb,var(--primary)_22%,var(--surface)_78%)] px-1.5 text-[14px] font-[var(--fw-semibold)] leading-[22px] text-app transition-opacity hover:opacity-80"
                                   style={{ gridColumn: `${segment.startCol + 1} / ${segment.endCol + 2}` }}
                                   title={segment.title}
                                   onClick={() => { setSelectedDay(startOfDay(new Date(segment.planId))); setCalendarModalOpen(true); }}
                                 >
                                   <span className="block truncate">{segment.title}</span>
                                 </div>
-                              )) : <div className="h-[14px]" aria-hidden="true" />}
+                              )) : <div className="h-[22px]" aria-hidden="true" />}
                             </div>
                           );
                         })}
@@ -682,12 +683,12 @@ function CalendarPageInner() {
                                   <div key={`${week.key}-lane-${laneIndex}`} className="grid grid-cols-7 gap-x-1">
                                     {lane.length ? lane.map((segment) => (
                                       <div key={segment.key}
-                                        className="h-[14px] cursor-pointer overflow-hidden rounded-full bg-[var(--primary)]/20 px-1 text-[8px] font-[var(--fw-semibold)] leading-[14px] text-app transition-opacity hover:opacity-80"
+                                        className="h-[22px] cursor-pointer overflow-hidden rounded-full bg-[var(--primary)]/20 px-1.5 text-[14px] font-[var(--fw-semibold)] leading-[22px] text-app transition-opacity hover:opacity-80"
                                         style={{ gridColumn: `${segment.startCol + 1} / ${segment.endCol + 2}` }}
                                         title={segment.title} onClick={() => navigateToPlan(segment.planId)}>
                                         <span className="block truncate">{segment.title}</span>
                                       </div>
-                                    )) : <div className="h-3" aria-hidden="true" />}
+                                    )) : <div className="h-[22px]" aria-hidden="true" />}
                                   </div>
                                 );
                               })}
@@ -864,32 +865,18 @@ function CalendarPageInner() {
 
 function PlanListSkeleton() {
   return (
-    <>
-      {/* Mobile skeleton */}
-      <div className="flex flex-col md:hidden">
-        {[1, 2, 3, 4].map((i, index, arr) => (
-          <div key={i} className={`flex items-center gap-3 ${index < arr.length - 1 ? "border-b border-app" : ""}`}>
-            <div className="size-[68px] shrink-0 animate-pulse rounded-[8px] bg-surface-2" style={{ animationDelay: `${index * 60}ms` }} />
-            <div className="flex min-w-0 flex-1 flex-col gap-[var(--space-2)] py-[var(--space-4)]">
-              <div className="h-[13px] w-[140px] animate-pulse rounded-full bg-surface-2" style={{ animationDelay: `${index * 60}ms` }} />
-              <div className="h-[11px] w-[90px] animate-pulse rounded-full bg-surface-2 opacity-60" style={{ animationDelay: `${index * 60 + 30}ms` }} />
-            </div>
+    <div className="space-y-[var(--space-4)]" aria-label="Cargando planes" role="status">
+      <div className="skeleton-shimmer h-[150px] w-full rounded-card" />
+
+      <div className="grid grid-cols-1 gap-[var(--space-3)] md:grid-cols-2">
+        {[1, 2].map((i) => (
+          <div key={i} className="flex items-center gap-3">
+            <div className="skeleton-shimmer size-[64px] shrink-0 rounded-card" />
+            <div className="skeleton-shimmer h-[14px] w-[150px] rounded-full" />
           </div>
         ))}
       </div>
-      {/* Desktop skeleton */}
-      <div className="hidden md:grid md:grid-cols-2 md:gap-[var(--space-5)]">
-        {[1, 2, 3, 4].map((i) => (
-          <div key={i}>
-            <div className="h-[160px] w-full animate-pulse rounded-[10px] bg-surface-2" />
-            <div className="mt-[var(--space-3)] space-y-[var(--space-2)]">
-              <div className="h-[16px] w-[70%] animate-pulse rounded-full bg-surface-2" />
-              <div className="h-[12px] w-[50%] animate-pulse rounded-full bg-surface-2 opacity-60" />
-            </div>
-          </div>
-        ))}
-      </div>
-    </>
+    </div>
   );
 }
 
@@ -985,7 +972,7 @@ function FullCalendarModal({
         {/* Cerrar */}
         <div className="flex min-w-0 flex-1 justify-end">
           <button type="button" onClick={onClose} aria-label="Cerrar" className="flex size-9 items-center justify-center rounded-full text-muted transition-colors hover:bg-surface-2">
-            <svg viewBox="0 0 24 24" fill="none" className="size-[18px]"><path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
+            <CloseX />
           </button>
         </div>
       </div>
@@ -1049,13 +1036,13 @@ function FullCalendarModal({
                         <div key={`${week.key}-lane-${laneIndex}`} className="grid grid-cols-7 gap-x-1">
                           {lane.length ? lane.map((segment) => (
                             <div key={segment.key}
-                              className="h-[18px] cursor-pointer overflow-hidden rounded-full bg-[var(--primary)]/20 px-1.5 text-[9px] font-[var(--fw-semibold)] leading-[18px] text-app transition-opacity hover:opacity-80"
+                              className="h-[24px] cursor-pointer overflow-hidden rounded-full bg-[var(--primary)]/20 px-2 text-[14px] font-[var(--fw-semibold)] leading-[24px] text-app transition-opacity hover:opacity-80"
                               style={{ gridColumn: `${segment.startCol + 1} / ${segment.endCol + 2}` }}
                               title={segment.title}
                               onClick={() => { navigateToPlan(segment.planId); onClose(); }}>
                               <span className="block truncate">{segment.title}</span>
                             </div>
-                          )) : <div className="h-3" aria-hidden="true" />}
+                          )) : <div className="h-[24px]" aria-hidden="true" />}
                         </div>
                       );
                     })}
@@ -1133,65 +1120,6 @@ function FullCalendarModal({
         )}
       </div>
     </div>
-  );
-}
-
-function CalendarPageSkeleton() {
-  return (
-    <>
-      <section className="grid grid-cols-1 gap-[var(--space-4)] md:grid-cols-2" aria-hidden="true">
-        {Array.from({ length: 4 }).map((_, index) => (
-          <article key={index} className="overflow-hidden rounded-card border border-app bg-surface shadow-elev-1">
-            <div className="skeleton-shimmer h-[138px] w-full" />
-            <div className="flex items-end justify-between gap-3 p-[var(--space-4)]">
-              <div className="min-w-0 flex-1 space-y-2">
-                <div className="skeleton-shimmer h-7 w-[62%] rounded-full" />
-                <div className="skeleton-shimmer h-4 w-[48%] rounded-full" />
-                <div className="skeleton-shimmer h-3 w-[34%] rounded-full" />
-              </div>
-              <div className="skeleton-shimmer h-10 w-24 rounded-[10px]" />
-            </div>
-          </article>
-        ))}
-      </section>
-
-      <aside
-        className="overflow-hidden rounded-modal border border-app bg-surface p-[var(--space-4)] shadow-elev-1 lg:sticky lg:top-[var(--space-6)] lg:self-start"
-        aria-hidden="true"
-      >
-        <div className="mb-[var(--space-2)] flex items-center justify-between">
-          <div className="skeleton-shimmer h-8 w-10 rounded-input" />
-          <div className="skeleton-shimmer h-4 w-24 rounded-full" />
-          <div className="skeleton-shimmer h-8 w-10 rounded-input" />
-        </div>
-
-        <div className="grid grid-cols-7 gap-x-1 gap-y-2 text-center">
-          {Array.from({ length: 7 }).map((_, index) => (
-            <div key={`calendar-head-${index}`} className="skeleton-shimmer mx-auto h-3 w-5 rounded-full" />
-          ))}
-        </div>
-
-        <div className="mt-2 space-y-1">
-          {Array.from({ length: 5 }).map((_, weekIndex) => (
-            <div key={`calendar-week-${weekIndex}`} className="h-[48px] p-1.5">
-              <div className="grid grid-cols-7 gap-x-1">
-                {Array.from({ length: 7 }).map((__, dayIndex) => (
-                  <div key={`calendar-day-${weekIndex}-${dayIndex}`} className="skeleton-shimmer h-7" />
-                ))}
-              </div>
-              <div className="mt-1 space-y-0.5">
-                <div className="grid grid-cols-7 gap-x-1">
-                  <div className="skeleton-shimmer col-span-4 h-3 rounded-full" />
-                </div>
-                <div className="grid grid-cols-7 gap-x-1">
-                  <div className="skeleton-shimmer col-span-3 h-3 rounded-full" />
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </aside>
-    </>
   );
 }
 

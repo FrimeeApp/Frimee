@@ -4,7 +4,7 @@ import "../styles/globals.css";
 import { AuthProvider } from "@/providers/AuthProvider";
 import NativeDeepLinks from "@/components/common/NativeDeepLinks";
 import NativeSystemUi from "@/components/common/NativeSystemUi";
-import { APP_DESCRIPTION, APP_ICON_PATHS, APP_NAME } from "@/config/app";
+import { APP_DESCRIPTION, APP_NAME } from "@/config/app";
 import { STORAGE_KEYS } from "@/config/storage";
 
 const inter = Inter({
@@ -25,12 +25,7 @@ export const metadata: Metadata = {
   title: APP_NAME,
   description: APP_DESCRIPTION,
   icons: {
-    icon: [
-      { url: "/favicoon-frimee-black.svg", type: "image/svg+xml", media: "(prefers-color-scheme: light)" },
-      { url: "/favicoon-frimee-white.svg", type: "image/svg+xml", media: "(prefers-color-scheme: dark)" },
-      { url: APP_ICON_PATHS.icon192, sizes: "192x192", type: "image/png" },
-      { url: APP_ICON_PATHS.icon512, sizes: "512x512", type: "image/png" },
-    ],
+    icon: [{ url: "/favicoon-frimee-black.svg", type: "image/svg+xml" }],
     apple: [{ url: "/logo-frimee.png", sizes: "180x180", type: "image/png" }],
     shortcut: ["/favicoon-frimee-black.svg"],
   },

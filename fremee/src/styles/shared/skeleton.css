@@ -8,8 +8,8 @@
   .skeleton-shimmer {
     position: relative;
     overflow: hidden;
-    background: #d7dde5;
-    border: 1px solid #c0c8d2;
+    background: color-mix(in srgb, var(--surface-2) 82%, var(--surface) 18%);
+    border: 1px solid color-mix(in srgb, var(--border) 54%, transparent);
   }
 
   .skeleton-shimmer::after {
@@ -20,30 +20,26 @@
     background: linear-gradient(
       90deg,
       transparent 0%,
-      rgb(255 255 255 / 0.08) 20%,
-      rgb(255 255 255 / 0.58) 48%,
-      rgb(255 255 255 / 0.82) 50%,
-      rgb(255 255 255 / 0.58) 52%,
-      rgb(255 255 255 / 0.08) 80%,
+      rgb(255 255 255 / 0.03) 22%,
+      rgb(255 255 255 / 0.22) 50%,
+      rgb(255 255 255 / 0.03) 78%,
       transparent 100%
     );
-    animation: skeleton-shimmer 1.15s ease-in-out infinite;
+    animation: skeleton-shimmer 1.45s ease-in-out infinite;
   }
 
   .dark .skeleton-shimmer {
-    background: #27313b;
-    border-color: #34414d;
+    background: color-mix(in srgb, var(--surface-2) 72%, var(--surface) 28%);
+    border-color: color-mix(in srgb, var(--border) 62%, transparent);
   }
 
   .dark .skeleton-shimmer::after {
     background: linear-gradient(
       90deg,
       transparent 0%,
-      rgb(255 255 255 / 0.03) 20%,
-      rgb(255 255 255 / 0.18) 48%,
-      rgb(255 255 255 / 0.28) 50%,
-      rgb(255 255 255 / 0.18) 52%,
-      rgb(255 255 255 / 0.03) 80%,
+      rgb(255 255 255 / 0.02) 22%,
+      rgb(255 255 255 / 0.12) 50%,
+      rgb(255 255 255 / 0.02) 78%,
       transparent 100%
     );
   }

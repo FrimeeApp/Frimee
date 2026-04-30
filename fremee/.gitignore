@@ -116,6 +116,13 @@ vite.config.*.timestamp-*
 .pnpm-store/
 
 ############################
+# Supabase
+############################
+supabase/migrations/
+supabase/.branches/
+supabase/.temp/
+
+############################
 # Capacitor
 ############################
 # Android

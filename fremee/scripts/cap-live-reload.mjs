@@ -1,5 +1,6 @@
 import { networkInterfaces } from "node:os";
 import { execSync } from "node:child_process";
+import { mkdirSync } from "node:fs";
 
 function getLocalIp() {
   const nets = networkInterfaces();
@@ -25,6 +26,10 @@ if (!ip) {
 }
 
 const serverUrl = `http://${ip}:${port}`;
+
+if (platform === "android") {
+  mkdirSync("android/app/src/main/assets", { recursive: true });
+}
 
 console.log(`→ Configuring Capacitor live reload for ${platform}`);
 console.log(`→ Server URL: ${serverUrl}`);

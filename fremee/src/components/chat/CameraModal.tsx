@@ -2,6 +2,7 @@
 
 import NextImage from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { CloseX } from "@/components/ui/CloseX";
 
 type CameraModalProps = {
   onCapture: (file: File) => void;
@@ -104,7 +105,7 @@ export function CameraModal({ onCapture, onClose }: CameraModalProps) {
     <div className="fixed inset-0 z-[100] flex flex-col bg-black">
       {/* Cerrar */}
       <button type="button" onClick={onClose} className="absolute right-[16px] top-[16px] z-10 flex size-[36px] items-center justify-center rounded-full bg-black/40 text-white">
-        <svg viewBox="0 0 24 24" fill="none" className="size-[18px]"><path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
+        <CloseX />
       </button>
 
       {error ? (
