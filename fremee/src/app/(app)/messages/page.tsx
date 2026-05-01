@@ -336,7 +336,7 @@ export default function MessagesPage() {
         <SearchInput
           value={searchValue}
           onChange={setSearchValue}
-          className="h-[44px] w-full"
+          className="h-[40px] w-full"
         />
       </div>
 
