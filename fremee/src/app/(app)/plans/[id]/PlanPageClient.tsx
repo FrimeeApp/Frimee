@@ -734,6 +734,11 @@ export default function PlanDetailPage() {
                 <EditIcon className="size-[18px]" />
               </button>
             )}
+            {isPast && (
+              <span className="absolute right-[var(--page-margin-x)] top-[calc(env(safe-area-inset-top)+var(--space-4))] rounded-full border border-white/30 bg-black/30 px-3 py-[6px] text-[13px] font-[600] text-white/90 backdrop-blur-sm md:top-[var(--space-6)]">
+                Finalizado
+              </span>
+            )}
 
             {/* Title & meta */}
             <div className="absolute bottom-0 left-0 right-0 px-[var(--page-margin-x)] pb-[var(--space-4)]">
@@ -750,11 +755,6 @@ export default function PlanDetailPage() {
                   <CalendarSmallIcon className="size-[14px] shrink-0" />
                   {formatDateRange(plan.inicio_at, plan.fin_at)}
                 </span>
-                {isPast && (
-                  <span className="shrink-0 rounded-chip border border-white/30 bg-white/10 px-[var(--space-2)] py-[2px] text-[14px] font-[var(--fw-medium)] text-white/70">
-                    Finalizado
-                  </span>
-                )}
                 <span className="flex min-w-0 items-center gap-[5px] text-body-sm">
                   <MapPinIcon className="size-[14px] shrink-0" />
                   <span className="min-w-0 truncate">{plan.ubicacion_nombre}</span>
@@ -763,7 +763,7 @@ export default function PlanDetailPage() {
 
               {/* Action buttons */}
               <div className="absolute bottom-[var(--space-4)] right-[var(--page-margin-x)] flex gap-[var(--space-2)]">
-                {!isPast && isAdmin && (
+                {isAdmin && (
                   <button
                     onClick={() => setShowPublishModal(true)}
                     className="flex h-9 items-center gap-1.5 rounded-full border border-app bg-surface px-3.5 text-[14px] font-[600] text-app shadow-elev-3 transition-colors hover:bg-surface-2"
@@ -1772,9 +1772,24 @@ export default function PlanDetailPage() {
 
       {activeTab !== "chat" && !showAddSheet && !showAddGastoSheet && (
         activeTab === "itinerario" || activeTab === "gastos" || activeTab === "fotos"
-      ) && !isPast && (membershipChecked || isAdmin || activeTab === "gastos") && (
+      ) && (!isPast || isAdmin) && (membershipChecked || isAdmin || activeTab === "gastos") && (
         <div className="fixed bottom-[calc(var(--space-6)+env(safe-area-inset-bottom))] right-[var(--page-margin-x)] z-[65] flex flex-col items-end gap-3 md:hidden">
           <div className={`flex flex-col items-end gap-2 transition-all duration-200 ease-out ${mobileCreateOpen ? "pointer-events-auto translate-y-0 opacity-100" : "pointer-events-none translate-y-2 opacity-0"}`}>
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => { setMobileCreateOpen(false); setShowPublishModal(true); }}
+                aria-label="Publicar plan"
+                className="flex items-center gap-[var(--space-2)]"
+              >
+                <span className="rounded-full border border-app bg-app px-[var(--space-3)] py-[7px] text-caption font-[var(--fw-semibold)] text-app shadow-elev-2">
+                  Publicar
+                </span>
+                <span className="flex size-14 items-center justify-center rounded-full border border-app bg-surface text-app shadow-elev-3">
+                  <Upload className="size-6" aria-hidden />
+                </span>
+              </button>
+            )}
             {!isPast && isAdmin && (
               <button
                 type="button"
