@@ -101,7 +101,7 @@ function configureGlobe(globe: GlobeMethods) {
 }
 
 export default function GlobeHero({ className = "" }: GlobeHeroProps) {
-  const globeRef = useRef<GlobeMethods>();
+  const globeRef = useRef<GlobeMethods | undefined>(undefined);
   const { ref: wrapperRef, size } = useElementSize<HTMLDivElement>();
   const [countries, setCountries] = useState<CountryFeature[]>([]);
   const globeMaterial = useMemo(

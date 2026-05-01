@@ -146,8 +146,13 @@ export function formatChatTime(isoString: string | null): string {
   const dateMidnight = new Date(date.getFullYear(), date.getMonth(), date.getDate());
   const diffDays = Math.round((todayMidnight.getTime() - dateMidnight.getTime()) / (1000 * 60 * 60 * 24));
 
-  if (diffDays === 0) return date.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
-  if (diffDays === 1) return "Ayer";
-  if (diffDays < 7) return date.toLocaleDateString("es-ES", { weekday: "short" });
+  const time = date.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", hour12: false });
+
+  if (diffDays === 0) return time;
+  if (diffDays === 1) return `Ayer a las ${time}`;
+  if (diffDays < 7) {
+    const weekday = date.toLocaleDateString("es-ES", { weekday: "short" });
+    return `${weekday.charAt(0).toUpperCase() + weekday.slice(1)}, ${time}`;
+  }
   return date.toLocaleDateString("es-ES", { day: "numeric", month: "short" });
 }

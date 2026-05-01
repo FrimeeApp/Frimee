@@ -49,6 +49,7 @@ function entryToFeedItem(entry: FeedPostEntry): FeedItemDto {
     photosSnapshot: entry.photosSnapshot ?? null,
     itinerarySnapshot: entry.itinerarySnapshot ?? null,
     expensesSnapshot: entry.expensesSnapshot ?? null,
+    participantsSnapshot: entry.participantsSnapshot ?? null,
   };
 }
 

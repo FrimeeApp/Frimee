@@ -55,7 +55,7 @@ function unlockDocumentScroll(lockId: symbol) {
 
 export function useModalCloseAnimation(onClose: () => void, isOpen = true) {
   const [isClosing, setIsClosing] = useState(false);
-  const closeTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const closeTimeoutRef = useRef<number | null>(null);
   const scrollLockIdRef = useRef<symbol>(Symbol("modal-scroll-lock"));
 
   const requestClose = useCallback(() => {

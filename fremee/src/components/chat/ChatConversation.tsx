@@ -1,7 +1,7 @@
 "use client";
 
 import NextImage from "next/image";
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, Fragment } from "react";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import {
   listChats,
@@ -38,12 +38,33 @@ import { promoteToAdminEndpoint, demoteAdminEndpoint, kickMemberEndpoint, leaveP
 import { callFrimeeAssistant, type FrimeeHistoryEntry } from "@/services/api/endpoints/frimee.endpoint";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
 import { CloseX } from "@/components/ui/CloseX";
+import dynamic from "next/dynamic";
+
+const EmojiMartPicker = dynamic(() => import("@emoji-mart/react"), { ssr: false });
 import {
   Trash2, Ban, AlertTriangle, LogOut, ChevronDown, Pencil, Reply, Copy,
   Smile, Forward, Pin, Star, Camera, Send as LucideSend, PlusCircle, Mic,
   File, Video, Music, BarChart2, Edit, ChevronLeft, ChevronRight, Users,
-  Phone, Check, Download, Plus,
+  Phone, Check, Download, Plus, X,
 } from "lucide-react";
+
+function isSameDay(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
+function formatDateLabel(date: Date): string {
+  const now = new Date();
+  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const dateMidnight = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const diffDays = Math.round((todayMidnight.getTime() - dateMidnight.getTime()) / 86400000);
+  if (diffDays === 0) return "Hoy";
+  if (diffDays === 1) return "Ayer";
+  const sameYear = date.getFullYear() === now.getFullYear();
+  const sameMonth = sameYear && date.getMonth() === now.getMonth();
+  if (!sameYear) return date.toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" });
+  if (!sameMonth) return date.toLocaleDateString("es-ES", { day: "numeric", month: "long" });
+  return date.toLocaleDateString("es-ES", { day: "numeric" });
+}
 
 export function ChatConversation({
   chat,
@@ -115,6 +136,8 @@ export function ChatConversation({
   const [forwardChats, setForwardChats] = useState<ChatListItem[]>([]);
   const [forwardSending, setForwardSending] = useState<string | null>(null);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const emojiContainerRef = useRef<HTMLDivElement | null>(null);
   const [showCamera, setShowCamera] = useState(false);
   const [showPollCreator, setShowPollCreator] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -126,6 +149,8 @@ export function ChatConversation({
   const docInputRef = useRef<HTMLInputElement | null>(null);
   const mediaInputRef = useRef<HTMLInputElement | null>(null);
   const audioFileInputRef = useRef<HTMLInputElement | null>(null);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const swipeRef = useRef<{ startX: number; startY: number; el: HTMLElement; triggered: boolean } | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const sentMsgIdsRef = useRef<Set<number>>(new Set());
@@ -333,7 +358,32 @@ export function ChatConversation({
     return () => document.removeEventListener("click", close);
   }, [reactingToId]);
 
-  const closeOverlays = () => { setContextMenu(null); setReactingToId(null); setReactingPos(null); setShowAttachMenu(false); };
+  useEffect(() => {
+    if (!showEmojiPicker) return;
+    const handleOutside = (e: MouseEvent) => {
+      if (emojiContainerRef.current && !emojiContainerRef.current.contains(e.target as Node)) {
+        setShowEmojiPicker(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOutside);
+    return () => document.removeEventListener("mousedown", handleOutside);
+  }, [showEmojiPicker]);
+
+  const handleEmojiSelect = useCallback((emoji: { native: string }) => {
+    const input = inputRef.current;
+    if (!input) return;
+    const start = input.selectionStart ?? input.value.length;
+    const end = input.selectionEnd ?? input.value.length;
+    const newText = input.value.slice(0, start) + emoji.native + input.value.slice(end);
+    setText(newText);
+    requestAnimationFrame(() => {
+      input.focus();
+      const pos = start + emoji.native.length;
+      input.setSelectionRange(pos, pos);
+    });
+  }, []);
+
+  const closeOverlays = () => { setContextMenu(null); setReactingToId(null); setReactingPos(null); setShowAttachMenu(false); setShowEmojiPicker(false); };
 
   const scrollToMessage = (msgId: number) => {
     const el = document.getElementById(`msg-${msgId}`);
@@ -1280,6 +1330,7 @@ export function ChatConversation({
         if (prev.some((m) => m.id === newId)) return prev;
         return [...prev, newMsg];
       });
+      requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }));
       onNewMessageRef.current(newMsg);
       setReplyingTo(null);
     } catch (e) {
@@ -1371,6 +1422,7 @@ export function ChatConversation({
         audio_url: localUrl,
       };
       setMessages((prev) => [...prev, tempMsg]);
+      requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }));
 
       try {
         const { downloadUrl } = await uploadAudioBlob({ blob, userId: currentUserId });
@@ -1405,6 +1457,7 @@ export function ChatConversation({
       document_name: file.name,
     };
     setMessages((prev) => [...prev, tempMsg]);
+    requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }));
     setShowAttachMenu(false);
     try {
       const { downloadUrl } = await uploadDocumentFile({ file, userId: currentUserId });
@@ -1435,6 +1488,7 @@ export function ChatConversation({
       image_type: file.type,
     };
     setMessages((prev) => [...prev, tempMsg]);
+    requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }));
     setShowAttachMenu(false);
     try {
       const { downloadUrl } = await uploadMediaFile({ file, userId: currentUserId });
@@ -1466,6 +1520,7 @@ export function ChatConversation({
       created_at: new Date().toISOString(),
     };
     setMessages((prev) => [...prev, tempMsg]);
+    requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }));
     try {
       const newId = await sendMensaje({ chatId: chat.chat_id, texto });
       const realMsg: MensajeRow = { ...tempMsg, id: newId };
@@ -1493,6 +1548,7 @@ export function ChatConversation({
       audio_url: localUrl,
     };
     setMessages((prev) => [...prev, tempMsg]);
+    requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }));
     setShowAttachMenu(false);
     try {
       const { downloadUrl } = await uploadAudioFile({ file, userId: currentUserId });
@@ -1669,7 +1725,7 @@ export function ChatConversation({
       {ongoingCall && !inCall && (
         <div className="flex items-center gap-[var(--space-3)] border-b border-app bg-surface px-[var(--space-3)] py-[10px]">
           <div className="flex size-8 items-center justify-center rounded-full bg-green-500/15 text-green-500">
-            <svg viewBox="0 0 24 24" fill="none" className="size-4" stroke="currentColor" strokeWidth="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.38 2 2 0 0 1 3.6 1.18h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.73a16 16 0 0 0 6 6l.95-.95a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 21.59 16z"/></svg>
+            <Phone className="size-4" />
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-body-sm font-[var(--fw-semibold)] text-app">Llamada en curso</p>
@@ -1694,12 +1750,12 @@ export function ChatConversation({
         >
           <PinIcon className="size-[13px] shrink-0 text-muted" />
           <p className="min-w-0 flex-1 truncate text-[14px] text-muted">{pinnedMsg.texto}</p>
-          <svg viewBox="0 0 24 24" fill="none" className="size-[14px] shrink-0 text-muted"><path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
+          <X className="size-[14px] shrink-0 text-muted" />
         </button>
       )}
 
       {/* Messages */}
-      <div ref={scrollContainerRef} className="scrollbar-thin min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-[var(--space-3)] py-[var(--space-4)] md:px-[var(--space-4)]" onClick={closeOverlays}>
+      <div ref={scrollContainerRef} className="scrollbar-thin min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-[var(--space-3)] pb-[var(--space-2)] pt-[var(--space-4)] md:px-[var(--space-4)]" onClick={closeOverlays}>
         {loading ? (
           <div className="flex h-full items-center justify-center text-body-sm text-muted">Cargando...</div>
         ) : messages.length === 0 ? (
@@ -1721,6 +1777,13 @@ export function ChatConversation({
               const isFirstInGroup = !prevMsg || prevMsg.sender_id !== msg.sender_id;
               const isLastInGroup = !nextMsg || nextMsg.sender_id !== msg.sender_id;
               const time = formatChatTime(msg.created_at);
+              const msgDate = msg.created_at ? new Date(msg.created_at) : null;
+              const prevMsgDate = prevMsg?.created_at ? new Date(prevMsg.created_at) : null;
+              const showDateSep = msgDate && (!prevMsgDate || !isSameDay(msgDate, prevMsgDate));
+              const dateLabel = showDateSep ? formatDateLabel(msgDate) : null;
+              const msgTime = msgDate ? msgDate.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", hour12: false }) : time;
+              const prevMsgTime = prevMsgDate ? prevMsgDate.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", hour12: false }) : null;
+              const showMsgTime = prevMsgTime !== msgTime;
               const isMediaMessage = Boolean(msg.image_url) || isResumenViaje(msg.texto);
               const reaction = localReactions[msg.id];
               const isStarred = starredIds.has(msg.id);
@@ -1731,8 +1794,54 @@ export function ChatConversation({
                 setReactingToId(null);
                 setReactingPos(null);
               };
+              const onBubbleTouchStart = (e: React.TouchEvent) => {
+                const t = e.touches[0];
+                swipeRef.current = { startX: t.clientX, startY: t.clientY, el: e.currentTarget as HTMLElement, triggered: false };
+                longPressTimerRef.current = setTimeout(() => {
+                  setContextMenu({ msg, x: t.clientX, y: t.clientY + 4, triggerTop: t.clientY });
+                  setReactingToId(null);
+                  setReactingPos(null);
+                  if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(40);
+                }, 500);
+              };
+              const onBubbleTouchMove = (e: React.TouchEvent) => {
+                if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }
+                const s = swipeRef.current;
+                if (!s) return;
+                const t = e.touches[0];
+                const dx = t.clientX - s.startX;
+                const dy = Math.abs(t.clientY - s.startY);
+                if (dy > Math.abs(dx) + 8) { swipeRef.current = null; return; }
+                const validSwipe = isMe ? dx < 0 : dx > 0;
+                if (!validSwipe) return;
+                const clamped = isMe ? Math.max(dx, -80) : Math.min(dx, 80);
+                s.el.style.transform = `translateX(${clamped}px)`;
+                s.el.style.transition = "none";
+                if (Math.abs(dx) >= 64 && !s.triggered) {
+                  s.triggered = true;
+                  setReplyingTo(msg);
+                  closeOverlays();
+                  setTimeout(() => inputRef.current?.focus(), 50);
+                  if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(30);
+                }
+              };
+              const onBubbleTouchEnd = () => {
+                if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }
+                const s = swipeRef.current;
+                if (s) {
+                  s.el.style.transition = "transform 0.25s ease";
+                  s.el.style.transform = "translateX(0)";
+                  swipeRef.current = null;
+                }
+              };
               return (
-                <div id={`msg-${msg.id}`} key={(msg)._key ?? msg.id} className={`group/msg flex ${isMe ? "justify-end" : "justify-start"} ${isFirstInGroup ? "mt-[var(--space-3)]" : "mt-[2px]"} ${reaction ? "mb-[20px]" : ""} ${highlightedId === msg.id ? "rounded-card bg-[var(--text-primary)]/10 transition-colors" : ""}`}>
+                <Fragment key={(msg)._key ?? msg.id}>
+                {dateLabel && (
+                  <div className="flex justify-center py-3">
+                    <span className="text-[11px] text-muted">{dateLabel}</span>
+                  </div>
+                )}
+                <div id={`msg-${msg.id}`} className={`group/msg flex ${isMe ? "justify-end" : "justify-start"} ${isFirstInGroup ? "mt-[var(--space-3)]" : "mt-[2px]"} ${reaction ? "mb-[20px]" : ""} ${highlightedId === msg.id ? "rounded-card bg-[var(--text-primary)]/10 transition-colors" : ""}`}>
                   {!isMe && (chat.tipo === "GRUPO" || isBot) && (
                     <div className="mr-[var(--space-2)] w-[24px] shrink-0">
                       {isFirstInGroup && (
@@ -1742,16 +1851,16 @@ export function ChatConversation({
                       )}
                     </div>
                   )}
-                  <div className="relative max-w-[75%]">
-                    {isFirstInGroup && !isMediaMessage && (
-                      isMe ? (
-                        <div className="absolute -right-[5px] top-[8px] h-0 w-0 border-y-[5px] border-l-[5px] border-y-transparent" style={{ borderLeftColor: "var(--primary)" }} />
-                      ) : (
-                        <div className="absolute -left-[5px] top-[8px] h-0 w-0 border-y-[5px] border-r-[5px] border-y-transparent" style={{ borderRightColor: isBot ? "var(--surface)" : "var(--surface-inset)" }} />
-                      )
-                    )}
+                  <div
+                    className="relative max-w-[75%]"
+                    onContextMenu={(e) => e.preventDefault()}
+                    onTouchStart={onBubbleTouchStart}
+                    onTouchMove={onBubbleTouchMove}
+                    onTouchEnd={onBubbleTouchEnd}
+                    onTouchCancel={onBubbleTouchEnd}
+                  >
                     <div
-                      className={`break-words ${isMediaMessage ? "bg-transparent p-0" : "px-3 py-2"} ${!isMediaMessage ? (isMe ? "bg-[var(--primary)] text-white" : isBot ? "bg-surface text-app" : "bg-surface-inset text-app") : ""} ${contextMenu?.msg.id === msg.id ? "opacity-75" : ""}`}
+                      className={`relative break-words ${isMediaMessage ? "bg-transparent p-0" : "px-3 py-2"} ${!isMediaMessage ? (isMe ? "bg-[var(--primary)] dark:bg-[color-mix(in_srgb,var(--primary)_80%,#000)] text-white" : isBot ? "bg-surface text-app" : "bg-surface-inset text-app") : ""} ${contextMenu?.msg.id === msg.id ? "opacity-75" : ""}`}
                       style={isMediaMessage ? undefined : {
                         borderRadius: isMe
                           ? `${isFirstInGroup ? "18px" : "8px"} 18px ${isLastInGroup ? "4px" : "8px"} 18px`
@@ -1784,7 +1893,7 @@ export function ChatConversation({
                       ) : msg.document_url ? (
                         <DocumentBubble url={msg.document_url} name={msg.document_name ?? "Documento"} sending={msg.id < 0} />
                       ) : msg.image_url ? (
-                        <MediaBubble url={msg.image_url} type={msg.image_type ?? "image/jpeg"} sending={msg.id < 0} time={time} isMe={isMe} onOpenLightbox={!msg.image_type?.startsWith("video/") ? () => setLightboxUrl(msg.image_url!) : undefined} />
+                        <MediaBubble url={msg.image_url} type={msg.image_type ?? "image/jpeg"} sending={msg.id < 0} time={showMsgTime ? msgTime : ""} isMe={isMe} onOpenLightbox={!msg.image_type?.startsWith("video/") ? () => setLightboxUrl(msg.image_url!) : undefined} />
                       ) : isResumenViaje(msg.texto) ? (
                         <ResumenViajeBubble texto={msg.texto} />
                       ) : isPollMessage(msg.texto) ? (
@@ -1793,20 +1902,26 @@ export function ChatConversation({
                           void channelRef.current?.send({ type: "broadcast", event: "poll_vote", payload: { mensaje_id: msg.id, option_index: idx } });
                         }} />
                       ) : (
-                        <p className={`text-body-sm${isBot ? " whitespace-pre-line" : ""}`}>{msg.texto}</p>
+                        <p className={`text-body-sm${isBot ? " whitespace-pre-line" : ""}`}>
+                          {msg.texto}
+                          <span aria-hidden className="pointer-events-none inline-block select-none align-bottom" style={{ width: isStarred ? 62 : 46, height: 1 }} />
+                        </p>
                       )}
-                      {!isMediaMessage && <div className={`mt-[2px] flex items-center justify-end gap-[4px] text-[11px] ${isMe ? "text-white/60" : "text-muted"}`}>
-                        {isStarred && <span>★</span>}
-                        <span>{time}</span>
-                        {!isBot && <button
-                          type="button"
-                          onClick={openMsgMenu}
-                          className="flex items-center justify-center rounded-full opacity-0 transition-opacity group-hover/msg:opacity-100 hover:opacity-70"
-                          aria-label="Opciones del mensaje"
-                        >
-                          <ChevronDownIcon className="size-[11px]" />
-                        </button>}
-                      </div>}
+                      {!isMediaMessage && (
+                        msg.tipo?.startsWith("call_") || msg.audio_url || msg.document_url || isResumenViaje(msg.texto) || isPollMessage(msg.texto) ? (
+                          <div className={`mt-[2px] flex items-center justify-end gap-[4px] text-[11px] ${isMe ? "text-white/60" : "text-muted"}`}>
+                            {isStarred && <span>★</span>}
+                            <span>{msgTime}</span>
+                            {!isBot && <button type="button" onClick={openMsgMenu} className="flex items-center justify-center rounded-full opacity-0 transition-opacity group-hover/msg:opacity-100 hover:opacity-70" aria-label="Opciones del mensaje"><ChevronDownIcon className="size-[11px]" /></button>}
+                          </div>
+                        ) : !msg.image_url && !isResumenViaje(msg.texto) && (
+                          <div className={`pointer-events-none absolute bottom-[4px] right-[4px] flex items-center gap-[3px] text-[11px] ${isMe ? "text-white/55" : "text-muted"}`}>
+                            {isStarred && <span>★</span>}
+                            <span>{msgTime}</span>
+                            {!isBot && <button type="button" onClick={openMsgMenu} className="pointer-events-auto flex items-center justify-center rounded-full opacity-0 transition-opacity group-hover/msg:opacity-100 hover:opacity-70" aria-label="Opciones del mensaje"><ChevronDownIcon className="size-[11px]" /></button>}
+                          </div>
+                        )
+                      )}
                     </div>
                     {reaction && (
                       <div className={`absolute -bottom-[18px] ${isMe ? "right-[8px]" : "left-[8px]"} rounded-full border border-app bg-app px-[6px] py-[2px] text-[14px] shadow-sm`}>
@@ -1815,6 +1930,7 @@ export function ChatConversation({
                     )}
                   </div>
                 </div>
+                </Fragment>
               );
             })}
             <div ref={bottomRef} />
@@ -1823,7 +1939,7 @@ export function ChatConversation({
       </div>
 
       {/* Input area */}
-      <div className="border-t border-app px-[var(--space-3)] pb-[max(12px,env(safe-area-inset-bottom))] pt-[var(--space-3)] md:px-[var(--space-4)] md:pb-[var(--space-3)]">
+      <div className="px-[var(--space-3)] pb-[max(12px,env(safe-area-inset-bottom))] pt-[var(--space-2)] md:px-[var(--space-4)] md:pb-[var(--space-3)]">
         {replyingTo && (
           <div className="mb-[var(--space-2)] flex items-center gap-[var(--space-2)] rounded-[10px] border-l-2 border-[var(--text-primary)] bg-surface px-3 py-[8px]">
             <div className="min-w-0 flex-1">
@@ -1835,7 +1951,7 @@ export function ChatConversation({
               </p>
             </div>
             <button type="button" onClick={cancelReply} className="shrink-0 text-muted transition-colors hover:text-app">
-              <svg viewBox="0 0 24 24" fill="none" className="size-[16px]"><path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
+              <X className="size-[16px]" />
             </button>
           </div>
         )}
@@ -1846,109 +1962,136 @@ export function ChatConversation({
               <p className="truncate text-[14px] text-muted">{editingMsg.texto}</p>
             </div>
             <button type="button" onClick={cancelEdit} className="shrink-0 text-muted transition-colors hover:text-app">
-              <svg viewBox="0 0 24 24" fill="none" className="size-[16px]"><path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
+              <X className="size-[16px]" />
             </button>
           </div>
         )}
         <div className="relative flex items-center gap-[var(--space-2)]">
-          {/* Attachment menu */}
-          <div className="relative shrink-0">
-            <button
-              type="button"
-              onClick={() => setShowAttachMenu((v) => !v)}
-              className="flex size-[36px] items-center justify-center rounded-full transition-colors hover:bg-surface"
-              aria-label="Adjuntar"
-            >
-              <AttachPlusIcon className="size-[20px] text-muted" />
-            </button>
-            {/* Inputs ocultos */}
-            <input ref={docInputRef} type="file" className="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar" onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleSendDocument(f); e.target.value = ""; }} />
-            <input ref={mediaInputRef} type="file" className="hidden" accept="image/*,video/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleSendMedia(f); e.target.value = ""; }} />
-            <input ref={audioFileInputRef} type="file" className="hidden" accept="audio/*,.mp3,.m4a,.ogg,.wav,.aac,.flac" onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleSendAudioFile(f); e.target.value = ""; }} />
-            {showAttachMenu && (
-              <div className="absolute bottom-[44px] left-0 z-50 min-w-[180px] overflow-hidden rounded-[14px] border border-app bg-app shadow-[0_8px_32px_rgba(0,0,0,0.25)]">
-                {[
-                  { icon: <DocIcon className="size-[18px]" />, label: "Documento", color: "text-purple-400", onClick: () => { setShowAttachMenu(false); docInputRef.current?.click(); } },
-                  { icon: <PhotoVideoIcon className="size-[18px]" />, label: "Fotos y videos", color: "text-blue-400", onClick: () => { setShowAttachMenu(false); const i = mediaInputRef.current; if (!i) return; i.removeAttribute("capture"); i.click(); } },
-                  { icon: <CameraIcon className="size-[18px]" />, label: "Cámara", color: "text-red-400", onClick: () => { setShowAttachMenu(false); setShowCamera(true); } },
-                  { icon: <AudioFileIcon className="size-[18px]" />, label: "Audio", color: "text-orange-400", onClick: () => { setShowAttachMenu(false); audioFileInputRef.current?.click(); } },
-                  { icon: <PollIcon className="size-[18px]" />, label: "Encuesta", color: "text-green-400", onClick: () => { setShowAttachMenu(false); setShowPollCreator(true); } },
-                ].map(({ icon, label, color, onClick }) => (
-                  <button
-                    key={label}
-                    type="button"
-                    onClick={onClick}
-                    className="flex w-full items-center gap-[var(--space-3)] px-4 py-[11px] text-left transition-colors hover:bg-surface"
-                  >
-                    <span className={color}>{icon}</span>
-                    <span className="text-body-sm text-app">{label}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          {/* Inputs ocultos */}
+          <input ref={docInputRef} type="file" className="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar" onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleSendDocument(f); e.target.value = ""; }} />
+          <input ref={mediaInputRef} type="file" className="hidden" accept="image/*,video/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleSendMedia(f); e.target.value = ""; }} />
+          <input ref={audioFileInputRef} type="file" className="hidden" accept="audio/*,.mp3,.m4a,.ogg,.wav,.aac,.flac" onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleSendAudioFile(f); e.target.value = ""; }} />
 
-          {isRecording ? (
-            <>
-              <div className="flex min-w-0 flex-1 items-center gap-[var(--space-2)] rounded-full border border-red-500/50 bg-surface px-4 py-[8px]">
-                <span className="size-[8px] shrink-0 animate-pulse rounded-full bg-red-500" />
-                <span className="text-body-sm text-red-400">
+          {/* Single input container */}
+          <div className="flex min-w-0 flex-1 items-center gap-1 rounded-full border border-app bg-surface px-2">
+            {isRecording ? (
+              <>
+                <span className="mx-1 size-2 shrink-0 animate-pulse rounded-full bg-red-500" />
+                <span className="shrink-0 text-body-sm text-red-400">
                   {String(Math.floor(recordingSeconds / 60)).padStart(2, "0")}:{String(recordingSeconds % 60).padStart(2, "0")}
                 </span>
-                <span className="text-body-sm text-muted">Grabando...</span>
-              </div>
-              <button
-                type="button"
-                onClick={handleCancelRecording}
-                className="flex size-[36px] shrink-0 items-center justify-center rounded-full transition-colors hover:bg-surface"
-                aria-label="Cancelar grabación"
-              >
-                <svg viewBox="0 0 24 24" fill="none" className="size-[16px] text-muted"><path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
-              </button>
-              <button
-                type="button"
-                onClick={handleSendRecording}
-                className="flex size-[36px] shrink-0 items-center justify-center rounded-full bg-[var(--primary)] text-white transition-opacity hover:opacity-80"
-                aria-label="Enviar nota de voz"
-              >
-                <SendMsgIcon className="size-[16px]" />
-              </button>
-            </>
-          ) : (
-            <>
-              <input
-                ref={inputRef}
-                type="text"
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                onKeyDown={onKeyDown}
-                onFocus={() => {
-                  setTimeout(() => {
-                    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-                  }, 300);
-                }}
-                placeholder={editingMsg ? "Editar mensaje..." : "Escribe un mensaje..."}
-                className="min-w-0 flex-1 rounded-full border border-app bg-surface px-4 py-[8px] text-body-sm text-app outline-none transition-colors focus:border-[var(--border-strong)]"
-              />
-              <button
-                type="button"
-                onClick={() => void handleStartRecording()}
-                className="flex size-[36px] shrink-0 items-center justify-center rounded-full transition-colors hover:bg-surface"
-                aria-label="Nota de voz"
-              >
-                <MicIcon className="size-[18px] text-muted" />
-              </button>
-              <button
-                type="button"
-                onClick={() => void onSend()}
-                disabled={!text.trim() || sending}
-                className="flex size-[36px] shrink-0 items-center justify-center rounded-full bg-[var(--primary)] text-white transition-opacity hover:opacity-80 disabled:opacity-30"
-                aria-label="Enviar"
-              >
-                <SendMsgIcon className="size-[16px]" />
-              </button>
-            </>
-          )}
+                <span className="flex-1 px-1 text-body-sm text-muted">Grabando...</span>
+                <button
+                  type="button"
+                  onClick={handleCancelRecording}
+                  className="shrink-0 p-2 text-muted transition-colors hover:text-app"
+                  aria-label="Cancelar grabación"
+                >
+                  <X className="size-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSendRecording}
+                  className="shrink-0 p-2 text-[var(--primary)] transition-opacity hover:opacity-70"
+                  aria-label="Enviar nota de voz"
+                >
+                  <LucideSend className="size-4" />
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="relative shrink-0" ref={emojiContainerRef}>
+                  <button
+                    type="button"
+                    onClick={() => setShowEmojiPicker((v) => !v)}
+                    className="p-2 text-muted transition-colors hover:text-app"
+                    aria-label="Emoji"
+                  >
+                    <Smile className="size-5" />
+                  </button>
+                  {showEmojiPicker && (
+                    <div className="absolute bottom-[calc(100%+8px)] left-0 z-50 max-w-[calc(100vw-32px)]">
+                      <EmojiMartPicker
+                        data={async () => {
+                          const res = await fetch("https://cdn.jsdelivr.net/npm/@emoji-mart/data");
+                          return res.json();
+                        }}
+                        onEmojiSelect={handleEmojiSelect}
+                        locale="es"
+                        theme="auto"
+                        set="native"
+                        previewPosition="none"
+                        skinTonePosition="search"
+                      />
+                    </div>
+                  )}
+                </div>
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  onKeyDown={onKeyDown}
+                  placeholder={editingMsg ? "Editar mensaje..." : "Escribe un mensaje..."}
+                  className="min-w-0 flex-1 bg-transparent py-[10px] text-body-sm text-app outline-none placeholder:text-muted"
+                />
+                {!text.trim() && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => void handleStartRecording()}
+                      className="shrink-0 p-2 text-muted transition-colors hover:text-app"
+                      aria-label="Nota de voz"
+                    >
+                      <Mic className="size-5" />
+                    </button>
+                    <div className="relative shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setShowAttachMenu((v) => !v)}
+                        className="p-2 text-muted transition-colors hover:text-app"
+                        aria-label="Adjuntar"
+                      >
+                        <Plus className="size-5" />
+                      </button>
+                      {showAttachMenu && (
+                        <div className="absolute bottom-[44px] right-0 z-50 min-w-[180px] overflow-hidden rounded-[14px] border border-app bg-app shadow-[0_8px_32px_rgba(0,0,0,0.25)]">
+                          {[
+                            { icon: <DocIcon className="size-[18px]" />, label: "Documento", color: "text-purple-400", onClick: () => { setShowAttachMenu(false); docInputRef.current?.click(); } },
+                            { icon: <PhotoVideoIcon className="size-[18px]" />, label: "Fotos y videos", color: "text-blue-400", onClick: () => { setShowAttachMenu(false); const i = mediaInputRef.current; if (!i) return; i.removeAttribute("capture"); i.click(); } },
+                            { icon: <CameraIcon className="size-[18px]" />, label: "Cámara", color: "text-red-400", onClick: () => { setShowAttachMenu(false); setShowCamera(true); } },
+                            { icon: <AudioFileIcon className="size-[18px]" />, label: "Audio", color: "text-orange-400", onClick: () => { setShowAttachMenu(false); audioFileInputRef.current?.click(); } },
+                            { icon: <PollIcon className="size-[18px]" />, label: "Encuesta", color: "text-green-400", onClick: () => { setShowAttachMenu(false); setShowPollCreator(true); } },
+                          ].map(({ icon, label, color, onClick }) => (
+                            <button
+                              key={label}
+                              type="button"
+                              onClick={onClick}
+                              className="flex w-full items-center gap-[var(--space-3)] px-4 py-[11px] text-left transition-colors hover:bg-surface"
+                            >
+                              <span className={color}>{icon}</span>
+                              <span className="text-body-sm text-app">{label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+                {text.trim() && (
+                  <button
+                    type="button"
+                    onClick={() => void onSend()}
+                    disabled={sending}
+                    className="shrink-0 p-2 text-[var(--primary)] transition-opacity hover:opacity-70 disabled:opacity-30"
+                    aria-label="Enviar"
+                  >
+                    <LucideSend className="size-5" />
+                  </button>
+                )}
+              </>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -2049,7 +2192,8 @@ function ChatInfoPanel({
   const [addingId, setAddingId] = useState<string | null>(null);
   const [localMembers, setLocalMembers] = useState(() => {
     const seen = new Set<string>();
-    return chat.miembros.filter((m) => { if (seen.has(m.id)) return false; seen.add(m.id); return true; });
+    const deduped = chat.miembros.filter((m) => { if (seen.has(m.id)) return false; seen.add(m.id); return true; });
+    return deduped.sort((a, b) => (a.id === currentUserId ? -1 : b.id === currentUserId ? 1 : 0));
   });
   const [localFoto, setLocalFoto] = useState(chat.foto);
   const [uploadingFoto, setUploadingFoto] = useState(false);
@@ -2280,10 +2424,9 @@ function ChatInfoPanel({
                     <div className="avatar-md flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">
                       {m.profile_image ? <NextImage src={m.profile_image} alt={m.nombre} width={40} height={40} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" /> : label}
                     </div>
-                    <p className="min-w-0 flex-1 truncate text-body-sm text-app">{m.nombre}</p>
-                    {isMe && (
-                      <span className="shrink-0 rounded-full bg-surface px-[8px] py-[3px] text-[14px] text-muted">Tú</span>
-                    )}
+                    <p className="min-w-0 flex-1 truncate text-body-sm text-app">
+                      {isMe ? <><span className="text-muted">(Tú)</span> {m.nombre}</> : m.nombre}
+                    </p>
                   </div>
                 );
               })}
@@ -2427,12 +2570,10 @@ function CallBubble({ tipo, duracion }: { tipo: string; duracion: number }) {
     return m > 0 ? `${m} min ${sec} s` : `${sec} s`;
   };
   return (
-    <div className="flex items-center gap-[var(--space-2)]">
-      <span className={`text-[20px] ${missed ? "opacity-60" : ""}`}>
-        {isVideo ? "📹" : "📞"}
-      </span>
+    <div className={`flex items-start gap-[var(--space-2)] ${missed ? "text-red-700 dark:text-red-800" : ""}`}>
+      {isVideo ? <Video className="mt-[2px] size-[16px] shrink-0" /> : <Phone className="mt-[2px] size-[16px] shrink-0" />}
       <div className="flex flex-col">
-        <span className={`text-body-sm font-[var(--fw-medium)] ${missed ? "opacity-70" : ""}`}>{label}</span>
+        <span className="text-body-sm font-[var(--fw-medium)]">{label}</span>
         {!missed && duracion > 0 && (
           <span className="text-[14px] opacity-60">{formatDur(duracion)}</span>
         )}

@@ -15,13 +15,14 @@ type Props = {
   planId: number;
   currentUserId: string;
   isMember: boolean;
+  refreshKey?: number;
 };
 
 const PlusIcon = () => <Plus className="size-5" aria-hidden />;
 const TrashIcon = () => <Trash2 className="size-4" aria-hidden />;
 const PlaneEmptyIcon = () => <Plane className="size-12 text-muted opacity-40" aria-hidden />;
 
-export default function PlanFotosTab({ planId, currentUserId, isMember }: Props) {
+export default function PlanFotosTab({ planId, currentUserId, isMember, refreshKey = 0 }: Props) {
   const [fotos, setFotos] = useState<PlanFotoDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -41,7 +42,7 @@ export default function PlanFotosTab({ planId, currentUserId, isMember }: Props)
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [planId]);
+  }, [planId, refreshKey]);
 
   async function handleFilesSelected(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
@@ -102,7 +103,7 @@ export default function PlanFotosTab({ planId, currentUserId, isMember }: Props)
     <div className="px-[var(--page-margin-x)] pt-5 pb-8">
       {/* Upload button */}
       {isMember && (
-        <div className="mb-4 flex items-center gap-3">
+        <div className="mb-4 hidden items-center gap-3 md:flex">
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}

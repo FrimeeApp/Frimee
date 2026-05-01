@@ -45,7 +45,7 @@
 }
 
 .small .avatar {
-  width: 34px;
+  width: 26px;
 }
 
 .ring {
@@ -59,7 +59,7 @@
 }
 
 .avatar {
-  width: clamp(58px, 14vw, 78px);
+  width: clamp(44px, 10vw, 60px);
   height: auto;
   object-fit: contain;
   filter: drop-shadow(0 10px 18px rgb(0 0 0 / 0.12));

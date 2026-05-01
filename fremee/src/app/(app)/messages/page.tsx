@@ -21,6 +21,7 @@ import { useToast } from "@/components/ui/Toaster";
 import { createGrupoEndpoint } from "@/services/api/endpoints/grupos.endpoint";
 import { ChatConversation, BackIcon, GroupIcon } from "@/components/chat/ChatConversation";
 import { SearchInput } from "@/components/ui/SearchInput";
+import { Phone, Video } from "lucide-react";
 
 export default function MessagesPage() {
   const { user, loading } = useAuth();
@@ -360,7 +361,14 @@ export default function MessagesPage() {
               const avatar = resolveChatAvatar(chat, user?.id ?? "");
               const hasUnread = chat.unread_count > 0;
               const isSelected = chat.chat_id === selectedChatId;
-              const lastMsg = (() => { const m = chat.last_message ?? ""; try { return JSON.parse(m)?.type === "poll" ? "📊 Encuesta" : m; } catch { return m; } })();
+              const lastMsgRaw = (() => { const m = chat.last_message ?? ""; try { return JSON.parse(m)?.type === "poll" ? "📊 Encuesta" : m; } catch { return m; } })();
+              const callPreview = (() => {
+                if (!lastMsgRaw.includes("Llamada") && !lastMsgRaw.includes("Videollamada")) return null;
+                const missed = lastMsgRaw.includes("perdida");
+                const isVideo = lastMsgRaw.includes("Video");
+                const label = missed ? (isVideo ? "Videollamada perdida" : "Llamada perdida") : (isVideo ? "Videollamada" : "Llamada de audio");
+                return { isVideo, missed, label };
+              })();
               return (
                 <button
                   key={chat.chat_id}
@@ -382,7 +390,12 @@ export default function MessagesPage() {
                       <span className="shrink-0 text-[12px] text-muted tabular-nums">{formatChatTime(chat.last_message_at)}</span>
                     </div>
                     <p className={`truncate text-[13px] leading-[1.4] ${hasUnread ? "font-[600] text-app" : "text-muted"}`}>
-                      {lastMsg}
+                      {callPreview ? (
+                        <span className={`flex items-center gap-1 ${callPreview.missed ? "text-red-700 dark:text-red-800" : ""}`}>
+                          {callPreview.isVideo ? <Video className="size-3 shrink-0" /> : <Phone className="size-3 shrink-0" />}
+                          <span className="truncate">{callPreview.label}</span>
+                        </span>
+                      ) : lastMsgRaw}
                     </p>
                   </div>
                 </button>

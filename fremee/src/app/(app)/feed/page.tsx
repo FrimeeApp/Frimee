@@ -26,6 +26,7 @@ import { getPublicUserProfile, searchUsers, type PublicUserProfileDto } from "@/
 import { fetchActiveFriends, getFollowStatuses } from "@/services/api/endpoints/users.endpoint";
 import { savePlan, unsavePlan, getSavedStatuses } from "@/services/api/endpoints/saved.endpoint";
 import { listActiveFriendFlightsEndpoint } from "@/services/api/endpoints/wallet.endpoint";
+import { Phone, Video } from "lucide-react";
 import type { PlanTicket } from "@/services/api/endpoints/wallet.endpoint";
 import FeedFlightCarousel from "@/components/feed/FeedFlightCarousel";
 import {
@@ -423,12 +424,12 @@ export default function FeedPage() {
                 className={`sticky top-0 z-[100] bg-app pb-[clamp(6px,1.6dvh,var(--space-2))] pt-mobile-safe-top pl-[max(var(--page-margin-x),env(safe-area-inset-left))] pr-[max(var(--page-margin-x),env(safe-area-inset-right))] md:hidden ${createPlanModalOpen ? "hidden" : ""}`}
               >
                 <div className="relative flex flex-col items-center gap-[10px]">
-                  <div className="relative flex w-full items-center justify-center">
+                  <div className="relative h-[40px] w-full">
                     <button
                       type="button"
                       onClick={() => setMobileSearchOpen(true)}
                       aria-label="Buscar"
-                      className={`flex h-[40px] items-center gap-[9px] rounded-full border border-app bg-[var(--search-field-bg)] px-4 text-muted shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-[width,opacity,transform,background-color] duration-300 ease-out hover:opacity-90 active:scale-[0.98] ${
+                      className={`absolute left-1/2 top-0 flex h-[40px] -translate-x-1/2 items-center gap-[9px] rounded-full border border-app bg-[var(--search-field-bg)] px-4 text-muted shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-[width,opacity,transform,background-color] duration-300 ease-out hover:opacity-90 active:scale-[0.98] ${
                         mobileSearchOpen ? "w-[calc(100%-44px)]" : "w-[min(66vw,300px)]"
                       }`}
                     >
@@ -1031,8 +1032,8 @@ function FeedChatPanel({ currentUserId }: { currentUserId: string | null }) {
                           const mins = Math.floor(duracion / 60);
                           const secs = duracion % 60;
                           return (
-                            <div className={`flex items-center gap-[8px] py-[2px] ${missed ? "opacity-60" : ""}`}>
-                              <span className="text-[18px]">{missed ? "📵" : (isVideo ? "📹" : "📞")}</span>
+                            <div className={`flex items-start gap-[8px] py-[2px] ${missed ? "text-red-700 dark:text-red-800" : ""}`}>
+                              {isVideo ? <Video className="mt-[2px] size-[15px] shrink-0" /> : <Phone className="mt-[2px] size-[15px] shrink-0" />}
                               <div>
                                 <p className="text-[14px] font-[var(--fw-medium)]">{label}</p>
                                 {!missed && duracion > 0 && <p className="text-[14px] opacity-70">{mins}:{String(secs).padStart(2, "0")}</p>}
@@ -1142,7 +1143,7 @@ function FeedChatPanel({ currentUserId }: { currentUserId: string | null }) {
 function FeedSkeleton() {
   return (
     <div className="flex min-h-[min(620px,calc(100dvh-140px))] items-center px-[max(12px,env(safe-area-inset-left))] py-4 md:px-0" aria-label="Cargando publicaciones" role="status">
-      <article className="mx-auto flex w-full max-w-[560px] items-center gap-3 md:max-w-[520px]">
+      <article className="mx-auto flex w-full max-w-[560px] items-start gap-3 md:max-w-[520px]">
         <div className="skeleton-shimmer size-10 shrink-0 rounded-full" />
         <div className="skeleton-shimmer aspect-[4/5] min-w-0 flex-1 rounded-[18px]" />
       </article>
