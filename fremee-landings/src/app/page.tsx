@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { ReactLenis } from "lenis/react";
+import { APP_REGISTER_URL } from "@/config/links";
 import GradualBlur from "@/components/landing/GradualBlur";
 import LandingScrollIndicator from "@/components/landing/LandingScrollIndicator";
 import LightRays from "@/components/landing/LightRays";
@@ -52,12 +53,12 @@ export default function LandingPage() {
                   />
                 </h1>
                 <p className="mx-auto mt-6 max-w-xl text-base leading-7 text-[var(--text-secondary)] sm:text-lg">
-                  Una base simple para presentar la app antes de entrar. Desde aquí puedes iniciar sesión o crear una
-                  cuenta.
+                  Una web para presentar Frimee, explicar la app y llevar a los usuarios al producto cuando quieran
+                  crear su cuenta.
                 </p>
                 <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
                   <Link
-                    href="/register"
+                    href={APP_REGISTER_URL}
                     className="inline-flex items-center justify-center rounded-full bg-[var(--primary)] px-6 py-3 text-sm font-semibold text-white transition hover:opacity-90 dark:text-black"
                   >
                     Empezar gratis

@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useSyncExternalStore } from "react";
+import { APP_LOGIN_URL, APP_REGISTER_URL } from "@/config/links";
 import { applyThemePreference, cacheThemePreference, type AppThemePreference } from "@/services/theme/preferences";
 
 const navLinks = [
@@ -46,7 +47,7 @@ export default function Navbar() {
       />
       <div className="relative z-10 grid h-16 w-full grid-cols-[auto_1fr] items-center gap-4 px-4 sm:px-6 md:grid-cols-[1fr_auto_1fr] lg:px-9">
         <Link
-          href="/landing"
+          href="/"
           className="flex items-center gap-2.5 text-black transition-colors duration-200 hover:text-black/70 dark:text-white dark:hover:text-white/70"
         >
           <span className="relative h-5 w-5 shrink-0">
@@ -116,13 +117,13 @@ export default function Navbar() {
             </svg>
           </label>
           <Link
-            href="/login"
+            href={APP_LOGIN_URL}
             className="hidden h-10 items-center justify-center rounded-[var(--radius-button)] px-4 text-sm font-medium text-black transition-colors duration-200 hover:text-black/60 dark:text-white/88 dark:hover:text-white sm:inline-flex"
           >
             Iniciar sesión
           </Link>
           <Link
-            href="/register"
+            href={APP_REGISTER_URL}
             className="group inline-flex h-10 items-center justify-center gap-2 overflow-hidden rounded-[var(--radius-button)] bg-[var(--primary)] px-4 text-sm font-medium text-white transition-colors duration-200 hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]/30 focus-visible:ring-offset-2 dark:text-black sm:px-6"
           >
             <span>Registrarse</span>
