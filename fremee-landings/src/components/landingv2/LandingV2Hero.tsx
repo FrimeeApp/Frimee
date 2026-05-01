@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { APP_REGISTER_URL } from "@/config/links";
 import FlipWords from "@/components/ui/FlipWords";
 import GlobeHero from "@/components/landingv2/GlobeHero";
 
@@ -31,7 +32,7 @@ export default function LandingV2Hero() {
             className="mt-5 flex flex-col justify-center gap-3 sm:mt-6 sm:flex-row"
           >
             <Link
-              href="/register"
+              href={APP_REGISTER_URL}
               className="inline-flex items-center justify-center rounded-full bg-[var(--primary)] px-6 py-3 text-sm font-semibold text-white transition hover:opacity-90 dark:text-black"
             >
               Empezar gratis

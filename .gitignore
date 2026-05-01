@@ -9,9 +9,36 @@ Thumbs.db
 
 .claude/settings.local.json
 
+# Dependencies
 node_modules/
+
+# Package manifests intentionally kept local in this repo
 package-lock.json
 package.json
+
+# Env files
+.env
+.env.*
+!.env.example
+!.env.sample
+
+# Build outputs / caches
+.next/
+next-env.d.ts
+out/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+.turbo/
+.nx/
+.vercel/
+
+# Framework caches
+.cache/
+.parcel-cache/
+.svelte-kit/
+.nuxt/
 
 seed-test-gastos.mjs
 seed-test-users.mjs
