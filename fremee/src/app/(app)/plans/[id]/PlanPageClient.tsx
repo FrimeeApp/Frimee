@@ -24,6 +24,8 @@ import AppSidebar from "@/components/common/AppSidebar";
 import PublishPlanModal from "@/components/plans/modals/PublishPlanModal";
 import PlanFotosTab from "@/components/plans/PlanFotosTab";
 import { PlanGastoDetailModal } from "@/components/plans/modals/PlanGastoDetailModal";
+import { uploadPlanAlbumFile } from "@/services/firebase/upload";
+import { addPlanFoto } from "@/services/api/repositories/plan-fotos.repository";
 import { formatMoney, formatExpenseDateTime, getInitial, formatDateRange, fmtTime, fmtDayHeader } from "@/lib/formatters";
 import { FIELD_LINE_CLS } from "@/lib/styles";
 import { buildGoogleMapsDirectionsUrl, buildWazeDirectionsUrl } from "@/config/external";
@@ -147,12 +149,16 @@ export default function PlanDetailPage() {
   const [selectedMapDay, setSelectedMapDay] = useState<string | null>(null);
   const [showMapFullscreen, setShowMapFullscreen] = useState(false);
   const [collapsedDays, setCollapsedDays] = useState<Set<string>>(new Set());
+  const collapsedDaysInitializedRef = useRef(false);
   const [showAddSheet, setShowAddSheet] = useState(false);
   const [addSheetInitialTitulo, setAddSheetInitialTitulo] = useState<string | undefined>();
   const [addSheetInitialDate, setAddSheetInitialDate] = useState<string | undefined>();
   const [editingSubplan, setEditingSubplan] = useState<SubplanRow | null>(null);
   const [showAddGastoSheet, setShowAddGastoSheet] = useState(false);
   const [mobileCreateOpen, setMobileCreateOpen] = useState(false);
+  const [photoAlbumRefreshKey, setPhotoAlbumRefreshKey] = useState(0);
+  const [fabPhotoUploading, setFabPhotoUploading] = useState(false);
+  const fabPhotoInputRef = useRef<HTMLInputElement>(null);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [gastos, setGastos] = useState<GastoRow[]>([]);
   const [selectedGastoId, setSelectedGastoId] = useState<number | null>(null);
@@ -172,6 +178,39 @@ export default function PlanDetailPage() {
     setComprobanteFile(null);
     setComprobantePreview(null);
   }, !!pagarDeuda);
+
+  const openPhotoUpload = () => {
+    setMobileCreateOpen(false);
+    setActiveTab("fotos");
+    fabPhotoInputRef.current?.click();
+  };
+
+  const handleFabPhotoFilesSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = "";
+    if (!plan?.id || !user?.id || files.length === 0) return;
+
+    setActiveTab("fotos");
+    setFabPhotoUploading(true);
+    try {
+      await Promise.all(
+        files.map(async (file) => {
+          const { filePath, downloadUrl } = await uploadPlanAlbumFile({ file, planId: plan.id });
+          return addPlanFoto({
+            planId: plan.id,
+            userId: user.id,
+            url: downloadUrl,
+            storagePath: filePath,
+          });
+        })
+      );
+      setPhotoAlbumRefreshKey((value) => value + 1);
+    } catch (error) {
+      console.error("Upload failed:", error);
+    } finally {
+      setFabPhotoUploading(false);
+    }
+  };
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [inviteFriends, setInviteFriends] = useState<PublicUserProfileRow[]>([]);
   const [inviteFriendsLoading, setInviteFriendsLoading] = useState(false);
@@ -473,6 +512,12 @@ export default function PlanDetailPage() {
     });
   };
 
+  useEffect(() => {
+    if (collapsedDaysInitializedRef.current || routeDayGroups.length === 0) return;
+    setCollapsedDays(new Set(routeDayGroups.map(([dateKey]) => dateKey)));
+    collapsedDaysInitializedRef.current = true;
+  }, [routeDayGroups]);
+
   // Auto-select today if within plan range, else first day with subplanes
   useEffect(() => {
     const days = groupByDay(subplanes);
@@ -611,6 +656,10 @@ export default function PlanDetailPage() {
     setMobileCreateOpen(false);
   }, [activeTab, showAddSheet, showAddGastoSheet]);
   useEffect(() => {
+    collapsedDaysInitializedRef.current = false;
+    setCollapsedDays(new Set());
+  }, [id]);
+  useEffect(() => {
     if (selectedGastoId && !gastos.some((gasto) => gasto.id === selectedGastoId)) {
       setSelectedGastoId(null);
     }
@@ -648,8 +697,8 @@ export default function PlanDetailPage() {
           <div
             className={`relative w-full overflow-hidden transition-[height] duration-300 md:ml-0 md:[border-bottom-left-radius:var(--radius-card)] md:[border-bottom-right-radius:var(--radius-card)] ${
               activeTab === "chat"
-                ? "h-[clamp(150px,21vh,190px)] md:h-[clamp(260px,40vh,380px)]"
-                : "h-[clamp(220px,34vh,320px)] md:h-[clamp(260px,40vh,380px)]"
+                ? "h-[clamp(130px,18vh,165px)] md:h-[clamp(260px,40vh,380px)]"
+                : "h-[clamp(190px,29vh,270px)] md:h-[clamp(260px,40vh,380px)]"
             }`}
           >
             {plan.foto_portada ? (
@@ -687,7 +736,7 @@ export default function PlanDetailPage() {
             )}
 
             {/* Title & meta */}
-            <div className="absolute bottom-0 left-0 right-0 px-[var(--page-margin-x)] pb-[var(--space-6)]">
+            <div className="absolute bottom-0 left-0 right-0 px-[var(--page-margin-x)] pb-[var(--space-4)]">
               <h1 className="[font-family:var(--font-display-face)] text-[clamp(24px,5vw,36px)] font-[var(--fw-medium)] leading-[1.1] tracking-[-0.01em] text-white md:max-w-[70%]">
                 {plan.titulo}
               </h1>
@@ -696,24 +745,24 @@ export default function PlanDetailPage() {
                   {plan.descripcion}
                 </p>
               )}
-              <div className="mt-[var(--space-2)] flex flex-col gap-[6px] pr-[132px] text-white/85 md:flex-row md:flex-wrap md:items-center md:gap-[var(--space-3)] md:pr-[220px]">
-                <span className="flex items-center gap-[5px] text-body-sm">
-                  <CalendarSmallIcon className="size-[14px]" />
+              <div className="mt-[var(--space-2)] flex min-w-0 items-center gap-[var(--space-3)] pr-[132px] text-white/85 md:pr-[220px]">
+                <span className="flex shrink-0 items-center gap-[5px] text-body-sm">
+                  <CalendarSmallIcon className="size-[14px] shrink-0" />
                   {formatDateRange(plan.inicio_at, plan.fin_at)}
                 </span>
                 {isPast && (
-                  <span className="rounded-chip border border-white/30 bg-white/10 px-[var(--space-2)] py-[2px] text-[14px] font-[var(--fw-medium)] text-white/70">
+                  <span className="shrink-0 rounded-chip border border-white/30 bg-white/10 px-[var(--space-2)] py-[2px] text-[14px] font-[var(--fw-medium)] text-white/70">
                     Finalizado
                   </span>
                 )}
-                <span className="flex items-center gap-[5px] text-body-sm">
-                  <MapPinIcon className="size-[14px]" />
-                  {plan.ubicacion_nombre}
+                <span className="flex min-w-0 items-center gap-[5px] text-body-sm">
+                  <MapPinIcon className="size-[14px] shrink-0" />
+                  <span className="min-w-0 truncate">{plan.ubicacion_nombre}</span>
                 </span>
               </div>
 
               {/* Action buttons */}
-              <div className="absolute bottom-[var(--space-6)] right-[var(--page-margin-x)] flex gap-[var(--space-2)]">
+              <div className="absolute bottom-[var(--space-4)] right-[var(--page-margin-x)] flex gap-[var(--space-2)]">
                 {!isPast && isAdmin && (
                   <button
                     onClick={() => setShowPublishModal(true)}
@@ -751,7 +800,7 @@ export default function PlanDetailPage() {
                         : "text-muted hover:text-app"
                     }`}
                   >
-                    {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                    {tab === "fotos" ? "Álbum" : tab.charAt(0).toUpperCase() + tab.slice(1)}
                     {activeTab === tab && (
                       <span className="absolute inset-x-0 bottom-0 h-[2px] rounded-full bg-primary-token" />
                     )}
@@ -847,6 +896,7 @@ export default function PlanDetailPage() {
               planId={plan.id}
               currentUserId={user.id}
               isMember={membershipChecked}
+              refreshKey={photoAlbumRefreshKey}
             />
           )}
 
@@ -1720,10 +1770,12 @@ export default function PlanDetailPage() {
         </div>
       )}
 
-      {!isPast && activeTab !== "chat" && activeTab !== "fotos" && !showAddSheet && !showAddGastoSheet && (isAdmin || activeTab === "gastos") && (
+      {activeTab !== "chat" && !showAddSheet && !showAddGastoSheet && (
+        activeTab === "itinerario" || activeTab === "gastos" || activeTab === "fotos"
+      ) && !isPast && (membershipChecked || isAdmin || activeTab === "gastos") && (
         <div className="fixed bottom-[calc(var(--space-6)+env(safe-area-inset-bottom))] right-[var(--page-margin-x)] z-[65] flex flex-col items-end gap-3 md:hidden">
           <div className={`flex flex-col items-end gap-2 transition-all duration-200 ease-out ${mobileCreateOpen ? "pointer-events-auto translate-y-0 opacity-100" : "pointer-events-none translate-y-2 opacity-0"}`}>
-            {isAdmin && (
+            {!isPast && isAdmin && (
               <button
                 type="button"
                 onClick={openCreateSubplan}
@@ -1738,20 +1790,46 @@ export default function PlanDetailPage() {
                 </span>
               </button>
             )}
-            <button
-              type="button"
-              onClick={openCreateGasto}
-              aria-label="Crear gasto"
-              className="flex items-center gap-[var(--space-2)]"
-            >
-              <span className="rounded-full border border-app bg-app px-[var(--space-3)] py-[7px] text-caption font-[var(--fw-semibold)] text-app shadow-elev-2">
-                Crear gasto
-              </span>
-              <span className="flex size-14 items-center justify-center rounded-full border border-app bg-surface text-app shadow-elev-3">
-                <FileText className="size-6" aria-hidden />
-              </span>
-            </button>
+            {!isPast && (
+              <button
+                type="button"
+                onClick={openCreateGasto}
+                aria-label="Crear gasto"
+                className="flex items-center gap-[var(--space-2)]"
+              >
+                <span className="rounded-full border border-app bg-app px-[var(--space-3)] py-[7px] text-caption font-[var(--fw-semibold)] text-app shadow-elev-2">
+                  Crear gasto
+                </span>
+                <span className="flex size-14 items-center justify-center rounded-full border border-app bg-surface text-app shadow-elev-3">
+                  <FileText className="size-6" aria-hidden />
+                </span>
+              </button>
+            )}
+            {membershipChecked && (
+              <button
+                type="button"
+                onClick={openPhotoUpload}
+                aria-label="Subir foto"
+                disabled={fabPhotoUploading}
+                className="flex items-center gap-[var(--space-2)]"
+              >
+                <span className="rounded-full border border-app bg-app px-[var(--space-3)] py-[7px] text-caption font-[var(--fw-semibold)] text-app shadow-elev-2">
+                  {fabPhotoUploading ? "Subiendo..." : "Subir foto"}
+                </span>
+                <span className="flex size-14 items-center justify-center rounded-full border border-app bg-surface text-app shadow-elev-3">
+                  {fabPhotoUploading ? <span className="size-5 animate-spin rounded-full border-2 border-current border-t-transparent opacity-60" /> : <Upload className="size-6" aria-hidden />}
+                </span>
+              </button>
+            )}
           </div>
+          <input
+            ref={fabPhotoInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={(event) => void handleFabPhotoFilesSelected(event)}
+          />
           <button
             type="button"
             aria-label={mobileCreateOpen ? "Cerrar crear" : "Crear"}

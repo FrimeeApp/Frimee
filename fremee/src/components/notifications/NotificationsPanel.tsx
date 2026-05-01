@@ -121,6 +121,19 @@ function Avatar({ src, name }: { src: string | null; name: string | null }) {
 
 // ─── NotifItem ───────────────────────────────────────────────────────────────
 
+function NotificationsSkeleton() {
+  return (
+    <div className="flex flex-col gap-[var(--space-4)] px-[var(--space-4)] py-[var(--space-3)]" aria-label="Cargando notificaciones" role="status">
+      {[1, 2, 3].map((i) => (
+        <div key={i} className="flex items-center gap-[var(--space-3)]">
+          <div className="skeleton-shimmer size-12 shrink-0 rounded-full" />
+          <div className="skeleton-shimmer h-[14px] w-[148px] rounded-full" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function NotifItem({
   n,
   onAction,
@@ -385,9 +398,7 @@ export default function NotificationsPanel({ open, onClose, onRead, desktopPosit
         {/* Content */}
         <div className="flex-1 overflow-y-auto overscroll-contain">
           {loading ? (
-            <div className="flex justify-center py-12">
-              <div className="size-5 rounded-full border-2 border-current border-t-transparent animate-spin opacity-40" />
-            </div>
+            <NotificationsSkeleton />
           ) : notifs.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-3 py-20 px-6 text-center">
               <Bell className="size-12 opacity-20" aria-hidden />

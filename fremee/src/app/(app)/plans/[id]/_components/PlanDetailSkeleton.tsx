@@ -8,8 +8,7 @@ export function PlanDetailSkeleton() {
 
               {/* Hero skeleton */}
               <div
-                className="relative w-full overflow-hidden md:ml-0 md:rounded-b-[20px] animate-pulse bg-[var(--surface-2)]"
-                style={{ height: "clamp(260px, 40vh, 380px)" }}
+                className="relative h-[clamp(190px,29vh,270px)] w-full overflow-hidden bg-[var(--surface-2)] animate-pulse md:ml-0 md:h-[clamp(260px,40vh,380px)] md:rounded-b-[20px]"
               >
                 <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
                 <div className="absolute left-[var(--page-margin-x)] top-[calc(env(safe-area-inset-top)+var(--space-4))] md:top-[var(--space-6)] h-9 w-9 rounded-full bg-white/20" />
