@@ -6,8 +6,8 @@ import { useRouter } from "next/navigation";
 import { Capacitor } from "@capacitor/core";
 import { ArrowLeftIcon, ChevronRightIcon } from "@/components/icons";
 import {
-  Pencil, User, Shield, Calendar, Bell, Moon, Globe, Clock,
-  Mail, MessageSquare, LogOut, Trash2, KeyRound, Eye, EyeOff,
+  Pencil, User, Shield, Calendar, Bell, Moon, Sun, Globe, Clock,
+  Mail, MessageSquare, LogOut, Trash2, KeyRound, Eye, EyeOff, ChevronLeft,
 } from "lucide-react";
 import { App } from "@capacitor/app";
 import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
@@ -567,9 +567,9 @@ export default function SettingsPage() {
               onClick={() => void goBack()}
               disabled={busyAction === "save"}
               aria-label="Volver"
-              className="flex items-center justify-center text-app transition-opacity hover:opacity-60 disabled:opacity-[var(--disabled-opacity)]"
+              className="flex size-[32px] items-center justify-center rounded-full transition-colors hover:bg-surface disabled:opacity-[var(--disabled-opacity)]"
             >
-              <ArrowLeftIcon />
+              <ChevronLeft className="size-[18px]" aria-hidden />
             </button>
           </div>
 
@@ -577,287 +577,240 @@ export default function SettingsPage() {
             Configuración y privacidad
           </h1>
 
-          <section>
-            <SettingsSection
-              title="Perfil"
-            >
-              <div className="mt-[var(--space-2)] border-t border-app">
-                <SettingsRow
-                  icon={<UserIcon />}
-                  label="Nombre"
-                  description="Nombre público que se muestra en tu perfil."
-                  right={<span className="text-body-sm text-muted">{form.nombre || "Sin nombre"}</span>}
-                />
-                <SettingsRow
-                  icon={<CalendarIcon />}
-                  label="Fecha de nacimiento"
-                  description="Se usa para personalización y edad mínima."
-                  right={
-                    <input
-                      type="date"
-                      value={form.fechaNac}
-                      disabled={disableEditing}
-                      onChange={(e) => setForm((prev) => ({ ...prev, fechaNac: e.target.value }))}
-                      className="w-full rounded-input border border-app bg-surface px-[var(--space-3)] py-[var(--space-2)] text-body-sm disabled:opacity-[var(--disabled-opacity)] sm:w-auto"
-                    />
-                  }
-                />
-              </div>
+          <div>
+            <SettingsSection title="Perfil">
+              <SettingsRow
+                icon={<UserIcon />}
+                label="Nombre"
+                description="Nombre público que se muestra en tu perfil."
+                right={<span className="text-body-sm text-muted">{form.nombre || "Sin nombre"}</span>}
+              />
+              <SettingsRow
+                icon={<CalendarIcon />}
+                label="Fecha de nacimiento"
+                description="Se usa para personalización y edad mínima."
+                right={
+                  <input
+                    type="date"
+                    value={form.fechaNac}
+                    disabled={disableEditing}
+                    onChange={(e) => setForm((prev) => ({ ...prev, fechaNac: e.target.value }))}
+                    className="rounded-input border border-app bg-surface px-[var(--space-3)] py-[var(--space-2)] text-body-sm disabled:opacity-[var(--disabled-opacity)]"
+                  />
+                }
+              />
             </SettingsSection>
 
-            <SettingsSection
-              title="Preferencias"
-                         >
-              <div className="mt-[var(--space-2)] border-t border-app">
-                <SettingsRow
-                  icon={<MoonIcon />}
-                  label="Tema"
-                  description="Elige entre sistema, claro u oscuro."
-                  right={
-                    <div className="flex flex-wrap items-center gap-[var(--space-2)]">
-                      <ModeButton
-                        active={form.theme === "SYSTEM"}
-                        label="Sistema"
-                        disabled={disableEditing}
-                        onClick={() => setForm((prev) => ({ ...prev, theme: "SYSTEM" }))}
-                      />
-                      <ModeButton
-                        active={form.theme === "LIGHT"}
-                        label="Claro"
-                        disabled={disableEditing}
-                        onClick={() => setForm((prev) => ({ ...prev, theme: "LIGHT" }))}
-                      />
-                      <ModeButton
-                        active={form.theme === "DARK"}
-                        label="Oscuro"
-                        disabled={disableEditing}
-                        onClick={() => setForm((prev) => ({ ...prev, theme: "DARK" }))}
-                      />
-                    </div>
-                  }
-                />
-                <SettingsRow
-                  icon={<LanguageIcon />}
-                  label="Idioma"
-                  description="Idioma de interfaz."
-                  right={
-                    <FieldSelect
-                      value={form.language}
+            <SettingsSection title="Preferencias">
+              <SettingsRow
+                icon={<MoonIcon />}
+                label="Tema"
+                description="Elige el tema de la aplicación."
+                right={
+                  <div className="flex items-center gap-2">
+                    <IconModeButton
+                      active={form.theme === "LIGHT"}
+                      icon={<Sun className="size-[18px]" />}
+                      label="Claro"
                       disabled={disableEditing}
-                      onChange={(value) => setForm((prev) => ({ ...prev, language: value }))}
-                      options={LANGUAGE_OPTIONS}
+                      onClick={() => setForm((prev) => ({ ...prev, theme: "LIGHT" }))}
                     />
-                  }
-                />
-                <SettingsRow
-                  icon={<ClockIcon />}
-                  label="Zona horaria"
-                  description="Hora local para tus planes y recordatorios."
-                  right={
-                    <FieldSelect
-                      value={form.timezone}
+                    <IconModeButton
+                      active={form.theme === "DARK"}
+                      icon={<Moon className="size-[18px]" />}
+                      label="Oscuro"
                       disabled={disableEditing}
-                      onChange={(value) => setForm((prev) => ({ ...prev, timezone: value }))}
-                      options={TIMEZONE_OPTIONS}
+                      onClick={() => setForm((prev) => ({ ...prev, theme: "DARK" }))}
                     />
-                  }
-                />
-              </div>
+                  </div>
+                }
+              />
             </SettingsSection>
 
-            <SettingsSection
-              title="Notificaciones"
-                         >
-              <div className="mt-[var(--space-2)] border-t border-app">
-                <SettingsRow
-                  icon={<BellIcon />}
-                  label="Push"
-                  description="Alertas en el dispositivo."
-                  right={
-                    <Switch
-                      checked={form.notifyPush}
-                      disabled={disableEditing}
-                      onChange={(next) => setForm((prev) => ({ ...prev, notifyPush: next }))}
-                    />
-                  }
-                />
-                <SettingsRow
-                  icon={<MailIcon />}
-                  label="Email"
-                  description="Resúmenes y actividad por correo."
-                  right={
-                    <Switch
-                      checked={form.notifyEmail}
-                      disabled={disableEditing}
-                      onChange={(next) => setForm((prev) => ({ ...prev, notifyEmail: next }))}
-                    />
-                  }
-                />
-                <SettingsRow
-                  icon={<ChatIcon />}
-                  label="In-app"
-                  description="Avisos dentro de la aplicación."
-                  right={
-                    <Switch
-                      checked={form.notifyInApp}
-                      disabled={disableEditing}
-                      onChange={(next) => setForm((prev) => ({ ...prev, notifyInApp: next }))}
-                    />
-                  }
-                />
-              </div>
+            <SettingsSection title="Notificaciones">
+              <SettingsRow
+                icon={<BellIcon />}
+                label="Push"
+                description="Alertas en el dispositivo."
+                right={
+                  <Switch
+                    checked={form.notifyPush}
+                    disabled={disableEditing}
+                    onChange={(next) => setForm((prev) => ({ ...prev, notifyPush: next }))}
+                  />
+                }
+              />
+              <SettingsRow
+                icon={<MailIcon />}
+                label="Email"
+                description="Resúmenes y actividad por correo."
+                right={
+                  <Switch
+                    checked={form.notifyEmail}
+                    disabled={disableEditing}
+                    onChange={(next) => setForm((prev) => ({ ...prev, notifyEmail: next }))}
+                  />
+                }
+              />
+              <SettingsRow
+                icon={<ChatIcon />}
+                label="In-app"
+                description="Avisos dentro de la aplicación."
+                right={
+                  <Switch
+                    checked={form.notifyInApp}
+                    disabled={disableEditing}
+                    onChange={(next) => setForm((prev) => ({ ...prev, notifyInApp: next }))}
+                  />
+                }
+              />
             </SettingsSection>
 
-            <SettingsSection
-              title="Privacidad"
-                         >
-              <div className="mt-[var(--space-2)] border-t border-app">
-                <SettingsRow
-                  icon={<UserIcon />}
-                  label="Visibilidad del perfil"
-                  description="Decide si tu perfil es público o privado."
-                  right={
-                    <FieldSelect
-                      value={form.profileVisibility}
-                      disabled={disableEditing}
-                      onChange={(value) =>
-                        setForm((prev) => ({ ...prev, profileVisibility: value as VisibilityOption }))
-                      }
-                      options={VISIBILITY_OPTIONS}
-                    />
-                  }
-                />
-                <SettingsRow
-                  icon={<ShieldIcon />}
-                  label="Solicitudes de amistad"
-                  description="Permite que otras personas te agreguen."
-                  right={
-                    <Switch
-                      checked={form.allowFriendRequests}
-                      disabled={disableEditing}
-                      onChange={(next) => setForm((prev) => ({ ...prev, allowFriendRequests: next }))}
-                    />
-                  }
-                />
-              </div>
+            <SettingsSection title="Privacidad">
+              <SettingsRow
+                icon={<UserIcon />}
+                label="Visibilidad del perfil"
+                description="Decide si tu perfil es público o privado."
+                right={
+                  <FieldSelect
+                    value={form.profileVisibility}
+                    disabled={disableEditing}
+                    onChange={(value) =>
+                      setForm((prev) => ({ ...prev, profileVisibility: value as VisibilityOption }))
+                    }
+                    options={VISIBILITY_OPTIONS}
+                  />
+                }
+              />
+              <SettingsRow
+                icon={<ShieldIcon />}
+                label="Solicitudes de amistad"
+                description="Permite que otras personas te agreguen."
+                right={
+                  <Switch
+                    checked={form.allowFriendRequests}
+                    disabled={disableEditing}
+                    onChange={(next) => setForm((prev) => ({ ...prev, allowFriendRequests: next }))}
+                  />
+                }
+              />
             </SettingsSection>
 
-            <SettingsSection
-              title="Google Calendar"
-                         >
-              <div className="mt-[var(--space-2)] border-t border-app">
-                <SettingsRow
-                  icon={<CalendarIcon />}
-                  label="Sincronización habilitada"
-                  description="Permite conectar Frimee con Google Calendar."
-                  right={
-                    <Switch
-                      checked={form.googleSyncEnabled}
-                      disabled={disableEditing}
-                      onChange={(next) => setForm((prev) => ({ ...prev, googleSyncEnabled: next }))}
-                    />
-                  }
-                />
-                <SettingsRow
-                  icon={<CalendarIcon />}
-                  label="Exportar planes"
-                  description="Crea y actualiza tus planes en Google Calendar."
-                  right={
-                    <Switch
-                      checked={form.googleSyncExportPlans}
-                      disabled={disableEditing || !form.googleSyncEnabled}
-                      onChange={(next) => setForm((prev) => ({ ...prev, googleSyncExportPlans: next }))}
-                    />
-                  }
-                />
-              </div>
+            <SettingsSection title="Google Calendar">
+              <SettingsRow
+                icon={<CalendarIcon />}
+                label="Sincronización habilitada"
+                description="Permite conectar Frimee con Google Calendar."
+                right={
+                  <Switch
+                    checked={form.googleSyncEnabled}
+                    disabled={disableEditing}
+                    onChange={(next) => setForm((prev) => ({ ...prev, googleSyncEnabled: next }))}
+                  />
+                }
+              />
+              <SettingsRow
+                icon={<CalendarIcon />}
+                label="Exportar planes"
+                description="Crea y actualiza tus planes en Google Calendar."
+                right={
+                  <Switch
+                    checked={form.googleSyncExportPlans}
+                    disabled={disableEditing || !form.googleSyncEnabled}
+                    onChange={(next) => setForm((prev) => ({ ...prev, googleSyncExportPlans: next }))}
+                  />
+                }
+              />
             </SettingsSection>
 
             <SettingsSection title="Seguridad">
-              <div className="mt-[var(--space-2)] border-t border-app">
-                <SettingsRow
-                  icon={<KeyRoundIcon />}
-                  label="Contraseña"
-                  description="Cambia la contraseña de tu cuenta."
-                  right={
-                    <button
-                      type="button"
-                      onClick={() => { setShowPasswordSection((v) => !v); setPwdMsg(null); }}
-                      className="rounded-chip border border-app bg-surface px-[var(--space-3)] py-[var(--space-2)] text-body-sm transition-colors hover:bg-surface-2"
-                    >
-                      {showPasswordSection ? "Cancelar" : "Cambiar"}
-                    </button>
-                  }
-                />
-                {showPasswordSection && (
-                  <div className="pb-[var(--space-4)]">
-                    <div className="flex flex-col gap-[var(--space-3)]">
-                      {(["current", "new", "confirm"] as const).map((field) => {
-                        const value = field === "current" ? pwdCurrent : field === "new" ? pwdNew : pwdConfirm;
-                        const setter = field === "current" ? setPwdCurrent : field === "new" ? setPwdNew : setPwdConfirm;
-                        const label = field === "current" ? "Contraseña actual" : field === "new" ? "Nueva contraseña" : "Confirmar nueva contraseña";
-                        return (
-                          <div key={field} className="relative">
-                            <input
-                              type={showPwd ? "text" : "password"}
-                              value={value}
-                              onChange={(e) => setter(e.target.value)}
-                              placeholder={label}
-                              autoComplete={field === "current" ? "current-password" : "new-password"}
-                              className="w-full rounded-input border border-app bg-surface px-[var(--space-3)] py-[var(--space-2)] pr-10 text-body-sm outline-none focus:border-primary-token"
-                            />
-                            {field === "confirm" && (
-                              <button
-                                type="button"
-                                onClick={() => setShowPwd((v) => !v)}
-                                className="absolute right-[var(--space-3)] top-1/2 -translate-y-1/2 text-muted"
-                                aria-label={showPwd ? "Ocultar contraseñas" : "Mostrar contraseñas"}
-                              >
-                                {showPwd ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-                              </button>
-                            )}
-                          </div>
-                        );
-                      })}
-                      {pwdMsg && (
-                        <p className={`text-body-sm ${pwdMsg.type === "ok" ? "text-success-token" : "text-error-token"}`}>
-                          {pwdMsg.text}
-                        </p>
-                      )}
-                      <div className="flex justify-end">
-                        <PrimaryButton
-                          label={busyAction === "change-password" ? "Guardando..." : "Guardar contraseña"}
-                          onClick={() => void onChangePassword()}
-                          disabled={busyAction !== null}
-                        />
-                      </div>
+              <SettingsRow
+                icon={<KeyRoundIcon />}
+                label="Contraseña"
+                description="Cambia la contraseña de tu cuenta."
+                right={
+                  <button
+                    type="button"
+                    onClick={() => { setShowPasswordSection((v) => !v); setPwdMsg(null); }}
+                    className="rounded-chip border border-app bg-surface px-[var(--space-3)] py-[var(--space-2)] text-body-sm transition-colors hover:bg-surface-2"
+                  >
+                    {showPasswordSection ? "Cancelar" : "Cambiar"}
+                  </button>
+                }
+              />
+              {showPasswordSection && (
+                <div className="pb-[var(--space-4)]">
+                  <div className="flex flex-col gap-[var(--space-3)]">
+                    {(["current", "new", "confirm"] as const).map((field) => {
+                      const value = field === "current" ? pwdCurrent : field === "new" ? pwdNew : pwdConfirm;
+                      const setter = field === "current" ? setPwdCurrent : field === "new" ? setPwdNew : setPwdConfirm;
+                      const label = field === "current" ? "Contraseña actual" : field === "new" ? "Nueva contraseña" : "Confirmar nueva contraseña";
+                      return (
+                        <div key={field} className="relative">
+                          <input
+                            type={showPwd ? "text" : "password"}
+                            value={value}
+                            onChange={(e) => setter(e.target.value)}
+                            placeholder={label}
+                            autoComplete={field === "current" ? "current-password" : "new-password"}
+                            className="w-full rounded-input border border-app bg-surface px-[var(--space-3)] py-[var(--space-2)] pr-10 text-body-sm outline-none focus:border-primary-token"
+                          />
+                          {field === "confirm" && (
+                            <button
+                              type="button"
+                              onClick={() => setShowPwd((v) => !v)}
+                              className="absolute right-[var(--space-3)] top-1/2 -translate-y-1/2 text-muted"
+                              aria-label={showPwd ? "Ocultar contraseñas" : "Mostrar contraseñas"}
+                            >
+                              {showPwd ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {pwdMsg && (
+                      <p className={`text-body-sm ${pwdMsg.type === "ok" ? "text-success-token" : "text-error-token"}`}>
+                        {pwdMsg.text}
+                      </p>
+                    )}
+                    <div className="flex justify-end">
+                      <PrimaryButton
+                        label={busyAction === "change-password" ? "Guardando..." : "Guardar contraseña"}
+                        onClick={() => void onChangePassword()}
+                        disabled={busyAction !== null}
+                      />
                     </div>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </SettingsSection>
 
             <SettingsSection title="Cuenta">
-              <div className="mt-[var(--space-3)] flex flex-col gap-[var(--space-4)] lg:flex-row lg:items-center lg:justify-between">
-                <div className="min-w-0">
+              {(saveMsg || errorMsg) && (
+                <div className="mb-3">
                   {saveMsg && <p className="text-body-sm text-success-token">{saveMsg}</p>}
                   {errorMsg && <p className="text-body-sm text-error-token">{errorMsg}</p>}
                 </div>
-                <div className="flex flex-col gap-[var(--space-2)] sm:flex-row">
-                  <SettingsButton
-                    icon={<LogOutIcon />}
-                    label={busyAction === "signout" ? "Cerrando sesión..." : "Cerrar sesión"}
-                    onClick={onSignOut}
-                    disabled={busyAction !== null}
-                  />
-                  <SettingsButton
-                    icon={<TrashIcon />}
-                    label="Eliminar cuenta"
-                    onClick={() => { setShowDeleteConfirm(true); setDeleteConfirmText(""); }}
-                    disabled={busyAction !== null}
-                    danger
-                  />
-                </div>
+              )}
+              <div className="flex flex-col">
+                <button
+                  type="button"
+                  onClick={() => void onSignOut()}
+                  disabled={busyAction !== null}
+                  className="flex min-h-[52px] w-full items-center gap-3 py-3 text-left text-body-sm font-[var(--fw-medium)] text-app transition-opacity hover:opacity-60 disabled:opacity-[var(--disabled-opacity)]"
+                >
+                  <LogOut className="size-[24px] shrink-0 text-muted" aria-hidden />
+                  <span>{busyAction === "signout" ? "Cerrando sesión..." : "Cerrar sesión"}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setShowDeleteConfirm(true); setDeleteConfirmText(""); }}
+                  disabled={busyAction !== null}
+                  className="flex min-h-[52px] w-full items-center gap-3 py-3 text-left text-body-sm font-[var(--fw-medium)] text-error-token transition-opacity hover:opacity-60 disabled:opacity-[var(--disabled-opacity)]"
+                >
+                  <Trash2 className="size-[24px] shrink-0" aria-hidden />
+                  <span>Eliminar cuenta</span>
+                </button>
               </div>
               {showDeleteConfirm && (
                 <div className="mt-[var(--space-4)] rounded-[var(--radius-card)] border border-error-token bg-surface p-[var(--space-4)]">
@@ -893,7 +846,7 @@ export default function SettingsPage() {
                 </div>
               )}
             </SettingsSection>
-          </section>
+          </div>
           <input
             ref={fileInputRef}
             type="file"
@@ -960,13 +913,11 @@ function SettingsSection({
   children: ReactNode;
 }) {
   return (
-    <section>
-      <div className="px-[var(--space-4)] py-[var(--space-5)] lg:px-[var(--space-7)] lg:py-[var(--space-6)]">
-        <h2 className="[font-family:var(--font-display-face)] text-[var(--font-h5)] font-normal leading-[var(--lh-h5)]">
-          {title}
-        </h2>
-        {children}
-      </div>
+    <section className="mb-[var(--space-7)]">
+      <p className="mb-1 text-[14px] font-[600] uppercase tracking-[0.06em] text-muted">
+        {title}
+      </p>
+      {children}
     </section>
   );
 }
@@ -979,20 +930,20 @@ function SettingsRow({
 }: {
   icon: ReactNode;
   label: string;
-  description: string;
+  description?: string;
   right?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-[var(--space-3)] border-b border-app py-[var(--space-4)] sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex min-w-0 items-start gap-[var(--space-3)]">
-        <span className="mt-[var(--space-1)] text-app">{icon}</span>
+    <div className="flex min-h-[52px] items-center justify-between gap-3 py-3">
+      <div className="flex min-w-0 items-center gap-3">
+        <span className="shrink-0 text-muted">{icon}</span>
         <div className="min-w-0">
-          <p className="text-body font-[var(--fw-medium)]">{label}</p>
-          <p className="mt-[var(--space-1)] text-body-sm text-muted">{description}</p>
+          <p className="text-body-sm font-[var(--fw-medium)] text-app">{label}</p>
+          {description && <p className="text-[14px] leading-snug text-muted">{description}</p>}
         </div>
       </div>
-      <div className="flex w-full flex-wrap items-center gap-[var(--space-2)] sm:w-auto sm:justify-end">
-        {right ?? <ChevronRightIcon className="size-[18px] shrink-0 text-tertiary" />}
+      <div className="flex shrink-0 items-center gap-2">
+        {right ?? <ChevronRightIcon className="size-4 shrink-0 text-muted" />}
       </div>
     </div>
   );
@@ -1103,6 +1054,37 @@ function ModeButton({
       }`}
     >
       {label}
+    </button>
+  );
+}
+
+function IconModeButton({
+  active,
+  icon,
+  label,
+  onClick,
+  disabled = false,
+}: {
+  active: boolean;
+  icon: ReactNode;
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className={`flex size-9 items-center justify-center rounded-full border transition-colors disabled:opacity-[var(--disabled-opacity)] ${
+        active
+          ? "border-primary-token bg-primary-token text-contrast-token"
+          : "border-app bg-surface text-muted hover:bg-surface-2"
+      }`}
+    >
+      {icon}
     </button>
   );
 }

@@ -388,6 +388,12 @@ export default function PlanDetailPage() {
 
   const visiblePlanGastos = useMemo(() => sortedPlanGastos.slice(0, gastosLimit), [sortedPlanGastos, gastosLimit]);
 
+  const planMemberIds = useMemo(() => {
+    const ids = new Set<string>();
+    sortedPlanGastos.forEach(g => { ids.add(g.pagado_por_user_id); g.partes?.forEach(p => ids.add(p.user_id)); });
+    return ids;
+  }, [sortedPlanGastos]);
+
   const selectedGasto = useMemo(
     () => gastos.find((gasto) => gasto.id === selectedGastoId) ?? null,
     [gastos, selectedGastoId],
@@ -1423,49 +1429,54 @@ export default function PlanDetailPage() {
             )}
 
             {activeTab === "gastos" && (
-              <div className="mx-auto max-w-[760px]" style={{ fontFamily: "var(--font-inter), sans-serif" }}>
-                <div className="relative mb-[var(--space-6)] flex min-h-10 items-start justify-center py-[var(--space-2)]">
-                  {/* Botón factura — izquierda */}
-                  {sortedPlanGastos.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setShowInvoiceModal(true)}
-                      title={isPast ? "Generar factura final" : "Generar resumen parcial"}
-                      className="absolute left-0 top-0 hidden size-10 items-center justify-center rounded-full bg-primary-token text-contrast-token md:flex"
-                    >
-                      <FileText className="size-[15px]" aria-hidden />
-                    </button>
-                  )}
-                  <div className="text-center">
-                    <p className="text-[14px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
-                      Total gastado en el plan
-                    </p>
-                    <p
-                      className="mt-[4px] text-[26px] font-[var(--fw-bold)] leading-none text-app"
-                      style={{ fontFamily: "var(--font-inter), sans-serif" }}
-                    >
-                      {formatMoney(expenseSummary.total, expenseSummary.currency)}
-                    </p>
+              <div className="mx-auto max-w-[760px]">
+                {/* Stats + acciones */}
+                <div className="relative mb-[var(--space-7)] flex flex-col items-center gap-[var(--space-3)] pt-[var(--space-2)]">
+                  <p className="text-[28px] font-[var(--fw-bold)] leading-none text-app">
+                    {formatMoney(expenseSummary.total, expenseSummary.currency)}
+                  </p>
+                  <div className="flex flex-wrap justify-center gap-2">
+                    <span className="rounded-full bg-surface px-3 py-[5px] text-caption text-muted">
+                      {sortedPlanGastos.length} {sortedPlanGastos.length === 1 ? "gasto" : "gastos"}
+                    </span>
+                    {planMemberIds.size > 0 && (
+                      <span className="rounded-full bg-surface px-3 py-[5px] text-caption text-muted">
+                        {planMemberIds.size} {planMemberIds.size === 1 ? "persona" : "personas"}
+                      </span>
+                    )}
+                    {planMemberIds.size > 0 && expenseSummary.total > 0 && (
+                      <span className="rounded-full bg-surface px-3 py-[5px] text-caption text-muted">
+                        {formatMoney(expenseSummary.total / planMemberIds.size, expenseSummary.currency)}/persona
+                      </span>
+                    )}
                   </div>
-                  {!isPast && (
-                  <button
-                    onClick={() => setShowAddGastoSheet(true)}
-                    aria-label="Añadir gasto"
-                    className="absolute right-0 top-0 hidden size-10 items-center justify-center rounded-full bg-primary-token text-contrast-token md:flex"
-                  >
-                    <Plus className="size-4" strokeWidth={2.5} aria-hidden />
-                  </button>
-                  )}
+                  <div className="absolute right-0 top-0 hidden items-center gap-2 md:flex">
+                    {sortedPlanGastos.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setShowInvoiceModal(true)}
+                        title={isPast ? "Generar factura final" : "Generar resumen parcial"}
+                        className="flex size-9 items-center justify-center rounded-full bg-surface text-muted transition-colors hover:bg-surface-2 hover:text-app"
+                      >
+                        <FileText className="size-[15px]" aria-hidden />
+                      </button>
+                    )}
+                    {!isPast && (
+                      <button
+                        onClick={() => setShowAddGastoSheet(true)}
+                        aria-label="Añadir gasto"
+                        className="flex size-9 items-center justify-center rounded-full bg-primary-token text-contrast-token transition-opacity hover:opacity-80"
+                      >
+                        <Plus className="size-4" strokeWidth={2.5} aria-hidden />
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="space-y-[var(--space-6)]">
                   <section>
                     <div className="mb-[var(--space-3)] flex items-center justify-between gap-[var(--space-3)]">
-                      <div>
-                        <h4 className="text-caption font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-app" style={{ fontFamily: "var(--font-inter), sans-serif" }}>
-                          Deudas pendientes
-                        </h4>
-                      </div>
+                      <p className="text-body-sm font-[var(--fw-medium)] text-muted">Deudas pendientes</p>
                       <span className="text-caption text-muted">
                         {new Set(visibleBalances.map(b => b.from_user_id)).size} deudor{new Set(visibleBalances.map(b => b.from_user_id)).size === 1 ? "" : "es"}
                       </span>
@@ -1513,7 +1524,7 @@ export default function PlanDetailPage() {
                                       return next;
                                     });
                                   }}
-                                  className={`flex w-full items-center gap-3 px-[var(--space-4)] py-[var(--space-3)] text-left ${(hasMultiple || isMe) ? "cursor-pointer hover:bg-[var(--surface-hover,rgba(255,255,255,0.04))]" : "cursor-default"}`}
+                                  className={`flex w-full items-center gap-3 py-[var(--space-3)] text-left ${(hasMultiple || isMe) ? "cursor-pointer hover:bg-surface-inset/50" : "cursor-default"}`}
                                 >
                                   <PlanExpenseAvatar
                                     name={debtorLabel}
@@ -1563,7 +1574,7 @@ export default function PlanDetailPage() {
                                           type="button"
                                           key={`${d.from_user_id}-${d.to_user_id}`}
                                           onClick={() => isMe ? setPagarDeuda(d) : undefined}
-                                          className={`flex w-full items-center gap-3 py-[var(--space-2)] pl-10 pr-[var(--space-4)] ${isMe ? "cursor-pointer hover:bg-[var(--surface-hover,rgba(255,255,255,0.04))]" : "cursor-default"}`}
+                                          className={`flex w-full items-center gap-3 py-[var(--space-2)] pl-10 ${isMe ? "cursor-pointer hover:bg-surface-inset/50" : "cursor-default"}`}
                                         >
                                           <div className="flex size-8 shrink-0 items-center justify-center rounded-full border border-app bg-surface-2 text-[11px] font-[var(--fw-semibold)] text-muted overflow-hidden">
                                             {!isMineIncoming && d.to_profile_image
@@ -1594,11 +1605,7 @@ export default function PlanDetailPage() {
 
                   <section>
                     <div className="mb-[var(--space-3)] flex items-center justify-between gap-[var(--space-3)]">
-                      <div>
-                        <h4 className="text-caption font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-app" style={{ fontFamily: "var(--font-inter), sans-serif" }}>
-                          Historial de gastos
-                        </h4>
-                      </div>
+                      <p className="text-body-sm font-[var(--fw-medium)] text-muted">Historial de gastos</p>
                       <span className="text-caption text-muted">
                         {sortedPlanGastos.length} gasto{sortedPlanGastos.length === 1 ? "" : "s"}
                       </span>
@@ -1609,15 +1616,10 @@ export default function PlanDetailPage() {
                         Aún no hay gastos registrados en este plan.
                       </p>
                     ) : (
-                      <div className="divide-y divide-app">
+                      <div className="flex flex-col">
                         {visiblePlanGastos.map((gasto) => {
                           const payerName = gasto.pagado_por_nombre ?? "Usuario";
-                          const categoryLine = gasto.subplan_titulo ?? gasto.categoria_nombre ?? gasto.descripcion?.trim() ?? "Sin detalle";
-                          const recipientsSummary = summarizeRecipients(gasto.partes, gasto.pagado_por_user_id);
                           const isPaidByYou = gasto.pagado_por_user_id === user?.id;
-                          const yourShare = user?.id
-                            ? gasto.partes?.find((parte) => parte.user_id === user.id)?.importe ?? null
-                            : null;
 
                           return (
                             <article
@@ -1631,42 +1633,40 @@ export default function PlanDetailPage() {
                                   setSelectedGastoId(gasto.id);
                                 }
                               }}
-                              className="flex cursor-pointer items-center gap-3 px-[var(--space-4)] py-[var(--space-3)] transition-colors hover:bg-surface focus:outline-none"
+                              className="flex cursor-pointer items-center gap-3 transition-colors hover:bg-surface-inset/50 focus:outline-none"
                             >
                               <PlanExpenseAvatar name={payerName} image={gasto.pagado_por_foto ?? null} />
 
-                              <div className="min-w-0 flex-1">
-                                <div className="flex min-w-0 items-center gap-[var(--space-2)]">
+                              <div className="flex min-w-0 flex-1 items-center gap-2 py-[var(--space-4)]">
+                                <div className="min-w-0 flex-1">
                                   <p className="truncate text-body-sm text-app">
                                     {isPaidByYou ? (
                                       <>
-                                        <span className="font-bold">Tú</span>
+                                        <span className="font-[var(--fw-semibold)]">Tú</span>
                                         <span className="font-light"> pagaste </span>
-                                        <span className="font-bold">{gasto.titulo}</span>
+                                        <span className="font-[var(--fw-semibold)]">{gasto.titulo}</span>
                                       </>
                                     ) : (
                                       <>
-                                        <span className="font-bold">{payerName}</span>
+                                        <span className="font-[var(--fw-semibold)]">{payerName}</span>
                                         <span className="font-light"> pagó </span>
-                                        <span className="font-bold">{gasto.titulo}</span>
+                                        <span className="font-[var(--fw-semibold)]">{gasto.titulo}</span>
                                       </>
                                     )}
                                   </p>
+                                  {gasto.subplan_titulo && (
+                                    <p className="truncate text-caption text-muted">{gasto.subplan_titulo}</p>
+                                  )}
                                 </div>
-                                <p className="truncate text-caption text-muted">
-                                  {yourShare != null
-                                    ? `Tu parte: ${formatMoney(yourShare, gasto.moneda)}`
-                                    : `Repartido entre ${recipientsSummary}`}
-                                </p>
-                                <p className="truncate text-caption text-muted">
-                                  {categoryLine} · {formatExpenseDateTime(gasto.fecha_gasto)}
-                                </p>
-                              </div>
 
-                              <div className="shrink-0 text-right">
-                                <p className="text-body-sm font-[var(--fw-semibold)] text-app">
-                                  {formatMoney(gasto.total, gasto.moneda)}
-                                </p>
+                                <div className="flex shrink-0 items-center gap-[var(--space-3)]">
+                                  <p className="text-body-sm font-[var(--fw-semibold)] text-app">
+                                    {formatMoney(gasto.total, gasto.moneda)}
+                                  </p>
+                                  <svg viewBox="0 0 24 24" fill="none" className="size-[15px] shrink-0 text-muted" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                    <path d="M9 18l6-6-6-6" />
+                                  </svg>
+                                </div>
                               </div>
                             </article>
                           );
@@ -1772,24 +1772,9 @@ export default function PlanDetailPage() {
 
       {activeTab !== "chat" && !showAddSheet && !showAddGastoSheet && (
         activeTab === "itinerario" || activeTab === "gastos" || activeTab === "fotos"
-      ) && (!isPast || isAdmin) && (membershipChecked || isAdmin || activeTab === "gastos") && (
+      ) && (!isPast || membershipChecked || isAdmin) && (membershipChecked || isAdmin || activeTab === "gastos") && (
         <div className="fixed bottom-[calc(var(--space-6)+env(safe-area-inset-bottom))] right-[var(--page-margin-x)] z-[65] flex flex-col items-end gap-3 md:hidden">
           <div className={`flex flex-col items-end gap-2 transition-all duration-200 ease-out ${mobileCreateOpen ? "pointer-events-auto translate-y-0 opacity-100" : "pointer-events-none translate-y-2 opacity-0"}`}>
-            {isAdmin && (
-              <button
-                type="button"
-                onClick={() => { setMobileCreateOpen(false); setShowPublishModal(true); }}
-                aria-label="Publicar plan"
-                className="flex items-center gap-[var(--space-2)]"
-              >
-                <span className="rounded-full border border-app bg-app px-[var(--space-3)] py-[7px] text-caption font-[var(--fw-semibold)] text-app shadow-elev-2">
-                  Publicar
-                </span>
-                <span className="flex size-14 items-center justify-center rounded-full border border-app bg-surface text-app shadow-elev-3">
-                  <Upload className="size-6" aria-hidden />
-                </span>
-              </button>
-            )}
             {!isPast && isAdmin && (
               <button
                 type="button"

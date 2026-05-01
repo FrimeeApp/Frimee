@@ -43,6 +43,7 @@ import AudioPlayer from "@/components/common/AudioPlayer";
 import { STORAGE_KEYS, STORAGE_TTLS } from "@/config/storage";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
 import { CloseX } from "@/components/ui/CloseX";
+import { SearchInput } from "@/components/ui/SearchInput";
 
 const EMOJI_LIST = [
   "😀","😃","😄","😁","😆","😅","🤣","😂","🙂","😊",
@@ -429,15 +430,13 @@ export default function FeedPage() {
                       type="button"
                       onClick={() => setMobileSearchOpen(true)}
                       aria-label="Buscar"
-                      className={`absolute left-1/2 top-0 flex h-[40px] -translate-x-1/2 items-center gap-[9px] rounded-full border border-app bg-[var(--search-field-bg)] px-4 text-muted shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-[width,opacity,transform,background-color] duration-300 ease-out hover:opacity-90 active:scale-[0.98] ${
-                        mobileSearchOpen ? "w-[calc(100%-44px)]" : "w-[min(66vw,300px)]"
-                      }`}
+                      className="absolute left-0 right-[44px] top-0 flex h-[40px] items-center gap-[10px] rounded-full border border-app bg-[var(--search-field-bg)] px-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-[opacity,background-color] duration-200 ease-out hover:opacity-90 active:scale-[0.98]"
                     >
-                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[19px] shrink-0">
+                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[18px] shrink-0 text-muted">
                         <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.8" />
                         <path d="M16 16L20.5 20.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
                       </svg>
-                      <span className="truncate text-[14px] font-[500]">Buscar</span>
+                      <span className="truncate text-body-sm font-[400] text-muted">Buscar</span>
                     </button>
 
                     <button
@@ -493,43 +492,23 @@ export default function FeedPage() {
                 }`}
               >
                 {/* Search bar at the top */}
-                <div className="relative flex items-center justify-center px-[max(var(--space-4),env(safe-area-inset-left))] pb-[var(--space-4)] pr-[max(var(--space-4),env(safe-area-inset-right))] pt-[calc(env(safe-area-inset-top)+var(--space-4))]">
+                <div className="flex items-center gap-2 pb-[var(--space-4)] pl-[max(var(--space-2),env(safe-area-inset-left))] pr-[max(var(--space-4),env(safe-area-inset-right))] pt-[calc(env(safe-area-inset-top)+var(--space-4))]">
                   <button
                     type="button"
                     onClick={closeMobileSearch}
                     aria-label="Cerrar búsqueda"
-                    className="absolute left-[max(var(--space-4),env(safe-area-inset-left))] top-[calc(env(safe-area-inset-top)+var(--space-4))] flex h-[44px] w-[36px] shrink-0 items-center justify-center text-app transition-opacity hover:opacity-70"
+                    className="flex h-[40px] w-[36px] shrink-0 items-center justify-center text-app transition-opacity hover:opacity-70"
                   >
                     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[20px]">
                       <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                   </button>
-                  <div className="mobile-search-expand-field ml-[44px] flex h-[44px] min-w-0 items-center gap-[10px] rounded-full border border-app bg-[var(--search-field-bg)] px-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[20px] shrink-0 text-muted">
-                      <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.8" />
-                      <path d="M16 16L20.5 20.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                    </svg>
-                    <input
-                      ref={mobileSearchInputRef}
-                      type="search"
-                      value={mobileSearchValue}
-                      onChange={(e) => setMobileSearchValue(e.target.value)}
-                      placeholder="Buscar"
-                      className="min-w-0 flex-1 border-none bg-transparent text-[15px] text-app shadow-none outline-none ring-0 focus:border-none focus:shadow-none focus:outline-none focus:ring-0 placeholder:text-muted [&::-webkit-search-cancel-button]:hidden"
-                    />
-                    {mobileSearchValue && (
-                      <button
-                        type="button"
-                        onClick={() => setMobileSearchValue("")}
-                        aria-label="Limpiar"
-                        className="shrink-0 text-muted transition-opacity hover:opacity-70"
-                      >
-                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[18px]">
-                          <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                        </svg>
-                      </button>
-                    )}
-                  </div>
+                  <SearchInput
+                    ref={mobileSearchInputRef}
+                    value={mobileSearchValue}
+                    onChange={setMobileSearchValue}
+                    className="mobile-search-expand-field h-[40px] flex-1"
+                  />
                 </div>
 
                 <div className="flex-1 overflow-y-auto overscroll-contain px-[var(--space-4)]">
