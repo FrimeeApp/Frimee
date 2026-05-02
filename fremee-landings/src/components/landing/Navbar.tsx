@@ -8,7 +8,7 @@ import { applyThemePreference, cacheThemePreference, type AppThemePreference } f
 
 const navLinks = [
   { href: "#producto", label: "Producto" },
-  { href: "#como-funciona", label: "Como funciona" },
+  { href: "#como-funciona", label: "Cómo funciona" },
   { href: "#demo", label: "Demo" },
 ];
 
