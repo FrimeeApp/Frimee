@@ -2097,7 +2097,7 @@ function FeedCard({
                     )}
                   </div>
 
-                  <div className="mt-3 flex items-center justify-between gap-3 text-muted">
+                  <div className="mt-3 flex items-center justify-between gap-3 text-muted" style={{ touchAction: "manipulation" }}>
                     <button
                       type="button"
                       className={mobileActionButtonClass}

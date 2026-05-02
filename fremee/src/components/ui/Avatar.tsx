@@ -84,6 +84,7 @@ export function Avatar({
           fill
           sizes={sizesPx}
           className="object-cover"
+          unoptimized
           referrerPolicy="no-referrer"
         />
       </div>
