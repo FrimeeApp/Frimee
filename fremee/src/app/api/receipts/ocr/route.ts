@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "crypto";
 import { publicEnv, getSupabaseServiceRoleKey } from "@/config/env";
 import { OPENAI_API_BASE_URL } from "@/config/external";
-import { createSupabaseServerClient } from "@/services/supabase/server";
+import { createSupabaseServerClient, createSupabaseServiceClient } from "@/services/supabase/server";
 import { sanitizePlanId, validateUploadFile } from "@/lib/sanitize";
 import { checkRateLimit, rateLimitedResponse } from "@/lib/rate-limit";
 
@@ -32,9 +32,18 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    // ── 0. Verificar sesión ────────────────────────────────────────────────
-    const authClient = await createSupabaseServerClient();
-    const { data: { user: sessionUser } } = await authClient.auth.getUser();
+    // ── 0. Verificar sesión (cookie o Bearer token) ────────────────────────
+    let sessionUser = null;
+    const authHeader = req.headers.get("authorization");
+    if (authHeader?.startsWith("Bearer ")) {
+      const token = authHeader.slice(7);
+      const { data } = await createSupabaseServiceClient().auth.getUser(token);
+      sessionUser = data.user;
+    } else {
+      const authClient = await createSupabaseServerClient();
+      const { data } = await authClient.auth.getUser();
+      sessionUser = data.user;
+    }
     if (!sessionUser) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }

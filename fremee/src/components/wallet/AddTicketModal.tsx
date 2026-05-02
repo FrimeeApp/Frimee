@@ -231,8 +231,10 @@ export default function AddTicketModal({
     setOcrLoading(true);
     setOcrError(null);
     try {
-      const { data: { user } } = await createBrowserSupabaseClient().auth.getUser();
+      const supabase = createBrowserSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("No autenticado");
+      const { data: { session } } = await supabase.auth.getSession();
 
       let fileToSend: File | Blob = file;
       const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
@@ -259,7 +261,11 @@ export default function AddTicketModal({
       fd.append("file", fileToSend, isPdf ? file.name : "ticket.jpg");
       fd.append("user_id", user.id);
 
-      const res  = await fetch("/api/tickets/ocr", { method: "POST", body: fd });
+      const res  = await fetch("/api/tickets/ocr", {
+        method: "POST",
+        headers: session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {},
+        body: fd,
+      });
       const data = await res.json() as TicketOcrResult & { error?: string };
       if (data.error) throw new Error(data.error);
 
