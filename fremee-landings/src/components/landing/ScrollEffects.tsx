@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import Lenis from "lenis";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 
@@ -8,6 +9,13 @@ gsap.registerPlugin(ScrollTrigger);
 
 export default function V3ScrollEffects() {
   useEffect(() => {
+    const lenis = new Lenis({ autoRaf: false });
+
+    const onRaf = (time: number) => lenis.raf(time * 1000);
+    gsap.ticker.add(onRaf);
+    gsap.ticker.lagSmoothing(0);
+    lenis.on("scroll", ScrollTrigger.update);
+
     const context = gsap.context(() => {
       const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       const mockup = document.querySelector<HTMLElement>(".v3-hero-mockup");
@@ -17,7 +25,7 @@ export default function V3ScrollEffects() {
 
       ScrollTrigger.create({
         trigger: mockup,
-        start: "center center",
+        start: "bottom bottom",
         endTrigger: shell,
         end: "bottom bottom",
         pin: true,
@@ -27,7 +35,6 @@ export default function V3ScrollEffects() {
       });
 
       if (!reduceMotion) {
-        // Hero story steps
         gsap.set(".v3-story-copy", { autoAlpha: 0, y: 70 });
 
         gsap.utils.toArray<HTMLElement>(".v3-story-copy").forEach((item) => {
@@ -44,7 +51,6 @@ export default function V3ScrollEffects() {
             .to(item, { autoAlpha: 0, y: -70, duration: 0.35, ease: "power2.in" }, 0.65);
         });
 
-        // Section entrance animations
         gsap.utils.toArray<HTMLElement>(".v3-animate-section").forEach((section) => {
           const children = gsap.utils.toArray<HTMLElement>(".v3-ac", section);
           if (!children.length) return;
@@ -76,7 +82,11 @@ export default function V3ScrollEffects() {
       ScrollTrigger.refresh();
     });
 
-    return () => context.revert();
+    return () => {
+      context.revert();
+      lenis.destroy();
+      gsap.ticker.remove(onRaf);
+    };
   }, []);
 
   return null;

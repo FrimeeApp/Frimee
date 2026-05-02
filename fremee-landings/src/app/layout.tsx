@@ -5,9 +5,9 @@ export const metadata: Metadata = {
   title: { default: "Frimee Landings", template: "%s · Frimee Landings" },
   description: "Landings de Frimee.",
   icons: {
-    icon: [{ url: "/favicoon-frimee-black.svg", type: "image/svg+xml" }],
-    apple: [{ url: "/logo-frimee.png", sizes: "180x180", type: "image/png" }],
-    shortcut: ["/favicoon-frimee-black.svg"],
+    icon: [{ url: "/images/favicoon-frimee-black.svg", type: "image/svg+xml" }],
+    apple: [{ url: "/images/logo-frimee.png", sizes: "180x180", type: "image/png" }],
+    shortcut: ["/images/favicoon-frimee-black.svg"],
   },
 };
 

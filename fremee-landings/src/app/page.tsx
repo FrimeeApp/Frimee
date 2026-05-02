@@ -1,225 +1,532 @@
-"use client";
-
 import Link from "next/link";
-import { ReactLenis } from "lenis/react";
-import { APP_REGISTER_URL } from "@/config/links";
-import GradualBlur from "@/components/landing/GradualBlur";
-import LandingScrollIndicator from "@/components/landing/LandingScrollIndicator";
-import LightRays from "@/components/landing/LightRays";
 import Navbar from "@/components/landing/Navbar";
-import FlipWords from "@/components/ui/FlipWords";
+import { APP_REGISTER_URL } from "@/config/links";
+import ScrollEffects from "@/components/landing/ScrollEffects";
+import PhoneMockup from "@/components/landing/PhoneMockup";
+import { AnimatedTestimonials } from "@/components/blocks/animated-testimonials";
+import { FaXTwitter, FaInstagram } from "react-icons/fa6";
+import { PricingSection, type Plan } from "@/components/ui/pricing";
+import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
+import { Footer7 } from "@/components/ui/footer-7";
+import {
+  FolderOpen,
+  Users,
+  Camera,
+  Plus,
+  UserPlus,
+  Lightbulb,
+  CalendarCheck,
+  PartyPopper,
+  Plane,
+  CreditCard,
+  Ticket,
+  Sparkles,
+  Check,
+  X,
+  Mail,
+  ArrowRight,
+  Zap,
+  QrCode,
+  Smartphone,
+} from "lucide-react";
 
-export default function LandingPage() {
+const storySteps = [{ title: "Todo" }, { title: "en la misma" }, { title: "aplicación" }];
+
+const problemItems = ["Mensajes caóticos", "Tickets perdidos", "Pagos desordenados"];
+
+const valueProps = [
+  {
+    icon: FolderOpen,
+    color: "#eef7a8",
+    iconColor: "#5a7a00",
+    title: "Todo en un sitio",
+    desc: "Chats, fotos, tickets y gastos del plan en un solo lugar. Nunca más buscar en mil grupos.",
+  },
+  {
+    icon: Users,
+    color: "#c7b8ff",
+    iconColor: "#6048e8",
+    title: "Decisiones en grupo",
+    desc: "Votad actividades y destinos juntos. Sin debates infinitos ni decisiones unilaterales.",
+  },
+  {
+    icon: Camera,
+    color: "#bcecd4",
+    iconColor: "#1a7a5a",
+    title: "Experiencia compartida",
+    desc: "Revivid el plan con fotos y recuerdos guardados automáticamente para siempre.",
+  },
+];
+
+const flowSteps = [
+  { step: "01", icon: Plus, title: "Crear", desc: "Nuevo plan en segundos" },
+  { step: "02", icon: UserPlus, title: "Invitar", desc: "Link directo al grupo" },
+  { step: "03", icon: Lightbulb, title: "Proponer", desc: "Ideas para todos" },
+  { step: "04", icon: CalendarCheck, title: "Organizar", desc: "Gastos y tickets" },
+  { step: "05", icon: PartyPopper, title: "Disfrutar", desc: "Sin estrés" },
+];
+
+const featureItems = [
+  { icon: Plane, color: "#eef7a8", iconColor: "#5a7a00", title: "Viajes compartidos" },
+  { icon: CreditCard, color: "#c7b8ff", iconColor: "#6048e8", title: "Gastos" },
+  { icon: Ticket, color: "#bcecd4", iconColor: "#1a7a5a", title: "Tickets" },
+  { icon: Sparkles, color: "#fde8c8", iconColor: "#c45d00", title: "Inspiración" },
+];
+
+const compareItems = {
+  whatsapp: ["Mensajes que se pierden", "Sin organización real", "Sin historial de gastos", "Sin gestión de tickets"],
+  excel: ["Demasiado técnico", "Sin colaboración fluida", "Sin fotos ni recuerdos", "Actualización manual"],
+  frimee: ["Todo organizado", "Colaboración real", "Fotos y recuerdos", "Gastos automáticos"],
+};
+
+const testimonials = [
+  {
+    id: 1,
+    name: "Ana M.",
+    role: "Estudiante",
+    company: "Madrid",
+    content:
+      "Planificamos un viaje a Ámsterdam con 8 personas y fue la primera vez que no hubo dramas. Todo en un solo sitio, increíble.",
+    rating: 5,
+    avatar: "https://i.pravatar.cc/150?img=47",
+  },
+  {
+    id: 2,
+    name: "Carlos R.",
+    role: "Desarrollador",
+    company: "Barcelona",
+    content:
+      "Organizamos la despedida de soltero con Frimee y fue increíble. Los votos de actividades solos ya valen la app.",
+    rating: 5,
+    avatar: "https://i.pravatar.cc/150?img=12",
+  },
+  {
+    id: 3,
+    name: "Laura G.",
+    role: "Diseñadora",
+    company: "Valencia",
+    content:
+      "Por fin una app que entiende que planificar con amigos no tiene que ser un caos de WhatsApp. La recomiendo al 100%.",
+    rating: 5,
+    avatar: "https://i.pravatar.cc/150?img=29",
+  },
+];
+
+const pricingPlans: Plan[] = [
+  {
+    name: "Basic",
+    info: "Para empezar sin coste",
+    price: { monthly: 0, yearly: 0 },
+    features: [
+      { text: "Hasta 3 planes activos" },
+      { text: "Grupos de hasta 5 personas" },
+      { text: "Chat del plan" },
+      { text: "División de gastos básica" },
+      { text: "Soporte de comunidad", tooltip: "Acceso a nuestra comunidad de usuarios en Discord" },
+    ],
+    btn: { text: "Empezar gratis", href: APP_REGISTER_URL },
+  },
+  {
+    name: "Pro",
+    highlighted: true,
+    info: "Para grupos que viajan",
+    price: { monthly: 6.99, yearly: 69 },
+    features: [
+      { text: "Planes ilimitados" },
+      { text: "Grupos de hasta 20 personas" },
+      { text: "Gestión de tickets y entradas", tooltip: "Guarda y comparte entradas de eventos con el grupo" },
+      { text: "Fotos y recuerdos del viaje" },
+      { text: "Historial completo de gastos" },
+      { text: "Soporte prioritario", tooltip: "Respuesta garantizada en menos de 24 horas" },
+    ],
+    btn: { text: "Empezar con Pro", href: APP_REGISTER_URL },
+  },
+  {
+    name: "Max",
+    info: "Para grandes aventuras",
+    price: { monthly: 12.99, yearly: 129 },
+    features: [
+      { text: "Todo lo de Pro" },
+      { text: "Sin límite de participantes" },
+      { text: "IA para sugerencias de planes", tooltip: "Recibe ideas personalizadas para tu próxima aventura" },
+      { text: "Exportar planes en PDF" },
+      { text: "Integraciones con calendarios" },
+      { text: "Soporte 24/7", tooltip: "Chat directo con el equipo de Frimee en cualquier momento" },
+    ],
+    btn: { text: "Empezar con Max", href: APP_REGISTER_URL },
+  },
+];
+
+const faqItems = [
+  {
+    q: "¿Es gratis?",
+    a: "Sí, Frimee es completamente gratuito durante la beta. Queremos que lo pruebes sin compromisos.",
+  },
+  {
+    q: "¿Cómo se usa?",
+    a: "Descarga la app, crea un plan e invita a tus amigos con un enlace. En segundos podéis empezar a organizar.",
+  },
+  {
+    q: "¿Está en móvil?",
+    a: "Sí, Frimee está disponible para iOS y Android. También funciona desde el navegador.",
+  },
+  {
+    q: "¿Cómo envío feedback?",
+    a: "Desde dentro de la app puedes enviar sugerencias directamente. También puedes escribirnos a hola@frimee.app.",
+  },
+];
+
+export default function LandingV3Page() {
   return (
-    <ReactLenis
-      root
-      options={{
-        autoRaf: true,
-        anchors: {
-          offset: -88,
-        },
-        duration: 1.1,
-        easing: (t) => Math.min(1, 1.001 - 2 ** (-10 * t)),
-      }}
-    >
-      <main className="landing-page min-h-dvh bg-[#fbfbfa] text-[var(--text-primary)] dark:bg-[#161616]">
-        <Navbar />
-        <LandingScrollIndicator />
-        <section className="relative min-h-[80dvh] overflow-hidden">
-          <LightRays
-            raysOrigin="top-center"
-            raysColor="#f4f4f5"
-            raysSpeed={1}
-            lightSpread={0.5}
-            rayLength={3}
-            followMouse
-            mouseInfluence={0.1}
-            noiseAmount={0}
-            distortion={0}
-            className="custom-rays"
-            pulsating={false}
-            fadeDistance={1}
-            saturation={1}
-          />
-          <div className="relative z-10 mx-auto flex min-h-[80dvh] w-full max-w-5xl flex-col px-6 pb-8 pt-24 sm:px-8">
-            <div className="flex flex-1 items-center justify-center py-16">
-              <div className="w-full max-w-5xl text-center">
-                <h1 className="[font-family:var(--font-sans)] text-4xl font-semibold leading-tight tracking-tight sm:text-6xl md:whitespace-nowrap">
-                  Planifica mejor. Sin{" "}
-                  <FlipWords
-                    words={["caos", "ruido", "fricción"]}
-                    intervalMs={3200}
-                    className="[font-family:var(--font-display-face)] py-[0.08em] font-normal text-[var(--primary)]"
-                  />
-                </h1>
-                <p className="mx-auto mt-6 max-w-xl text-base leading-7 text-[var(--text-secondary)] sm:text-lg">
-                  Una web para presentar Frimee, explicar la app y llevar a los usuarios al producto cuando quieran
-                  crear su cuenta.
+    <main className="landing-page v3-page min-h-dvh">
+      <ScrollEffects />
+      <Navbar />
+
+      {/* ── 1. Hero ──────────────────────────────────── */}
+      <section className="v3-hero">
+        <div className="v3-hero-shell">
+          <div className="v3-hero-copy">
+            <h1>
+              Planes con amigos.
+              <br />
+              Sin caos en el chat.
+            </h1>
+          </div>
+          <div className="v3-hero-mockup" aria-hidden="true">
+            <PhoneMockup />
+          </div>
+          <div className="v3-hero-story" aria-label="Como funciona Frimee">
+            <div className="v3-story-sequence">
+              {storySteps.map((step) => (
+                <article key={step.title} className="v3-story-copy">
+                  <h2>{step.title}</h2>
+                </article>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── 2. Problema ──────────────────────────────── */}
+      <section className="v3-section v3-animate-section">
+        <div className="v3-section-inner">
+          <p className="v3-kicker v3-ac">El problema</p>
+          <h2 className="v3-ac">Todo está en sitios diferentes</h2>
+          <div className="v3-chip-row v3-ac">
+            {problemItems.map((item) => (
+              <span key={item}>{item}</span>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── 3. Insight ───────────────────────────────── */}
+      <section className="v3-section v3-animate-section">
+        <div className="v3-section-inner">
+          <div className="v3-insight-dark v3-ac">
+            <div>
+              <p className="v3-kicker v3-kicker-emph">Insight</p>
+              <div className="v3-insight-quote-mark">"</div>
+              <h2 style={{ color: "#ffffff", marginTop: "0.5rem" }}>
+                El problema
+                <br />
+                no es la gente.
+              </h2>
+            </div>
+            <p className="v3-insight-statement">
+              Es la falta de una herramienta pensada para esto.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* ── 4. Propuesta de valor ─────────────────────── */}
+      <section className="v3-section v3-animate-section">
+        <div className="v3-section-inner">
+          <p className="v3-kicker v3-ac">Propuesta de valor</p>
+          <h2 className="v3-ac">Planes, decisiones y recuerdos en un solo lugar.</h2>
+          <div className="v3-value-grid">
+            {valueProps.map((vp) => {
+              const Icon = vp.icon;
+              return (
+                <div key={vp.title} className="v3-value-card v3-ac">
+                  <div
+                    className="v3-value-icon"
+                    style={{ background: vp.color }}
+                  >
+                    <Icon size={20} color={vp.iconColor} strokeWidth={2.5} />
+                  </div>
+                  <h3>{vp.title}</h3>
+                  <p>{vp.desc}</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* ── 5. Cómo funciona ──────────────────────────── */}
+      <section className="v3-section v3-section-alt v3-animate-section">
+        <div className="v3-section-inner">
+          <p className="v3-kicker v3-ac">Cómo funciona</p>
+          <h2 className="v3-ac">Cinco pasos, cero complicaciones.</h2>
+          <div className="v3-steps-grid">
+            {flowSteps.map((s) => {
+              const Icon = s.icon;
+              return (
+                <div key={s.step} className="v3-step-card v3-ac">
+                  <div className="v3-step-number">{s.step}</div>
+                  <Icon size={22} color="#6048e8" strokeWidth={2} />
+                  <h3>{s.title}</h3>
+                  <p>{s.desc}</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* ── 6. Producto ───────────────────────────────── */}
+      <section className="v3-section v3-product v3-animate-section">
+        <div className="v3-section-inner v3-product-grid">
+          <div>
+            <p className="v3-kicker v3-ac">Producto</p>
+            <h2 className="v3-ac">Lo importante del plan, visible.</h2>
+            <div className="v3-feature-cards">
+              {featureItems.map((fi) => {
+                const Icon = fi.icon;
+                return (
+                  <div key={fi.title} className="v3-feature-card v3-ac">
+                    <div
+                      className="v3-feature-card-icon"
+                      style={{ background: fi.color }}
+                    >
+                      <Icon size={16} color={fi.iconColor} strokeWidth={2.5} />
+                    </div>
+                    <span>{fi.title}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <PhoneMockup />
+        </div>
+      </section>
+
+      {/* ── 7. Diferenciación ─────────────────────────── */}
+      <section className="v3-section v3-animate-section">
+        <div className="v3-section-inner">
+          <p className="v3-kicker v3-ac">Diferenciación</p>
+          <h2 className="v3-ac">¿Por qué Frimee y no lo que ya usas?</h2>
+          <div className="v3-compare-grid">
+            {/* WhatsApp */}
+            <div className="v3-compare-card muted v3-ac">
+              <p className="v3-compare-card-title">WhatsApp</p>
+              {compareItems.whatsapp.map((item) => (
+                <div key={item} className="v3-compare-item">
+                  <X size={16} color="#ef4444" strokeWidth={2.5} style={{ flexShrink: 0 }} />
+                  {item}
+                </div>
+              ))}
+            </div>
+            {/* Excel */}
+            <div className="v3-compare-card muted v3-ac">
+              <p className="v3-compare-card-title">Excel / Notion</p>
+              {compareItems.excel.map((item) => (
+                <div key={item} className="v3-compare-item">
+                  <X size={16} color="#ef4444" strokeWidth={2.5} style={{ flexShrink: 0 }} />
+                  {item}
+                </div>
+              ))}
+            </div>
+            {/* Frimee */}
+            <div className="v3-compare-card highlight v3-ac">
+              <p className="v3-compare-card-title">Frimee ✨</p>
+              {compareItems.frimee.map((item) => (
+                <div key={item} className="v3-compare-item">
+                  <Check size={16} color="rgba(255,255,255,0.9)" strokeWidth={2.5} style={{ flexShrink: 0 }} />
+                  {item}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── 8. Impacto ────────────────────────────────── */}
+      <section className="v3-section v3-section-alt v3-animate-section">
+        <div className="v3-section-inner">
+          <p className="v3-kicker v3-ac">Impacto</p>
+          <h2 className="v3-ac">Los primeros resultados hablan.</h2>
+          <div className="v3-stats-grid">
+            <div className="v3-stat-card v3-ac">
+              <div className="v3-stat-value">
+                <Zap size={40} color="#6048e8" strokeWidth={2} />
+              </div>
+              <p className="v3-stat-label">Beta activa</p>
+              <p className="v3-stat-note">Probando con usuarios reales en fase privada</p>
+            </div>
+            <div className="v3-stat-card v3-ac">
+              <div className="v3-stat-value">100+</div>
+              <p className="v3-stat-label">Planes creados</p>
+              <p className="v3-stat-note">Primeras aventuras organizadas con Frimee</p>
+            </div>
+            <div className="v3-stat-card v3-ac">
+              <div className="v3-stat-value">★★★★★</div>
+              <p className="v3-stat-label">Feedback 5 estrellas</p>
+              <p className="v3-stat-note">Los primeros usuarios nos recomiendan</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── 9. Testimonios ────────────────────────────── */}
+      <AnimatedTestimonials testimonials={testimonials} />
+
+      {/* ── Pricing ───────────────────────────────────── */}
+      <section className="v3-section v3-pricing-section v3-animate-section">
+        <PricingSection
+          plans={pricingPlans}
+          heading="Simple y transparente."
+          description="Sin sorpresas, sin letra pequeña. Empieza gratis y sube cuando lo necesites."
+        />
+      </section>
+
+      {/* ── 10. Demo ──────────────────────────────────── */}
+      <section className="v3-demo-dark v3-animate-section">
+        <div className="v3-section-inner">
+          <div className="v3-demo-split">
+            {/* Left */}
+            <div className="v3-demo-left">
+              <span className="v3-demo-badge v3-ac">¡Ya disponible!</span>
+              <h2 className="v3-demo-heading v3-ac">
+                Pruébalo<br />ahora.
+              </h2>
+              <p className="v3-demo-desc v3-ac">
+                Descarga Frimee, crea tu primer plan e invita a tus amigos con un enlace. Sin caos, sin grupos de WhatsApp.
+              </p>
+              <div className="v3-demo-ctas v3-ac">
+                <Link href={APP_REGISTER_URL} className="v3-cta-large">
+                  Abrir Frimee <ArrowRight size={18} strokeWidth={2.5} />
+                </Link>
+                <Link href={APP_REGISTER_URL} className="v3-cta-ghost">
+                  Descargar app <ArrowRight size={16} strokeWidth={2.5} />
+                </Link>
+              </div>
+              <p className="v3-demo-note v3-ac">
+                Gratis durante la beta · Sin tarjeta de crédito
+              </p>
+            </div>
+
+            {/* Right: QR placeholder */}
+            <div className="v3-demo-qr-wrap v3-ac">
+              <div className="v3-demo-qr">
+                <div className="v3-demo-qr-icon">
+                  <QrCode size={72} strokeWidth={1.25} />
+                </div>
+                <p className="v3-demo-qr-label">Escanea para abrir la app</p>
+                <p className="v3-demo-qr-sub">
+                  <Smartphone size={13} strokeWidth={2} />
+                  iOS y Android
                 </p>
-                <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
-                  <Link
-                    href={APP_REGISTER_URL}
-                    className="inline-flex items-center justify-center rounded-full bg-[var(--primary)] px-6 py-3 text-sm font-semibold text-white transition hover:opacity-90 dark:text-black"
-                  >
-                    Empezar gratis
-                  </Link>
-                  <Link
-                    href="#producto"
-                    className="inline-flex items-center justify-center gap-1.5 rounded-full px-6 py-3 text-sm font-semibold text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]"
-                  >
-                    Ver el producto
-                    <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                      <path d="M12 5v14M5 12l7 7 7-7" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  </Link>
-                </div>
               </div>
             </div>
           </div>
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-px bg-black/10 dark:bg-white/10" />
-          <GradualBlur position="bottom" height="7rem" strength={1.5} divCount={4} opacity={1} />
-        </section>
-        <section
-          id="producto"
-          className="relative z-30 flex min-h-[70dvh] items-start bg-transparent px-6 py-16 text-[var(--text-primary)] sm:px-8"
-        >
-          <div className="mx-auto grid w-full max-w-6xl gap-10 md:grid-cols-[minmax(0,1fr)_minmax(280px,340px)_minmax(0,1fr)] md:items-start">
-            <div className="pointer-events-none z-20 w-[min(72vw,300px)] -translate-y-24 justify-self-center md:col-start-2 md:w-full md:-translate-y-36">
-              <div className="rounded-[1.85rem] border border-black/12 bg-neutral-950 p-1.5 shadow-[0_24px_80px_rgba(0,0,0,0.22)] dark:border-white/12 dark:bg-neutral-100 dark:shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
-                <div className="relative aspect-[9/19] overflow-hidden rounded-[1.45rem] bg-[#f4f4f2] dark:bg-[#101010]">
-                  <div className="absolute left-1/2 top-2 h-4 w-16 -translate-x-1/2 rounded-full bg-neutral-950 dark:bg-neutral-100" />
-                  <div className="absolute inset-x-0 top-0 border-b border-black/8 bg-white/45 px-5 pb-3 pt-9 backdrop-blur-xl dark:border-white/10 dark:bg-neutral-950/35">
-                    <p className="text-center text-[11px] font-semibold text-neutral-700 dark:text-neutral-200">
-                      Grupo Lisboa
-                    </p>
-                    <p className="mt-0.5 text-center text-[9px] font-medium text-neutral-400">
-                      6 amigos · 38 mensajes
-                    </p>
-                  </div>
-                  <div className="absolute inset-x-4 top-20 grid gap-2.5 text-[10.5px] leading-snug">
-                    <div className="max-w-[84%] rounded-[1rem] rounded-bl-sm bg-white px-3 py-2 text-neutral-700 shadow-sm dark:bg-neutral-800 dark:text-neutral-200">
-                      ¿Entonces pillamos vuelos hoy?
-                    </div>
-                    <div className="ml-auto max-w-[76%] rounded-[1rem] rounded-br-sm bg-neutral-950 px-3 py-2 text-white dark:bg-white dark:text-neutral-950">
-                      Yo puedo del 12 al 15.
-                    </div>
-                    <div className="max-w-[88%] rounded-[1rem] rounded-bl-sm bg-white px-3 py-2 text-neutral-700 shadow-sm dark:bg-neutral-800 dark:text-neutral-200">
-                      Espera, Paula no podía ese finde.
-                    </div>
-                    <div className="ml-auto max-w-[72%] rounded-[1rem] rounded-br-sm bg-neutral-950 px-3 py-2 text-white dark:bg-white dark:text-neutral-950">
-                      ¿Y el hotel?
-                    </div>
-                    <div className="max-w-[86%] rounded-[1rem] rounded-bl-sm bg-white px-3 py-2 text-neutral-700 shadow-sm dark:bg-neutral-800 dark:text-neutral-200">
-                      El link está más arriba, creo.
-                    </div>
-                    <div className="max-w-[78%] rounded-[1rem] rounded-bl-sm bg-white px-3 py-2 text-neutral-700 shadow-sm dark:bg-neutral-800 dark:text-neutral-200">
-                      ¿Al final quién confirma?
-                    </div>
-                    <div className="ml-auto max-w-[82%] rounded-[1rem] rounded-br-sm bg-neutral-950 px-3 py-2 text-white dark:bg-white dark:text-neutral-950">
-                      No sé qué se ha decidido.
-                    </div>
-                  </div>
-                  <div className="absolute inset-x-4 bottom-5 rounded-full border border-black/10 bg-white/70 px-4 py-2 text-[10px] font-medium text-neutral-400 backdrop-blur-xl dark:border-white/10 dark:bg-neutral-800/70">
-                    Escribe un mensaje...
-                  </div>
-                </div>
+        </div>
+      </section>
+
+      {/* ── 11. Comunidad ─────────────────────────────── */}
+      <section className="v3-section v3-animate-section">
+        <div className="v3-section-inner">
+          <p className="v3-kicker v3-ac">Comunidad</p>
+          <h2 className="v3-ac">Estamos construyendo esto contigo</h2>
+          <div className="v3-social-cards">
+            <a
+              href="https://twitter.com/frimeeapp"
+              target="_blank"
+              rel="noreferrer"
+              className="v3-social-card v3-ac"
+            >
+              <div className="v3-social-card-icon">
+                <FaXTwitter size={20} className="v3-icon-x" />
               </div>
-            </div>
-            <div className="-mt-14 text-center md:col-start-3 md:mt-0 md:pt-20 md:text-left">
-              <h2 className="text-3xl font-normal leading-tight tracking-tight sm:text-5xl">
-                Siempre pasa lo mismo.
-              </h2>
-            </div>
+              <div>
+                <p className="v3-social-card-name">Twitter / X</p>
+                <p className="v3-social-card-handle">@frimeeapp</p>
+              </div>
+            </a>
+            <a
+              href="https://instagram.com/frimeeapp"
+              target="_blank"
+              rel="noreferrer"
+              className="v3-social-card v3-ac"
+            >
+              <div className="v3-social-card-icon">
+                <FaInstagram size={20} color="#E1306C" />
+              </div>
+              <div>
+                <p className="v3-social-card-name">Instagram</p>
+                <p className="v3-social-card-handle">@frimeeapp</p>
+              </div>
+            </a>
           </div>
-        </section>
-        <section
-          id="como-funciona"
-          className="relative flex min-h-[70dvh] items-center bg-transparent px-6 py-20 text-[var(--text-primary)] sm:px-8"
-        >
-          <div className="mx-auto grid w-full max-w-5xl gap-8 md:grid-cols-[0.9fr_1.1fr] md:items-center">
+        </div>
+      </section>
+
+      {/* ── 12. Feedback ──────────────────────────────── */}
+      <section className="v3-section v3-section-alt v3-animate-section">
+        <div className="v3-section-inner">
+          <div className="v3-feedback-card v3-ac">
             <div>
-              <h2 className="text-3xl font-normal leading-tight tracking-tight sm:text-5xl">
-                Todo en un solo lugar.
+              <p className="v3-kicker">Feedback</p>
+              <h2 style={{ fontSize: "clamp(1.75rem,4vw,3.5rem)", marginTop: "0.75rem" }}>
+                ¿Ideas o problemas?
+                <br />
+                Queremos escucharte.
               </h2>
             </div>
-            <div className="grid gap-4 text-base leading-7 text-[var(--text-secondary)] sm:text-lg">
-              <p>Fechas, ideas, decisiones y enlaces dejan de vivir perdidos en el chat.</p>
-              <p>Esta sección es temporal para validar ritmo, scroll y composición antes del contenido final.</p>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "1rem" }}>
+              <div
+                style={{
+                  width: "3.5rem",
+                  height: "3.5rem",
+                  borderRadius: "1rem",
+                  background: "color-mix(in srgb, #6048e8 15%, white)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Mail size={22} color="#6048e8" strokeWidth={2} />
+              </div>
+              <a className="v3-feedback-mail" href="mailto:hola@frimee.app">
+                hola@frimee.app
+              </a>
             </div>
           </div>
-        </section>
-        <section
-          id="demo"
-          className="relative flex min-h-[70dvh] items-center bg-transparent px-6 py-20 text-[var(--text-primary)] sm:px-8"
-        >
-          <div className="mx-auto grid w-full max-w-5xl gap-8 md:grid-cols-[1.1fr_0.9fr] md:items-center">
-            <div>
-              <h2 className="text-3xl font-normal leading-tight tracking-tight sm:text-5xl">
-                Menos mensajes. Más decisiones.
-              </h2>
-            </div>
-            <div className="rounded-2xl border border-black/10 bg-white/35 p-6 backdrop-blur-xl dark:border-white/10 dark:bg-white/5">
-              <p className="text-base leading-7 text-[var(--text-secondary)] sm:text-lg">
-                Placeholder de demo para probar cómo respira la landing con varias secciones y preparar el espacio
-                donde después irá una vista más visual del producto.
-              </p>
-            </div>
+        </div>
+      </section>
+
+      {/* ── 13. FAQ ───────────────────────────────────── */}
+      <section className="v3-section v3-animate-section">
+        <div className="v3-section-inner">
+          <p className="v3-kicker v3-ac">FAQ</p>
+          <h2 className="v3-ac">Preguntas frecuentes</h2>
+          <div className="v3-ac" style={{ marginTop: "clamp(2rem, 4vh, 3.5rem)" }}>
+            <Accordion type="single" collapsible defaultValue="faq-0">
+              {faqItems.map((item, i) => (
+                <AccordionItem key={item.q} value={`faq-${i}`}>
+                  <AccordionTrigger>{item.q}</AccordionTrigger>
+                  <AccordionContent>{item.a}</AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
           </div>
-        </section>
-        <section className="relative flex min-h-[90dvh] items-center overflow-hidden bg-transparent px-6 py-24 text-[var(--text-primary)] sm:px-8">
-          <div className="mx-auto w-full max-w-6xl">
-            <div className="mx-auto max-w-3xl text-center">
-              <h2 className="text-4xl font-normal leading-tight tracking-tight sm:text-6xl">
-                Un viaje. Todo conectado.
-              </h2>
-              <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-[var(--text-secondary)] sm:text-lg">
-                Placeholder visual para mostrar cómo gastos, mensajes y decisiones orbitan alrededor del viaje.
-              </p>
-            </div>
-            <div className="landing-orbit-scene mt-12 min-h-[520px]" aria-hidden="true">
-              <div className="landing-world">
-                <span className="landing-world-dot dot-1" />
-                <span className="landing-world-dot dot-2" />
-                <span className="landing-world-dot dot-3" />
-              </div>
-              <div className="landing-orbit-token token-1">EUR</div>
-              <div className="landing-orbit-token token-2">USD</div>
-              <div className="landing-orbit-token token-3">Split</div>
-              <div className="landing-orbit-token token-4">Hotel</div>
-              <div className="landing-orbit-token token-5">Plan</div>
-            </div>
-          </div>
-        </section>
-        <section className="relative flex min-h-[90dvh] items-center overflow-hidden bg-transparent px-6 py-24 text-[var(--text-primary)] sm:px-8">
-          <div className="mx-auto w-full max-w-6xl">
-            <div className="landing-orbit-scene min-h-[620px]" aria-hidden="true">
-              <div className="landing-world landing-world-sm">
-                <span className="landing-world-dot dot-1" />
-                <span className="landing-world-dot dot-2" />
-                <span className="landing-world-dot dot-3" />
-              </div>
-              <div className="landing-feature-card card-1">
-                <span>Mensaje nuevo</span>
-                <strong>Confirmamos alojamiento?</strong>
-              </div>
-              <div className="landing-feature-card card-2">
-                <span>Gasto compartido</span>
-                <strong>Hotel: 84 por persona</strong>
-              </div>
-              <div className="landing-feature-card card-3">
-                <span>Decisión pendiente</span>
-                <strong>Votar fechas del viaje</strong>
-              </div>
-              <div className="landing-feature-card card-4">
-                <span>Recordatorio</span>
-                <strong>Comprar vuelos antes del viernes</strong>
-              </div>
-              <div className="landing-orbit-token token-1">EUR</div>
-              <div className="landing-orbit-token token-4">Link</div>
-            </div>
-          </div>
-        </section>
-      </main>
-    </ReactLenis>
+        </div>
+      </section>
+
+      {/* ── Footer ────────────────────────────────────── */}
+      <Footer7 />
+    </main>
   );
 }
