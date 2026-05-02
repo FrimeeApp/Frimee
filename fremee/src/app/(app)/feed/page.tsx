@@ -1171,6 +1171,7 @@ function FeedCard({
   }, commentsModalOpen);
   const { isClosing: deleteClosing, requestClose: closeDeleteConfirm } = useModalCloseAnimation(() => setConfirmDeleteId(null), !!confirmDeleteId);
   const [replyingTo, setReplyingTo] = useState<{ commentId: string; userName: string } | null>(null);
+  const [modalHeight, setModalHeight] = useState<number | null>(null);
   const [saved, setSaved] = useState(initialSaved);
   const { toastError } = useToast();
   const isOwnPost = post.plan.ownerUserId === currentUserId;
@@ -1446,6 +1447,14 @@ function FeedCard({
       window.cancelAnimationFrame(frame);
     };
   }, [closeCommentsModal, commentsModalOpen]);
+
+  useEffect(() => {
+    if (!commentsModalOpen) { setModalHeight(null); return; }
+    const update = () => setModalHeight(window.visualViewport?.height ?? window.innerHeight);
+    update();
+    window.visualViewport?.addEventListener("resize", update);
+    return () => window.visualViewport?.removeEventListener("resize", update);
+  }, [commentsModalOpen]);
 
   const insertEmoji = (emoji: { native: string }) => {
     const input = commentInputRef.current;
@@ -2424,7 +2433,7 @@ function FeedCard({
 
       {commentsModalOpen && (
         <div data-closing={commentsClosing ? "true" : "false"} className="app-modal-overlay fixed inset-0 z-[1100] flex items-end justify-center md:items-center md:p-[var(--space-6)]" onClick={closeCommentsModal}>
-          <div className="app-modal-panel grid h-dvh w-full overflow-hidden bg-app shadow-elev-4 md:h-[min(88dvh,760px)] md:max-w-[1120px] md:rounded-[6px] md:grid-cols-[minmax(0,1fr)_420px]" onClick={(e) => e.stopPropagation()}>
+          <div className="app-modal-panel grid h-dvh w-full overflow-hidden bg-app shadow-elev-4 md:h-[min(88dvh,760px)] md:max-w-[1120px] md:rounded-[6px] md:grid-cols-[minmax(0,1fr)_420px]" style={modalHeight ? { height: modalHeight } : undefined} onClick={(e) => e.stopPropagation()}>
             <div className="relative hidden min-h-0 bg-[#111] md:block">
               {post.hasImage && post.coverImage ? (
                 <NextImage src={post.coverImage} alt="Imagen del plan" width={1200} height={900} className="h-full w-full object-contain" unoptimized referrerPolicy="no-referrer" />
