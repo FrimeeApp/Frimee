@@ -1976,7 +1976,7 @@ function FeedCard({
         {/* Image post in Twitter-like mobile layout */}
         {post.hasImage && post.coverImage && (
           <>
-          <div className="absolute inset-0 z-10 flex items-center justify-center overflow-y-auto bg-app px-[max(12px,env(safe-area-inset-left))] pt-4 pb-[56px]" style={{ touchAction: "pan-y" }}>
+          <div className="absolute inset-0 z-10 flex items-center justify-center overflow-y-auto bg-app px-[max(12px,env(safe-area-inset-left))] py-4">
             <div className="w-full max-w-[560px] text-app">
               <div className="flex items-start gap-3">
                 <Link href={`/profile/${post.plan.ownerUserId}`} onClick={(e) => e.stopPropagation()} className="shrink-0">
@@ -2097,52 +2097,55 @@ function FeedCard({
                     )}
                   </div>
 
+                  <div className="mt-3 flex items-center justify-between gap-3 text-muted">
+                    <button
+                      type="button"
+                      className={mobileActionButtonClass}
+                      onClick={(e) => { e.stopPropagation(); onLikeToggle(); }}
+                      onTouchStart={(e) => e.stopPropagation()}
+                      disabled={!currentUserId || likeLoading}
+                      aria-label={liked ? "Quitar like" : "Dar like"}
+                    >
+                      <PlaneIcon liked={liked} animating={likeAnimating} size={18} className={liked ? "text-primary-token" : ""} />
+                      <span className={`text-[13px] ${likeCount > 0 ? "" : "invisible"}`}>{likeCount || 0}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={mobileActionButtonClass}
+                      onClick={(e) => { e.stopPropagation(); openCommentsModal(); }}
+                      onTouchStart={(e) => e.stopPropagation()}
+                      aria-label="Comentarios"
+                    >
+                      <svg viewBox="0 0 24 24" fill="currentColor" className="size-[18px]" aria-hidden="true">
+                        <path d="M12 4C7.582 4 4 6.91 4 10.5C4 12.31 4.913 13.947 6.39 15.109C6.272 16.213 5.79 17.343 4.98 18.316C4.787 18.549 5.02 18.88 5.315 18.785C7.005 18.243 8.357 17.471 9.235 16.86C10.115 17.113 11.04 17.25 12 17.25C16.418 17.25 20 14.34 20 10.75C20 7.16 16.418 4 12 4Z" />
+                      </svg>
+                      <span className={`text-[13px] ${commentsSection.length > 0 ? "" : "invisible"}`}>{commentsSection.length || 0}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`${mobileSaveButtonClass} ${saved ? "text-primary-token" : ""}`}
+                      onClick={(e) => { e.stopPropagation(); void handleToggleSave(); }}
+                      onTouchStart={(e) => e.stopPropagation()}
+                      disabled={!currentUserId}
+                      aria-label={saved ? "Quitar guardado" : "Guardar"}
+                    >
+                      <BookmarkIcon size={18} />
+                    </button>
+                    <Link
+                      href={Capacitor.isNativePlatform() ? `/plan/static?id=${post.plan.id}` : `/plan/${post.plan.id}`}
+                      onClick={(e) => e.stopPropagation()}
+                      onTouchStart={(e) => e.stopPropagation()}
+                      className="flex items-center gap-1 text-[13px] font-[700] text-muted transition-colors hover:text-primary-token"
+                    >
+                      Ver plan
+                      <svg viewBox="0 0 24 24" fill="none" className="size-[11px]" aria-hidden="true">
+                        <path d="M13 3L21 12M21 12L13 21M21 12H3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </Link>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-          {/* Action bar outside overflow-y-auto so Android doesn't intercept taps as scroll */}
-          <div className="absolute bottom-0 left-0 right-0 z-20 flex h-[56px] items-center justify-between gap-3 bg-app px-[max(12px,env(safe-area-inset-left))] text-muted">
-            <button
-              type="button"
-              className={mobileActionButtonClass}
-              onClick={(e) => { e.stopPropagation(); onLikeToggle(); }}
-              disabled={!currentUserId || likeLoading}
-              aria-label={liked ? "Quitar like" : "Dar like"}
-            >
-              <PlaneIcon liked={liked} animating={likeAnimating} size={18} className={liked ? "text-primary-token" : ""} />
-              <span className={`text-[13px] ${likeCount > 0 ? "" : "invisible"}`}>{likeCount || 0}</span>
-            </button>
-            <button
-              type="button"
-              className={mobileActionButtonClass}
-              onClick={(e) => { e.stopPropagation(); openCommentsModal(); }}
-              aria-label="Comentarios"
-            >
-              <svg viewBox="0 0 24 24" fill="currentColor" className="size-[18px]" aria-hidden="true">
-                <path d="M12 4C7.582 4 4 6.91 4 10.5C4 12.31 4.913 13.947 6.39 15.109C6.272 16.213 5.79 17.343 4.98 18.316C4.787 18.549 5.02 18.88 5.315 18.785C7.005 18.243 8.357 17.471 9.235 16.86C10.115 17.113 11.04 17.25 12 17.25C16.418 17.25 20 14.34 20 10.75C20 7.16 16.418 4 12 4Z" />
-              </svg>
-              <span className={`text-[13px] ${commentsSection.length > 0 ? "" : "invisible"}`}>{commentsSection.length || 0}</span>
-            </button>
-            <button
-              type="button"
-              className={`${mobileSaveButtonClass} ${saved ? "text-primary-token" : ""}`}
-              onClick={(e) => { e.stopPropagation(); void handleToggleSave(); }}
-              disabled={!currentUserId}
-              aria-label={saved ? "Quitar guardado" : "Guardar"}
-            >
-              <BookmarkIcon size={18} />
-            </button>
-            <Link
-              href={Capacitor.isNativePlatform() ? `/plan/static?id=${post.plan.id}` : `/plan/${post.plan.id}`}
-              onClick={(e) => e.stopPropagation()}
-              className="flex items-center gap-1 text-[13px] font-[700] text-muted transition-colors hover:text-primary-token"
-            >
-              Ver plan
-              <svg viewBox="0 0 24 24" fill="none" className="size-[11px]" aria-hidden="true">
-                <path d="M13 3L21 12M21 12L13 21M21 12H3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </Link>
           </div>
           </>
         )}
