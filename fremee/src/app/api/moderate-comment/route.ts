@@ -1,13 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { OPENAI_API_BASE_URL } from "@/config/external";
-import { createSupabaseServerClient } from "@/services/supabase/server";
+import { createSupabaseServerClient, createSupabaseServiceClient } from "@/services/supabase/server";
 import { sanitizeText } from "@/lib/sanitize";
 import { checkRateLimit, rateLimitedResponse } from "@/lib/rate-limit";
 
-
 export async function POST(req: NextRequest) {
-  const authClient = await createSupabaseServerClient();
-  const { data: { user } } = await authClient.auth.getUser();
+  let user = null;
+  const authHeader = req.headers.get("authorization");
+  if (authHeader?.startsWith("Bearer ")) {
+    const { data } = await createSupabaseServiceClient().auth.getUser(authHeader.slice(7));
+    user = data.user;
+  } else {
+    const { data } = await (await createSupabaseServerClient()).auth.getUser();
+    user = data.user;
+  }
   if (!user) return NextResponse.json({ toxic: false }, { status: 401 });
 
   const rl = await checkRateLimit(`moderate:${user.id}`, 30, 60_000);

@@ -152,6 +152,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
     setError(null);
     setNotAReceipt(false);
     try {
+      const { data: { session } } = await createBrowserSupabaseClient().auth.getSession();
       let fileToSend: File | Blob = file;
       const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
       if (!isPdf && file.type.startsWith("image/")) {
@@ -167,7 +168,11 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
       fd.append("file", fileToSend, isPdf ? file.name : "receipt.jpg");
       fd.append("plan_id", String(planId));
       fd.append("user_id", userId);
-      const res = await fetch("/api/receipts/ocr", { method: "POST", body: fd });
+      const res = await fetch("/api/receipts/ocr", {
+        method: "POST",
+        headers: session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {},
+        body: fd,
+      });
       const data = await res.json() as OcrResult;
       if ("error" in data) throw new Error((data as { error: string }).error);
       if (!data.is_receipt) setNotAReceipt(true);

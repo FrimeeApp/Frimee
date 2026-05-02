@@ -301,16 +301,13 @@ export default function SettingsPage() {
   }, [form.theme, settingsLoading]);
 
   const navigate = () => {
-    if (typeof window !== "undefined" && window.history.length > 1) {
+    if (Capacitor.isNativePlatform()) {
+      const profileHref = user?.id ? `/profile/static?id=${user.id}` : "/feed";
+      router.push(profileHref);
+    } else if (typeof window !== "undefined" && window.history.length > 1) {
       router.back();
     } else {
-      const profileHref =
-        user?.id && Capacitor.isNativePlatform()
-          ? `/profile/static?id=${user.id}`
-          : user?.id
-            ? `/profile/${user.id}`
-            : "/feed";
-      router.push(profileHref);
+      router.push(user?.id ? `/profile/${user.id}` : "/feed");
     }
   };
 
@@ -538,7 +535,11 @@ export default function SettingsPage() {
     setErrorMsg(null);
 
     try {
-      const res = await fetch("/api/account/delete", { method: "DELETE" });
+      const { data: { session } } = await createBrowserSupabaseClient().auth.getSession();
+      const res = await fetch("/api/account/delete", {
+        method: "DELETE",
+        headers: session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {},
+      });
       if (!res.ok) {
         const body = await res.json() as { error?: string };
         throw new Error(body.error ?? "Error al eliminar la cuenta.");
