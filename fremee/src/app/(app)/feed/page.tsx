@@ -1,6 +1,8 @@
 ﻿"use client";
 
+import dynamic from "next/dynamic";
 import NextImage from "next/image";
+const EmojiMartPicker = dynamic(() => import("@emoji-mart/react"), { ssr: false });
 import Link from "next/link";
 import PlaneIcon from "@/components/ui/PlaneIcon";
 import { useFollow } from "@/hooks/useFollow";
@@ -410,8 +412,8 @@ export default function FeedPage() {
   if (loading) return <LoadingScreen />;
 
   return (
-    <div className="min-h-dvh bg-app text-app">
-      <div className="relative mx-auto min-h-dvh max-w-[1440px]">
+    <div className="h-dvh overflow-hidden bg-app text-app">
+      <div className="relative mx-auto h-dvh max-w-[1440px] overflow-hidden">
         <AppSidebar />
 
         <main
@@ -1445,10 +1447,19 @@ function FeedCard({
     };
   }, [closeCommentsModal, commentsModalOpen]);
 
-  const insertEmoji = (emoji: string) => {
-    setCommentText((prev) => prev + emoji);
+  const insertEmoji = (emoji: { native: string }) => {
+    const input = commentInputRef.current;
+    if (!input) { setCommentText((prev) => (prev + emoji.native).slice(0, 300)); setEmojiPickerOpen(false); return; }
+    const start = input.selectionStart ?? input.value.length;
+    const end = input.selectionEnd ?? input.value.length;
+    const newText = (input.value.slice(0, start) + emoji.native + input.value.slice(end)).slice(0, 300);
+    setCommentText(newText);
     setEmojiPickerOpen(false);
-    commentInputRef.current?.focus();
+    requestAnimationFrame(() => {
+      input.focus();
+      const pos = start + emoji.native.length;
+      input.setSelectionRange(pos, pos);
+    });
   };
 
   const openCommentsModal = () => {
@@ -1983,7 +1994,7 @@ function FeedCard({
 
                   <div
                     className="relative mt-3 w-full overflow-hidden rounded-[14px] border border-app bg-surface-inset"
-                    style={{ aspectRatio: coverAspect ? String(coverAspect) : "4/5" }}
+                    style={{ aspectRatio: coverAspect ? String(coverAspect) : "4/5", maxHeight: "calc(100svh - 360px)" }}
                   >
                     {!imgLoaded && <div className="skeleton-shimmer absolute inset-0 z-[2]" aria-hidden="true" />}
                     {slides.map((slide, i) => {
@@ -2165,7 +2176,7 @@ function FeedCard({
               {/* Image / Slides section — ratio from cover image */}
               <div
                 className="relative w-full bg-black"
-                style={{ aspectRatio: coverAspect ? String(coverAspect) : "4/5" }}
+                style={{ aspectRatio: coverAspect ? String(coverAspect) : "4/5", maxHeight: "70vh" }}
               >
                 {/* Skeleton while loading */}
                 {!imgLoaded && <div className="skeleton-shimmer absolute inset-0 z-[2]" aria-hidden="true" />}
@@ -2489,7 +2500,7 @@ function FeedCard({
                 {renderCommentsList()}
               </div>
 
-              <div className="px-[22px] py-[14px]">
+              <div className="hidden md:block px-[22px] py-[14px]">
                 <div className="flex items-center gap-4 text-app">
                   <button type="button" className="flex items-center gap-[6px] transition-opacity hover:opacity-70" aria-label="Me gusta" onClick={onLikeToggle} disabled={!currentUserId}>
                     <PlaneIcon liked={liked} animating={likeAnimating} size={28} />
@@ -2510,26 +2521,72 @@ function FeedCard({
                 </div>
               </div>
 
-              <div ref={emojiPickerRef} className="relative px-[22px] py-[14px]">
-                {emojiPickerOpen && (
-                  <div className="absolute bottom-[calc(100%+8px)] left-[22px] z-[70] w-[256px] rounded-[10px] border border-app bg-[var(--surface-raised)] p-2 shadow-lg backdrop-blur-md">
-                    <div className="scrollbar-thin grid max-h-[180px] grid-cols-8 gap-0.5 overflow-x-hidden overflow-y-auto overscroll-contain">
-                      {EMOJI_LIST.map((emoji) => (
-                        <button key={emoji} type="button" className="flex size-[30px] items-center justify-center rounded-[6px] text-[18px] transition-colors hover:bg-[var(--interactive-hover-surface)]" onClick={() => insertEmoji(emoji)}>
-                          {emoji}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
+              <div ref={emojiPickerRef} className="relative border-t border-app px-4 py-3 md:border-t-0 md:px-[22px] md:py-[14px] md:pt-0">
                 {replyingTo && (
-                  <div className="flex items-center justify-between px-[2px] pb-[4px] text-[14px] text-muted">
+                  <div className="flex items-center justify-between px-[2px] pb-[6px] text-[14px] text-muted">
                     <span>Respondiendo a <span className="font-[700] text-app">@{replyingTo.userName}</span></span>
                     <button type="button" onClick={() => { setReplyingTo(null); setCommentText(""); }} className="text-muted hover:opacity-70">✕</button>
                   </div>
                 )}
-                <div className="flex items-center gap-[var(--space-2)]">
+
+                {/* Mobile: chat-style pill input with emoji inside */}
+                <div className="flex items-center gap-2 md:hidden">
+                  <div className="relative flex min-w-0 flex-1 items-center rounded-full border border-app bg-surface px-3">
+                    {emojiPickerOpen && (
+                      <div className="absolute bottom-[calc(100%+8px)] left-0 z-[70] max-w-[calc(100vw-32px)]">
+                        <EmojiMartPicker
+                          data={async () => { const r = await fetch("https://cdn.jsdelivr.net/npm/@emoji-mart/data"); return r.json(); }}
+                          onEmojiSelect={insertEmoji}
+                          locale="es"
+                          theme="auto"
+                          set="native"
+                          previewPosition="none"
+                          skinTonePosition="search"
+                        />
+                      </div>
+                    )}
+                    <button type="button" className="shrink-0 py-2 pr-1 text-muted transition-colors hover:text-app" aria-label="Emoji" onClick={() => setEmojiPickerOpen((v) => !v)}>
+                      <SmileyIcon />
+                    </button>
+                    <input
+                      ref={commentInputRef}
+                      type="text"
+                      value={commentText}
+                      onChange={(e) => setCommentText(e.target.value.slice(0, 300))}
+                      onKeyDown={onCommentKeyDown}
+                      placeholder={replyingTo ? `Responder a @${replyingTo.userName}...` : "Añade un comentario..."}
+                      maxLength={300}
+                      className="min-w-0 flex-1 bg-transparent py-2 text-[15px] text-app outline-none placeholder:text-muted"
+                      disabled={!currentUserId || commentSubmitting}
+                    />
+                    {commentText.length > 250 && (
+                      <span className="shrink-0 text-[11px] text-muted">{300 - commentText.length}</span>
+                    )}
+                  </div>
+                  {commentText.trim() && (
+                    <button type="button" onClick={onSubmitComment} disabled={!currentUserId || commentSubmitting} aria-label="Enviar comentario" className="shrink-0 text-primary-token transition-opacity hover:opacity-70 disabled:opacity-40">
+                      <svg viewBox="0 0 24 24" fill="currentColor" className="size-[22px]" aria-hidden>
+                        <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+
+                {/* Desktop: original input */}
+                <div className="hidden md:flex items-center gap-[var(--space-2)]">
+                  {emojiPickerOpen && (
+                    <div className="absolute bottom-[calc(100%+8px)] left-[22px] z-[70] max-w-[calc(100vw-32px)]">
+                      <EmojiMartPicker
+                        data={async () => { const r = await fetch("https://cdn.jsdelivr.net/npm/@emoji-mart/data"); return r.json(); }}
+                        onEmojiSelect={insertEmoji}
+                        locale="es"
+                        theme="auto"
+                        set="native"
+                        previewPosition="none"
+                        skinTonePosition="search"
+                      />
+                    </div>
+                  )}
                   <button type="button" className="flex items-center justify-center text-muted" aria-label="Emoticonos" onClick={() => setEmojiPickerOpen((prev) => !prev)}>
                     <SmileyIcon />
                   </button>
@@ -2537,9 +2594,10 @@ function FeedCard({
                     ref={commentInputRef}
                     type="text"
                     value={commentText}
-                    onChange={(e) => setCommentText(e.target.value)}
+                    onChange={(e) => setCommentText(e.target.value.slice(0, 300))}
                     onKeyDown={onCommentKeyDown}
                     placeholder={replyingTo ? `Responder a @${replyingTo.userName}...` : "Añade un comentario..."}
+                    maxLength={300}
                     className="min-w-0 flex-1 bg-transparent py-[4px] text-[15px] text-app outline-none ring-0 focus:outline-none focus:ring-0 focus:border-transparent placeholder:text-muted"
                     disabled={!currentUserId || commentSubmitting}
                   />

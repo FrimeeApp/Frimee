@@ -703,7 +703,7 @@ export default function PlanDetailPage() {
           <div
             className={`relative w-full overflow-hidden transition-[height] duration-300 md:ml-0 md:[border-bottom-left-radius:var(--radius-card)] md:[border-bottom-right-radius:var(--radius-card)] ${
               activeTab === "chat"
-                ? "h-[clamp(130px,18vh,165px)] md:h-[clamp(260px,40vh,380px)]"
+                ? "h-[clamp(165px,21vh,195px)] md:h-[clamp(260px,40vh,380px)]"
                 : "h-[clamp(190px,29vh,270px)] md:h-[clamp(260px,40vh,380px)]"
             }`}
           >
@@ -717,7 +717,11 @@ export default function PlanDetailPage() {
                 unoptimized
               />
             ) : (
-              <div className="absolute inset-0 bg-gradient-to-br from-primary/60 to-primary/30" />
+              <div className="absolute inset-0 bg-gradient-to-br from-[#1a2a4a] to-[#0d1a2e] flex items-center justify-center">
+                <svg viewBox="0 0 24 24" fill="none" className="size-16 text-white/15" aria-hidden>
+                  <path d="M22 16.5H2M5 19.5h14M12 3L4.5 13.5h15L12 3z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </div>
             )}
             {/* Gradient overlay */}
             <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/25 to-transparent" />
@@ -848,7 +852,7 @@ export default function PlanDetailPage() {
 
           {/* ─── Chat tab ─── */}
           {activeTab === "chat" && (
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden pt-4 md:pt-0">
               {planChat && user ? (
                 <ChatConversation
                   chat={planChat}

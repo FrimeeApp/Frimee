@@ -399,8 +399,8 @@ export default function ProfilePage() {
                     disabled={followLoading}
                     className={`rounded-full px-6 py-[6px] text-body-sm font-[var(--fw-semibold)] transition-all disabled:opacity-50 ${
                       following
-                        ? "border border-primary-token bg-transparent text-primary-token hover:border-primary-token hover:text-primary-token md:border-app md:text-app md:hover:border-red-400 md:hover:text-red-400"
-                        : "bg-primary-token text-[var(--contrast)] hover:opacity-80 md:bg-[var(--text-primary)] md:text-contrast-token"
+                        ? "border border-transparent bg-primary-token text-[var(--contrast)] hover:opacity-80 md:hover:bg-red-500 md:hover:text-white"
+                        : "border border-app bg-transparent text-app hover:bg-surface"
                     }`}
                   >
                     {following ? "Siguiendo" : "Seguir"}
@@ -472,8 +472,8 @@ export default function ProfilePage() {
                   className="absolute bottom-0 h-[2px] w-[28px] rounded-full bg-[var(--text-primary)] transition-all duration-300 ease-[var(--ease-standard)]"
                   style={{
                     left: activeTab === "planes"
-                      ? "calc(25% - 14px)"
-                      : isOwnProfile ? "calc(75% - 14px)" : "calc(50% - 14px)",
+                      ? isOwnProfile ? "calc(25% - 14px)" : "calc(50% - 14px)"
+                      : "calc(75% - 14px)",
                   }}
                 />
               </div>
@@ -598,7 +598,13 @@ function PlanGrid({ plans, onPlanClick }: { plans: FeedPlanItemDto[]; onPlanClic
                 unoptimized
               />
             )}
-            {!plan.coverImage && <div className="aspect-[4/3] w-full bg-black" />}
+            {!plan.coverImage && (
+              <div className="aspect-[4/3] w-full bg-gradient-to-br from-[#1a2a4a] to-[#0d1a2e] flex items-center justify-center">
+                <svg viewBox="0 0 24 24" fill="none" className="size-10 text-white/20" aria-hidden>
+                  <path d="M22 16.5H2M5 19.5h14M12 3L4.5 13.5h15L12 3z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </div>
+            )}
             {new Date(plan.endsAt) < new Date() && (
               <div className="absolute right-2 top-2 rounded-full bg-black/50 px-2 py-[3px] text-[14px] font-[var(--fw-medium)] leading-tight text-white/90 backdrop-blur-sm">
                 Finalizado

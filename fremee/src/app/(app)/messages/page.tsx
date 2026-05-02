@@ -373,7 +373,10 @@ export default function MessagesPage() {
                 <button
                   key={chat.chat_id}
                   type="button"
-                  onClick={() => setSelectedChatId(chat.chat_id)}
+                  onClick={() => {
+                    setSelectedChatId(chat.chat_id);
+                    setChats((prev) => prev.map((c) => c.chat_id !== chat.chat_id ? c : { ...c, unread_count: 0 }));
+                  }}
                   className={`flex w-full items-center gap-3 rounded-[14px] px-3 py-[10px] text-left transition-colors focus:outline-none ${isSelected ? "bg-surface" : "hover:bg-surface"}`}
                 >
                   <div className="relative shrink-0 self-start mt-[1px]">
