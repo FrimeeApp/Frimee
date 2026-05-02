@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useSyncExternalStore } from "react";
-import { APP_LOGIN_URL, APP_REGISTER_URL } from "@/config/links";
+import { APP_REGISTER_URL } from "@/config/links";
 import { applyThemePreference, cacheThemePreference, type AppThemePreference } from "@/services/theme/preferences";
 
 const navLinks = [
@@ -36,16 +36,8 @@ export default function Navbar() {
   }
 
   return (
-    <header className="landing-glass-navbar fixed inset-x-0 top-0 z-50 transition-colors duration-200">
-      <div
-        className="pointer-events-none absolute inset-0 z-0 bg-white/18 backdrop-blur-[24px] backdrop-saturate-110 dark:bg-[#1a1a1a]/36"
-        style={{
-          WebkitBackdropFilter: "blur(24px) saturate(1.1)",
-          backdropFilter: "blur(24px) saturate(1.1)",
-        }}
-        aria-hidden="true"
-      />
-      <div className="relative z-10 grid h-16 w-full grid-cols-[auto_1fr] items-center gap-4 px-4 sm:px-6 md:grid-cols-[1fr_auto_1fr] lg:px-9">
+    <header className="landing-pill-navbar fixed inset-x-4 top-3 z-50 transition-colors duration-200 sm:inset-x-6 md:inset-x-8">
+      <div className="relative z-10 grid h-14 w-full grid-cols-[auto_1fr] items-center gap-4 px-4 sm:px-6 md:grid-cols-[1fr_auto_1fr] lg:px-8">
         <Link
           href="/"
           className="flex items-center gap-2.5 text-black transition-colors duration-200 hover:text-black/70 dark:text-white dark:hover:text-white/70"
@@ -117,16 +109,10 @@ export default function Navbar() {
             </svg>
           </label>
           <Link
-            href={APP_LOGIN_URL}
-            className="hidden h-10 items-center justify-center rounded-[var(--radius-button)] px-4 text-sm font-medium text-black transition-colors duration-200 hover:text-black/60 dark:text-white/88 dark:hover:text-white sm:inline-flex"
-          >
-            Iniciar sesión
-          </Link>
-          <Link
             href={APP_REGISTER_URL}
             className="group inline-flex h-10 items-center justify-center gap-2 overflow-hidden rounded-[var(--radius-button)] bg-[var(--primary)] px-4 text-sm font-medium text-white transition-colors duration-200 hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]/30 focus-visible:ring-offset-2 dark:text-black sm:px-6"
           >
-            <span>Registrarse</span>
+            <span>Empezar</span>
             <span className="w-0 opacity-0 transition-all duration-200 group-hover:w-4 group-hover:opacity-100">
               <svg
                 aria-hidden="true"
