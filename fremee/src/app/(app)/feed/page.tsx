@@ -1584,11 +1584,16 @@ function FeedCard({
 
       // Moderation: async — delete silently if toxic
       const commentId = result.comment_id;
-      void fetch("/api/moderate-comment", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: content }),
-      })
+      void createBrowserSupabaseClient().auth.getSession().then(({ data: { session } }) =>
+        fetch("/api/moderate-comment", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
+          },
+          body: JSON.stringify({ text: content }),
+        })
+      )
         .then((r) => r.json())
         .then((data: { toxic: boolean }) => {
           if (data.toxic) {
