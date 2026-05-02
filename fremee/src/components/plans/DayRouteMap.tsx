@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import type { SubplanRow } from "@/services/api/endpoints/subplanes.endpoint";
 import { TIPOS_TRANSPORTE } from "@/services/api/endpoints/subplanes.endpoint";
 import { loadGoogleMapsScript } from "@/lib/googleMaps";
+import { createBrowserSupabaseClient } from "@/services/supabase/client";
 
 type Props = {
   subplanes: SubplanRow[];
@@ -236,9 +237,13 @@ export default function DayRouteMap({
                 toCoord   ? `${toCoord.lat},${toCoord.lng}`     : points[i + 1].name,
               ];
 
+              const { data: { session } } = await createBrowserSupabaseClient().auth.getSession();
               const res = await fetch("/api/directions", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                  "Content-Type": "application/json",
+                  ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
+                },
                 body: JSON.stringify({
                   waypoints,
                   originCoords: fromCoord ?? undefined,

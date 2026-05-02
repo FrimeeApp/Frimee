@@ -194,6 +194,15 @@ function TimeWheelInput({ value, onChange, minTime, maxTime }: {
   const m = parseInt(mStr ?? "0", 10);
   const touchHRef = useRef<{ startY: number; start: number } | null>(null);
   const touchMRef = useRef<{ startY: number; start: number } | null>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = wrapperRef.current;
+    if (!el) return;
+    const stop = (e: WheelEvent) => e.preventDefault();
+    el.addEventListener("wheel", stop, { passive: false });
+    return () => el.removeEventListener("wheel", stop);
+  }, []);
 
   const emit = (hh: number, mm: number) => {
     let total = Math.max(0, Math.min(23 * 60 + 59, hh * 60 + mm));
@@ -205,12 +214,12 @@ function TimeWheelInput({ value, onChange, minTime, maxTime }: {
   const inputCls = "w-[46px] bg-transparent text-[28px] font-[var(--fw-bold)] text-app outline-none text-center [appearance:textfield] [&::-webkit-inner-spin-button]:hidden [&::-webkit-outer-spin-button]:hidden";
 
   return (
-    <div className="flex items-baseline">
+    <div ref={wrapperRef} className="flex items-baseline">
       <input
         type="number" min={0} max={23}
         value={String(h).padStart(2, "0")}
         onChange={(e) => emit(Math.max(0, Math.min(23, parseInt(e.target.value) || 0)), m)}
-        onWheel={(e) => { e.preventDefault(); emit(h + (e.deltaY > 0 ? -1 : 1), m); }}
+        onWheel={(e) => { e.preventDefault(); e.stopPropagation(); emit(h + (e.deltaY > 0 ? -1 : 1), m); }}
         onTouchStart={(e) => { touchHRef.current = { startY: e.touches[0].clientY, start: h }; }}
         onTouchMove={(e) => {
           if (!touchHRef.current) return;
@@ -226,7 +235,7 @@ function TimeWheelInput({ value, onChange, minTime, maxTime }: {
         type="number" min={0} max={59}
         value={String(m).padStart(2, "0")}
         onChange={(e) => emit(h, Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
-        onWheel={(e) => { e.preventDefault(); emit(h, m + (e.deltaY > 0 ? -1 : 1)); }}
+        onWheel={(e) => { e.preventDefault(); e.stopPropagation(); emit(h, m + (e.deltaY > 0 ? -1 : 1)); }}
         onTouchStart={(e) => { touchMRef.current = { startY: e.touches[0].clientY, start: m }; }}
         onTouchMove={(e) => {
           if (!touchMRef.current) return;

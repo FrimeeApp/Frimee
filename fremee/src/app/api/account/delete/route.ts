@@ -1,11 +1,18 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient, createSupabaseServiceClient } from "@/services/supabase/server";
 
-export async function DELETE() {
-  const supabase = await createSupabaseServerClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
+export async function DELETE(req: NextRequest) {
+  let user = null;
+  const authHeader = req.headers.get("authorization");
+  if (authHeader?.startsWith("Bearer ")) {
+    const { data } = await createSupabaseServiceClient().auth.getUser(authHeader.slice(7));
+    user = data.user;
+  } else {
+    const { data, error } = await (await createSupabaseServerClient()).auth.getUser();
+    if (!error) user = data.user;
+  }
 
-  if (authError || !user) {
+  if (!user) {
     return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   }
 

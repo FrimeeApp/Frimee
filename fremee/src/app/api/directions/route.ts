@@ -45,8 +45,19 @@ function getApiStatus(error: unknown): string | undefined {
 }
 
 export async function POST(req: NextRequest) {
-  const authClient = await createSupabaseServerClient();
-  const { data: { user } } = await authClient.auth.getUser();
+  // Try cookie-based auth first, then Bearer token fallback (browser client uses localStorage)
+  let user = null;
+  const authHeader = req.headers.get("authorization");
+  if (authHeader?.startsWith("Bearer ")) {
+    const token = authHeader.slice(7);
+    const supabase = createSupabaseServiceClient();
+    const { data } = await supabase.auth.getUser(token);
+    user = data.user;
+  } else {
+    const authClient = await createSupabaseServerClient();
+    const { data } = await authClient.auth.getUser();
+    user = data.user;
+  }
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
   const rl = await checkRateLimit(`directions:${user.id}`, 60, 60_000);
