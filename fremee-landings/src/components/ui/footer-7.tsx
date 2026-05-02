@@ -69,7 +69,7 @@ const defaultLegalLinks: Footer7Props["legalLinks"] = [
 export const Footer7 = ({
   logo = {
     url: "/",
-    src: "/logo-frimee-black.png",
+    src: "/images/logo-frimee-black.png",
     alt: "Frimee",
     title: "Frimee",
   },

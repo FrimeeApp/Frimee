@@ -52,14 +52,14 @@ export default function Navbar() {
         >
           <span className="relative h-5 w-5 shrink-0">
             <Image
-              src="/logo-frimee-black.png"
+              src="/images/logo-frimee-black.png"
               alt=""
               width={20}
               height={20}
               className="h-5 w-5 object-contain opacity-100 transition-opacity duration-200 dark:opacity-0"
             />
             <Image
-              src="/logo-frimee.png"
+              src="/images/logo-frimee.png"
               alt=""
               width={20}
               height={20}
