@@ -2336,6 +2336,15 @@ function FeedCard({
                     <span className={saved ? "text-primary-token" : ""}><BookmarkIcon size={24} /></span>
                   </button>
                 )}
+                <Link
+                  href={`/plan/${post.plan.id}`}
+                  className="ml-auto flex items-center gap-1 text-[14px] font-[700] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
+                >
+                  Ver plan
+                  <svg viewBox="0 0 24 24" fill="none" className="size-[12px]" aria-hidden="true">
+                    <path d="M13 3L21 12M21 12L13 21M21 12H3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </Link>
               </div>
 
               {/* Caption */}
