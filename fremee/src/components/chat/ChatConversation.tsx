@@ -1761,7 +1761,7 @@ export function ChatConversation({
         ) : messages.length === 0 ? (
           <div className="flex h-full items-center justify-center text-body-sm text-muted">Sé el primero en escribir</div>
         ) : (
-          <div className="space-y-[1px]">
+          <div className="flex min-h-full flex-col justify-end space-y-[1px]">
             {/* Sentinel para infinite scroll hacia arriba */}
             <div ref={topSentinelRef} className="h-px" />
             {loadingMore && (
@@ -1842,11 +1842,11 @@ export function ChatConversation({
                   </div>
                 )}
                 <div id={`msg-${msg.id}`} className={`group/msg flex ${isMe ? "justify-end" : "justify-start"} ${isFirstInGroup ? "mt-[var(--space-3)]" : "mt-[2px]"} ${reaction ? "mb-[20px]" : ""} ${highlightedId === msg.id ? "rounded-card bg-[var(--text-primary)]/10 transition-colors" : ""}`}>
-                  {!isMe && (chat.tipo === "GRUPO" || isBot) && (
+                  {!isMe && (chat.tipo === "GRUPO" || chat.tipo === "PLAN" || isBot) && (
                     <div className="mr-[var(--space-2)] w-[24px] shrink-0">
                       {isFirstInGroup && (
-                        <div className={`flex size-[24px] items-center justify-center overflow-hidden rounded-full text-[14px] font-[var(--fw-semibold)] ${isBot ? "bg-primary-token/15 text-primary-token" : "border border-app bg-surface-inset text-app"}`}>
-                          {isBot ? "F" : msg.sender_profile_image ? <NextImage src={msg.sender_profile_image} alt={msg.sender_nombre} width={24} height={24} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" /> : (msg.sender_nombre[0] ?? "?").toUpperCase()}
+                        <div className={`flex size-[24px] items-center justify-center overflow-hidden rounded-full text-[14px] font-[var(--fw-semibold)] ${isBot ? "bg-[#b0b0b0]" : "border border-app bg-surface-inset text-app"}`}>
+                          {isBot ? <NextImage src="/Frimee_personaje.png" alt="Frimee" width={24} height={24} className="h-full w-full object-cover" /> : msg.sender_profile_image ? <NextImage src={msg.sender_profile_image} alt={msg.sender_nombre} width={24} height={24} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" /> : (msg.sender_nombre[0] ?? "?").toUpperCase()}
                         </div>
                       )}
                     </div>
@@ -1867,7 +1867,7 @@ export function ChatConversation({
                           : `18px ${isFirstInGroup ? "18px" : "8px"} 18px ${isLastInGroup ? "4px" : "8px"}`,
                       }}
                     >
-                      {!isMe && (chat.tipo === "GRUPO" || isBot) && isFirstInGroup && (
+                      {!isMe && (chat.tipo === "GRUPO" || chat.tipo === "PLAN" || isBot) && isFirstInGroup && (
                         <p className={`mb-[2px] text-[14px] font-[var(--fw-semibold)] ${isBot ? "text-primary-token" : "text-muted"}`}>{isBot ? "Frimee" : msg.sender_nombre}</p>
                       )}
                       {msg.reply_texto && msg.reply_to_id && (

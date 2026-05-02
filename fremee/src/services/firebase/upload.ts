@@ -3,13 +3,22 @@ import { storage } from "./storage";
 
 // ── WebP conversion ───────────────────────────────────────────────────────────
 
+const MAX_IMAGE_DIM = 1920;
+
+function clampDimensions(w: number, h: number, max = MAX_IMAGE_DIM): { width: number; height: number } {
+  if (w <= max && h <= max) return { width: w, height: h };
+  const scale = max / Math.max(w, h);
+  return { width: Math.round(w * scale), height: Math.round(h * scale) };
+}
+
 async function toWebP(file: File, quality = 0.85): Promise<Blob> {
   const bitmap = await createImageBitmap(file);
+  const { width, height } = clampDimensions(bitmap.width, bitmap.height);
   const canvas = document.createElement("canvas");
-  canvas.width = bitmap.width;
-  canvas.height = bitmap.height;
+  canvas.width = width;
+  canvas.height = height;
   const ctx = canvas.getContext("2d")!;
-  ctx.drawImage(bitmap, 0, 0);
+  ctx.drawImage(bitmap, 0, 0, width, height);
   bitmap.close();
   return new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(
@@ -24,10 +33,11 @@ async function dataUrlToWebP(dataUrl: string, quality = 0.85): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
+      const { width, height } = clampDimensions(img.naturalWidth, img.naturalHeight);
       const canvas = document.createElement("canvas");
-      canvas.width = img.naturalWidth;
-      canvas.height = img.naturalHeight;
-      canvas.getContext("2d")!.drawImage(img, 0, 0);
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext("2d")!.drawImage(img, 0, 0, width, height);
       const result = canvas.toDataURL("image/webp", quality);
       resolve(result);
     };
