@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { Capacitor } from "@capacitor/core";
 import AppSidebar from "@/components/common/AppSidebar";
 import LoadingScreen from "@/components/common/LoadingScreen";
 import { useAuth } from "@/providers/AuthProvider";
@@ -488,7 +489,7 @@ export default function ProfilePage() {
                     {isOwnProfile ? "Aun no tienes planes publicados." : "No hay planes publicos."}
                   </p>
                 ) : (
-                  <PlanGrid plans={plans} onPlanClick={(planId) => router.push(`/plans/${planId}`)} />
+                  <PlanGrid plans={plans} onPlanClick={(planId) => router.push(Capacitor.isNativePlatform() ? `/plans/static?id=${planId}` : `/plans/${planId}`)} />
                 )
               ) : loadingSaved ? (
                 <div className="flex justify-center py-[var(--space-6)]">
@@ -499,7 +500,7 @@ export default function ProfilePage() {
                   Aun no has guardado ningun plan.
                 </p>
               ) : (
-                <PlanGrid plans={savedPlans} onPlanClick={(planId) => router.push(`/plans/${planId}`)} />
+                <PlanGrid plans={savedPlans} onPlanClick={(planId) => router.push(Capacitor.isNativePlatform() ? `/plans/static?id=${planId}` : `/plans/${planId}`)} />
               )}
             </div>
           </div>

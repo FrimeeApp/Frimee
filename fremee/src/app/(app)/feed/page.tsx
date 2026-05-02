@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import NextImage from "next/image";
 const EmojiMartPicker = dynamic(() => import("@emoji-mart/react"), { ssr: false });
 import Link from "next/link";
+import { Capacitor } from "@capacitor/core";
 import PlaneIcon from "@/components/ui/PlaneIcon";
 import { useFollow } from "@/hooks/useFollow";
 import { useToast } from "@/components/ui/Toaster";
@@ -1949,13 +1950,14 @@ function FeedCard({
                     <button
                       type="button"
                       className={`${mobileSaveButtonClass} ${saved ? "text-primary-token" : ""}`}
-                      onClick={(e) => { e.stopPropagation(); handleToggleSave(); }}
+                      onClick={(e) => { e.stopPropagation(); void handleToggleSave(); }}
+                      disabled={!currentUserId}
                       aria-label={saved ? "Quitar guardado" : "Guardar"}
                     >
                       <BookmarkIcon size={18} />
                     </button>
                     <Link
-                      href={`/plan/${post.plan.id}`}
+                      href={Capacitor.isNativePlatform() ? `/plan/static?id=${post.plan.id}` : `/plan/${post.plan.id}`}
                       onClick={(e) => e.stopPropagation()}
                       className="flex items-center gap-1 text-[13px] font-[700] text-muted transition-colors hover:text-primary-token"
                     >
@@ -1973,7 +1975,8 @@ function FeedCard({
 
         {/* Image post in Twitter-like mobile layout */}
         {post.hasImage && post.coverImage && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center overflow-y-auto bg-app px-[max(12px,env(safe-area-inset-left))] py-4">
+          <>
+          <div className="absolute inset-0 z-10 flex items-center justify-center overflow-y-auto bg-app px-[max(12px,env(safe-area-inset-left))] pt-4 pb-[56px]">
             <div className="w-full max-w-[560px] text-app">
               <div className="flex items-start gap-3">
                 <Link href={`/profile/${post.plan.ownerUserId}`} onClick={(e) => e.stopPropagation()} className="shrink-0">
@@ -2099,6 +2102,7 @@ function FeedCard({
                       type="button"
                       className={mobileActionButtonClass}
                       onClick={(e) => { e.stopPropagation(); onLikeToggle(); }}
+                      onTouchStart={(e) => e.stopPropagation()}
                       disabled={!currentUserId || likeLoading}
                       aria-label={liked ? "Quitar like" : "Dar like"}
                     >
@@ -2109,6 +2113,7 @@ function FeedCard({
                       type="button"
                       className={mobileActionButtonClass}
                       onClick={(e) => { e.stopPropagation(); openCommentsModal(); }}
+                      onTouchStart={(e) => e.stopPropagation()}
                       aria-label="Comentarios"
                     >
                       <svg viewBox="0 0 24 24" fill="currentColor" className="size-[18px]" aria-hidden="true">
@@ -2119,14 +2124,17 @@ function FeedCard({
                     <button
                       type="button"
                       className={`${mobileSaveButtonClass} ${saved ? "text-primary-token" : ""}`}
-                      onClick={(e) => { e.stopPropagation(); handleToggleSave(); }}
+                      onClick={(e) => { e.stopPropagation(); void handleToggleSave(); }}
+                      onTouchStart={(e) => e.stopPropagation()}
+                      disabled={!currentUserId}
                       aria-label={saved ? "Quitar guardado" : "Guardar"}
                     >
                       <BookmarkIcon size={18} />
                     </button>
                     <Link
-                      href={`/plan/${post.plan.id}`}
+                      href={Capacitor.isNativePlatform() ? `/plan/static?id=${post.plan.id}` : `/plan/${post.plan.id}`}
                       onClick={(e) => e.stopPropagation()}
+                      onTouchStart={(e) => e.stopPropagation()}
                       className="flex items-center gap-1 text-[13px] font-[700] text-muted transition-colors hover:text-primary-token"
                     >
                       Ver plan
@@ -2139,6 +2147,7 @@ function FeedCard({
               </div>
             </div>
           </div>
+          </>
         )}
       </div>
 
@@ -2337,7 +2346,7 @@ function FeedCard({
                   </button>
                 )}
                 <Link
-                  href={`/plan/${post.plan.id}`}
+                  href={Capacitor.isNativePlatform() ? `/plan/static?id=${post.plan.id}` : `/plan/${post.plan.id}`}
                   className="ml-auto flex items-center gap-1 text-[14px] font-[700] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
                 >
                   Ver plan
@@ -2429,7 +2438,7 @@ function FeedCard({
                   <BookmarkIcon size={24} />
                 </button>
                 <Link
-                  href={`/plan/${post.plan.id}`}
+                  href={Capacitor.isNativePlatform() ? `/plan/static?id=${post.plan.id}` : `/plan/${post.plan.id}`}
                   className="ml-auto flex items-center gap-1 text-[14px] font-[700] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
                 >
                   Ver plan
