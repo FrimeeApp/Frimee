@@ -261,7 +261,23 @@ function Skeleton({ className, style }: { className?: string; style?: React.CSSP
 export default function PlanPostClient() {
   const params = useParams();
   const router = useRouter();
-  const planId = Number(params.id);
+  const rawId = params.id as string;
+  const [planId, setPlanId] = useState<number>(() => {
+    if (rawId === "static") {
+      const q = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("id") : null;
+      return Number(q ?? 0);
+    }
+    return Number(rawId);
+  });
+
+  useEffect(() => {
+    if (rawId === "static") {
+      const q = new URLSearchParams(window.location.search).get("id");
+      setPlanId(Number(q ?? 0));
+    } else {
+      setPlanId(Number(rawId));
+    }
+  }, [rawId]);
 
   const [post, setPost] = useState<PostDoc | null>(null);
   const [loading, setLoading] = useState(true);
