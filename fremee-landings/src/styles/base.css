@@ -344,13 +344,13 @@
     display: grid;
     justify-items: center;
     min-height: 88dvh;
-    padding: clamp(5rem, 10vh, 8rem) 1rem 0;
+    padding: clamp(8rem, 16vh, 13rem) 1rem 0;
     text-align: center;
   }
 
   .v3-hero-copy h1 {
     margin: 0.5rem 0 0;
-    color: var(--v3-purple);
+    color: var(--v3-ink);
     font-family: var(--font-sans);
     max-width: min(100%, 11em);
     font-size: clamp(3rem, min(5vw, 8.5vh), 5.25rem);
@@ -536,6 +536,26 @@
     width: clamp(20rem, 42vw, 44rem);
   }
 
+  .v3-product-screenshot-wrap {
+    justify-self: center;
+    width: fit-content;
+    max-width: min(100%, clamp(18rem, 32vw, 27rem));
+    border: 8px solid #000;
+    border-radius: clamp(1.25rem, 2vw, 1.8rem);
+    background: var(--v3-card-bg);
+    padding: 0;
+    box-shadow: 0 24px 80px rgb(28 28 34 / 0.14);
+  }
+
+  .v3-product-screenshot {
+    display: block;
+    width: auto;
+    max-width: 100%;
+    height: auto;
+    max-height: min(72vh, 46rem);
+    border-radius: clamp(0.9rem, 1.6vw, 1.35rem);
+  }
+
   .v3-qr {
     justify-self: center;
     width: min(68vw, 21rem);
@@ -565,38 +585,46 @@
 
   /* ── V3 Redesigned Sections ───────────────────── */
 
-  /* Insight dark card — dark in light mode, purple-tinted in dark mode */
-  .v3-insight-dark {
-    background: var(--v3-ink);
-    border-radius: clamp(1.5rem, 3vw, 2.5rem);
-    padding: clamp(3rem, 6vw, 5rem);
+  .v3-insight-open {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
     gap: clamp(2rem, 5vw, 6rem);
-    align-items: center;
+    align-items: end;
+    border-bottom: 1px solid var(--v3-border-strong);
+    padding-bottom: clamp(2.5rem, 6vh, 4.5rem);
   }
 
-  .v3-insight-dark h2 {
+  .v3-insight-open h2 {
     max-width: none !important;
-    color: #ffffff !important;
     font-size: clamp(2.5rem, 5vw, 5.5rem) !important;
     margin-top: 0.25rem !important;
   }
 
-  .v3-insight-quote-mark {
-    line-height: 0.6;
-    color: var(--v3-purple);
-    font-size: 7rem;
-    font-weight: 900;
-    opacity: 0.45;
-    margin-bottom: 0.25rem;
-  }
-
   .v3-insight-statement {
-    color: var(--v3-accent-soft);
+    color: var(--v3-heading);
     font-size: clamp(1.5rem, 3vw, 3rem);
     font-weight: 800;
     line-height: 1.2;
+  }
+
+  .v3-insight-pain-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.7rem;
+    margin-top: clamp(1.5rem, 3vh, 2.25rem);
+  }
+
+  .v3-insight-pain-row span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    border: 1px solid var(--v3-border-strong);
+    border-radius: 999px;
+    background: var(--v3-card-alt);
+    padding: 0.75rem 0.95rem;
+    color: var(--v3-heading);
+    font-size: clamp(0.9rem, 1.5vw, 1.05rem);
+    font-weight: 750;
   }
 
   /* Value prop cards */
@@ -648,7 +676,7 @@
   /* How it works steps */
   .v3-steps-grid {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     gap: 1rem;
     margin-top: clamp(2rem, 4vh, 3.5rem);
     position: relative;
@@ -755,6 +783,14 @@
     margin-top: clamp(2rem, 4vh, 3.5rem);
   }
 
+  .v3-compare-block {
+    margin-top: clamp(4rem, 9vh, 7rem);
+  }
+
+  .v3-compare-grid-compact {
+    margin-top: clamp(1.5rem, 3vh, 2.5rem);
+  }
+
   .v3-compare-card {
     border-radius: 1.5rem;
     padding: 2rem;
@@ -848,10 +884,6 @@
     position: relative;
     z-index: 2;
     padding: clamp(6rem, 14vh, 11rem) 0;
-  }
-
-  .v3-kicker-emph {
-    color: var(--v3-emph-kicker);
   }
 
   .v3-demo-heading {
@@ -1123,9 +1155,8 @@
     border: 1px solid color-mix(in srgb, var(--v3-purple) 18%, transparent);
     border-radius: 2rem;
     padding: clamp(2.5rem, 5vw, 4.5rem);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+    display: grid;
+    align-content: space-between;
     gap: 2rem;
   }
 
@@ -1133,6 +1164,42 @@
     font-size: clamp(1.75rem, 4vw, 3.5rem) !important;
     max-width: none !important;
     margin-top: 0.75rem !important;
+  }
+
+  .v3-community-feedback {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(20rem, 1.1fr);
+    gap: clamp(2rem, 5vw, 5rem);
+    align-items: stretch;
+  }
+
+  .v3-community-copy {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+  }
+
+  .v3-social-cards-compact {
+    grid-template-columns: 1fr;
+    margin-top: clamp(1.75rem, 4vh, 3rem);
+  }
+
+  .v3-feedback-action {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .v3-feedback-icon {
+    display: flex;
+    width: 3.5rem;
+    height: 3.5rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 1rem;
+    background: color-mix(in srgb, var(--v3-purple) 14%, var(--v3-section-bg));
+    color: var(--v3-purple);
   }
 
   .v3-feedback-mail {
@@ -1754,12 +1821,6 @@
     background: color-mix(in srgb, var(--v3-purple) 5%, var(--v3-card-bg));
   }
 
-  /* ── Dark mode: insight card differentiation ── */
-  .dark .v3-insight-dark {
-    background: color-mix(in srgb, var(--v3-purple) 12%, #1e1e24);
-    border: 1px solid color-mix(in srgb, var(--v3-purple) 22%, transparent);
-  }
-
   /* ── Dark mode: product section bg ─────────── */
   .dark .v3-product {
     background:
@@ -1840,13 +1901,15 @@
   }
 
   .v3-product-grid .v3-hero-video,
+  .v3-product-screenshot-wrap,
   .v3-qr {
     justify-self: center;
   }
 
-  .v3-insight-dark {
+  .v3-insight-open {
     grid-template-columns: 1fr;
     gap: 2rem;
+    align-items: start;
   }
 
   .v3-value-grid {
@@ -1877,13 +1940,16 @@
     grid-template-columns: 1fr;
   }
 
+  .v3-community-feedback {
+    grid-template-columns: 1fr;
+  }
+
   .v3-feature-cards {
     grid-template-columns: 1fr;
   }
 
   .v3-feedback-card {
-    flex-direction: column;
-    align-items: flex-start;
+    align-content: start;
   }
 
   .v3-testimonials-layout {
