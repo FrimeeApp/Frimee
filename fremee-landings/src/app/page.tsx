@@ -3,16 +3,12 @@ import { APP_REGISTER_URL } from "@/config/links";
 import ScrollEffects from "@/components/landing/ScrollEffects";
 import PhoneMockup from "@/components/landing/PhoneMockup";
 import ValueCarousel from "@/components/landing/ValueCarousel";
+import FlowStepper from "@/components/landing/FlowStepper";
 import { AnimatedTestimonials } from "@/components/blocks/animated-testimonials";
-import { FaXTwitter, FaInstagram } from "react-icons/fa6";
 import { PricingSection, type Plan } from "@/components/ui/pricing";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { Footer7 } from "@/components/ui/footer-7";
 import {
-  Plus,
-  UserPlus,
-  CalendarCheck,
-  PartyPopper,
   MapPin,
   Receipt,
   Images,
@@ -35,13 +31,6 @@ const problemItems = [
   { icon: WalletCards, label: "Pagos desordenados" },
 ];
 
-
-const flowSteps = [
-  { step: "01", icon: Plus, title: "Crear", desc: "Nuevo plan en segundos" },
-  { step: "02", icon: UserPlus, title: "Invitar", desc: "Link directo al grupo" },
-  { step: "03", icon: CalendarCheck, title: "Organizar", desc: "Gastos, tickets e ideas" },
-  { step: "04", icon: PartyPopper, title: "Disfrutar", desc: "Sin estrés" },
-];
 
 const featureItems = [
   { icon: MapPin, title: "Itinerario" },
@@ -227,19 +216,7 @@ export default function LandingV3Page() {
       <section id="como-funciona" className="v3-section v3-section-alt v3-animate-section">
         <div className="v3-section-inner">
           <h2 className="v3-ac">Cuatro pasos, cero complicaciones.</h2>
-          <div className="v3-steps-grid">
-            {flowSteps.map((s) => {
-              const Icon = s.icon;
-              return (
-                <div key={s.step} className="v3-step-card v3-ac">
-                  <div className="v3-step-number">{s.step}</div>
-                  <Icon size={22} color="#6048e8" strokeWidth={2} />
-                  <h3>{s.title}</h3>
-                  <p>{s.desc}</p>
-                </div>
-              );
-            })}
-          </div>
+          <FlowStepper />
         </div>
       </section>
 
@@ -351,47 +328,25 @@ export default function LandingV3Page() {
       {/* ── 8. Comunidad y feedback ──────────────────── */}
       <section className="v3-section v3-section-alt v3-animate-section">
         <div className="v3-section-inner">
-          <div className="v3-community-feedback">
-            <div className="v3-community-copy">
-              <h2 className="v3-ac">Estamos construyendo esto contigo.</h2>
-              <div className="v3-social-cards v3-social-cards-compact">
-                <a
-                  href="https://twitter.com/frimeeapp"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="v3-social-card v3-ac"
-                >
-                  <div className="v3-social-card-icon">
-                    <FaXTwitter size={20} className="v3-icon-x" />
-                  </div>
-                  <div>
-                    <p className="v3-social-card-name">Twitter / X</p>
-                    <p className="v3-social-card-handle">@frimeeapp</p>
-                  </div>
-                </a>
-                <a
-                  href="https://instagram.com/frimeeapp"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="v3-social-card v3-ac"
-                >
-                  <div className="v3-social-card-icon">
-                    <FaInstagram size={20} color="#E1306C" />
-                  </div>
-                  <div>
-                    <p className="v3-social-card-name">Instagram</p>
-                    <p className="v3-social-card-handle">@frimeeapp</p>
-                  </div>
-                </a>
-              </div>
-            </div>
-            <div className="v3-feedback-block v3-ac">
-              <p className="v3-feedback-subtitle">
-                ¿Ideas o problemas? Queremos escucharte.
-              </p>
-              <a className="v3-feedback-mail-row" href="mailto:contact@frimee.app">
-                <Mail size={18} strokeWidth={2} />
-                contact@frimee.app
+          <div className="v3-community-header v3-ac">
+            <h2>Estamos construyendo esto contigo.</h2>
+            <p className="v3-community-desc">¿Ideas o problemas? Queremos escucharte.</p>
+          </div>
+          <div className="v3-community-contacts v3-ac">
+            <a className="v3-feedback-mail-row" href="mailto:contact@frimee.app">
+              <Mail size={18} strokeWidth={2} />
+              contact@frimee.app
+            </a>
+            <div className="v3-community-socials">
+              <a href="https://twitter.com/frimeeapp" target="_blank" rel="noreferrer" className="v3-feedback-mail-row">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/images/x_icon.png" alt="X" width={18} height={18} style={{ objectFit: "contain" }} />
+                @frimeeapp
+              </a>
+              <a href="https://instagram.com/frimeeapp" target="_blank" rel="noreferrer" className="v3-feedback-mail-row">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/images/instagram_icon.png" alt="Instagram" width={18} height={18} style={{ objectFit: "contain" }} />
+                @frimeeapp
               </a>
             </div>
           </div>
