@@ -10,6 +10,7 @@ gsap.registerPlugin(ScrollTrigger);
 export default function V3ScrollEffects() {
   useEffect(() => {
     const lenis = new Lenis({ autoRaf: false });
+    let onLoad: (() => void) | null = null;
 
     const onRaf = (time: number) => lenis.raf(time * 1000);
     gsap.ticker.add(onRaf);
@@ -21,18 +22,18 @@ export default function V3ScrollEffects() {
       const mockup = document.querySelector<HTMLElement>(".v3-hero-mockup");
       const shell = document.querySelector<HTMLElement>(".v3-hero-shell");
 
-      if (!mockup || !shell) return;
-
-      ScrollTrigger.create({
-        trigger: mockup,
-        start: "bottom bottom",
-        endTrigger: shell,
-        end: "bottom bottom",
-        pin: true,
-        pinSpacing: false,
-        anticipatePin: 1,
-        invalidateOnRefresh: true,
-      });
+      if (mockup && shell) {
+        ScrollTrigger.create({
+          trigger: mockup,
+          start: "bottom bottom",
+          endTrigger: shell,
+          end: "bottom bottom",
+          pin: true,
+          pinSpacing: false,
+          anticipatePin: 1,
+          invalidateOnRefresh: true,
+        });
+      }
 
       if (!reduceMotion) {
         gsap.set(".v3-story-copy", { autoAlpha: 0, y: 70 });
@@ -80,10 +81,15 @@ export default function V3ScrollEffects() {
       }
 
       ScrollTrigger.refresh();
+      onLoad = () => ScrollTrigger.refresh();
+      window.addEventListener("load", onLoad, { once: true });
     });
 
     return () => {
       context.revert();
+      if (onLoad) {
+        window.removeEventListener("load", onLoad);
+      }
       lenis.destroy();
       gsap.ticker.remove(onRaf);
     };

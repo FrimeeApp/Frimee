@@ -70,7 +70,7 @@ export function AnimatedTestimonials({
   if (testimonials.length === 0) return null
 
   return (
-    <section ref={sectionRef} className={`v3-section ${className ?? ""}`}>
+    <section ref={sectionRef} className={`v3-section v3-section-alt ${className ?? ""}`}>
       <div className="v3-section-inner">
         <motion.div
           initial="hidden"

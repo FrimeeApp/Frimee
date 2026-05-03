@@ -6,6 +6,8 @@
 }
 
 :root {
+  --font-inter: "Inter";
+  --font-display-face: "Iowan Old Style";
   --font-sans: var(--font-inter), "Helvetica Neue", Helvetica, Arial, sans-serif;
   --font-display: var(--font-display-face), "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
 

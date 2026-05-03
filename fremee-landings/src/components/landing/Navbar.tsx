@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Image from "next/image";
 import Link from "next/link";
@@ -8,8 +8,8 @@ import { applyThemePreference, cacheThemePreference, type AppThemePreference } f
 
 const navLinks = [
   { href: "#producto", label: "Producto" },
-  { href: "#como-funciona", label: "Cómo funciona" },
-  { href: "#demo", label: "Demo" },
+  { href: "#como-funciona", label: "Como funciona" },
+  { href: "#demo", label: "Pruebalo ahora" },
 ];
 
 function subscribeToThemeClass(onStoreChange: () => void) {
@@ -57,9 +57,6 @@ export default function Navbar() {
               height={20}
               className="absolute inset-0 h-5 w-5 object-contain opacity-0 transition-opacity duration-200 dark:opacity-100"
             />
-          </span>
-          <span className="[font-family:var(--font-display-face)] text-xl font-normal leading-none tracking-[0.01em]">
-            Frimee
           </span>
         </Link>
 
