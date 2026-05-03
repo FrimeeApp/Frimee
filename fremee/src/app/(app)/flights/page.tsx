@@ -10,7 +10,7 @@ import {
 } from "@/services/api/endpoints/wallet.endpoint";
 import type { PlanTicket } from "@/services/api/endpoints/wallet.endpoint";
 import { flightProgressFromPosition, flightProgressFromTime, AIRPORTS } from "@/lib/airports";
-import { buildOpenSkyStatesUrl } from "@/config/external";
+import { buildInternalApiUrl, buildOpenSkyStatesUrl } from "@/config/external";
 
 // ── Time-of-day theming ───────────────────────────────────────────────────────
 
@@ -121,7 +121,7 @@ export default function FlightsPage() {
         if (ticket.to_label)   params.set("to",   ticket.to_label);
         if (ticket.starts_at)  params.set("starts_at", ticket.starts_at);
         if (ticket.ends_at)    params.set("ends_at",   ticket.ends_at ?? "");
-        const res = await fetch(`/api/flights/track?${params}`);
+        const res = await fetch(buildInternalApiUrl(`/api/flights/track?${params}`));
         if (!res.ok) return;
         const pos = await res.json() as FlightPosition;
         setPositions(prev => ({ ...prev, [pos.callsign]: pos }));

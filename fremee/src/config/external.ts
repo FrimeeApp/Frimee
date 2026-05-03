@@ -1,4 +1,5 @@
 import { DEFAULT_LIVEKIT_URL, DEFAULT_SUPABASE_PROFILE_IMAGES_BUCKET } from "@/config/app";
+import { Capacitor } from "@capacitor/core";
 
 export const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar";
 export const GOOGLE_CALENDAR_API_BASE_URL = "https://www.googleapis.com/calendar/v3";
@@ -23,6 +24,23 @@ export function resolveMailboxUrl(email: string): string | null {
 
 export function getLivekitUrl() {
   return process.env.NEXT_PUBLIC_LIVEKIT_URL ?? DEFAULT_LIVEKIT_URL;
+}
+
+export function getWebAppUrl() {
+  return process.env.NEXT_PUBLIC_WEB_APP_URL?.replace(/\/+$/, "") ?? null;
+}
+
+export function buildInternalApiUrl(path: string) {
+  if (!Capacitor.isNativePlatform()) {
+    return path;
+  }
+
+  const webAppUrl = getWebAppUrl();
+  if (!webAppUrl) {
+    throw new Error("Falta NEXT_PUBLIC_WEB_APP_URL para llamadas API desde la app nativa.");
+  }
+
+  return `${webAppUrl}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
 export function getProfileImagesBucket() {

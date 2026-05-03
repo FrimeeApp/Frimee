@@ -729,7 +729,7 @@ export default function PlanDetailPage() {
             {/* Back button */}
             <button
               onClick={() => router.back()}
-              className="absolute left-[var(--page-margin-x)] top-[calc(env(safe-area-inset-top)+var(--space-4))] flex h-9 w-9 items-center justify-center rounded-full border border-app bg-surface text-app shadow-elev-3 transition-colors hover:bg-surface-2 md:top-[var(--space-6)]"
+              className="absolute left-[var(--page-margin-x)] top-[calc(env(safe-area-inset-top)+var(--space-4))] z-20 flex h-9 w-9 items-center justify-center rounded-full border border-app bg-surface text-app shadow-elev-3 transition-colors hover:bg-surface-2 md:top-[var(--space-6)]"
             >
               <BackIcon className="size-[20px]" />
             </button>
@@ -751,7 +751,7 @@ export default function PlanDetailPage() {
             )}
 
             {/* Title & meta */}
-            <div className="absolute bottom-0 left-0 right-0 px-[var(--page-margin-x)] pb-[var(--space-4)]">
+            <div className="absolute bottom-0 left-0 right-0 z-10 px-[var(--page-margin-x)] pb-[var(--space-4)]">
               <h1 className="[font-family:var(--font-display-face)] text-[clamp(24px,5vw,36px)] font-[var(--fw-medium)] leading-[1.1] tracking-[-0.01em] text-white md:max-w-[70%]">
                 {plan.titulo}
               </h1>

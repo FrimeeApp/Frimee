@@ -15,8 +15,15 @@ export function PollCreatorModal({ onClose, onCreate }: PollCreatorModalProps) {
   const canCreate = question.trim().length > 0 && options.filter((o) => o.trim()).length >= 2;
 
   return (
-    <div data-closing={isClosing ? "true" : "false"} className="app-modal-overlay absolute inset-0 z-50 flex items-end justify-center md:items-center" onClick={requestClose}>
-      <div className="app-modal-panel w-full max-w-[420px] rounded-t-[20px] bg-app p-[var(--space-5)] md:rounded-[16px]" onClick={(e) => e.stopPropagation()}>
+    <div
+      data-closing={isClosing ? "true" : "false"}
+      className="app-modal-overlay absolute inset-0 z-50 flex items-end justify-center px-[var(--space-4)] pb-[max(var(--space-4),env(safe-area-inset-bottom))] pt-[max(var(--space-4),env(safe-area-inset-top))] md:items-center"
+      onClick={requestClose}
+    >
+      <div
+        className="app-modal-panel max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-2*var(--space-4))] w-full max-w-[420px] overflow-y-auto rounded-t-[20px] bg-app p-[var(--space-5)] md:rounded-[16px]"
+        onClick={(e) => e.stopPropagation()}
+      >
         <p className="mb-[var(--space-4)] text-body font-[var(--fw-semibold)] text-app">Nueva encuesta</p>
         <input
           value={question}

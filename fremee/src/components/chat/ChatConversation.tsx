@@ -2768,10 +2768,10 @@ function PollBubble({ msg, isMe, onVote }: { msg: MensajeRow; isMe: boolean; onV
   const total = Object.values(votes).reduce((a, b) => a + b, 0);
 
   return (
-    <div className="w-[260px]">
+    <div className="w-full max-w-[min(260px,calc(100vw-96px))] min-w-0">
       <div className="mb-[10px] flex items-center gap-[6px]">
         <PollIcon className="size-[14px] shrink-0 opacity-60" />
-        <p className="text-body-sm font-[var(--fw-semibold)]">{poll.question}</p>
+        <p className="min-w-0 whitespace-normal break-words text-body-sm font-[var(--fw-semibold)]">{poll.question}</p>
       </div>
       <div className="space-y-[6px]">
         {poll.options.map((opt, idx) => {
@@ -2796,14 +2796,14 @@ function PollBubble({ msg, isMe, onVote }: { msg: MensajeRow; isMe: boolean; onV
                     : selected ? "rgba(99,102,241,0.65)" : "rgba(99,102,241,0.35)",
                 }}
               />
-              <div className="relative flex items-center justify-between gap-2">
-                <div className="flex items-center gap-[6px]">
+              <div className="relative flex min-w-0 items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-[6px]">
                   {selected && (
                     <Check className="size-[13px] shrink-0" strokeWidth={2.5} style={{ color: isMe ? "rgba(255,255,255,0.9)" : "var(--text-primary)" }} aria-hidden />
                   )}
-                  <span className="text-body-sm">{opt}</span>
+                  <span className="min-w-0 whitespace-normal break-words text-body-sm">{opt}</span>
                 </div>
-                <span className={`text-[14px] ${isMe ? "text-white/60" : "text-muted"}`}>{pct}%</span>
+                <span className={`shrink-0 text-[14px] ${isMe ? "text-white/60" : "text-muted"}`}>{pct}%</span>
               </div>
             </button>
           );
