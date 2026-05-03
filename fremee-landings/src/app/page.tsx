@@ -3,23 +3,19 @@ import { APP_REGISTER_URL } from "@/config/links";
 import ScrollEffects from "@/components/landing/ScrollEffects";
 import PhoneMockup from "@/components/landing/PhoneMockup";
 import ValueCarousel from "@/components/landing/ValueCarousel";
+import FlowStepper from "@/components/landing/FlowStepper";
+import WaitlistSection from "@/components/landing/WaitlistSection";
 import { AnimatedTestimonials } from "@/components/blocks/animated-testimonials";
-import { FaXTwitter, FaInstagram } from "react-icons/fa6";
 import { PricingSection, type Plan } from "@/components/ui/pricing";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { Footer7 } from "@/components/ui/footer-7";
 import {
-  Plus,
-  UserPlus,
-  CalendarCheck,
-  PartyPopper,
   MapPin,
   Receipt,
   Images,
   MessageSquare,
   Check,
   X,
-  Mail,
   MessageCircle,
   ReceiptText,
   QrCode,
@@ -35,13 +31,6 @@ const problemItems = [
   { icon: WalletCards, label: "Pagos desordenados" },
 ];
 
-
-const flowSteps = [
-  { step: "01", icon: Plus, title: "Crear", desc: "Nuevo plan en segundos" },
-  { step: "02", icon: UserPlus, title: "Invitar", desc: "Link directo al grupo" },
-  { step: "03", icon: CalendarCheck, title: "Organizar", desc: "Gastos, tickets e ideas" },
-  { step: "04", icon: PartyPopper, title: "Disfrutar", desc: "Sin estrés" },
-];
 
 const featureItems = [
   { icon: MapPin, title: "Itinerario" },
@@ -99,7 +88,6 @@ const pricingPlans: Plan[] = [
       { text: "Grupos de hasta 5 personas" },
       { text: "Chat del plan" },
       { text: "División de gastos básica" },
-      { text: "Soporte de comunidad", tooltip: "Acceso a nuestra comunidad de usuarios en Discord" },
     ],
     btn: { text: "Empezar gratis", href: APP_REGISTER_URL },
   },
@@ -114,7 +102,6 @@ const pricingPlans: Plan[] = [
       { text: "Gestión de tickets y entradas", tooltip: "Guarda y comparte entradas de eventos con el grupo" },
       { text: "Fotos y recuerdos del viaje" },
       { text: "Historial completo de gastos" },
-      { text: "Soporte prioritario", tooltip: "Respuesta garantizada en menos de 24 horas" },
     ],
     btn: { text: "Empezar con Pro", href: APP_REGISTER_URL },
   },
@@ -128,7 +115,6 @@ const pricingPlans: Plan[] = [
       { text: "IA para sugerencias de planes", tooltip: "Recibe ideas personalizadas para tu próxima aventura" },
       { text: "Exportar planes en PDF" },
       { text: "Integraciones con calendarios" },
-      { text: "Soporte 24/7", tooltip: "Chat directo con el equipo de Frimee en cualquier momento" },
     ],
     btn: { text: "Empezar con Max", href: APP_REGISTER_URL },
   },
@@ -137,11 +123,11 @@ const pricingPlans: Plan[] = [
 const faqItems = [
   {
     q: "¿Es gratis?",
-    a: "Sí, Frimee es completamente gratuito durante la beta. Queremos que lo pruebes sin compromisos.",
+    a: "Sí, Frimee es completamente gratuito. Las suscripciones ofrecen funcionalidades adicionales y son opcionales.",
   },
   {
     q: "¿Cómo se usa?",
-    a: "Descarga la app, crea un plan e invita a tus amigos con un enlace. En segundos podéis empezar a organizar.",
+    a: "Descarga la app, crea un plan e invita a tus amigos. En segundos podéis empezar a organizar.",
   },
   {
     q: "¿Está en móvil?",
@@ -149,7 +135,7 @@ const faqItems = [
   },
   {
     q: "¿Cómo envío feedback?",
-    a: "Desde dentro de la app puedes enviar sugerencias directamente. También puedes escribirnos a hola@frimee.app.",
+    a: "Puedes escribirnos directamente a contact@frimee.es.",
   },
 ];
 
@@ -159,7 +145,7 @@ export default function LandingV3Page() {
       <ScrollEffects />
       <Navbar />
 
-      {/* ── 1. Hero ──────────────────────────────────── */}
+      {/* -- 1. Hero ------------------------------------ */}
       <section className="v3-hero">
         <div className="v3-hero-shell">
           <div className="v3-hero-copy">
@@ -185,69 +171,67 @@ export default function LandingV3Page() {
         </div>
       </section>
 
-      {/* ── 2. Insight ───────────────────────────────── */}
+      {/* -- 2. Insight --------------------------------- */}
       <section className="v3-section v3-animate-section">
         <div className="v3-section-inner">
           <div className="v3-insight-open v3-ac">
             <div>
               <h2>
-                El problema
+                El&nbsp;problema
                 <br />
-                no es la gente.
+                no&nbsp;es&nbsp;la&nbsp;gente.
               </h2>
             </div>
-            <div>
+            <div className="v3-insight-copy">
               <p className="v3-insight-statement">
                 Es tener mensajes, pagos y decisiones repartidos en sitios&nbsp;distintos.
               </p>
-              <div className="v3-insight-pain-row" aria-label="Problemas habituales">
-                {problemItems.map((item) => (
-                  <span key={item.label}>
-                    <item.icon size={18} strokeWidth={2.25} />
-                    {item.label}
-                  </span>
-                ))}
-              </div>
+            </div>
+            <div className="v3-insight-pain-row" aria-label="Problemas habituales">
+              {problemItems.map((item) => (
+                <span key={item.label}>
+                  <item.icon size={18} strokeWidth={2.25} />
+                  {item.label}
+                </span>
+              ))}
             </div>
           </div>
         </div>
       </section>
 
-      {/* ── 3. Propuesta de valor ─────────────────────── */}
+      {/* -- 3. Propuesta de valor ----------------------- */}
       <section className="v3-section v3-animate-section">
         <div className="v3-section-inner">
           <div className="v3-value-split">
             <ValueCarousel />
-            <h2 className="v3-ac">Planes, decisiones y recuerdos en un solo lugar.</h2>
+            <h2 className="v3-ac">
+              Planes, decisiones
+              <br />
+              y recuerdos en un
+              <br />
+              mismo lugar
+            </h2>
           </div>
         </div>
       </section>
 
-      {/* ── 4. Cómo funciona ──────────────────────────── */}
+      {/* -- 4. Cómo funciona ---------------------------- */}
       <section id="como-funciona" className="v3-section v3-section-alt v3-animate-section">
         <div className="v3-section-inner">
-          <h2 className="v3-ac">Cuatro pasos, cero complicaciones.</h2>
-          <div className="v3-steps-grid">
-            {flowSteps.map((s) => {
-              const Icon = s.icon;
-              return (
-                <div key={s.step} className="v3-step-card v3-ac">
-                  <div className="v3-step-number">{s.step}</div>
-                  <Icon size={22} color="#6048e8" strokeWidth={2} />
-                  <h3>{s.title}</h3>
-                  <p>{s.desc}</p>
-                </div>
-              );
-            })}
-          </div>
+          <h2 className="v3-ac v3-section-heading-full">Cuatro pasos, <br/>cero complicaciones.</h2>
+          <FlowStepper />
         </div>
       </section>
 
-      {/* ── 5. Producto y diferenciación ──────────────── */}
+      {/* -- 5. Producto y diferenciación ---------------- */}
       <section id="producto" className="v3-section v3-product v3-animate-section">
         <div className="v3-product-hero-grid">
           <div className="v3-product-hero-content">
-            <h2 className="v3-ac v3-product-heading">Lo importante<br /><span style={{ whiteSpace: "nowrap" }}>del plan, visible.</span></h2>
+            <h2 className="v3-ac v3-product-heading">
+              <span style={{ whiteSpace: "nowrap" }}>Lo importante</span>
+              <br />
+              <span style={{ whiteSpace: "nowrap" }}>del plan, visible.</span>
+            </h2>
             <div className="v3-feature-cards">
               {featureItems.map((fi) => {
                 const Icon = fi.icon;
@@ -272,11 +256,16 @@ export default function LandingV3Page() {
 
         <div className="v3-section-inner">
           <div className="v3-compare-block">
-            <h2 className="v3-ac">¿Por qué Frimee y no lo que ya usas?</h2>
+            <h2 className="v3-ac v3-pricing-heading">
+              ¿Por qué <span className="v3-brand-word">Frimee</span> y no lo que ya usas?
+            </h2>
           </div>
           <div className="v3-compare-grid v3-compare-grid-compact">
             <div className="v3-compare-card muted v3-ac">
-              <p className="v3-compare-card-title">WhatsApp</p>
+              <p className="v3-compare-card-title">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/images/WhatsApp_icon.png" alt="WhatsApp" className="v3-compare-card-logo" />
+              </p>
               {compareItems.whatsapp.map((item) => (
                 <div key={item} className="v3-compare-item">
                   <X size={16} color="#ef4444" strokeWidth={2.5} style={{ flexShrink: 0 }} />
@@ -285,7 +274,10 @@ export default function LandingV3Page() {
               ))}
             </div>
             <div className="v3-compare-card muted v3-ac">
-              <p className="v3-compare-card-title">Excel / Notion</p>
+              <p className="v3-compare-card-title">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/images/excel_icon.png" alt="Excel / Notion" className="v3-compare-card-logo" />
+              </p>
               {compareItems.excel.map((item) => (
                 <div key={item} className="v3-compare-item">
                   <X size={16} color="#ef4444" strokeWidth={2.5} style={{ flexShrink: 0 }} />
@@ -294,10 +286,23 @@ export default function LandingV3Page() {
               ))}
             </div>
             <div className="v3-compare-card highlight v3-ac">
-              <p className="v3-compare-card-title">Frimee</p>
+              <p className="v3-compare-card-title">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/images/logo-frimee-black.png"
+                  alt="Frimee"
+                  className="v3-compare-card-logo v3-compare-frimee-logo-light"
+                />
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/images/logo-frimee.png"
+                  alt="Frimee"
+                  className="v3-compare-card-logo v3-compare-frimee-logo-dark"
+                />
+              </p>
               {compareItems.frimee.map((item) => (
                 <div key={item} className="v3-compare-item">
-                  <Check size={16} color="rgba(255,255,255,0.9)" strokeWidth={2.5} style={{ flexShrink: 0 }} />
+                  <Check size={16} color="currentColor" strokeWidth={2.5} style={{ flexShrink: 0 }} />
                   {item}
                 </div>
               ))}
@@ -306,19 +311,19 @@ export default function LandingV3Page() {
         </div>
       </section>
 
-      {/* ── 6. Testimonios ────────────────────────────── */}
+      {/* -- 6. Testimonios ------------------------------ */}
       <AnimatedTestimonials testimonials={testimonials} />
 
-      {/* ── Pricing ───────────────────────────────────── */}
-      <section className="v3-section v3-pricing-section v3-animate-section">
+      {/* -- Pricing ------------------------------------- */}
+      <section id="precios" className="v3-section v3-pricing-section v3-animate-section">
         <PricingSection
           plans={pricingPlans}
           heading="Simple y transparente."
-          description="Sin sorpresas, sin letra pequeña. Empieza gratis y sube cuando lo necesites."
+          description="Empieza gratis y escala cuando lo necesites."
         />
       </section>
 
-      {/* ── 7. Demo ──────────────────────────────────── */}
+      {/* -- 7. Demo ------------------------------------ */}
       <section id="demo" className="v3-demo-dark v3-animate-section">
         <div className="v3-section-inner">
           <div className="v3-demo-split">
@@ -348,57 +353,8 @@ export default function LandingV3Page() {
         </div>
       </section>
 
-      {/* ── 8. Comunidad y feedback ──────────────────── */}
-      <section className="v3-section v3-section-alt v3-animate-section">
-        <div className="v3-section-inner">
-          <div className="v3-community-feedback">
-            <div className="v3-community-copy">
-              <h2 className="v3-ac">Estamos construyendo esto contigo.</h2>
-              <div className="v3-social-cards v3-social-cards-compact">
-                <a
-                  href="https://twitter.com/frimeeapp"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="v3-social-card v3-ac"
-                >
-                  <div className="v3-social-card-icon">
-                    <FaXTwitter size={20} className="v3-icon-x" />
-                  </div>
-                  <div>
-                    <p className="v3-social-card-name">Twitter / X</p>
-                    <p className="v3-social-card-handle">@frimeeapp</p>
-                  </div>
-                </a>
-                <a
-                  href="https://instagram.com/frimeeapp"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="v3-social-card v3-ac"
-                >
-                  <div className="v3-social-card-icon">
-                    <FaInstagram size={20} color="#E1306C" />
-                  </div>
-                  <div>
-                    <p className="v3-social-card-name">Instagram</p>
-                    <p className="v3-social-card-handle">@frimeeapp</p>
-                  </div>
-                </a>
-              </div>
-            </div>
-            <div className="v3-feedback-block v3-ac">
-              <p className="v3-feedback-subtitle">
-                ¿Ideas o problemas? Queremos escucharte.
-              </p>
-              <a className="v3-feedback-mail-row" href="mailto:contact@frimee.app">
-                <Mail size={18} strokeWidth={2} />
-                contact@frimee.app
-              </a>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── 9. FAQ ───────────────────────────────────── */}
+      <WaitlistSection />
+      {/* -- 8. FAQ ------------------------------------- */}
       <section className="v3-section v3-animate-section">
         <div className="v3-section-inner">
           <h2 className="v3-ac">Preguntas frecuentes</h2>
@@ -415,7 +371,7 @@ export default function LandingV3Page() {
         </div>
       </section>
 
-      {/* ── Footer ────────────────────────────────────── */}
+      {/* -- Footer -------------------------------------- */}
       <Footer7 />
     </main>
   );

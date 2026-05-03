@@ -10,6 +10,7 @@ import {
   type PlanFotoDto,
 } from "@/services/api/repositories/plan-fotos.repository";
 import { Plus, Trash2, Plane, Loader2 } from "lucide-react";
+import { ImageLightbox } from "@/components/ui/ImageLightbox";
 
 type Props = {
   planId: number;
@@ -28,6 +29,7 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, refreshK
   const [uploading, setUploading] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [hoveredId, setHoveredId] = useState<number | null>(null);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -76,6 +78,7 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, refreshK
     try {
       await removePlanFoto({ id: foto.id, userId: currentUserId });
       setFotos((prev) => prev.filter((f) => f.id !== foto.id));
+      setLightboxUrl((prev) => (prev === foto.url ? null : prev));
     } catch (err) {
       console.error("Delete failed:", err);
     } finally {
@@ -101,7 +104,6 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, refreshK
 
   return (
     <div className="px-[var(--page-margin-x)] pt-5 pb-8">
-      {/* Upload button */}
       {isMember && (
         <div className="mb-4 hidden items-center gap-3 md:flex">
           <button
@@ -110,7 +112,7 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, refreshK
             className="flex items-center gap-2 rounded-full border border-app px-4 h-9 text-[14px] font-[600] text-app transition-colors hover:bg-[var(--surface-raised)] disabled:opacity-50"
           >
             <PlusIcon />
-            {uploading ? "Subiendo…" : "Añadir fotos"}
+            {uploading ? "Subiendo..." : "Anadir fotos"}
           </button>
           <input
             ref={fileInputRef}
@@ -123,13 +125,12 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, refreshK
         </div>
       )}
 
-      {/* Grid or empty state */}
       {fotos.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
           <PlaneEmptyIcon />
-          <p className="text-[14px] font-[600] text-muted">Aún no hay fotos</p>
+          <p className="text-[14px] font-[600] text-muted">Aun no hay fotos</p>
           {isMember && (
-            <p className="text-[14px] text-muted opacity-70">¡Sube la primera foto del plan!</p>
+            <p className="text-[14px] text-muted opacity-70">Sube la primera foto del plan</p>
           )}
         </div>
       ) : (
@@ -146,21 +147,37 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, refreshK
                 onMouseEnter={() => isOwn && setHoveredId(foto.id)}
                 onMouseLeave={() => setHoveredId(null)}
               >
-                <div className="relative w-full aspect-square">
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setLightboxUrl(foto.url)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setLightboxUrl(foto.url);
+                    }
+                  }}
+                  className="relative block w-full aspect-square cursor-pointer"
+                >
                   <Image
                     src={foto.url}
                     alt=""
                     fill
                     className="object-cover"
                     sizes="(max-width: 640px) 50vw, 33vw"
+                    unoptimized
+                    referrerPolicy="no-referrer"
                   />
-                  {/* Delete overlay — own photo only */}
                   {isOwn && (isHovered || isDeleting) && (
-                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center transition-opacity">
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/40 transition-opacity">
                       <button
-                        onClick={() => void handleDelete(foto)}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void handleDelete(foto);
+                        }}
                         disabled={isDeleting}
-                        className="flex items-center justify-center size-9 rounded-full bg-white/20 text-white backdrop-blur-sm hover:bg-red-500/80 transition-colors disabled:opacity-50"
+                        className="flex size-9 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-sm transition-colors hover:bg-red-500/80 disabled:opacity-50"
                       >
                         {isDeleting ? (
                           <Loader2 className="size-4 animate-spin" aria-hidden />
@@ -175,6 +192,14 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, refreshK
             );
           })}
         </div>
+      )}
+
+      {lightboxUrl && (
+        <ImageLightbox
+          url={lightboxUrl}
+          imageUrls={fotos.map((foto) => foto.url)}
+          onClose={() => setLightboxUrl(null)}
+        />
       )}
     </div>
   );

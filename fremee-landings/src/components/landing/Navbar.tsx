@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Image from "next/image";
 import Link from "next/link";
@@ -36,8 +36,8 @@ export default function Navbar() {
   }
 
   return (
-    <header className="landing-pill-navbar fixed inset-x-4 top-3 z-50 transition-colors duration-200 sm:inset-x-6 md:inset-x-8">
-      <div className="relative z-10 grid h-14 w-full grid-cols-[auto_1fr] items-center gap-4 px-4 sm:px-6 md:grid-cols-[1fr_auto_1fr] lg:px-8">
+    <header className="landing-pill-navbar fixed inset-x-1.5 top-3 z-50 transition-colors duration-200 sm:inset-x-6 md:inset-x-8">
+      <div className="relative z-10 flex h-14 w-full items-center justify-between gap-2.5 px-2 sm:gap-4 sm:px-6 md:grid md:grid-cols-[1fr_auto_1fr] md:justify-normal lg:px-8">
         <Link
           href="/"
           className="flex items-center gap-2.5 text-black transition-colors duration-200 hover:text-black/70 dark:text-white dark:hover:text-white/70"
@@ -58,9 +58,6 @@ export default function Navbar() {
               className="absolute inset-0 h-5 w-5 object-contain opacity-0 transition-opacity duration-200 dark:opacity-100"
             />
           </span>
-          <span className="[font-family:var(--font-display-face)] text-xl font-normal leading-none tracking-[0.01em]">
-            Frimee
-          </span>
         </Link>
 
         <nav className="hidden items-center justify-center gap-8 md:flex lg:gap-16 xl:gap-20" aria-label="Navegacion principal">
@@ -80,9 +77,9 @@ export default function Navbar() {
           ))}
         </nav>
 
-        <div className="flex min-w-0 items-center justify-end gap-2 sm:gap-3">
+        <div className="flex min-w-0 flex-none flex-nowrap items-center justify-end gap-1 sm:gap-3 md:justify-self-end">
           <label
-            className="group relative inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-[var(--radius-button)] text-black transition-colors duration-200 hover:text-black/60 dark:text-white/88 dark:hover:text-white"
+            className="group relative inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-button)] text-black transition-colors duration-200 hover:text-black/60 dark:text-white/88 dark:hover:text-white sm:h-10 sm:w-10"
             aria-label="Cambiar tema"
           >
             <input
@@ -110,10 +107,10 @@ export default function Navbar() {
           </label>
           <Link
             href={APP_REGISTER_URL}
-            className="group inline-flex h-10 items-center justify-center gap-2 overflow-hidden rounded-[var(--radius-button)] bg-[var(--primary)] px-4 text-sm font-medium text-white transition-colors duration-200 hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]/30 focus-visible:ring-offset-2 dark:text-black sm:px-6"
+            className="group inline-flex h-9 min-w-[5.8rem] shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-[var(--radius-button)] bg-[var(--primary)] px-2.5 text-xs font-medium text-white transition-colors duration-200 hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]/30 focus-visible:ring-offset-2 dark:text-black max-[360px]:min-w-[5.2rem] max-[360px]:px-2 max-[360px]:text-[11px] sm:h-10 sm:min-w-[6.25rem] sm:gap-2 sm:overflow-hidden sm:px-6 sm:text-sm"
           >
             <span>Empezar</span>
-            <span className="w-0 opacity-0 transition-all duration-200 group-hover:w-4 group-hover:opacity-100">
+            <span className="hidden w-0 opacity-0 transition-all duration-200 group-hover:w-4 group-hover:opacity-100 sm:inline-flex">
               <svg
                 aria-hidden="true"
                 className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1"

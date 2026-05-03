@@ -56,6 +56,21 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   const participanteNombre = inCall && "participanteNombre" in callState ? callState.participanteNombre : "";
   const participanteFoto = inCall && "participanteFoto" in callState ? callState.participanteFoto : undefined;
 
+  useEffect(() => {
+    if (!inCall || minimized) return;
+
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousHtmlOverflow;
+    };
+  }, [inCall, minimized]);
+
   return (
     <CallContext.Provider value={{ callState, startCall, joinCall, endCall, minimized, minimize: () => setMinimized(true), expand: () => setMinimized(false) }}>
       {children}

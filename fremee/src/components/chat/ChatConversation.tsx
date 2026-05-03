@@ -37,14 +37,14 @@ import { createGastoEndpoint, getBalancesForPlanEndpoint } from "@/services/api/
 import { promoteToAdminEndpoint, demoteAdminEndpoint, kickMemberEndpoint, leavePlanEndpoint } from "@/services/api/endpoints/plans.endpoint";
 import { callFrimeeAssistant, type FrimeeHistoryEntry } from "@/services/api/endpoints/frimee.endpoint";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
-import { CloseX } from "@/components/ui/CloseX";
+import { ImageLightbox } from "@/components/ui/ImageLightbox";
 import dynamic from "next/dynamic";
 
 const EmojiMartPicker = dynamic(() => import("@emoji-mart/react"), { ssr: false });
 import {
   Trash2, Ban, AlertTriangle, LogOut, ChevronDown, Pencil, Reply, Copy,
   Smile, Forward, Pin, Star, Camera, Send as LucideSend, PlusCircle, Mic,
-  File, Video, Music, BarChart2, Edit, ChevronLeft, ChevronRight, Users,
+  File, Video, Music, BarChart2, Edit, ChevronLeft, Users,
   Phone, Check, Download, Plus, X,
 } from "lucide-react";
 
@@ -1655,7 +1655,7 @@ export function ChatConversation({
       )}
 
       {/* Lightbox */}
-      {lightboxUrl && <Lightbox
+      {lightboxUrl && <ImageLightbox
         url={lightboxUrl}
         imageUrls={messages.filter((m) => m.image_url && !m.image_type?.startsWith("video/")).map((m) => m.image_url!)}
         onClose={() => setLightboxUrl(null)}
@@ -2854,63 +2854,3 @@ export function VideoCallIcon({ className = "size-icon" }: { className?: string 
   return <Video className={className} aria-hidden />;
 }
 
-function Lightbox({ url, imageUrls, onClose }: { url: string; imageUrls: string[]; onClose: () => void }) {
-  const [current, setCurrent] = useState(url);
-  const thumbsRef = useRef<HTMLDivElement>(null);
-
-  const idx = imageUrls.indexOf(current);
-  const hasPrev = idx > 0;
-  const hasNext = idx < imageUrls.length - 1;
-
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-      if (e.key === "ArrowLeft" && hasPrev) setCurrent(imageUrls[idx - 1]);
-      if (e.key === "ArrowRight" && hasNext) setCurrent(imageUrls[idx + 1]);
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [idx, hasPrev, hasNext, imageUrls, onClose]);
-
-  useEffect(() => {
-    const el = thumbsRef.current?.children[idx] as HTMLElement | undefined;
-    el?.scrollIntoView({ inline: "center", behavior: "smooth" });
-  }, [idx]);
-
-  return (
-    <div className="fixed inset-0 z-[200] flex flex-col bg-black" onClick={onClose}>
-      {/* Header */}
-      <div className="flex shrink-0 items-center justify-end p-3" onClick={(e) => e.stopPropagation()}>
-        <button type="button" onClick={onClose} className="rounded-full p-2 text-white hover:bg-white/10">
-          <CloseX className="size-6" />
-        </button>
-      </div>
-
-      {/* Main image */}
-      <div className="relative flex flex-1 items-center justify-center overflow-hidden" onClick={(e) => e.stopPropagation()}>
-        {hasPrev && (
-          <button type="button" onClick={() => setCurrent(imageUrls[idx - 1])} className="absolute left-3 z-10 rounded-full bg-white/10 p-2 text-white hover:bg-white/20">
-            <ChevronLeft className="size-6" aria-hidden />
-          </button>
-        )}
-        <NextImage src={current} alt="Imagen" width={1600} height={1200} className="max-h-full max-w-full object-contain" unoptimized referrerPolicy="no-referrer" />
-        {hasNext && (
-          <button type="button" onClick={() => setCurrent(imageUrls[idx + 1])} className="absolute right-3 z-10 rounded-full bg-white/10 p-2 text-white hover:bg-white/20">
-            <ChevronRight className="size-6" aria-hidden />
-          </button>
-        )}
-      </div>
-
-      {/* Thumbnails */}
-      {imageUrls.length > 1 && (
-        <div ref={thumbsRef} className="flex shrink-0 gap-2 overflow-x-auto scrollbar-hide" style={{ padding: "12px calc(50% - 28px)" }} onClick={(e) => e.stopPropagation()}>
-          {imageUrls.map((u, i) => (
-            <button key={u} type="button" onClick={() => setCurrent(u)} className={`shrink-0 overflow-hidden rounded-[6px] border-2 transition-all ${u === current ? "border-white" : "border-transparent opacity-50 hover:opacity-80"}`} style={{ width: 56, height: 56 }}>
-              <NextImage src={u} alt={`Imagen ${i + 1}`} width={56} height={56} className="size-full object-cover" unoptimized referrerPolicy="no-referrer" />
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
