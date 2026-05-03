@@ -1223,8 +1223,6 @@
   .v3-social-card-icon {
     width: 3rem;
     height: 3rem;
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--v3-purple) 10%, white);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1245,11 +1243,32 @@
   }
 
   /* Feedback card */
+  .v3-community-header {
+    text-align: center;
+    margin-bottom: clamp(2.5rem, 5vh, 4rem);
+  }
+
+  .v3-community-header h2 {
+    font-size: clamp(1.6rem, 3vw, 2.4rem) !important;
+    font-weight: 800 !important;
+    line-height: 1.15 !important;
+    max-width: none !important;
+    white-space: nowrap;
+  }
+
+  .v3-community-desc {
+    color: var(--v3-sub);
+    font-size: 0.95rem;
+    line-height: 1.6;
+    margin: 0.75rem auto 0;
+    max-width: 52ch;
+  }
+
   .v3-community-feedback {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: clamp(2rem, 5vw, 5rem);
-    align-items: center;
+    align-items: start;
   }
 
   .v3-community-copy {
@@ -1267,8 +1286,7 @@
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 2rem;
-    padding-top: clamp(2rem, 5vh, 4rem);
+    gap: 1.5rem;
   }
 
   .v3-feedback-subtitle {
@@ -1294,6 +1312,115 @@
 
   .v3-feedback-mail-row:hover {
     opacity: 0.65;
+  }
+
+  .v3-community-contacts {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: clamp(1.5rem, 3vh, 2.5rem);
+    margin-top: clamp(2rem, 4vh, 3rem);
+  }
+
+  .v3-community-socials {
+    display: flex;
+    gap: clamp(1rem, 3vw, 2rem);
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  /* Flow stepper — horizontal */
+  .v3-stepper-h {
+    display: flex;
+    align-items: flex-start;
+    margin-top: clamp(2rem, 4vh, 3.5rem);
+  }
+
+  .v3-stepper-h-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    flex-shrink: 0;
+    width: clamp(5rem, 14vw, 9rem);
+  }
+
+  .v3-stepper-h-circle {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 999px;
+    border: 1.5px solid var(--v3-border-strong);
+    background: var(--v3-card-bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--v3-sub);
+    transition: background 2s ease, border-color 2s ease, color 2s ease, box-shadow 2s ease;
+    flex-shrink: 0;
+    z-index: 1;
+  }
+
+  .v3-stepper-h-step.active .v3-stepper-h-circle {
+    background: var(--v3-heading);
+    border-color: var(--v3-heading);
+    color: var(--v3-card-bg);
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--v3-heading) 12%, transparent);
+  }
+
+  .v3-stepper-h-step.done .v3-stepper-h-circle {
+    background: var(--v3-purple);
+    border-color: var(--v3-purple);
+    color: #fff;
+    box-shadow: none;
+  }
+
+  .v3-stepper-h-line {
+    flex: 1;
+    height: 1.5px;
+    background: var(--v3-border);
+    margin-top: 1.25rem;
+    border-radius: 1px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .v3-stepper-h-line-fill {
+    height: 100%;
+    background: var(--v3-purple);
+    width: 0%;
+    transition: width 2s ease;
+    border-radius: 1px;
+  }
+
+  .v3-stepper-h-label {
+    margin-top: 0.85rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+
+  .v3-stepper-h-title {
+    font-size: 0.9rem;
+    font-weight: 800;
+    color: var(--v3-heading);
+    margin: 0;
+    transition: opacity 2s ease;
+  }
+
+  .v3-stepper-h-step:not(.active):not(.done) .v3-stepper-h-title {
+    opacity: 0.35;
+  }
+
+  .v3-stepper-h-desc {
+    font-size: 0.8rem;
+    color: var(--v3-sub);
+    margin: 0;
+    line-height: 1.4;
+    transition: opacity 2s ease;
+  }
+
+  .v3-stepper-h-step:not(.active):not(.done) .v3-stepper-h-desc {
+    opacity: 0.25;
   }
 
   /* FAQ accordion */
@@ -1394,19 +1521,23 @@
   }
 
   .v3-testimonials-dot {
-    height: 0.55rem;
+    height: 0.45rem;
+    width: 0.45rem;
     border-radius: 999px;
-    background: rgb(28 28 34 / 0.15);
+    background: rgb(28 28 34 / 0.2);
     border: none;
     cursor: pointer;
-    transition: all 0.3s ease;
-    width: 0.55rem;
     padding: 0;
+    transition: width 0.3s ease, background 0.3s ease;
+  }
+
+  .dark .v3-testimonials-dot {
+    background: rgb(255 255 255 / 0.2);
   }
 
   .v3-testimonials-dot.active {
-    width: 2.5rem;
-    background: var(--v3-purple);
+    width: 2rem;
+    background: var(--v3-heading);
   }
 
   .v3-testimonials-cards {
