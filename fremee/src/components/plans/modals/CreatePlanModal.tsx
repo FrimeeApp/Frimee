@@ -1,12 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent } from "react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { Globe, Lock, Plane, User, Users } from "lucide-react";
+import { FileText, Globe, Lock, Plane, User, Users } from "lucide-react";
 import LocationAutocomplete from "@/components/plans/LocationAutocomplete";
 import { fetchActiveFriends, type PublicUserProfileRow } from "@/services/api/endpoints/users.endpoint";
 import { listChats, type ChatListItem } from "@/services/api/repositories/chat.repository";
+import { FIELD_LINE_CLS } from "@/lib/styles";
+import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
+import { CloseX } from "@/components/ui/CloseX";
+import { ModalFeedback, type ModalFeedbackState } from "@/components/ui/ModalFeedback";
+import { DiscardChangesDialog } from "@/components/ui/DiscardChangesDialog";
 
 export type CreatePlanPayload = {
   title: string;
@@ -264,10 +269,12 @@ function InlineRangeCalendar({
 // ─── Main modal ───────────────────────────────────────────────────────────────
 
 export default function CreatePlanModal({ open, onClose, onCreate, currentUserId, initialValues, mode = "create" }: CreatePlanModalProps) {
+  const { isClosing, requestClose } = useModalCloseAnimation(onClose, open);
   const wasOpenRef = useRef(false);
   const coverInputRef = useRef<HTMLInputElement | null>(null);
   const handleNextRef = useRef<() => void>(() => {});
   const handleSubmitRef = useRef<() => void | Promise<void>>(() => {});
+  const initialSnapshotRef = useRef<string>("");
 
   const [step, setStep] = useState(1);
   const [title, setTitle] = useState("");
@@ -281,6 +288,8 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [feedbackState, setFeedbackState] = useState<ModalFeedbackState | null>(null);
+  const [discardOpen, setDiscardOpen] = useState(false);
   const [friends, setFriends] = useState<PublicUserProfileRow[]>([]);
   const [loadingFriends, setLoadingFriends] = useState(false);
   const [invitedFriendIds, setInvitedFriendIds] = useState<Set<string>>(new Set());
@@ -303,24 +312,68 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
     return true;
   }, [step, location, startDate, endDate, title]);
 
-  const resetForm = () => {
+  const formSnapshot = useMemo(() => JSON.stringify({
+    title,
+    description,
+    location,
+    startDate,
+    endDate,
+    visibility,
+    coverImageUrl,
+    inviteMode,
+    invitedFriendIds: Array.from(invitedFriendIds).sort(),
+    selectedGroupIds: Array.from(selectedGroupIds).sort(),
+  }), [coverImageUrl, description, endDate, inviteMode, invitedFriendIds, location, selectedGroupIds, startDate, title, visibility]);
+
+  const hasProgress = Boolean(coverFile) || step > 1 || (initialSnapshotRef.current !== "" && formSnapshot !== initialSnapshotRef.current);
+
+  const requestDismiss = useCallback(() => {
+    if (saving) return;
+    if (hasProgress) {
+      setDiscardOpen(true);
+      return;
+    }
+    requestClose();
+  }, [hasProgress, requestClose, saving]);
+
+  const resetForm = useCallback(() => {
     const today = new Date();
+    const nextTitle = initialValues?.title ?? "";
+    const nextDescription = initialValues?.description ?? "";
+    const nextLocation = initialValues?.location ?? "";
+    const nextStartDate = initialValues?.startDate ?? toDateInputValue(today);
+    const nextEndDate = initialValues?.endDate ?? toDateInputValue(addDays(today, 1));
+    const nextVisibility = initialValues?.visibility ?? DEFAULT_VISIBILITY;
+    const nextCoverImageUrl = initialValues?.coverImageUrl ?? null;
     setStep(1);
-    setTitle(initialValues?.title ?? "");
-    setDescription(initialValues?.description ?? "");
-    setLocation(initialValues?.location ?? "");
-    setStartDate(initialValues?.startDate ?? toDateInputValue(today));
-    setEndDate(initialValues?.endDate ?? toDateInputValue(addDays(today, 1)));
-    setVisibility(initialValues?.visibility ?? DEFAULT_VISIBILITY);
+    setTitle(nextTitle);
+    setDescription(nextDescription);
+    setLocation(nextLocation);
+    setStartDate(nextStartDate);
+    setEndDate(nextEndDate);
+    setVisibility(nextVisibility);
     setInviteMode(DEFAULT_INVITE_MODE);
-    setCoverImageUrl(initialValues?.coverImageUrl ?? null);
+    setCoverImageUrl(nextCoverImageUrl);
     setCoverFile(null);
     setSaving(false);
     setErrorMsg(null);
     setInvitedFriendIds(new Set());
     setSelectedGroupIds(new Set());
     setInviteTab("friends");
-  };
+    setDiscardOpen(false);
+    initialSnapshotRef.current = JSON.stringify({
+      title: nextTitle,
+      description: nextDescription,
+      location: nextLocation,
+      startDate: nextStartDate,
+      endDate: nextEndDate,
+      visibility: nextVisibility,
+      coverImageUrl: nextCoverImageUrl,
+      inviteMode: DEFAULT_INVITE_MODE,
+      invitedFriendIds: [],
+      selectedGroupIds: [],
+    });
+  }, [initialValues]);
 
   useEffect(() => {
     if (!open) {
@@ -335,13 +388,13 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
     }, 0);
 
     return () => window.clearTimeout(resetTimer);
-  }, [open]);
+  }, [open, resetForm]);
 
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape" && !saving) {
-        onClose();
+        requestDismiss();
         return;
       }
 
@@ -364,15 +417,12 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [canContinue, onClose, open, saving, step]);
+  }, [canContinue, open, requestDismiss, saving, step]);
 
   useEffect(() => {
     if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
     document.body.setAttribute("data-create-plan-open", "true");
     return () => {
-      document.body.style.overflow = prev;
       document.body.removeAttribute("data-create-plan-open");
     };
   }, [open]);
@@ -445,6 +495,7 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
     }
     setErrorMsg(null);
     setSaving(true);
+    setFeedbackState({ type: "loading" });
     try {
       await onCreate({
         title: title.trim(),
@@ -461,10 +512,13 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
         inviteMode,
         invitedFriendIds: [...invitedFriendIds].filter((id) => id !== currentUserId),
       });
+      setFeedbackState({ type: "success", label: "Plan creado" });
     } catch (err) {
       const message =
         typeof err === "object" && err && "message" in err ? String(err.message) : "No se pudo crear el plan.";
       setErrorMsg(message);
+      setFeedbackState({ type: "error", message });
+    } finally {
       setSaving(false);
     }
   }
@@ -478,18 +532,27 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
     "rounded-[14px] bg-[var(--text-primary)] px-[var(--space-8)] py-[12px] text-body-sm font-[var(--fw-semibold)] text-contrast-token transition-opacity hover:opacity-85 disabled:opacity-[var(--disabled-opacity)]";
 
   return (
+    <>
     <div
-      className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 backdrop-blur-sm md:items-center"
-      onClick={saving ? undefined : onClose}
+      data-closing={isClosing ? "true" : "false"}
+      className="app-modal-overlay fixed inset-0 z-[60] flex items-end justify-center md:items-center"
+      onClick={saving ? undefined : requestDismiss}
       role="presentation"
     >
       <div
-        className="relative flex h-dvh w-full flex-col overflow-hidden bg-[var(--bg)] md:h-[min(760px,90dvh)] md:w-full md:max-w-[var(--create-plan-desktop-max-width)] md:rounded-[24px] md:shadow-elev-4 md:transition-[max-width] md:duration-300 md:[transition-timing-function:cubic-bezier(0.22,1,0.36,1)]"
+        className="app-modal-panel relative flex h-dvh w-full flex-col overflow-hidden bg-[var(--bg)] pt-[env(safe-area-inset-top)] md:h-[min(760px,90dvh)] md:w-full md:max-w-[var(--create-plan-desktop-max-width)] md:rounded-[24px] md:pt-0 md:shadow-elev-4 md:transition-[max-width] md:duration-300 md:[transition-timing-function:cubic-bezier(0.22,1,0.36,1)]"
         style={{ "--create-plan-desktop-max-width": desktopMaxWidth } as CSSProperties}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
       >
+        {feedbackState && (
+          <ModalFeedback
+            state={feedbackState}
+            onSuccess={requestClose}
+            onDismissError={() => setFeedbackState(null)}
+          />
+        )}
         {/* ── Progress bar ── */}
         <div className="h-[3px] w-full shrink-0 bg-[var(--surface-2)]">
           <div
@@ -500,25 +563,31 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
 
         {/* ── Top nav ── */}
         <div className="flex shrink-0 items-center justify-between px-[var(--space-5)] py-[var(--space-3)]">
-          <button
-            type="button"
-            onClick={step === 1 ? onClose : handleBack}
-            disabled={saving}
-            className="flex size-9 items-center justify-center rounded-full text-app transition-colors hover:bg-surface disabled:opacity-50"
-            aria-label={step === 1 ? "Cerrar" : "Volver"}
-          >
-            {step === 1 ? (
-              <svg viewBox="0 0 24 24" fill="none" className="size-[18px]">
-                <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-              </svg>
-            ) : (
+          {step > 1 ? (
+            <button
+              type="button"
+              onClick={handleBack}
+              disabled={saving}
+              className="flex size-9 items-center justify-center rounded-full text-app transition-colors hover:bg-surface disabled:opacity-50"
+              aria-label="Volver"
+            >
               <svg viewBox="0 0 24 24" fill="none" className="size-[18px]">
                 <path d="M15 19l-7-7 7-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-            )}
-          </button>
+            </button>
+          ) : (
+            <div className="size-9" aria-hidden="true" />
+          )}
           <span className="text-caption font-[var(--fw-medium)] text-muted">{step} de {TOTAL_STEPS}</span>
-          <div className="size-9" aria-hidden="true" />
+          <button
+            type="button"
+            onClick={requestDismiss}
+            disabled={saving}
+            className="flex size-9 items-center justify-center rounded-full text-app transition-colors hover:bg-surface disabled:opacity-50"
+            aria-label="Cerrar"
+          >
+            <CloseX />
+          </button>
         </div>
 
         {/* ── Content ── */}
@@ -543,6 +612,7 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
                 placeholder="París, Tokyo, Nueva York..."
                 onCommit={canContinue ? handleNext : undefined}
                 onEnter={canContinue ? handleNext : undefined}
+                autoFocus
               />
             </div>
           )}
@@ -561,24 +631,6 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
           {/* ── Step 3: Nombre + portada ── */}
           {step === 3 && (
             <div className="space-y-[var(--space-5)]">
-              <div className="flex items-center gap-[var(--space-3)] border-b-2 border-app pb-[var(--space-2)]">
-                <Plane className="size-5 shrink-0 text-muted" strokeWidth={1.5} aria-hidden="true" />
-                <input
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Verano en Italia"
-                  autoFocus
-                  className="w-full flex-1 bg-transparent text-[22px] font-[var(--fw-semibold)] text-app shadow-none outline-none ring-0 placeholder:text-muted focus:outline-none focus:ring-0 focus:shadow-none focus-visible:shadow-none"
-                />
-              </div>
-              <div className="border-b border-app pb-[var(--space-2)]">
-                <input
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Descripción breve (opcional)"
-                  className="w-full bg-transparent text-body-sm text-app shadow-none outline-none ring-0 placeholder:text-muted focus:outline-none focus:ring-0 focus:shadow-none focus-visible:shadow-none"
-                />
-              </div>
               {coverImageUrl ? (
                 <div className="relative h-[160px] w-full overflow-hidden rounded-[16px]">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -606,6 +658,26 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
                 </button>
               )}
               <input ref={coverInputRef} type="file" accept="image/*" onChange={onCoverChange} className="hidden" />
+
+              <div className={`flex items-center gap-[var(--space-3)] ${FIELD_LINE_CLS}`}>
+                <Plane className="size-5 shrink-0 text-muted" strokeWidth={1.5} aria-hidden="true" />
+                <input
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="Verano en Italia"
+                  autoFocus
+                  className="w-full flex-1 bg-transparent text-[22px] font-[var(--fw-semibold)] text-app shadow-none outline-none ring-0 placeholder:text-muted focus:outline-none focus:ring-0 focus:shadow-none focus-visible:shadow-none"
+                />
+              </div>
+              <div className={`flex items-center gap-[var(--space-3)] ${FIELD_LINE_CLS}`}>
+                <FileText className="size-5 shrink-0 text-muted" strokeWidth={1.5} aria-hidden="true" />
+                <input
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Descripción breve (opcional)"
+                  className="w-full flex-1 bg-transparent text-body-sm text-app shadow-none outline-none ring-0 placeholder:text-muted focus:outline-none focus:ring-0 focus:shadow-none focus-visible:shadow-none"
+                />
+              </div>
             </div>
           )}
 
@@ -850,7 +922,7 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
         </div>
 
         {/* ── Footer ── */}
-        <div className="shrink-0 border-t border-app px-[var(--space-5)] py-[var(--space-4)]">
+        <div className="shrink-0 border-t border-app px-[var(--space-5)] pb-[calc(var(--space-4)+env(safe-area-inset-bottom))] pt-[var(--space-4)] md:py-[var(--space-4)]">
           {step === 2 ? (
             <div className="flex items-center justify-between">
               <button
@@ -888,5 +960,14 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
         </div>
       </div>
     </div>
+    <DiscardChangesDialog
+      open={discardOpen}
+      onCancel={() => setDiscardOpen(false)}
+      onDiscard={() => {
+        setDiscardOpen(false);
+        requestClose();
+      }}
+    />
+    </>
   );
 }

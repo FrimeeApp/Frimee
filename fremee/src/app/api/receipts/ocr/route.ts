@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "crypto";
+import { publicEnv, getSupabaseServiceRoleKey } from "@/config/env";
+import { OPENAI_API_BASE_URL } from "@/config/external";
+import { createSupabaseServerClient, createSupabaseServiceClient } from "@/services/supabase/server";
+import { sanitizePlanId, validateUploadFile } from "@/lib/sanitize";
+import { checkRateLimit, rateLimitedResponse } from "@/lib/rate-limit";
 
 // Tipos que devuelve el OCR al frontend
 export type OcrResult = {
@@ -27,22 +32,55 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    // ── 0. Verificar sesión (cookie o Bearer token) ────────────────────────
+    let sessionUser = null;
+    const authHeader = req.headers.get("authorization");
+    if (authHeader?.startsWith("Bearer ")) {
+      const token = authHeader.slice(7);
+      const { data } = await createSupabaseServiceClient().auth.getUser(token);
+      sessionUser = data.user;
+    } else {
+      const authClient = await createSupabaseServerClient();
+      const { data } = await authClient.auth.getUser();
+      sessionUser = data.user;
+    }
+    if (!sessionUser) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+    }
+
+    const rl = await checkRateLimit(`ocr-receipt:${sessionUser.id}`, 5, 60_000);
+    if (rl.limited) return rateLimitedResponse(rl.retryAfter);
+
     // ── 1. Leer el archivo del formulario ──────────────────────────────────
     const formData = await req.formData();
-    const file = formData.get("file") as File | null;
-    const planId = formData.get("plan_id") as string | null;
+    const fileRaw = formData.get("file") as File | null;
+    const planId = sanitizePlanId(formData.get("plan_id"));
     const userId = formData.get("user_id") as string | null;
 
-    if (!file || !planId || !userId) {
-      return NextResponse.json({ error: "Faltan parámetros: file, plan_id, user_id" }, { status: 400 });
+    if (!planId) {
+      return NextResponse.json({ error: "plan_id inválido o requerido" }, { status: 400 });
     }
+    if (!userId) {
+      return NextResponse.json({ error: "Faltan parámetros: user_id" }, { status: 400 });
+    }
+
+    // Asegurar que el userId del formulario coincide con la sesión activa
+    if (userId !== sessionUser.id) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+    }
+
+    const fileCheck = validateUploadFile(fileRaw);
+    if (!fileCheck.ok) {
+      return NextResponse.json({ error: fileCheck.error }, { status: 400 });
+    }
+    const file = fileCheck.file;
 
     // ── 2. Subir a Supabase Storage ────────────────────────────────────────
     // Usamos service role para saltarnos RLS en el servidor (la política de Storage
     // aplica a peticiones del cliente, no a llamadas server-side con service role)
     const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
+      publicEnv.supabaseUrl,
+      getSupabaseServiceRoleKey()
     );
 
     const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
@@ -106,7 +144,7 @@ Si no puedes extraer algún campo, pon null. Los items pueden ser array vacío s
       ];
     }
 
-    const openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+    const openaiRes = await fetch(`${OPENAI_API_BASE_URL}/chat/completions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

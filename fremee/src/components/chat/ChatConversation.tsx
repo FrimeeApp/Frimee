@@ -1,7 +1,7 @@
 "use client";
 
 import NextImage from "next/image";
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, Fragment } from "react";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import {
   listChats,
@@ -29,10 +29,42 @@ import { fetchActiveFriends, type PublicUserProfileRow } from "@/services/api/en
 import { closePollEndpoint } from "@/services/api/endpoints/chat.endpoint";
 import { uploadPlanCoverFile, uploadAudioBlob, uploadAudioFile, uploadDocumentFile, uploadMediaFile } from "@/services/firebase/upload";
 import AudioPlayer from "@/components/common/AudioPlayer";
+import { CameraModal } from "@/components/chat/CameraModal";
+import { PollCreatorModal } from "@/components/chat/PollCreatorModal";
+import { PLAN_WRITE_COMMANDS, VALID_TASK_CATEGORIES } from "@/components/chat/chat.constants";
 import { crearTareaEndpoint, misTareasEndpoint, todasTareasEndpoint, updateEstadoTareaEndpoint, recordarEndpoint, type TareaRow } from "@/services/api/endpoints/tareas.endpoint";
 import { createGastoEndpoint, getBalancesForPlanEndpoint } from "@/services/api/endpoints/gastos.endpoint";
 import { promoteToAdminEndpoint, demoteAdminEndpoint, kickMemberEndpoint, leavePlanEndpoint } from "@/services/api/endpoints/plans.endpoint";
 import { callFrimeeAssistant, type FrimeeHistoryEntry } from "@/services/api/endpoints/frimee.endpoint";
+import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
+import { CloseX } from "@/components/ui/CloseX";
+import dynamic from "next/dynamic";
+
+const EmojiMartPicker = dynamic(() => import("@emoji-mart/react"), { ssr: false });
+import {
+  Trash2, Ban, AlertTriangle, LogOut, ChevronDown, Pencil, Reply, Copy,
+  Smile, Forward, Pin, Star, Camera, Send as LucideSend, PlusCircle, Mic,
+  File, Video, Music, BarChart2, Edit, ChevronLeft, ChevronRight, Users,
+  Phone, Check, Download, Plus, X,
+} from "lucide-react";
+
+function isSameDay(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
+function formatDateLabel(date: Date): string {
+  const now = new Date();
+  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const dateMidnight = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const diffDays = Math.round((todayMidnight.getTime() - dateMidnight.getTime()) / 86400000);
+  if (diffDays === 0) return "Hoy";
+  if (diffDays === 1) return "Ayer";
+  const sameYear = date.getFullYear() === now.getFullYear();
+  const sameMonth = sameYear && date.getMonth() === now.getMonth();
+  if (!sameYear) return date.toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" });
+  if (!sameMonth) return date.toLocaleDateString("es-ES", { day: "numeric", month: "long" });
+  return date.toLocaleDateString("es-ES", { day: "numeric" });
+}
 
 export function ChatConversation({
   chat,
@@ -100,9 +132,12 @@ export function ChatConversation({
   const [highlightedId, setHighlightedId] = useState<number | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [forwardMsg, setForwardMsg] = useState<MensajeRow | null>(null);
+  const { isClosing: forwardClosing, requestClose: closeForwardModal } = useModalCloseAnimation(() => setForwardMsg(null), !!forwardMsg);
   const [forwardChats, setForwardChats] = useState<ChatListItem[]>([]);
   const [forwardSending, setForwardSending] = useState<string | null>(null);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const emojiContainerRef = useRef<HTMLDivElement | null>(null);
   const [showCamera, setShowCamera] = useState(false);
   const [showPollCreator, setShowPollCreator] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -114,6 +149,8 @@ export function ChatConversation({
   const docInputRef = useRef<HTMLInputElement | null>(null);
   const mediaInputRef = useRef<HTMLInputElement | null>(null);
   const audioFileInputRef = useRef<HTMLInputElement | null>(null);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const swipeRef = useRef<{ startX: number; startY: number; el: HTMLElement; triggered: boolean } | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const sentMsgIdsRef = useRef<Set<number>>(new Set());
@@ -256,6 +293,16 @@ export function ChatConversation({
   const observerReadyRef = useRef(false);
 
   useEffect(() => {
+    setLoading(true);
+    setMessages([]);
+    setLoadingMore(false);
+    setHasMore(true);
+    oldestIdRef.current = null;
+    isNearBottomRef.current = true;
+    observerReadyRef.current = false;
+  }, [chat.chat_id]);
+
+  useEffect(() => {
     if (loading) return;
     if (!observerReadyRef.current) {
       // Primera carga: saltar al fondo instantáneamente
@@ -311,7 +358,32 @@ export function ChatConversation({
     return () => document.removeEventListener("click", close);
   }, [reactingToId]);
 
-  const closeOverlays = () => { setContextMenu(null); setReactingToId(null); setReactingPos(null); setShowAttachMenu(false); };
+  useEffect(() => {
+    if (!showEmojiPicker) return;
+    const handleOutside = (e: MouseEvent) => {
+      if (emojiContainerRef.current && !emojiContainerRef.current.contains(e.target as Node)) {
+        setShowEmojiPicker(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOutside);
+    return () => document.removeEventListener("mousedown", handleOutside);
+  }, [showEmojiPicker]);
+
+  const handleEmojiSelect = useCallback((emoji: { native: string }) => {
+    const input = inputRef.current;
+    if (!input) return;
+    const start = input.selectionStart ?? input.value.length;
+    const end = input.selectionEnd ?? input.value.length;
+    const newText = input.value.slice(0, start) + emoji.native + input.value.slice(end);
+    setText(newText);
+    requestAnimationFrame(() => {
+      input.focus();
+      const pos = start + emoji.native.length;
+      input.setSelectionRange(pos, pos);
+    });
+  }, []);
+
+  const closeOverlays = () => { setContextMenu(null); setReactingToId(null); setReactingPos(null); setShowAttachMenu(false); setShowEmojiPicker(false); };
 
   const scrollToMessage = (msgId: number) => {
     const el = document.getElementById(`msg-${msgId}`);
@@ -332,14 +404,14 @@ export function ChatConversation({
     }
   };
 
-  const CATEGORIAS_VALIDAS = ["vuelo", "ferry", "coche", "alojamiento", "actividad", "comida", "otro"] as const;
+  const CATEGORIAS_VALIDAS = VALID_TASK_CATEGORIES;
 
   const isPlanFinished = planInfo?.fin_at ? new Date(planInfo.fin_at) < new Date() : false;
 
   const fmtEstado = (e: string) =>
     ({ hecho: "Hecho", pendiente: "Pendiente", en_progreso: "En progreso" }[e] ?? e);
 
-  const WRITE_COMMANDS = new Set(["tarea", "gasto", "votar", "voto", "recordar", "admin", "deadmin", "expulsar"]);
+  const WRITE_COMMANDS = PLAN_WRITE_COMMANDS;
 
   const handleCommand = async (cmd: string): Promise<string> => {
     const parts = cmd.slice(1).trim().split(/\s+/);
@@ -951,7 +1023,7 @@ export function ChatConversation({
       } else if (winners.length > 1) {
         resultLines.push(`Empate entre: ${winners.map((w) => w.opt).join(", ")}`);
       } else {
-        winnerOption = winners[0]!.opt;
+        winnerOption = winners[0].opt;
         resultLines.push(`Ganadora: ${winnerOption}`);
       }
 
@@ -1064,7 +1136,7 @@ export function ChatConversation({
         .slice(-6)
         .map((m) => ({
           role: m.sender_id === currentUserId ? "user" : "assistant",
-          content: m.texto!,
+          content: m.texto,
         }));
 
       // Mostrar mensaje del usuario al instante con ID temporal
@@ -1258,6 +1330,7 @@ export function ChatConversation({
         if (prev.some((m) => m.id === newId)) return prev;
         return [...prev, newMsg];
       });
+      requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }));
       onNewMessageRef.current(newMsg);
       setReplyingTo(null);
     } catch (e) {
@@ -1349,6 +1422,7 @@ export function ChatConversation({
         audio_url: localUrl,
       };
       setMessages((prev) => [...prev, tempMsg]);
+      requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }));
 
       try {
         const { downloadUrl } = await uploadAudioBlob({ blob, userId: currentUserId });
@@ -1383,6 +1457,7 @@ export function ChatConversation({
       document_name: file.name,
     };
     setMessages((prev) => [...prev, tempMsg]);
+    requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }));
     setShowAttachMenu(false);
     try {
       const { downloadUrl } = await uploadDocumentFile({ file, userId: currentUserId });
@@ -1413,6 +1488,7 @@ export function ChatConversation({
       image_type: file.type,
     };
     setMessages((prev) => [...prev, tempMsg]);
+    requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }));
     setShowAttachMenu(false);
     try {
       const { downloadUrl } = await uploadMediaFile({ file, userId: currentUserId });
@@ -1444,6 +1520,7 @@ export function ChatConversation({
       created_at: new Date().toISOString(),
     };
     setMessages((prev) => [...prev, tempMsg]);
+    requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }));
     try {
       const newId = await sendMensaje({ chatId: chat.chat_id, texto });
       const realMsg: MensajeRow = { ...tempMsg, id: newId };
@@ -1471,6 +1548,7 @@ export function ChatConversation({
       audio_url: localUrl,
     };
     setMessages((prev) => [...prev, tempMsg]);
+    requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }));
     setShowAttachMenu(false);
     try {
       const { downloadUrl } = await uploadAudioFile({ file, userId: currentUserId });
@@ -1585,8 +1663,8 @@ export function ChatConversation({
 
       {/* Forward modal */}
       {forwardMsg && (
-        <div className="absolute inset-0 z-50 flex items-end justify-center bg-black/40 md:items-center" onClick={() => setForwardMsg(null)}>
-          <div className="w-full max-w-[360px] rounded-t-[20px] bg-app p-[var(--space-5)] md:rounded-[16px]" onClick={(e) => e.stopPropagation()}>
+        <div data-closing={forwardClosing ? "true" : "false"} className="app-modal-overlay absolute inset-0 z-50 flex items-end justify-center md:items-center" onClick={closeForwardModal}>
+          <div className="app-modal-panel w-full max-w-[360px] rounded-t-[20px] bg-app p-[var(--space-5)] md:rounded-[16px]" onClick={(e) => e.stopPropagation()}>
             <p className="mb-[var(--space-3)] text-body-sm font-[var(--fw-semibold)] text-app">Reenviar a...</p>
             <div className="max-h-[280px] space-y-[1px] overflow-y-auto">
               {forwardChats.filter((c) => c.chat_id !== chat.chat_id).map((c) => {
@@ -1612,7 +1690,7 @@ export function ChatConversation({
                 <p className="py-[var(--space-4)] text-center text-body-sm text-muted">No hay otros chats</p>
               )}
             </div>
-            <button type="button" onClick={() => setForwardMsg(null)} className="mt-[var(--space-3)] w-full rounded-full border border-app py-[10px] text-body-sm font-[var(--fw-semibold)] text-app transition-colors hover:bg-surface">
+            <button type="button" onClick={closeForwardModal} className="mt-[var(--space-3)] w-full rounded-full border border-app py-[10px] text-body-sm font-[var(--fw-semibold)] text-app transition-colors hover:bg-surface">
               Cancelar
             </button>
           </div>
@@ -1621,7 +1699,7 @@ export function ChatConversation({
 
       {/* Header */}
       {!embedded && (
-        <div className="flex items-center gap-[var(--space-3)] border-b border-app px-[var(--space-3)] pb-[var(--space-3)] md:px-[var(--space-4)]">
+        <div className="flex items-center gap-[var(--space-3)] border-b border-app px-[var(--space-3)] pb-[var(--space-3)] pt-mobile-safe-top md:px-[var(--space-4)] md:py-[var(--space-3)]">
           <button type="button" onClick={onBack} className="flex size-[32px] items-center justify-center rounded-full transition-colors hover:bg-surface" aria-label="Volver">
             <BackIcon className="size-[18px]" />
           </button>
@@ -1647,7 +1725,7 @@ export function ChatConversation({
       {ongoingCall && !inCall && (
         <div className="flex items-center gap-[var(--space-3)] border-b border-app bg-surface px-[var(--space-3)] py-[10px]">
           <div className="flex size-8 items-center justify-center rounded-full bg-green-500/15 text-green-500">
-            <svg viewBox="0 0 24 24" fill="none" className="size-4" stroke="currentColor" strokeWidth="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.38 2 2 0 0 1 3.6 1.18h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.73a16 16 0 0 0 6 6l.95-.95a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 21.59 16z"/></svg>
+            <Phone className="size-4" />
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-body-sm font-[var(--fw-semibold)] text-app">Llamada en curso</p>
@@ -1672,18 +1750,18 @@ export function ChatConversation({
         >
           <PinIcon className="size-[13px] shrink-0 text-muted" />
           <p className="min-w-0 flex-1 truncate text-[14px] text-muted">{pinnedMsg.texto}</p>
-          <svg viewBox="0 0 24 24" fill="none" className="size-[14px] shrink-0 text-muted"><path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
+          <X className="size-[14px] shrink-0 text-muted" />
         </button>
       )}
 
       {/* Messages */}
-      <div ref={scrollContainerRef} className="scrollbar-thin min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-[var(--space-3)] py-[var(--space-4)] md:px-[var(--space-4)]" onClick={closeOverlays}>
+      <div ref={scrollContainerRef} className="scrollbar-thin min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-[var(--space-3)] pb-[var(--space-2)] pt-[var(--space-4)] md:px-[var(--space-4)]" onClick={closeOverlays}>
         {loading ? (
           <div className="flex h-full items-center justify-center text-body-sm text-muted">Cargando...</div>
         ) : messages.length === 0 ? (
           <div className="flex h-full items-center justify-center text-body-sm text-muted">Sé el primero en escribir</div>
         ) : (
-          <div className="space-y-[1px]">
+          <div className="flex min-h-full flex-col justify-end space-y-[1px]">
             {/* Sentinel para infinite scroll hacia arriba */}
             <div ref={topSentinelRef} className="h-px" />
             {loadingMore && (
@@ -1695,8 +1773,17 @@ export function ChatConversation({
               const isMe = msg.sender_id === currentUserId;
               const isBot = msg.tipo === "bot";
               const prevMsg = messages[idx - 1];
+              const nextMsg = messages[idx + 1];
               const isFirstInGroup = !prevMsg || prevMsg.sender_id !== msg.sender_id;
+              const isLastInGroup = !nextMsg || nextMsg.sender_id !== msg.sender_id;
               const time = formatChatTime(msg.created_at);
+              const msgDate = msg.created_at ? new Date(msg.created_at) : null;
+              const prevMsgDate = prevMsg?.created_at ? new Date(prevMsg.created_at) : null;
+              const showDateSep = msgDate && (!prevMsgDate || !isSameDay(msgDate, prevMsgDate));
+              const dateLabel = showDateSep ? formatDateLabel(msgDate) : null;
+              const msgTime = msgDate ? msgDate.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", hour12: false }) : time;
+              const prevMsgTime = prevMsgDate ? prevMsgDate.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", hour12: false }) : null;
+              const showMsgTime = prevMsgTime !== msgTime;
               const isMediaMessage = Boolean(msg.image_url) || isResumenViaje(msg.texto);
               const reaction = localReactions[msg.id];
               const isStarred = starredIds.has(msg.id);
@@ -1707,39 +1794,92 @@ export function ChatConversation({
                 setReactingToId(null);
                 setReactingPos(null);
               };
+              const onBubbleTouchStart = (e: React.TouchEvent) => {
+                const t = e.touches[0];
+                swipeRef.current = { startX: t.clientX, startY: t.clientY, el: e.currentTarget as HTMLElement, triggered: false };
+                longPressTimerRef.current = setTimeout(() => {
+                  setContextMenu({ msg, x: t.clientX, y: t.clientY + 4, triggerTop: t.clientY });
+                  setReactingToId(null);
+                  setReactingPos(null);
+                  if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(40);
+                }, 500);
+              };
+              const onBubbleTouchMove = (e: React.TouchEvent) => {
+                if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }
+                const s = swipeRef.current;
+                if (!s) return;
+                const t = e.touches[0];
+                const dx = t.clientX - s.startX;
+                const dy = Math.abs(t.clientY - s.startY);
+                if (dy > Math.abs(dx) + 8) { swipeRef.current = null; return; }
+                const validSwipe = isMe ? dx < 0 : dx > 0;
+                if (!validSwipe) return;
+                const clamped = isMe ? Math.max(dx, -80) : Math.min(dx, 80);
+                s.el.style.transform = `translateX(${clamped}px)`;
+                s.el.style.transition = "none";
+                if (Math.abs(dx) >= 64 && !s.triggered) {
+                  s.triggered = true;
+                  setReplyingTo(msg);
+                  closeOverlays();
+                  setTimeout(() => inputRef.current?.focus(), 50);
+                  if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(30);
+                }
+              };
+              const onBubbleTouchEnd = () => {
+                if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }
+                const s = swipeRef.current;
+                if (s) {
+                  s.el.style.transition = "transform 0.25s ease";
+                  s.el.style.transform = "translateX(0)";
+                  swipeRef.current = null;
+                }
+              };
               return (
-                <div id={`msg-${msg.id}`} key={(msg as LocalMsg)._key ?? msg.id} className={`group/msg flex ${isMe ? "justify-end" : "justify-start"} ${isFirstInGroup ? "mt-[var(--space-3)]" : "mt-[2px]"} ${reaction ? "mb-[20px]" : ""} ${highlightedId === msg.id ? "rounded-card bg-[var(--text-primary)]/10 transition-colors" : ""}`}>
-                  {!isMe && (chat.tipo === "GRUPO" || isBot) && (
+                <Fragment key={(msg)._key ?? msg.id}>
+                {dateLabel && (
+                  <div className="flex justify-center py-3">
+                    <span className="text-[11px] text-muted">{dateLabel}</span>
+                  </div>
+                )}
+                <div id={`msg-${msg.id}`} className={`group/msg flex ${isMe ? "justify-end" : "justify-start"} ${isFirstInGroup ? "mt-[var(--space-3)]" : "mt-[2px]"} ${reaction ? "mb-[20px]" : ""} ${highlightedId === msg.id ? "rounded-card bg-[var(--text-primary)]/10 transition-colors" : ""}`}>
+                  {!isMe && (chat.tipo === "GRUPO" || chat.tipo === "PLAN" || isBot) && (
                     <div className="mr-[var(--space-2)] w-[24px] shrink-0">
                       {isFirstInGroup && (
-                        <div className={`flex size-[24px] items-center justify-center overflow-hidden rounded-full text-[14px] font-[var(--fw-semibold)] ${isBot ? "bg-primary-token/15 text-primary-token" : "border border-app bg-surface-inset text-app"}`}>
-                          {isBot ? "F" : msg.sender_profile_image ? <NextImage src={msg.sender_profile_image} alt={msg.sender_nombre} width={24} height={24} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" /> : (msg.sender_nombre[0] ?? "?").toUpperCase()}
+                        <div className={`flex size-[24px] items-center justify-center overflow-hidden rounded-full text-[14px] font-[var(--fw-semibold)] ${isBot ? "bg-[#b0b0b0]" : "border border-app bg-surface-inset text-app"}`}>
+                          {isBot ? <NextImage src="/Frimee_personaje.png" alt="Frimee" width={24} height={24} className="h-full w-full object-cover" /> : msg.sender_profile_image ? <NextImage src={msg.sender_profile_image} alt={msg.sender_nombre} width={24} height={24} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" /> : (msg.sender_nombre[0] ?? "?").toUpperCase()}
                         </div>
                       )}
                     </div>
                   )}
-                  <div className="relative max-w-[75%]">
-                    {isFirstInGroup && !isMediaMessage && (
-                      isMe ? (
-                        <div className="absolute -right-[5px] top-[8px] h-0 w-0 border-y-[5px] border-l-[5px] border-y-transparent" style={{ borderLeftColor: "var(--text-primary)" }} />
-                      ) : (
-                        <div className="absolute -left-[5px] top-[8px] h-0 w-0 border-y-[5px] border-r-[5px] border-y-transparent" style={{ borderRightColor: isBot ? "var(--surface)" : "var(--surface-inset)" }} />
-                      )
-                    )}
-                    <div className={`break-words ${isMediaMessage ? "bg-transparent p-0" : "rounded-card px-3 py-2"} ${!isMediaMessage ? (isMe ? "bg-[var(--text-primary)] text-contrast-token" : isBot ? "bg-surface" : "bg-surface-inset") : ""} ${contextMenu?.msg.id === msg.id ? "opacity-75" : ""}`}>
-                      {!isMe && (chat.tipo === "GRUPO" || isBot) && isFirstInGroup && (
+                  <div
+                    className="relative max-w-[75%]"
+                    onContextMenu={(e) => e.preventDefault()}
+                    onTouchStart={onBubbleTouchStart}
+                    onTouchMove={onBubbleTouchMove}
+                    onTouchEnd={onBubbleTouchEnd}
+                    onTouchCancel={onBubbleTouchEnd}
+                  >
+                    <div
+                      className={`relative break-words ${isMediaMessage ? "bg-transparent p-0" : "px-3 py-2"} ${!isMediaMessage ? (isMe ? "bg-[var(--primary)] dark:bg-[color-mix(in_srgb,var(--primary)_80%,#000)] text-white" : isBot ? "bg-surface text-app" : "bg-surface-inset text-app") : ""} ${contextMenu?.msg.id === msg.id ? "opacity-75" : ""}`}
+                      style={isMediaMessage ? undefined : {
+                        borderRadius: isMe
+                          ? `${isFirstInGroup ? "18px" : "8px"} 18px ${isLastInGroup ? "4px" : "8px"} 18px`
+                          : `18px ${isFirstInGroup ? "18px" : "8px"} 18px ${isLastInGroup ? "4px" : "8px"}`,
+                      }}
+                    >
+                      {!isMe && (chat.tipo === "GRUPO" || chat.tipo === "PLAN" || isBot) && isFirstInGroup && (
                         <p className={`mb-[2px] text-[14px] font-[var(--fw-semibold)] ${isBot ? "text-primary-token" : "text-muted"}`}>{isBot ? "Frimee" : msg.sender_nombre}</p>
                       )}
                       {msg.reply_texto && msg.reply_to_id && (
                         <button
                           type="button"
                           onClick={(e) => { e.stopPropagation(); scrollToMessage(msg.reply_to_id!); }}
-                          className={`mb-[6px] w-full rounded-card border-l-[3px] px-2 py-[4px] text-left transition-opacity hover:opacity-80 ${isMe ? "border-contrast-token/50 bg-black/20" : "border-[var(--text-primary)] bg-black/8"}`}
+                          className={`mb-[6px] w-full rounded-card border-l-[3px] px-2 py-[4px] text-left transition-opacity hover:opacity-80 ${isMe ? "border-white/50 bg-black/20" : "border-[var(--primary)] bg-black/8"}`}
                         >
-                          <p className={`truncate text-[14px] font-[var(--fw-semibold)] ${isMe ? "text-contrast-token/80" : "text-[var(--text-primary)]"}`}>
+                          <p className={`truncate text-[14px] font-[var(--fw-semibold)] ${isMe ? "text-white/80" : "text-[var(--text-primary)]"}`}>
                             {msg.reply_sender_nombre ?? "Usuario"}
                           </p>
-                          <p className={`truncate text-[14px] ${isMe ? "text-contrast-token/70" : "text-muted"}`}>
+                          <p className={`truncate text-[14px] ${isMe ? "text-white/70" : "text-muted"}`}>
                             {msg.reply_texto && isPollMessage(msg.reply_texto)
                               ? `📊 ${(JSON.parse(msg.reply_texto) as { question: string }).question}`
                               : msg.reply_texto}
@@ -1753,7 +1893,7 @@ export function ChatConversation({
                       ) : msg.document_url ? (
                         <DocumentBubble url={msg.document_url} name={msg.document_name ?? "Documento"} sending={msg.id < 0} />
                       ) : msg.image_url ? (
-                        <MediaBubble url={msg.image_url} type={msg.image_type ?? "image/jpeg"} sending={msg.id < 0} time={time} isMe={isMe} onOpenLightbox={!msg.image_type?.startsWith("video/") ? () => setLightboxUrl(msg.image_url!) : undefined} />
+                        <MediaBubble url={msg.image_url} type={msg.image_type ?? "image/jpeg"} sending={msg.id < 0} time={showMsgTime ? msgTime : ""} isMe={isMe} onOpenLightbox={!msg.image_type?.startsWith("video/") ? () => setLightboxUrl(msg.image_url!) : undefined} />
                       ) : isResumenViaje(msg.texto) ? (
                         <ResumenViajeBubble texto={msg.texto} />
                       ) : isPollMessage(msg.texto) ? (
@@ -1762,20 +1902,26 @@ export function ChatConversation({
                           void channelRef.current?.send({ type: "broadcast", event: "poll_vote", payload: { mensaje_id: msg.id, option_index: idx } });
                         }} />
                       ) : (
-                        <p className={`text-body-sm${isBot ? " whitespace-pre-line" : ""}`}>{msg.texto}</p>
+                        <p className={`text-body-sm${isBot ? " whitespace-pre-line" : ""}`}>
+                          {msg.texto}
+                          <span aria-hidden className="pointer-events-none inline-block select-none align-bottom" style={{ width: isStarred ? 62 : 46, height: 1 }} />
+                        </p>
                       )}
-                      {!isMediaMessage && <div className={`mt-[2px] flex items-center justify-end gap-[4px] text-[14px] ${isMe ? "text-contrast-token/60" : "text-muted"}`}>
-                        {isStarred && <span>★</span>}
-                        <span>{time}</span>
-                        {!isBot && <button
-                          type="button"
-                          onClick={openMsgMenu}
-                          className="flex items-center justify-center rounded-full opacity-0 transition-opacity group-hover/msg:opacity-100 hover:opacity-70"
-                          aria-label="Opciones del mensaje"
-                        >
-                          <ChevronDownIcon className="size-[11px]" />
-                        </button>}
-                      </div>}
+                      {!isMediaMessage && (
+                        msg.tipo?.startsWith("call_") || msg.audio_url || msg.document_url || isResumenViaje(msg.texto) || isPollMessage(msg.texto) ? (
+                          <div className={`mt-[2px] flex items-center justify-end gap-[4px] text-[11px] ${isMe ? "text-white/60" : "text-muted"}`}>
+                            {isStarred && <span>★</span>}
+                            <span>{msgTime}</span>
+                            {!isBot && <button type="button" onClick={openMsgMenu} className="flex items-center justify-center rounded-full opacity-0 transition-opacity group-hover/msg:opacity-100 hover:opacity-70" aria-label="Opciones del mensaje"><ChevronDownIcon className="size-[11px]" /></button>}
+                          </div>
+                        ) : !msg.image_url && !isResumenViaje(msg.texto) && (
+                          <div className={`pointer-events-none absolute bottom-[4px] right-[4px] flex items-center gap-[3px] text-[11px] ${isMe ? "text-white/55" : "text-muted"}`}>
+                            {isStarred && <span>★</span>}
+                            <span>{msgTime}</span>
+                            {!isBot && <button type="button" onClick={openMsgMenu} className="pointer-events-auto flex items-center justify-center rounded-full opacity-0 transition-opacity group-hover/msg:opacity-100 hover:opacity-70" aria-label="Opciones del mensaje"><ChevronDownIcon className="size-[11px]" /></button>}
+                          </div>
+                        )
+                      )}
                     </div>
                     {reaction && (
                       <div className={`absolute -bottom-[18px] ${isMe ? "right-[8px]" : "left-[8px]"} rounded-full border border-app bg-app px-[6px] py-[2px] text-[14px] shadow-sm`}>
@@ -1784,6 +1930,7 @@ export function ChatConversation({
                     )}
                   </div>
                 </div>
+                </Fragment>
               );
             })}
             <div ref={bottomRef} />
@@ -1792,7 +1939,7 @@ export function ChatConversation({
       </div>
 
       {/* Input area */}
-      <div className="border-t border-app px-[var(--space-3)] pb-[var(--space-3)] pt-[var(--space-3)] md:px-[var(--space-4)]">
+      <div className="px-[var(--space-3)] pb-[max(12px,env(safe-area-inset-bottom))] pt-[var(--space-2)] md:px-[var(--space-4)] md:pb-[var(--space-3)]">
         {replyingTo && (
           <div className="mb-[var(--space-2)] flex items-center gap-[var(--space-2)] rounded-[10px] border-l-2 border-[var(--text-primary)] bg-surface px-3 py-[8px]">
             <div className="min-w-0 flex-1">
@@ -1804,7 +1951,7 @@ export function ChatConversation({
               </p>
             </div>
             <button type="button" onClick={cancelReply} className="shrink-0 text-muted transition-colors hover:text-app">
-              <svg viewBox="0 0 24 24" fill="none" className="size-[16px]"><path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
+              <X className="size-[16px]" />
             </button>
           </div>
         )}
@@ -1815,104 +1962,136 @@ export function ChatConversation({
               <p className="truncate text-[14px] text-muted">{editingMsg.texto}</p>
             </div>
             <button type="button" onClick={cancelEdit} className="shrink-0 text-muted transition-colors hover:text-app">
-              <svg viewBox="0 0 24 24" fill="none" className="size-[16px]"><path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
+              <X className="size-[16px]" />
             </button>
           </div>
         )}
         <div className="relative flex items-center gap-[var(--space-2)]">
-          {/* Attachment menu */}
-          <div className="relative shrink-0">
-            <button
-              type="button"
-              onClick={() => setShowAttachMenu((v) => !v)}
-              className="flex size-[36px] items-center justify-center rounded-full transition-colors hover:bg-surface"
-              aria-label="Adjuntar"
-            >
-              <AttachPlusIcon className="size-[20px] text-muted" />
-            </button>
-            {/* Inputs ocultos */}
-            <input ref={docInputRef} type="file" className="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar" onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleSendDocument(f); e.target.value = ""; }} />
-            <input ref={mediaInputRef} type="file" className="hidden" accept="image/*,video/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleSendMedia(f); e.target.value = ""; }} />
-            <input ref={audioFileInputRef} type="file" className="hidden" accept="audio/*,.mp3,.m4a,.ogg,.wav,.aac,.flac" onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleSendAudioFile(f); e.target.value = ""; }} />
-            {showAttachMenu && (
-              <div className="absolute bottom-[44px] left-0 z-50 min-w-[180px] overflow-hidden rounded-[14px] border border-app bg-app shadow-[0_8px_32px_rgba(0,0,0,0.25)]">
-                {[
-                  { icon: <DocIcon className="size-[18px]" />, label: "Documento", color: "text-purple-400", onClick: () => { setShowAttachMenu(false); docInputRef.current?.click(); } },
-                  { icon: <PhotoVideoIcon className="size-[18px]" />, label: "Fotos y videos", color: "text-blue-400", onClick: () => { setShowAttachMenu(false); const i = mediaInputRef.current; if (!i) return; i.removeAttribute("capture"); i.click(); } },
-                  { icon: <CameraIcon className="size-[18px]" />, label: "Cámara", color: "text-red-400", onClick: () => { setShowAttachMenu(false); setShowCamera(true); } },
-                  { icon: <AudioFileIcon className="size-[18px]" />, label: "Audio", color: "text-orange-400", onClick: () => { setShowAttachMenu(false); audioFileInputRef.current?.click(); } },
-                  { icon: <PollIcon className="size-[18px]" />, label: "Encuesta", color: "text-green-400", onClick: () => { setShowAttachMenu(false); setShowPollCreator(true); } },
-                ].map(({ icon, label, color, onClick }) => (
-                  <button
-                    key={label}
-                    type="button"
-                    onClick={onClick}
-                    className="flex w-full items-center gap-[var(--space-3)] px-4 py-[11px] text-left transition-colors hover:bg-surface"
-                  >
-                    <span className={color}>{icon}</span>
-                    <span className="text-body-sm text-app">{label}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          {/* Inputs ocultos */}
+          <input ref={docInputRef} type="file" className="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar" onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleSendDocument(f); e.target.value = ""; }} />
+          <input ref={mediaInputRef} type="file" className="hidden" accept="image/*,video/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleSendMedia(f); e.target.value = ""; }} />
+          <input ref={audioFileInputRef} type="file" className="hidden" accept="audio/*,.mp3,.m4a,.ogg,.wav,.aac,.flac" onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleSendAudioFile(f); e.target.value = ""; }} />
 
-          {isRecording ? (
-            <>
-              <div className="flex min-w-0 flex-1 items-center gap-[var(--space-2)] rounded-full border border-red-500/50 bg-surface px-4 py-[8px]">
-                <span className="size-[8px] shrink-0 animate-pulse rounded-full bg-red-500" />
-                <span className="text-body-sm text-red-400">
+          {/* Single input container */}
+          <div className="flex min-w-0 flex-1 items-center gap-1 rounded-full border border-app bg-surface px-2">
+            {isRecording ? (
+              <>
+                <span className="mx-1 size-2 shrink-0 animate-pulse rounded-full bg-red-500" />
+                <span className="shrink-0 text-body-sm text-red-400">
                   {String(Math.floor(recordingSeconds / 60)).padStart(2, "0")}:{String(recordingSeconds % 60).padStart(2, "0")}
                 </span>
-                <span className="text-body-sm text-muted">Grabando...</span>
-              </div>
-              <button
-                type="button"
-                onClick={handleCancelRecording}
-                className="flex size-[36px] shrink-0 items-center justify-center rounded-full transition-colors hover:bg-surface"
-                aria-label="Cancelar grabación"
-              >
-                <svg viewBox="0 0 24 24" fill="none" className="size-[16px] text-muted"><path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
-              </button>
-              <button
-                type="button"
-                onClick={handleSendRecording}
-                className="flex size-[36px] shrink-0 items-center justify-center rounded-full bg-[var(--text-primary)] text-contrast-token transition-opacity hover:opacity-80"
-                aria-label="Enviar nota de voz"
-              >
-                <SendMsgIcon className="size-[16px]" />
-              </button>
-            </>
-          ) : (
-            <>
-              <input
-                ref={inputRef}
-                type="text"
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                onKeyDown={onKeyDown}
-                placeholder={editingMsg ? "Editar mensaje..." : "Escribe un mensaje..."}
-                className="min-w-0 flex-1 rounded-full border border-app bg-surface px-4 py-[8px] text-body-sm text-app outline-none transition-colors focus:border-[var(--border-strong)]"
-              />
-              <button
-                type="button"
-                onClick={() => void handleStartRecording()}
-                className="flex size-[36px] shrink-0 items-center justify-center rounded-full transition-colors hover:bg-surface"
-                aria-label="Nota de voz"
-              >
-                <MicIcon className="size-[18px] text-muted" />
-              </button>
-              <button
-                type="button"
-                onClick={() => void onSend()}
-                disabled={!text.trim() || sending}
-                className="flex size-[36px] shrink-0 items-center justify-center rounded-full bg-[var(--text-primary)] text-contrast-token transition-opacity hover:opacity-80 disabled:opacity-30"
-                aria-label="Enviar"
-              >
-                <SendMsgIcon className="size-[16px]" />
-              </button>
-            </>
-          )}
+                <span className="flex-1 px-1 text-body-sm text-muted">Grabando...</span>
+                <button
+                  type="button"
+                  onClick={handleCancelRecording}
+                  className="shrink-0 p-2 text-muted transition-colors hover:text-app"
+                  aria-label="Cancelar grabación"
+                >
+                  <X className="size-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSendRecording}
+                  className="shrink-0 p-2 text-[var(--primary)] transition-opacity hover:opacity-70"
+                  aria-label="Enviar nota de voz"
+                >
+                  <LucideSend className="size-4" />
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="relative shrink-0" ref={emojiContainerRef}>
+                  <button
+                    type="button"
+                    onClick={() => setShowEmojiPicker((v) => !v)}
+                    className="p-2 text-muted transition-colors hover:text-app"
+                    aria-label="Emoji"
+                  >
+                    <Smile className="size-5" />
+                  </button>
+                  {showEmojiPicker && (
+                    <div className="absolute bottom-[calc(100%+8px)] left-0 z-50 max-w-[calc(100vw-32px)]">
+                      <EmojiMartPicker
+                        data={async () => {
+                          const res = await fetch("https://cdn.jsdelivr.net/npm/@emoji-mart/data");
+                          return res.json();
+                        }}
+                        onEmojiSelect={handleEmojiSelect}
+                        locale="es"
+                        theme="auto"
+                        set="native"
+                        previewPosition="none"
+                        skinTonePosition="search"
+                      />
+                    </div>
+                  )}
+                </div>
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  onKeyDown={onKeyDown}
+                  placeholder={editingMsg ? "Editar mensaje..." : "Escribe un mensaje..."}
+                  className="min-w-0 flex-1 bg-transparent py-[10px] text-body-sm text-app outline-none placeholder:text-muted"
+                />
+                {!text.trim() && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => void handleStartRecording()}
+                      className="shrink-0 p-2 text-muted transition-colors hover:text-app"
+                      aria-label="Nota de voz"
+                    >
+                      <Mic className="size-5" />
+                    </button>
+                    <div className="relative shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setShowAttachMenu((v) => !v)}
+                        className="p-2 text-muted transition-colors hover:text-app"
+                        aria-label="Adjuntar"
+                      >
+                        <Plus className="size-5" />
+                      </button>
+                      {showAttachMenu && (
+                        <div className="absolute bottom-[44px] right-0 z-50 min-w-[180px] overflow-hidden rounded-[14px] border border-app bg-app shadow-[0_8px_32px_rgba(0,0,0,0.25)]">
+                          {[
+                            { icon: <DocIcon className="size-[18px]" />, label: "Documento", color: "text-purple-400", onClick: () => { setShowAttachMenu(false); docInputRef.current?.click(); } },
+                            { icon: <PhotoVideoIcon className="size-[18px]" />, label: "Fotos y videos", color: "text-blue-400", onClick: () => { setShowAttachMenu(false); const i = mediaInputRef.current; if (!i) return; i.removeAttribute("capture"); i.click(); } },
+                            { icon: <CameraIcon className="size-[18px]" />, label: "Cámara", color: "text-red-400", onClick: () => { setShowAttachMenu(false); setShowCamera(true); } },
+                            { icon: <AudioFileIcon className="size-[18px]" />, label: "Audio", color: "text-orange-400", onClick: () => { setShowAttachMenu(false); audioFileInputRef.current?.click(); } },
+                            { icon: <PollIcon className="size-[18px]" />, label: "Encuesta", color: "text-green-400", onClick: () => { setShowAttachMenu(false); setShowPollCreator(true); } },
+                          ].map(({ icon, label, color, onClick }) => (
+                            <button
+                              key={label}
+                              type="button"
+                              onClick={onClick}
+                              className="flex w-full items-center gap-[var(--space-3)] px-4 py-[11px] text-left transition-colors hover:bg-surface"
+                            >
+                              <span className={color}>{icon}</span>
+                              <span className="text-body-sm text-app">{label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+                {text.trim() && (
+                  <button
+                    type="button"
+                    onClick={() => void onSend()}
+                    disabled={sending}
+                    className="shrink-0 p-2 text-[var(--primary)] transition-opacity hover:opacity-70 disabled:opacity-30"
+                    aria-label="Enviar"
+                  >
+                    <LucideSend className="size-5" />
+                  </button>
+                )}
+              </>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -2004,6 +2183,7 @@ function ChatInfoPanel({
   containerClassName?: string;
 }) {
   const [confirmLeave, setConfirmLeave] = useState(false);
+  const { isClosing: confirmLeaveClosing, requestClose: closeConfirmLeave } = useModalCloseAnimation(() => setConfirmLeave(false), confirmLeave);
   const [leaving, setLeaving] = useState(false);
   const [showAllMembers, setShowAllMembers] = useState(false);
   const [showAddMembers, setShowAddMembers] = useState(false);
@@ -2012,7 +2192,8 @@ function ChatInfoPanel({
   const [addingId, setAddingId] = useState<string | null>(null);
   const [localMembers, setLocalMembers] = useState(() => {
     const seen = new Set<string>();
-    return chat.miembros.filter((m) => { if (seen.has(m.id)) return false; seen.add(m.id); return true; });
+    const deduped = chat.miembros.filter((m) => { if (seen.has(m.id)) return false; seen.add(m.id); return true; });
+    return deduped.sort((a, b) => (a.id === currentUserId ? -1 : b.id === currentUserId ? 1 : 0));
   });
   const [localFoto, setLocalFoto] = useState(chat.foto);
   const [uploadingFoto, setUploadingFoto] = useState(false);
@@ -2121,7 +2302,7 @@ function ChatInfoPanel({
   return (
     <div className={containerClassName ?? "relative flex h-[calc(100dvh-var(--space-20)-env(safe-area-inset-bottom))] flex-col md:h-[calc(100dvh-var(--space-16))]"}>
       {/* Header */}
-      <div className="flex items-center gap-[var(--space-2)] border-b border-app px-[var(--space-3)] pb-[var(--space-3)] md:px-[var(--space-4)]">
+      <div className="flex items-center gap-[var(--space-2)] border-b border-app px-[var(--space-3)] pb-[var(--space-3)] pt-mobile-safe-top md:px-[var(--space-4)] md:py-[var(--space-3)]">
         <button type="button" onClick={onBack} className="flex size-[32px] items-center justify-center rounded-full transition-colors hover:bg-surface" aria-label="Volver">
           <BackIcon className="size-[18px]" />
         </button>
@@ -2133,7 +2314,7 @@ function ChatInfoPanel({
       {/* Add members overlay */}
       {showAddMembers && (
         <div className="absolute inset-0 z-40 flex flex-col bg-app">
-          <div className="flex items-center gap-[var(--space-2)] border-b border-app px-[var(--space-3)] py-[var(--space-3)] md:px-[var(--space-4)]">
+          <div className="flex items-center gap-[var(--space-2)] border-b border-app px-[var(--space-3)] pb-[var(--space-3)] pt-mobile-safe-top md:px-[var(--space-4)] md:py-[var(--space-3)]">
             <button type="button" onClick={() => setShowAddMembers(false)} className="flex size-[32px] items-center justify-center rounded-full transition-colors hover:bg-surface">
               <BackIcon className="size-[18px]" />
             </button>
@@ -2231,9 +2412,7 @@ function ChatInfoPanel({
                 className="flex w-full items-center gap-[var(--space-3)] rounded-[10px] px-2 py-[10px] text-left transition-colors hover:bg-surface"
               >
                 <div className="avatar-md flex shrink-0 items-center justify-center rounded-full border border-dashed border-[var(--border-strong)] bg-surface-inset">
-                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[16px] text-muted">
-                    <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                  </svg>
+                  <Plus className="size-[16px] text-muted" aria-hidden />
                 </div>
                 <p className="text-body-sm font-[var(--fw-medium)] text-app">Añadir personas</p>
               </button>
@@ -2245,10 +2424,9 @@ function ChatInfoPanel({
                     <div className="avatar-md flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">
                       {m.profile_image ? <NextImage src={m.profile_image} alt={m.nombre} width={40} height={40} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" /> : label}
                     </div>
-                    <p className="min-w-0 flex-1 truncate text-body-sm text-app">{m.nombre}</p>
-                    {isMe && (
-                      <span className="shrink-0 rounded-full bg-surface px-[8px] py-[3px] text-[14px] text-muted">Tú</span>
-                    )}
+                    <p className="min-w-0 flex-1 truncate text-body-sm text-app">
+                      {isMe ? <><span className="text-muted">(Tú)</span> {m.nombre}</> : m.nombre}
+                    </p>
                   </div>
                 );
               })}
@@ -2289,8 +2467,8 @@ function ChatInfoPanel({
 
       {/* Confirm modal */}
       {confirmLeave && (
-        <div className="absolute inset-0 z-50 flex items-end justify-center bg-black/40 md:items-center">
-          <div className="w-full max-w-[360px] rounded-t-[20px] bg-app p-[var(--space-5)] md:rounded-[16px]">
+        <div data-closing={confirmLeaveClosing ? "true" : "false"} className="app-modal-overlay absolute inset-0 z-50 flex items-end justify-center md:items-center">
+          <div className="app-modal-panel w-full max-w-[360px] rounded-t-[20px] bg-app p-[var(--space-5)] md:rounded-[16px]">
             <p className="text-center text-body-sm font-[var(--fw-semibold)] text-app">
               {isGrupo ? "¿Salir del grupo?" : "¿Eliminar esta conversación?"}
             </p>
@@ -2308,7 +2486,7 @@ function ChatInfoPanel({
               </button>
               <button
                 type="button"
-                onClick={() => setConfirmLeave(false)}
+                onClick={closeConfirmLeave}
                 className="w-full rounded-full border border-app py-[10px] text-body-sm font-[var(--fw-semibold)] text-app transition-colors hover:bg-surface"
               >
                 Cancelar
@@ -2344,327 +2522,40 @@ function ActionRow({
   );
 }
 
-function TrashLightIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-full">
-      <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-function TrashIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-full">
-      <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-function BlockIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-full">
-      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M5.636 5.636l12.728 12.728" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  );
-}
-function ReportIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-full">
-      <path d="M12 9v4M12 17h.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-    </svg>
-  );
-}
-function LeaveIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-full">
-      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function ChevronDownIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-function EditIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-full">
-      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-function ReplyIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-full">
-      <path d="M9 17H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M15 19l-4-4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M11 15h7a2 2 0 0 1 2 2v2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-function CopyIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-full">
-      <rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-function EmojiIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-full">
-      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M8 13s1.5 2 4 2 4-2 4-2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      <circle cx="9" cy="9.5" r="1" fill="currentColor" />
-      <circle cx="15" cy="9.5" r="1" fill="currentColor" />
-    </svg>
-  );
-}
-function ForwardIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-full">
-      <path d="M15 17l5-5-5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M20 12H9a5 5 0 0 0-5 5v1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-function PinIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <path d="M12 17v5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      <path d="M8.5 5l-.5 5-3 2 7 4 7-4-3-2-.5-5z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-function StarIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-full">
-      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function CameraIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-      <circle cx="12" cy="13" r="4" stroke="currentColor" strokeWidth="1.8" />
-    </svg>
-  );
-}
+const TrashLightIcon = Trash2;
+const TrashIcon = Trash2;
+const BlockIcon = Ban;
+const ReportIcon = AlertTriangle;
+const LeaveIcon = LogOut;
+const ChevronDownIcon = ChevronDown;
+const EditIcon = Pencil;
+const ReplyIcon = Reply;
+const CopyIcon = Copy;
+const EmojiIcon = Smile;
+const ForwardIcon = Forward;
+const PinIcon = Pin;
+const StarIcon = Star;
+const CameraIcon = Camera;
+const PhotoVideoIcon = Video;
+const AudioFileIcon = Music;
+const PollIcon = BarChart2;
+const AttachPlusIcon = PlusCircle;
+const MicIcon = Mic;
+const DocIcon = File;
+const SendMsgIcon = LucideSend;
 
 export function ComposeIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <path d="M12 5H7a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L12 14l-4 1 1-4 7.5-7.5z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
+  return <Edit className={className} aria-hidden />;
 }
 
 export function BackIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
+  return <ChevronLeft className={className} aria-hidden />;
 }
 
 export function GroupIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <circle cx="9" cy="7" r="3" stroke="currentColor" strokeWidth="1.6" />
-      <path d="M2 19c1-3 3.5-4.5 7-4.5s6 1.5 7 4.5" stroke="currentColor" strokeWidth="1.6" />
-      <circle cx="17" cy="8" r="2.5" stroke="currentColor" strokeWidth="1.4" />
-      <path d="M18.5 14.5c1.5.8 2.8 2 3.5 4.5" stroke="currentColor" strokeWidth="1.4" />
-    </svg>
-  );
+  return <Users className={className} aria-hidden />;
 }
 
-function SendMsgIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <path d="M22 2L11 13" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function CameraModal({ onCapture, onClose }: { onCapture: (file: File) => void; onClose: () => void }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const videoChunksRef = useRef<Blob[]>([]);
-  const [ready, setReady] = useState(false);
-  const [mode, setMode] = useState<"photo" | "video">("photo");
-  const [recording, setRecording] = useState(false);
-  const [recSeconds, setRecSeconds] = useState(0);
-  const recTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [captured, setCaptured] = useState<string | null>(null);     // foto: dataURL
-  const [capturedVideo, setCapturedVideo] = useState<Blob | null>(null); // video: blob
-  const [capturedVideoUrl, setCapturedVideoUrl] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
-
-  const videoRefCallback = useCallback((el: HTMLVideoElement | null) => { setVideoEl(el); }, []);
-
-  useEffect(() => {
-    if (!videoEl) return;
-    let cancelled = false;
-    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-      .then((stream) => {
-        if (cancelled) { stream.getTracks().forEach((t) => t.stop()); return; }
-        streamRef.current = stream;
-        videoEl.srcObject = stream;
-      })
-      .catch((e: unknown) => setError(`No se pudo acceder a la cámara: ${(e as Error).message ?? String(e)}`));
-    return () => {
-      cancelled = true;
-      streamRef.current?.getTracks().forEach((t) => t.stop());
-    };
-  }, [videoEl]);
-
-  const handleCapturePhoto = () => {
-    const video = videoEl;
-    const canvas = canvasRef.current;
-    if (!video || !canvas) return;
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    canvas.getContext("2d")?.drawImage(video, 0, 0);
-    setCaptured(canvas.toDataURL("image/jpeg", 0.92));
-  };
-
-  const handleStartVideo = () => {
-    const stream = streamRef.current;
-    if (!stream) return;
-    videoChunksRef.current = [];
-    const recorder = new MediaRecorder(stream);
-    recorder.ondataavailable = (e) => { if (e.data.size > 0) videoChunksRef.current.push(e.data); };
-    recorder.onstop = () => {
-      const blob = new Blob(videoChunksRef.current, { type: "video/webm" });
-      const url = URL.createObjectURL(blob);
-      setCapturedVideo(blob);
-      setCapturedVideoUrl(url);
-    };
-    recorder.start();
-    recorderRef.current = recorder;
-    setRecording(true);
-    setRecSeconds(0);
-    recTimerRef.current = setInterval(() => setRecSeconds((s) => s + 1), 1000);
-  };
-
-  const handleStopVideo = () => {
-    recorderRef.current?.stop();
-    if (recTimerRef.current) clearInterval(recTimerRef.current);
-    setRecording(false);
-  };
-
-  const handleSendPhoto = () => {
-    if (!captured) return;
-    const byteString = atob(captured.split(",")[1]!);
-    const buffer = new Uint8Array(byteString.length);
-    for (let i = 0; i < byteString.length; i++) buffer[i] = byteString.charCodeAt(i);
-    onCapture(new File([buffer], `foto_${Date.now()}.jpg`, { type: "image/jpeg" }));
-  };
-
-  const handleSendVideo = () => {
-    if (!capturedVideo) return;
-    if (capturedVideoUrl) URL.revokeObjectURL(capturedVideoUrl);
-    onCapture(new File([capturedVideo], `video_${Date.now()}.webm`, { type: "video/webm" }));
-  };
-
-  const handleRepeat = () => {
-    if (capturedVideoUrl) { URL.revokeObjectURL(capturedVideoUrl); setCapturedVideoUrl(null); }
-    setCaptured(null);
-    setCapturedVideo(null);
-  };
-
-  const fmt = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
-  const hasCapture = captured ?? capturedVideo;
-
-  return (
-    <div className="fixed inset-0 z-[100] flex flex-col bg-black">
-      {/* Cerrar */}
-      <button type="button" onClick={onClose} className="absolute right-[16px] top-[16px] z-10 flex size-[36px] items-center justify-center rounded-full bg-black/40 text-white">
-        <svg viewBox="0 0 24 24" fill="none" className="size-[18px]"><path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
-      </button>
-
-      {error ? (
-        <div className="flex flex-1 items-center justify-center">
-          <p className="px-8 text-center text-white/80">{error}</p>
-        </div>
-      ) : hasCapture ? (
-        /* Preview */
-        <>
-          <div className="relative flex-1 overflow-hidden">
-            {captured ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <NextImage src={captured} alt="Captura" width={1200} height={900} className="h-full w-full object-contain" unoptimized />
-            ) : (
-              <video src={capturedVideoUrl ?? undefined} controls autoPlay className="h-full w-full object-contain" />
-            )}
-          </div>
-          <div className="flex items-center justify-center gap-[16px] py-[28px]">
-            <button type="button" onClick={handleRepeat} className="rounded-full border border-white/50 px-[24px] py-[10px] text-white">
-              Repetir
-            </button>
-            <button type="button" onClick={captured ? handleSendPhoto : handleSendVideo} className="rounded-full bg-white px-[28px] py-[10px] font-semibold text-black">
-              Enviar
-            </button>
-          </div>
-        </>
-      ) : (
-        /* Visor */
-        <>
-          <div className="relative flex-1 overflow-hidden">
-            <video ref={videoRefCallback} autoPlay playsInline muted onCanPlay={() => setReady(true)} className="h-full w-full object-cover" />
-            {!ready && <div className="absolute inset-0 flex items-center justify-center"><span className="text-sm text-white/60">Iniciando cámara...</span></div>}
-            {recording && (
-              <div className="absolute left-[16px] top-[16px] flex items-center gap-[6px] rounded-full bg-black/50 px-[12px] py-[4px]">
-                <span className="size-[8px] animate-pulse rounded-full bg-red-500" />
-                <span className="text-[14px] text-white">{fmt(recSeconds)}</span>
-              </div>
-            )}
-          </div>
-          <canvas ref={canvasRef} className="hidden" />
-
-          {/* Controles */}
-          <div className="flex items-center justify-center gap-[40px] py-[28px]">
-            {/* Switch foto/video */}
-            <div className="flex rounded-full bg-white/15 p-[3px]">
-              <button type="button" onClick={() => setMode("photo")} className={`rounded-full px-[14px] py-[6px] text-[14px] font-medium transition-colors ${mode === "photo" ? "bg-white text-black" : "text-white"}`}>
-                Foto
-              </button>
-              <button type="button" onClick={() => setMode("video")} className={`rounded-full px-[14px] py-[6px] text-[14px] font-medium transition-colors ${mode === "video" ? "bg-white text-black" : "text-white"}`}>
-                Vídeo
-              </button>
-            </div>
-
-            {/* Botón captura */}
-            {mode === "photo" ? (
-              <button type="button" onClick={handleCapturePhoto} disabled={!ready}
-                className="flex size-[64px] items-center justify-center rounded-full border-[3px] border-white bg-white/20 transition-opacity disabled:opacity-40 hover:bg-white/30">
-                <div className="size-[48px] rounded-full bg-white" />
-              </button>
-            ) : (
-              <button type="button" onClick={recording ? handleStopVideo : handleStartVideo} disabled={!ready}
-                className={`flex size-[64px] items-center justify-center rounded-full border-[3px] transition-all disabled:opacity-40 ${recording ? "border-red-500 bg-red-500/20" : "border-white bg-white/20 hover:bg-white/30"}`}>
-                <div className={`rounded-full bg-red-500 transition-all ${recording ? "size-[24px] rounded-[6px]" : "size-[48px]"}`} />
-              </button>
-            )}
-
-            {/* Placeholder para centrar */}
-            <div className="w-[80px]" />
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
 
 function CallBubble({ tipo, duracion }: { tipo: string; duracion: number }) {
   const missed = tipo.includes("missed");
@@ -2679,12 +2570,10 @@ function CallBubble({ tipo, duracion }: { tipo: string; duracion: number }) {
     return m > 0 ? `${m} min ${sec} s` : `${sec} s`;
   };
   return (
-    <div className="flex items-center gap-[var(--space-2)]">
-      <span className={`text-[20px] ${missed ? "opacity-60" : ""}`}>
-        {isVideo ? "📹" : "📞"}
-      </span>
+    <div className={`flex items-start gap-[var(--space-2)] ${missed ? "text-red-700 dark:text-red-800" : ""}`}>
+      {isVideo ? <Video className="mt-[2px] size-[16px] shrink-0" /> : <Phone className="mt-[2px] size-[16px] shrink-0" />}
       <div className="flex flex-col">
-        <span className={`text-body-sm font-[var(--fw-medium)] ${missed ? "opacity-70" : ""}`}>{label}</span>
+        <span className="text-body-sm font-[var(--fw-medium)]">{label}</span>
         {!missed && duracion > 0 && (
           <span className="text-[14px] opacity-60">{formatDur(duracion)}</span>
         )}
@@ -2910,87 +2799,23 @@ function PollBubble({ msg, isMe, onVote }: { msg: MensajeRow; isMe: boolean; onV
               <div className="relative flex items-center justify-between gap-2">
                 <div className="flex items-center gap-[6px]">
                   {selected && (
-                    <svg viewBox="0 0 24 24" fill="none" className="size-[13px] shrink-0" style={{ color: isMe ? "rgba(255,255,255,0.9)" : "var(--text-primary)" }}>
-                      <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
+                    <Check className="size-[13px] shrink-0" strokeWidth={2.5} style={{ color: isMe ? "rgba(255,255,255,0.9)" : "var(--text-primary)" }} aria-hidden />
                   )}
                   <span className="text-body-sm">{opt}</span>
                 </div>
-                <span className={`text-[14px] ${isMe ? "text-contrast-token/60" : "text-muted"}`}>{pct}%</span>
+                <span className={`text-[14px] ${isMe ? "text-white/60" : "text-muted"}`}>{pct}%</span>
               </div>
             </button>
           );
         })}
       </div>
-      <p className={`mt-[8px] text-[14px] ${isMe ? "text-contrast-token/60" : "text-muted"}`}>
+      <p className={`mt-[8px] text-[14px] ${isMe ? "text-white/60" : "text-muted"}`}>
         {poll.closed ? `Cerrada · ${total} ${total === 1 ? "voto" : "votos"}` : `${total} ${total === 1 ? "voto" : "votos"}`}
       </p>
     </div>
   );
 }
 
-function PollCreatorModal({ onClose, onCreate }: { onClose: () => void; onCreate: (question: string, options: string[]) => void }) {
-  const [question, setQuestion] = useState("");
-  const [options, setOptions] = useState(["", ""]);
-  const canCreate = question.trim().length > 0 && options.filter((o) => o.trim()).length >= 2;
-
-  return (
-    <div className="absolute inset-0 z-50 flex items-end justify-center bg-black/40 md:items-center" onClick={onClose}>
-      <div className="w-full max-w-[420px] rounded-t-[20px] bg-app p-[var(--space-5)] md:rounded-[16px]" onClick={(e) => e.stopPropagation()}>
-        <p className="mb-[var(--space-4)] text-body font-[var(--fw-semibold)] text-app">Nueva encuesta</p>
-        <input
-          value={question}
-          onChange={(e) => setQuestion(e.target.value)}
-          placeholder="Pregunta..."
-          className="mb-[var(--space-3)] w-full rounded-[10px] border border-app bg-surface px-3 py-[10px] text-body-sm text-app outline-none focus:border-[var(--border-strong)]"
-        />
-        <div className="mb-[var(--space-3)] space-y-[8px]">
-          {options.map((opt, idx) => (
-            <div key={idx} className="flex items-center gap-2">
-              <input
-                value={opt}
-                onChange={(e) => setOptions((prev) => prev.map((o, i) => (i === idx ? e.target.value : o)))}
-                placeholder={`Opción ${idx + 1}`}
-                className="flex-1 rounded-[10px] border border-app bg-surface px-3 py-[8px] text-body-sm text-app outline-none focus:border-[var(--border-strong)]"
-              />
-              {options.length > 2 && (
-                <button
-                  type="button"
-                  onClick={() => setOptions((prev) => prev.filter((_, i) => i !== idx))}
-                  className="text-muted transition-colors hover:text-red-400"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" className="size-[16px]"><path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-        {options.length < 6 && (
-          <button
-            type="button"
-            onClick={() => setOptions((prev) => [...prev, ""])}
-            className="mb-[var(--space-4)] text-body-sm text-[var(--text-primary)] transition-opacity hover:opacity-70"
-          >
-            + Añadir opción
-          </button>
-        )}
-        <div className="flex gap-[var(--space-2)]">
-          <button type="button" onClick={onClose} className="flex-1 rounded-full border border-app py-[10px] text-body-sm font-[var(--fw-semibold)] text-app transition-colors hover:bg-surface">
-            Cancelar
-          </button>
-          <button
-            type="button"
-            disabled={!canCreate}
-            onClick={() => onCreate(question.trim(), options.filter((o) => o.trim()))}
-            className="flex-1 rounded-full bg-[var(--text-primary)] py-[10px] text-body-sm font-[var(--fw-semibold)] text-contrast-token transition-opacity hover:opacity-80 disabled:opacity-30"
-          >
-            Crear
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function DocumentBubble({ url, name, sending }: { url: string; name: string; sending?: boolean }) {
   const ext = name.split(".").pop()?.toUpperCase() ?? "DOC";
@@ -3015,86 +2840,18 @@ function DocumentBubble({ url, name, sending }: { url: string; name: string; sen
       </div>
       {/* Flecha descarga */}
       {!sending && (
-        <svg viewBox="0 0 24 24" fill="none" className="size-[16px] shrink-0 opacity-50">
-          <path d="M12 3v13M5 13l7 7 7-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
+        <Download className="size-[16px] shrink-0 opacity-50" aria-hidden />
       )}
     </a>
   );
 }
 
-function AttachPlusIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.6" />
-      <path d="M12 7v10M7 12h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function MicIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <rect x="9" y="2" width="6" height="12" rx="3" stroke="currentColor" strokeWidth="1.6" />
-      <path d="M5 10a7 7 0 0 0 14 0" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-      <path d="M12 19v3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function DocIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
-      <path d="M14 2v6h6M8 13h8M8 17h5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function PhotoVideoIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <rect x="2" y="5" width="14" height="14" rx="2" stroke="currentColor" strokeWidth="1.6" />
-      <path d="M16 9l6-3v12l-6-3V9Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function AudioFileIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <path d="M9 18V6l12-2v12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="6" cy="18" r="3" stroke="currentColor" strokeWidth="1.4" />
-      <circle cx="18" cy="16" r="3" stroke="currentColor" strokeWidth="1.4" />
-    </svg>
-  );
-}
-
-function PollIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <rect x="3" y="14" width="4" height="7" rx="1" stroke="currentColor" strokeWidth="1.5" />
-      <rect x="10" y="9" width="4" height="12" rx="1" stroke="currentColor" strokeWidth="1.5" />
-      <rect x="17" y="4" width="4" height="17" rx="1" stroke="currentColor" strokeWidth="1.5" />
-    </svg>
-  );
-}
-
 export function PhoneCallIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.27h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.91a16 16 0 0 0 6.08 6.08l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
+  return <Phone className={className} aria-hidden />;
 }
 
 export function VideoCallIcon({ className = "size-icon" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <polygon points="23 7 16 12 23 17 23 7" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-      <rect x="1" y="5" width="15" height="14" rx="2" stroke="currentColor" strokeWidth="1.8" />
-    </svg>
-  );
+  return <Video className={className} aria-hidden />;
 }
 
 function Lightbox({ url, imageUrls, onClose }: { url: string; imageUrls: string[]; onClose: () => void }) {
@@ -3125,7 +2882,7 @@ function Lightbox({ url, imageUrls, onClose }: { url: string; imageUrls: string[
       {/* Header */}
       <div className="flex shrink-0 items-center justify-end p-3" onClick={(e) => e.stopPropagation()}>
         <button type="button" onClick={onClose} className="rounded-full p-2 text-white hover:bg-white/10">
-          <svg viewBox="0 0 24 24" fill="none" className="size-6"><path d="M18 6 6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+          <CloseX className="size-6" />
         </button>
       </div>
 
@@ -3133,13 +2890,13 @@ function Lightbox({ url, imageUrls, onClose }: { url: string; imageUrls: string[
       <div className="relative flex flex-1 items-center justify-center overflow-hidden" onClick={(e) => e.stopPropagation()}>
         {hasPrev && (
           <button type="button" onClick={() => setCurrent(imageUrls[idx - 1])} className="absolute left-3 z-10 rounded-full bg-white/10 p-2 text-white hover:bg-white/20">
-            <svg viewBox="0 0 24 24" fill="none" className="size-6"><path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            <ChevronLeft className="size-6" aria-hidden />
           </button>
         )}
         <NextImage src={current} alt="Imagen" width={1600} height={1200} className="max-h-full max-w-full object-contain" unoptimized referrerPolicy="no-referrer" />
         {hasNext && (
           <button type="button" onClick={() => setCurrent(imageUrls[idx + 1])} className="absolute right-3 z-10 rounded-full bg-white/10 p-2 text-white hover:bg-white/20">
-            <svg viewBox="0 0 24 24" fill="none" className="size-6"><path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            <ChevronRight className="size-6" aria-hidden />
           </button>
         )}
       </div>

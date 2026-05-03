@@ -17,11 +17,15 @@ import {
   type ChatListItem,
 } from "@/services/api/repositories/chat.repository";
 import { fetchActiveFriends, type PublicUserProfileRow } from "@/services/api/endpoints/users.endpoint";
+import { useToast } from "@/components/ui/Toaster";
 import { createGrupoEndpoint } from "@/services/api/endpoints/grupos.endpoint";
 import { ChatConversation, BackIcon, GroupIcon } from "@/components/chat/ChatConversation";
+import { SearchInput } from "@/components/ui/SearchInput";
+import { Phone, Video } from "lucide-react";
 
 export default function MessagesPage() {
   const { user, loading } = useAuth();
+  const { toastError } = useToast();
   const { startCall, joinCall, callState } = useCallContext();
   const prevCallStatusRef = useRef(callState.status);
   const reloadCallMessagesRef = useRef<(() => void) | null>(null);
@@ -61,6 +65,7 @@ export default function MessagesPage() {
       setFriends(data);
     } catch (e) {
       console.error("[messages] Error cargando amigos:", e);
+      toastError("No se pudieron cargar tus amigos.");
     } finally {
       setFriendsLoading(false);
     }
@@ -76,6 +81,7 @@ export default function MessagesPage() {
       setSelectedChatId(chatId);
     } catch (e) {
       console.error("[messages] Error iniciando chat:", e);
+      toastError("No se pudo iniciar la conversación.");
     } finally {
       setStartingChatWith(null);
     }
@@ -111,6 +117,7 @@ export default function MessagesPage() {
       setSelectedChatId(chatId);
     } catch (e) {
       console.error("[messages] Error creando grupo:", e);
+      toastError("No se pudo crear el grupo.");
     } finally {
       setCreatingGroup(false);
     }
@@ -162,7 +169,7 @@ export default function MessagesPage() {
   const chatListContent = showFriendPicker ? (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="flex items-center gap-[var(--space-3)] px-[var(--space-4)] py-[var(--space-3)]">
+      <div className="flex items-center gap-[var(--space-3)] px-[var(--space-4)] pb-[var(--space-3)] pt-mobile-safe-top md:py-[var(--space-3)]">
         <button
           type="button"
           onClick={() => {
@@ -174,9 +181,9 @@ export default function MessagesPage() {
         >
           <BackIcon className="size-[18px]" />
         </button>
-        <h2 className="text-[var(--font-h4)] font-[var(--fw-medium)] text-app">
+        <h1 className="text-[var(--font-h2)] font-[var(--fw-regular)] leading-[1.15] text-app md:text-[var(--font-h1)]">
           {showGroupCreator ? "Nuevo grupo" : "Nueva conversación"}
-        </h2>
+        </h1>
       </div>
 
       <div className="flex-1 overflow-y-auto overscroll-contain px-[var(--space-3)]">
@@ -237,7 +244,7 @@ export default function MessagesPage() {
                       >
                         <div className="avatar-md flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">
                           {friend.profile_image ? (
-                            <Image src={friend.profile_image} alt={friend.nombre} width={34} height={34} className="h-full w-full object-cover" referrerPolicy="no-referrer" unoptimized />
+                            <Image src={friend.profile_image} alt={friend.nombre} width={34} height={34} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
                           ) : avatarLabel}
                         </div>
                         <p className="min-w-0 flex-1 truncate text-body-sm font-[var(--fw-medium)] text-app">{friend.nombre}</p>
@@ -302,7 +309,7 @@ export default function MessagesPage() {
                   >
                     <div className="avatar-md flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">
                       {friend.profile_image ? (
-                        <Image src={friend.profile_image} alt={friend.nombre} width={34} height={34} className="h-full w-full object-cover" referrerPolicy="no-referrer" unoptimized />
+                        <Image src={friend.profile_image} alt={friend.nombre} width={34} height={34} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
                       ) : avatarLabel}
                     </div>
                     <p className="min-w-0 flex-1 truncate text-body-sm font-[var(--fw-medium)] text-app">{friend.nombre}</p>
@@ -319,49 +326,24 @@ export default function MessagesPage() {
     </div>
   ) : (
     <div className="flex h-full flex-col">
-      {/* Header + compose */}
-      <div className="flex items-center justify-between px-[var(--space-4)] py-[var(--space-3)]">
+      {/* Header */}
+      <div className="flex items-center justify-between px-[var(--space-4)] pb-[var(--space-8)] pt-mobile-safe-top md:pb-[var(--space-8)] md:pt-[var(--space-3)]">
         <h1 className="text-[var(--font-h2)] font-[var(--fw-regular)] leading-[1.15] text-app md:text-[var(--font-h1)]">Mensajes</h1>
-        <button
-          type="button"
-          onClick={() => void openFriendPicker()}
-          className="flex size-[36px] shrink-0 items-center justify-center rounded-full bg-[var(--primary)] text-white transition-opacity hover:opacity-80"
-          aria-label="Nueva conversación"
-        >
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[18px]">
-            <path d="M12 4V20M4 12H20" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-          </svg>
-        </button>
       </div>
 
       {/* Search bar */}
       <div className="px-[var(--space-4)] pb-[var(--space-3)]">
-        <div className="flex h-[44px] w-full items-center gap-[10px] rounded-[8px] bg-[var(--search-field-bg)] px-[14px]">
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[20px] shrink-0 text-muted">
-            <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.8" />
-            <path d="M16 16L20.5 20.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-          </svg>
-          <input
-            type="search"
-            value={searchValue}
-            onChange={(e) => setSearchValue(e.target.value)}
-            placeholder="Buscar"
-            className="min-w-0 flex-1 border-none bg-transparent text-[15px] text-app shadow-none outline-none ring-0 focus:border-none focus:shadow-none focus:outline-none focus:ring-0 placeholder:text-muted [&::-webkit-search-cancel-button]:hidden"
-          />
-          {searchValue && (
-            <button type="button" onClick={() => setSearchValue("")} className="shrink-0 text-muted transition-opacity hover:opacity-70">
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[18px]"><path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
-            </button>
-          )}
-        </div>
+        <SearchInput
+          value={searchValue}
+          onChange={setSearchValue}
+          className="h-[40px] w-full"
+        />
       </div>
 
       {/* Chat list */}
       <div className="flex-1 overflow-y-auto overscroll-contain">
         {chatsLoading ? (
-          <div className="flex justify-center py-[var(--space-12)]">
-            <div className="size-5 animate-spin rounded-full border-2 border-current border-t-transparent opacity-40" />
-          </div>
+          <ChatListSkeleton />
         ) : filteredChats.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-[var(--space-3)] py-[var(--space-12)] text-center">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-12 opacity-20">
@@ -373,32 +355,50 @@ export default function MessagesPage() {
             </p>
           </div>
         ) : (
-          <div className="flex flex-col">
-            {filteredChats.map((chat, index) => {
+          <div className="flex flex-col px-2">
+            {filteredChats.map((chat) => {
               const name = resolveChatName(chat, user?.id ?? "");
               const avatar = resolveChatAvatar(chat, user?.id ?? "");
               const hasUnread = chat.unread_count > 0;
-              const isLast = index === filteredChats.length - 1;
+              const isSelected = chat.chat_id === selectedChatId;
+              const lastMsgRaw = (() => { const m = chat.last_message ?? ""; try { return JSON.parse(m)?.type === "poll" ? "📊 Encuesta" : m; } catch { return m; } })();
+              const callPreview = (() => {
+                if (!lastMsgRaw.includes("Llamada") && !lastMsgRaw.includes("Videollamada")) return null;
+                const missed = lastMsgRaw.includes("perdida");
+                const isVideo = lastMsgRaw.includes("Video");
+                const label = missed ? (isVideo ? "Videollamada perdida" : "Llamada perdida") : (isVideo ? "Videollamada" : "Llamada de audio");
+                return { isVideo, missed, label };
+              })();
               return (
                 <button
                   key={chat.chat_id}
                   type="button"
-                  onClick={() => setSelectedChatId(chat.chat_id)}
-                  className="flex w-full items-center gap-3 px-[var(--space-4)] pt-[var(--space-3)] text-left transition-colors hover:bg-surface focus:outline-none"
+                  onClick={() => {
+                    setSelectedChatId(chat.chat_id);
+                    setChats((prev) => prev.map((c) => c.chat_id !== chat.chat_id ? c : { ...c, unread_count: 0 }));
+                  }}
+                  className={`flex w-full items-center gap-3 rounded-[14px] px-3 py-[10px] text-left transition-colors focus:outline-none ${isSelected ? "bg-surface" : "hover:bg-surface"}`}
                 >
-                  <div className="relative shrink-0 self-start">
+                  <div className="relative shrink-0 self-start mt-[1px]">
                     <ChatPreviewAvatar name={name} image={avatar} isGroup={chat.tipo === "GRUPO"} />
                     {hasUnread && (
-                      <span className="absolute -right-[2px] -top-[2px] size-[10px] rounded-full border-2 border-[var(--bg)] bg-[#ff6a3d]" />
+                      <span className="absolute -right-[3px] -top-[3px] flex min-w-[18px] h-[18px] items-center justify-center rounded-full border-2 border-[var(--bg)] bg-[var(--primary)] px-[3px] text-[10px] font-[700] text-white leading-none">
+                        {chat.unread_count > 9 ? "9+" : chat.unread_count}
+                      </span>
                     )}
                   </div>
-                  <div className={`min-w-0 flex-1 pb-[var(--space-3)] ${!isLast ? "border-b border-app" : ""}`}>
-                    <div className="flex items-baseline justify-between gap-[var(--space-2)]">
-                      <p className="truncate text-body-sm font-[var(--fw-semibold)] text-app">{name}</p>
-                      <span className="shrink-0 text-[14px] text-muted">{formatChatTime(chat.last_message_at)}</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2 mb-[2px]">
+                      <p className={`truncate text-[15px] ${hasUnread ? "font-[700]" : "font-[600]"} text-app`}>{name}</p>
+                      <span className="shrink-0 text-[12px] text-muted tabular-nums">{formatChatTime(chat.last_message_at)}</span>
                     </div>
-                    <p className={`truncate text-caption leading-[1.4] min-h-[1.4em] ${hasUnread ? "font-[var(--fw-medium)] text-app" : "text-muted"}`}>
-                      {(() => { const m = chat.last_message ?? ""; try { return JSON.parse(m)?.type === "poll" ? "📊 Encuesta" : m; } catch { return m; } })()}
+                    <p className={`truncate text-[13px] leading-[1.4] ${hasUnread ? "font-[600] text-app" : "text-muted"}`}>
+                      {callPreview ? (
+                        <span className={`flex items-center gap-1 ${callPreview.missed ? "text-red-700 dark:text-red-800" : ""}`}>
+                          {callPreview.isVideo ? <Video className="size-3 shrink-0" /> : <Phone className="size-3 shrink-0" />}
+                          <span className="truncate">{callPreview.label}</span>
+                        </span>
+                      ) : lastMsgRaw}
                     </p>
                   </div>
                 </button>
@@ -448,7 +448,7 @@ export default function MessagesPage() {
   return (
     <div className="h-dvh bg-app text-app">
       <div className="relative h-full">
-        <AppSidebar hideMobileNav={isInChat} />
+        <AppSidebar hideMobileNav={isInChat} onCreateConversation={() => void openFriendPicker()} />
 
         {/* Sliding two-panel layout */}
         <div className="h-full overflow-hidden md:ml-[102px]">
@@ -482,19 +482,31 @@ export default function MessagesPage() {
   );
 }
 
+function ChatListSkeleton() {
+  return (
+    <div className="flex flex-col gap-[var(--space-4)] px-[var(--space-4)] py-[var(--space-3)]" aria-label="Cargando conversaciones" role="status">
+      {[1, 2].map((i) => (
+        <div key={i} className="flex items-center gap-[var(--space-3)]">
+          <div className="skeleton-shimmer size-12 shrink-0 rounded-full" />
+          <div className="skeleton-shimmer h-[14px] w-[148px] rounded-full" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function ChatPreviewAvatar({ name, image, isGroup }: { name: string; image: string | null; isGroup: boolean }) {
   if (image) {
     return (
-      <div className="relative mt-0.5 size-11 shrink-0 overflow-hidden rounded-full border border-app">
-        <Image src={image} alt={name} fill sizes="44px" className="object-cover" unoptimized referrerPolicy="no-referrer" />
+      <div className="relative size-12 shrink-0 overflow-hidden rounded-full border border-app">
+        <Image src={image} alt={name} fill sizes="48px" className="object-cover" unoptimized referrerPolicy="no-referrer" />
       </div>
     );
   }
 
   return (
-    <div className="mt-0.5 flex size-11 shrink-0 items-center justify-center rounded-full border border-app bg-surface-2 text-body-sm font-[var(--fw-semibold)] text-muted">
-      {isGroup ? <GroupIcon className="size-[18px] text-muted" /> : (name.trim()[0] || "U").toUpperCase()}
+    <div className="flex size-12 shrink-0 items-center justify-center rounded-full border border-app bg-surface-2 text-[15px] font-[700] text-muted">
+      {isGroup ? <GroupIcon className="size-[20px] text-muted" /> : (name.trim()[0] || "U").toUpperCase()}
     </div>
   );
 }
-

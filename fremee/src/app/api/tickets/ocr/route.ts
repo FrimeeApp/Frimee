@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "crypto";
+import { publicEnv, getSupabaseServiceRoleKey } from "@/config/env";
+import { OPENAI_API_BASE_URL } from "@/config/external";
+import { createSupabaseServerClient, createSupabaseServiceClient } from "@/services/supabase/server";
+import { validateUploadFile } from "@/lib/sanitize";
+import { checkRateLimit, rateLimitedResponse } from "@/lib/rate-limit";
 
 export type TicketOcrResult = {
   source_path: string;            // path en Supabase Storage (plan-tickets bucket)
@@ -26,18 +31,48 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const formData = await req.formData();
-    const file   = formData.get("file")    as File   | null;
-    const userId = formData.get("user_id") as string | null;
-
-    if (!file || !userId) {
-      return NextResponse.json({ error: "Faltan parámetros: file, user_id" }, { status: 400 });
+    // ── 0. Verificar sesión (cookie o Bearer token) ────────────────────────
+    let sessionUser = null;
+    const authHeader = req.headers.get("authorization");
+    if (authHeader?.startsWith("Bearer ")) {
+      const token = authHeader.slice(7);
+      const { data } = await createSupabaseServiceClient().auth.getUser(token);
+      sessionUser = data.user;
+    } else {
+      const authClient = await createSupabaseServerClient();
+      const { data } = await authClient.auth.getUser();
+      sessionUser = data.user;
     }
+    if (!sessionUser) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+    }
+
+    const rl = await checkRateLimit(`ocr-ticket:${sessionUser.id}`, 5, 60_000);
+    if (rl.limited) return rateLimitedResponse(rl.retryAfter);
+
+    const formData = await req.formData();
+    const fileRaw = formData.get("file") as File | null;
+    const userId  = formData.get("user_id") as string | null;
+
+    if (!userId) {
+      return NextResponse.json({ error: "Faltan parámetros: user_id" }, { status: 400 });
+    }
+
+    // Asegurar que el userId del formulario coincide con la sesión activa
+    if (userId !== sessionUser.id) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+    }
+
+    const fileCheck = validateUploadFile(fileRaw);
+    if (!fileCheck.ok) {
+      return NextResponse.json({ error: fileCheck.error }, { status: 400 });
+    }
+    const file = fileCheck.file;
 
     // ── Subir a plan-tickets bucket ────────────────────────────────────────────
     const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
+      publicEnv.supabaseUrl,
+      getSupabaseServiceRoleKey()
     );
 
     const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
@@ -91,7 +126,7 @@ Si no puedes extraer algún campo con certeza, pon null. No inventes datos.`;
       ];
     }
 
-    const openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+    const openaiRes = await fetch(`${OPENAI_API_BASE_URL}/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({ model: "gpt-4o", max_tokens: 800, messages: [{ role: "user", content: messageContent }] }),

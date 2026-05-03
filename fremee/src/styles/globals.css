@@ -1,9 +1,13 @@
 @import "tailwindcss";
+@import "lenis/dist/lenis.css";
+
+@custom-variant dark (&:where(.dark, .dark *));
 
 @import "./theme.css";
 @import "./base.css";
 @import "./utilities.css";
 @import "./shared/skeleton.css";
+@import "./shared/modal.css";
 @import "./components/popover.css";
 @import "./features/feed.css";
 @import "./vendors/react-day-picker.css";

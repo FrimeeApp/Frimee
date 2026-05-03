@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { SubplanRow } from "@/services/api/endpoints/subplanes.endpoint";
 import { TIPOS_TRANSPORTE } from "@/services/api/endpoints/subplanes.endpoint";
+import { loadGoogleMapsScript } from "@/lib/googleMaps";
+import { createBrowserSupabaseClient } from "@/services/supabase/client";
 
 type Props = {
   subplanes: SubplanRow[];
@@ -15,26 +17,10 @@ type Props = {
 
 function isoDateOnly(iso: string) { return iso.slice(0, 10); }
 
-function loadGoogleMaps(): Promise<void> {
-  return new Promise((resolve) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if ((window as any).google?.maps) { resolve(); return; }
-    const existing = document.getElementById("google-maps-script");
-    if (existing) { existing.addEventListener("load", () => resolve()); return; }
-    const script = document.createElement("script");
-    script.id = "google-maps-script";
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&v=weekly&libraries=places,geometry`;
-    script.async = true;
-    script.onload = () => resolve();
-    document.head.appendChild(script);
-  });
-}
-
 // Geocode an address → {lat, lng}
 async function geocode(address: string): Promise<{ lat: number; lng: number } | null> {
   return new Promise((resolve) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const geocoder = new (window as any).google.maps.Geocoder();
+    const geocoder = new window.google.maps.Geocoder();
     geocoder.geocode({ address }, (results: Array<{ geometry: { location: { lat: () => number; lng: () => number } } }> | null, status: string) => {
       if (status !== "OK" || !results?.[0]) { resolve(null); return; }
       const loc = results[0].geometry.location;
@@ -113,10 +99,9 @@ export default function DayRouteMap({
     setLoading(true);
     setError(null);
     try {
-      await loadGoogleMaps();
+      await loadGoogleMapsScript();
       if (gen !== renderGenRef.current || !fallbackMapRef.current) return;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const google = (window as any).google;
+      const google = window.google;
       fallbackMapRef.current.innerHTML = "";
       const map = new google.maps.Map(fallbackMapRef.current, {
         mapTypeId: "roadmap", disableDefaultUI: true, zoomControl: true, styles: darkMapStyles,
@@ -156,10 +141,9 @@ export default function DayRouteMap({
     setError(null);
 
     try {
-      await loadGoogleMaps();
+      await loadGoogleMapsScript();
       if (gen !== renderGenRef.current || !mapRef.current) return; // stale
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const google = (window as any).google;
+      const google = window.google;
 
       // Clear previous map content
       mapRef.current.innerHTML = "";
@@ -253,9 +237,13 @@ export default function DayRouteMap({
                 toCoord   ? `${toCoord.lat},${toCoord.lng}`     : points[i + 1].name,
               ];
 
+              const { data: { session } } = await createBrowserSupabaseClient().auth.getSession();
               const res = await fetch("/api/directions", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                  "Content-Type": "application/json",
+                  ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
+                },
                 body: JSON.stringify({
                   waypoints,
                   originCoords: fromCoord ?? undefined,

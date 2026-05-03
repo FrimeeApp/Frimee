@@ -12,6 +12,12 @@ import {
 import { TicketTypeIcon } from "@/app/(app)/wallet/page";
 import type { TicketOcrResult } from "@/app/api/tickets/ocr/route";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
+import { Upload, Loader2, Check, FileText, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { FIELD_LINE_CLS } from "@/lib/styles";
+import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
+import { CloseX } from "@/components/ui/CloseX";
+import { ModalFeedback, type ModalFeedbackState } from "@/components/ui/ModalFeedback";
+import { DiscardChangesDialog } from "@/components/ui/DiscardChangesDialog";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -44,23 +50,25 @@ function InlineDayCalendar({
 }) {
   const todayStr = toDateInputValue(new Date());
   const now = new Date();
+  const baseYear = now.getFullYear();
+  const baseMonth = now.getMonth();
   const [monthCount, setMonthCount] = useState(4);
   const [desktopPage, setDesktopPage] = useState(0);
 
   const mobileMonths = useMemo(() =>
     Array.from({ length: monthCount }, (_, i) => {
-      const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+      const d = new Date(baseYear, baseMonth + i, 1);
       return { year: d.getFullYear(), month: d.getMonth() };
     }),
-    [monthCount]
+    [baseMonth, baseYear, monthCount]
   );
 
   const desktopMonths = useMemo(() =>
     [0, 1].map((offset) => {
-      const d = new Date(now.getFullYear(), now.getMonth() + desktopPage * 2 + offset, 1);
+      const d = new Date(baseYear, baseMonth + desktopPage * 2 + offset, 1);
       return { year: d.getFullYear(), month: d.getMonth() };
     }),
-    [desktopPage]
+    [baseMonth, baseYear, desktopPage]
   );
 
   function renderMonth(year: number, month: number) {
@@ -139,9 +147,7 @@ function InlineDayCalendar({
           disabled={desktopPage === 0}
           className="mt-[54px] flex size-8 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-surface disabled:opacity-20"
         >
-          <svg viewBox="0 0 24 24" fill="none" className="size-4">
-            <path d="M15 19l-7-7 7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+          <ChevronLeft className="size-4" aria-hidden />
         </button>
         <div className="grid flex-1 grid-cols-2 gap-[var(--space-8)]">
           {desktopMonths.map(({ year, month }) => renderMonth(year, month))}
@@ -151,9 +157,7 @@ function InlineDayCalendar({
           onClick={() => setDesktopPage(p => p + 1)}
           className="mt-[54px] flex size-8 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-surface"
         >
-          <svg viewBox="0 0 24 24" fill="none" className="size-4">
-            <path d="M9 5l7 7-7 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+          <ChevronRight className="size-4" aria-hidden />
         </button>
       </div>
     </div>
@@ -169,6 +173,7 @@ export default function AddTicketModal({
   onClose: () => void;
   onCreated: () => void;
 }) {
+  const { isClosing, requestClose } = useModalCloseAnimation(onClose);
   const handleNextRef   = useRef<() => void>(() => {});
   const handleSubmitRef = useRef<() => void | Promise<void>>(() => {});
   const fileInputRef    = useRef<HTMLInputElement | null>(null);
@@ -176,6 +181,8 @@ export default function AddTicketModal({
   const [step, setStep]   = useState(1);
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [feedbackState, setFeedbackState] = useState<ModalFeedbackState | null>(null);
+  const [discardOpen, setDiscardOpen] = useState(false);
 
   // Step 1 — source file + OCR
   const [sourceFile, setSourceFile]             = useState<File | null>(null);
@@ -208,20 +215,26 @@ export default function AddTicketModal({
   const [notes, setNotes]                 = useState("");
   const [hasQr, setHasQr]                 = useState(false);
 
+  function isTicketType(value: string): value is TicketType {
+    return TICKET_TYPES.includes(value as TicketType);
+  }
+
   const canContinue = useMemo(() => {
     if (step === 1) return !ocrLoading; // esperar a que termine el OCR
     if (step === 2) return title.trim().length > 0;
     if (step === 3) return dateStr !== "";
     if (step === 4) return isRouteType(type) ? fromLabel.trim().length > 0 && toLabel.trim().length > 0 : true;
     return true;
-  }, [step, title, dateStr, type, fromLabel, toLabel]);
+  }, [dateStr, fromLabel, ocrLoading, step, title, toLabel, type]);
 
   async function runOcr(file: File) {
     setOcrLoading(true);
     setOcrError(null);
     try {
-      const { data: { user } } = await createBrowserSupabaseClient().auth.getUser();
+      const supabase = createBrowserSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("No autenticado");
+      const { data: { session } } = await supabase.auth.getSession();
 
       let fileToSend: File | Blob = file;
       const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
@@ -229,22 +242,36 @@ export default function AddTicketModal({
         const bitmap = await createImageBitmap(file);
         const canvas = document.createElement("canvas");
         canvas.width = bitmap.width; canvas.height = bitmap.height;
-        canvas.getContext("2d")!.drawImage(bitmap, 0, 0);
+        const context = canvas.getContext("2d");
+        if (!context) throw new Error("No se pudo preparar la imagen");
+        context.drawImage(bitmap, 0, 0);
         bitmap.close();
-        fileToSend = await new Promise<Blob>(res => canvas.toBlob(b => res(b!), "image/jpeg", 0.92));
+        fileToSend = await new Promise<Blob>((resolve, reject) => {
+          canvas.toBlob((blob) => {
+            if (!blob) {
+              reject(new Error("No se pudo convertir la imagen"));
+              return;
+            }
+            resolve(blob);
+          }, "image/jpeg", 0.92);
+        });
       }
 
       const fd = new FormData();
       fd.append("file", fileToSend, isPdf ? file.name : "ticket.jpg");
       fd.append("user_id", user.id);
 
-      const res  = await fetch("/api/tickets/ocr", { method: "POST", body: fd });
+      const res  = await fetch("/api/tickets/ocr", {
+        method: "POST",
+        headers: session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {},
+        body: fd,
+      });
       const data = await res.json() as TicketOcrResult & { error?: string };
       if (data.error) throw new Error(data.error);
 
       // Pre-fill fields
       if (data.source_path)    setSourcePath(data.source_path);
-      if (data.type && TICKET_TYPES.includes(data.type as TicketType)) setType(data.type as TicketType);
+      if (data.type && isTicketType(data.type)) setType(data.type);
       if (data.title)          setTitle(data.title);
       if (data.from_label)     setFromLabel(data.from_label);
       if (data.to_label)       setToLabel(data.to_label);
@@ -279,6 +306,7 @@ export default function AddTicketModal({
     if (saving) return;
     setSaving(true);
     setErrorMsg(null);
+    setFeedbackState({ type: "loading" });
     try {
       const startsAt = `${dateStr}T${timeStr || "00:00"}:00`;
       const endsAt   = endDateStr ? `${endDateStr}T${endTimeStr || "00:00"}:00` : null;
@@ -310,10 +338,12 @@ export default function AddTicketModal({
         cover_color:      null,
         status:           "upcoming",
       });
-      onCreated();
+      setFeedbackState({ type: "success", label: "Ticket guardado" });
     } catch (e) {
       const msg = typeof e === "object" && e && "message" in e ? String((e as { message: string }).message) : "No se pudo guardar el ticket.";
       setErrorMsg(msg);
+      setFeedbackState({ type: "error", message: msg });
+    } finally {
       setSaving(false);
     }
   }
@@ -324,20 +354,48 @@ export default function AddTicketModal({
   const meta = STEP_META[step - 1];
   const desktopMaxWidth = step === 3 ? "840px" : "540px";
   const primaryBtnCls = "rounded-[14px] bg-[var(--text-primary)] px-[var(--space-8)] py-[12px] text-body-sm font-[var(--fw-semibold)] text-contrast-token transition-opacity hover:opacity-85 disabled:opacity-[var(--disabled-opacity)]";
+  const hasProgress =
+    step > 1 ||
+    sourceFile !== null ||
+    sourcePath !== null ||
+    title.trim().length > 0 ||
+    fromLabel.trim().length > 0 ||
+    toLabel.trim().length > 0 ||
+    placeLabel.trim().length > 0 ||
+    bookingCode.trim().length > 0 ||
+    notes.trim().length > 0;
+
+  function requestDismiss() {
+    if (saving || ocrLoading) return;
+    if (hasProgress) {
+      setDiscardOpen(true);
+      return;
+    }
+    requestClose();
+  }
 
   return (
+    <>
     <div
-      className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 backdrop-blur-sm md:items-center"
-      onClick={saving ? undefined : onClose}
+      data-closing={isClosing ? "true" : "false"}
+      className="app-modal-overlay fixed inset-0 z-[60] flex items-end justify-center md:items-center"
+      onClick={saving ? undefined : requestDismiss}
       role="presentation"
     >
       <div
-        className="relative flex h-dvh w-full flex-col overflow-hidden bg-[var(--bg)] md:h-[min(760px,90dvh)] md:w-full md:max-w-[var(--modal-max-width)] md:rounded-[24px] md:shadow-elev-4 md:transition-[max-width] md:duration-300 md:[transition-timing-function:cubic-bezier(0.22,1,0.36,1)]"
+        className="app-modal-panel relative flex h-dvh w-full flex-col overflow-hidden bg-[var(--bg)] md:h-[min(760px,90dvh)] md:w-full md:max-w-[var(--modal-max-width)] md:rounded-[24px] md:shadow-elev-4 md:transition-[max-width] md:duration-300 md:[transition-timing-function:cubic-bezier(0.22,1,0.36,1)]"
         style={{ "--modal-max-width": desktopMaxWidth } as CSSProperties}
         onClick={e => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
       >
+        {feedbackState && (
+          <ModalFeedback
+            state={feedbackState}
+            onSuccess={() => { onCreated(); requestClose(); }}
+            onDismissError={() => setFeedbackState(null)}
+          />
+        )}
         {/* Progress bar */}
         <div className="h-[3px] w-full shrink-0 bg-[var(--surface-2)]">
           <div
@@ -350,19 +408,15 @@ export default function AddTicketModal({
         <div className="flex shrink-0 items-center justify-between px-[var(--space-5)] py-[var(--space-3)]">
           <button
             type="button"
-            onClick={step === 1 ? onClose : handleBack}
+            onClick={step === 1 ? requestDismiss : handleBack}
             disabled={saving}
             className="flex size-9 items-center justify-center rounded-full text-app transition-colors hover:bg-surface disabled:opacity-50"
             aria-label={step === 1 ? "Cerrar" : "Volver"}
           >
             {step === 1 ? (
-              <svg viewBox="0 0 24 24" fill="none" className="size-[18px]">
-                <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-              </svg>
+              <CloseX />
             ) : (
-              <svg viewBox="0 0 24 24" fill="none" className="size-[18px]">
-                <path d="M15 19l-7-7 7-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
+              <ChevronLeft className="size-[18px]" aria-hidden />
             )}
           </button>
           <span className="text-caption font-[var(--fw-medium)] text-muted">{step} de {TOTAL_STEPS}</span>
@@ -437,7 +491,7 @@ export default function AddTicketModal({
               </div>
 
               {/* Title */}
-              <div className="flex items-center gap-[var(--space-3)] border-b-2 border-app pb-[var(--space-2)] transition-colors focus-within:border-primary-token">
+              <div className={`flex items-center gap-[var(--space-3)] ${FIELD_LINE_CLS}`}>
                 <TicketTypeIcon type={type} className="size-5 shrink-0 text-muted" />
                 <input
                   value={title}
@@ -463,7 +517,7 @@ export default function AddTicketModal({
               <div className="grid shrink-0 grid-cols-2 gap-[var(--space-4)]">
                 <div>
                   <p className="mb-[var(--space-2)] text-[13px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Hora de inicio</p>
-                  <div className="border-b-2 border-app pb-[var(--space-2)] transition-colors focus-within:border-primary-token">
+                  <div className={FIELD_LINE_CLS}>
                     <input
                       type="time"
                       value={timeStr}
@@ -474,7 +528,7 @@ export default function AddTicketModal({
                 </div>
                 <div>
                   <p className="mb-[var(--space-2)] text-[13px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Hora de fin (opcional)</p>
-                  <div className="border-b-2 border-app pb-[var(--space-2)] transition-colors focus-within:border-primary-token">
+                  <div className={FIELD_LINE_CLS}>
                     <input
                       type="time"
                       value={endTimeStr}
@@ -499,7 +553,7 @@ export default function AddTicketModal({
                 <div className="grid grid-cols-2 gap-[var(--space-5)]">
                   <div>
                     <p className="mb-[var(--space-2)] text-[13px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Origen</p>
-                    <div className="border-b-2 border-app pb-[var(--space-2)] transition-colors focus-within:border-primary-token">
+                    <div className={FIELD_LINE_CLS}>
                       <input
                         type="text"
                         value={fromLabel}
@@ -513,7 +567,7 @@ export default function AddTicketModal({
                   </div>
                   <div>
                     <p className="mb-[var(--space-2)] text-[13px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Destino</p>
-                    <div className="border-b-2 border-app pb-[var(--space-2)] transition-colors focus-within:border-primary-token">
+                    <div className={FIELD_LINE_CLS}>
                       <input
                         type="text"
                         value={toLabel}
@@ -530,7 +584,7 @@ export default function AddTicketModal({
                   <p className="mb-[var(--space-2)] text-[13px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
                     {type === "hotel" ? "Nombre del hotel" : "Lugar / recinto"}
                   </p>
-                  <div className="border-b-2 border-app pb-[var(--space-2)] transition-colors focus-within:border-primary-token">
+                  <div className={FIELD_LINE_CLS}>
                     <input
                       type="text"
                       value={placeLabel}
@@ -550,7 +604,7 @@ export default function AddTicketModal({
 
               <div>
                 <p className="mb-[var(--space-2)] text-[13px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Localizador / código de reserva</p>
-                <div className="border-b-2 border-app pb-[var(--space-2)] transition-colors focus-within:border-primary-token">
+                <div className={FIELD_LINE_CLS}>
                   <input
                     type="text"
                     value={bookingCode}
@@ -572,7 +626,7 @@ export default function AddTicketModal({
                     <p className="mb-[var(--space-2)] text-[13px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
                       {type === "concert" || type === "match" ? "Sector / zona" : "Asiento"}
                     </p>
-                    <div className="border-b-2 border-app pb-[var(--space-2)] transition-colors focus-within:border-primary-token">
+                    <div className={FIELD_LINE_CLS}>
                       <input
                         type="text"
                         value={seatLabel}
@@ -585,7 +639,7 @@ export default function AddTicketModal({
                   {isRouteType(type) && (
                     <div>
                       <p className="mb-[var(--space-2)] text-[13px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Puerta</p>
-                      <div className="border-b-2 border-app pb-[var(--space-2)] transition-colors focus-within:border-primary-token">
+                      <div className={FIELD_LINE_CLS}>
                         <input
                           type="text"
                           value={gateLabel}
@@ -602,7 +656,7 @@ export default function AddTicketModal({
               {type === "flight" && (
                 <div>
                   <p className="mb-[var(--space-2)] text-[13px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Terminal</p>
-                  <div className="border-b-2 border-app pb-[var(--space-2)] transition-colors focus-within:border-primary-token">
+                  <div className={FIELD_LINE_CLS}>
                     <input
                       type="text"
                       value={terminalLabel}
@@ -616,7 +670,7 @@ export default function AddTicketModal({
 
               <div>
                 <p className="mb-[var(--space-2)] text-[13px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Nombre del titular</p>
-                <div className="border-b-2 border-app pb-[var(--space-2)] transition-colors focus-within:border-primary-token">
+                <div className={FIELD_LINE_CLS}>
                   <input
                     type="text"
                     value={passengerName}
@@ -670,6 +724,15 @@ export default function AddTicketModal({
         </div>
       </div>
     </div>
+    <DiscardChangesDialog
+      open={discardOpen}
+      onCancel={() => setDiscardOpen(false)}
+      onDiscard={() => {
+        setDiscardOpen(false);
+        requestClose();
+      }}
+    />
+    </>
   );
 }
 
@@ -741,9 +804,7 @@ function UploadStep({
             onClick={onClear}
             className="absolute right-3 top-3 flex size-8 items-center justify-center rounded-full bg-black/50 text-white transition-colors hover:bg-black/70"
           >
-            <svg viewBox="0 0 24 24" fill="none" className="size-4">
-              <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-            </svg>
+            <X className="size-4" aria-hidden />
           </button>
         </div>
       )}
@@ -785,37 +846,14 @@ function UploadStep({
 }
 
 function UploadIcon({ className = "size-6" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <path d="M12 16V8M12 8L9 11M12 8L15 11" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  );
+  return <Upload className={className} aria-hidden />;
 }
-
 function SpinnerIcon({ className = "size-4" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" strokeDasharray="28 56" strokeLinecap="round" />
-    </svg>
-  );
+  return <Loader2 className={`${className} animate-spin`} aria-hidden />;
 }
-
 function CheckIcon({ className = "size-4" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <path d="M5 13L9 17L19 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
+  return <Check className={className} aria-hidden />;
 }
-
 function PdfIcon({ className = "size-6" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M14 2v6h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M9 13h1.5a1 1 0 010 2H9v-4h1.5a1 1 0 010 2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M14 11h1.5a1.5 1.5 0 010 3H14v-3z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
+  return <FileText className={className} aria-hidden />;
 }

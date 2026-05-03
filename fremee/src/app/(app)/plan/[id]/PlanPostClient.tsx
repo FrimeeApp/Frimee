@@ -6,6 +6,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { getPostByPlanId, type PostDoc } from "@/services/api/posts/get-post";
 import type { ItinerarySnapshotItem } from "@/services/api/dtos/plan.dto";
+import { ArrowLeft as ArrowLeftIcon, MapPin, Calendar, Users } from "lucide-react";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -54,42 +55,10 @@ function initials(name: string): string {
 
 // ── Icons ──────────────────────────────────────────────────────────────────────
 
-function ArrowLeft() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" className="size-5">
-      <path d="M19 12H5M5 12L12 19M5 12L12 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function MapPinIcon() {
-  return (
-    <svg viewBox="0 0 20 20" fill="none" className="size-4 shrink-0">
-      <path d="M10 2C7.24 2 5 4.24 5 7C5 11 10 18 10 18C10 18 15 11 15 7C15 4.24 12.76 2 10 2Z" stroke="currentColor" strokeWidth="1.5" />
-      <circle cx="10" cy="7" r="2" stroke="currentColor" strokeWidth="1.5" />
-    </svg>
-  );
-}
-
-function CalendarIcon() {
-  return (
-    <svg viewBox="0 0 20 20" fill="none" className="size-4 shrink-0">
-      <rect x="3" y="4" width="14" height="13" rx="2" stroke="currentColor" strokeWidth="1.5" />
-      <path d="M7 3V5M13 3V5M3 9H17" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function UsersIcon() {
-  return (
-    <svg viewBox="0 0 20 20" fill="none" className="size-4 shrink-0">
-      <circle cx="8" cy="7" r="3" stroke="currentColor" strokeWidth="1.5" />
-      <path d="M2 17C2 14.24 4.69 12 8 12C11.31 12 14 14.24 14 17" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-      <path d="M14 7C15.66 7 17 8.12 17 9.5C17 10.88 15.66 12 14 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-      <path d="M16 17C16 15.34 15.1 13.88 13.7 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-    </svg>
-  );
-}
+const ArrowLeft = () => <ArrowLeftIcon className="size-5" aria-hidden />;
+const MapPinIcon = () => <MapPin className="size-4 shrink-0" aria-hidden />;
+const CalendarIcon = () => <Calendar className="size-4 shrink-0" aria-hidden />;
+const UsersIcon = () => <Users className="size-4 shrink-0" aria-hidden />;
 
 // ── Section components ─────────────────────────────────────────────────────────
 
@@ -292,7 +261,23 @@ function Skeleton({ className, style }: { className?: string; style?: React.CSSP
 export default function PlanPostClient() {
   const params = useParams();
   const router = useRouter();
-  const planId = Number(params.id);
+  const rawId = params.id as string;
+  const [planId, setPlanId] = useState<number>(() => {
+    if (rawId === "static") {
+      const q = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("id") : null;
+      return Number(q ?? 0);
+    }
+    return Number(rawId);
+  });
+
+  useEffect(() => {
+    if (rawId === "static") {
+      const q = new URLSearchParams(window.location.search).get("id");
+      setPlanId(Number(q ?? 0));
+    } else {
+      setPlanId(Number(rawId));
+    }
+  }, [rawId]);
 
   const [post, setPost] = useState<PostDoc | null>(null);
   const [loading, setLoading] = useState(true);

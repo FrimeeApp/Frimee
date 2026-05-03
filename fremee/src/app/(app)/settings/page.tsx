@@ -4,6 +4,11 @@ import Image from "next/image";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Capacitor } from "@capacitor/core";
+import { ArrowLeftIcon, ChevronRightIcon } from "@/components/icons";
+import {
+  Pencil, User, Shield, Calendar, Bell, Moon, Sun, Globe, Clock,
+  Mail, MessageSquare, LogOut, Trash2, KeyRound, Eye, EyeOff, ChevronLeft,
+} from "lucide-react";
 import { App } from "@capacitor/app";
 import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
 import { useAuth } from "@/providers/AuthProvider";
@@ -16,8 +21,9 @@ import {
   type UserSettingsTheme,
   type UserSettingsVisibility,
 } from "@/services/api/repositories/settings.repository";
+import { STORAGE_KEYS } from "@/config/storage";
 
-type BusyAction = "save" | "signout" | "delete" | "upload-image" | null;
+type BusyAction = "save" | "signout" | "delete" | "upload-image" | "change-password" | null;
 type ThemeOption = UserSettingsTheme;
 type VisibilityOption = UserSettingsVisibility;
 
@@ -176,6 +182,7 @@ export default function SettingsPage() {
   const router = useRouter();
   const { user, profile, settings, signOut, refreshProfile, setUserSnapshot } = useAuth();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const hasLoadedRef = useRef(false);
 
   const [settingsLoading, setSettingsLoading] = useState(true);
   const [busyAction, setBusyAction] = useState<BusyAction>(null);
@@ -184,6 +191,16 @@ export default function SettingsPage() {
 
   const [form, setForm] = useState<SettingsForm>(DEFAULT_SETTINGS);
   const [initialForm, setInitialForm] = useState<SettingsForm>(DEFAULT_SETTINGS);
+
+  const [showPasswordSection, setShowPasswordSection] = useState(false);
+  const [pwdCurrent, setPwdCurrent] = useState("");
+  const [pwdNew, setPwdNew] = useState("");
+  const [pwdConfirm, setPwdConfirm] = useState("");
+  const [showPwd, setShowPwd] = useState(false);
+  const [pwdMsg, setPwdMsg] = useState<{ type: "ok" | "error"; text: string } | null>(null);
+
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
 
   const hasChanges = useMemo(
     () => JSON.stringify(form) !== JSON.stringify(initialForm),
@@ -197,20 +214,39 @@ export default function SettingsPage() {
 
   const avatarFallback = displayName[0]?.toUpperCase() ?? "U";
 
+  const userId = user?.id;
+
   useEffect(() => {
+    if (!userId) {
+      setSettingsLoading(false);
+      return;
+    }
+
+    const CACHE_KEY = `settings_form_${userId}`;
+
+    // Show cached data immediately to avoid skeleton flash on re-navigation
+    const cached = sessionStorage.getItem(CACHE_KEY);
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached) as SettingsForm;
+        setForm(parsed);
+        setInitialForm(parsed);
+        applyThemeToDocument(parsed.theme);
+        setSettingsLoading(false);
+        hasLoadedRef.current = true;
+      } catch {
+        // ignore corrupt cache
+      }
+    }
+
     let cancelled = false;
 
     const loadSettings = async () => {
-      if (!user?.id) {
-        setSettingsLoading(false);
-        return;
-      }
-
-      setSettingsLoading(true);
+      if (!hasLoadedRef.current) setSettingsLoading(true);
       setErrorMsg(null);
 
       try {
-        const latestSettings = await getUserSettings(user.id);
+        const latestSettings = await getUserSettings(userId);
         const mapped = mergeProfileAndSettings({
           profile: profile
             ? {
@@ -221,14 +257,18 @@ export default function SettingsPage() {
             : null,
           settings: latestSettings ?? settings,
         });
-        setForm(mapped);
-        setInitialForm(mapped);
-        applyThemeToDocument(mapped.theme);
-        cacheThemePreference(mapped.theme);
+        if (!cancelled) {
+          setForm(mapped);
+          setInitialForm(mapped);
+          applyThemeToDocument(mapped.theme);
+          cacheThemePreference(mapped.theme);
+          sessionStorage.setItem(CACHE_KEY, JSON.stringify(mapped));
+          hasLoadedRef.current = true;
+        }
       } catch (error) {
         if (cancelled) return;
         console.warn("[settings] load error:", error);
-        setErrorMsg("No se pudieron cargar los ajustes.");
+        if (!hasLoadedRef.current) setErrorMsg("No se pudieron cargar los ajustes.");
       } finally {
         if (!cancelled) setSettingsLoading(false);
       }
@@ -239,7 +279,8 @@ export default function SettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [user?.id, profile, settings]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
 
   useEffect(() => {
     if (settingsLoading) return;
@@ -260,16 +301,13 @@ export default function SettingsPage() {
   }, [form.theme, settingsLoading]);
 
   const navigate = () => {
-    if (typeof window !== "undefined" && window.history.length > 1) {
+    if (Capacitor.isNativePlatform()) {
+      const profileHref = user?.id ? `/profile/static?id=${user.id}` : "/feed";
+      router.push(profileHref);
+    } else if (typeof window !== "undefined" && window.history.length > 1) {
       router.back();
     } else {
-      const profileHref =
-        user?.id && Capacitor.isNativePlatform()
-          ? `/profile/static?id=${user.id}`
-          : user?.id
-            ? `/profile/${user.id}`
-            : "/feed";
-      router.push(profileHref);
+      router.push(user?.id ? `/profile/${user.id}` : "/feed");
     }
   };
 
@@ -414,7 +452,8 @@ export default function SettingsPage() {
         console.warn("[settings] auth metadata sync error:", metadataError);
       }
       if (typeof window !== "undefined") {
-        window.localStorage.setItem("fremee.profile.updated_at", String(Date.now()));
+        window.localStorage.setItem(STORAGE_KEYS.profileUpdatedAt, String(Date.now()));
+        sessionStorage.setItem(`settings_form_${user.id}`, JSON.stringify(mapped));
       }
       await refreshProfile();
       setSaveMsg("Ajustes guardados.");
@@ -444,8 +483,75 @@ export default function SettingsPage() {
     }
   };
 
+  const onChangePassword = async () => {
+    if (!user?.email || busyAction !== null) return;
+    setPwdMsg(null);
+
+    if (!pwdCurrent || !pwdNew || !pwdConfirm) {
+      setPwdMsg({ type: "error", text: "Rellena todos los campos." });
+      return;
+    }
+    if (pwdNew.length < 8) {
+      setPwdMsg({ type: "error", text: "La nueva contraseña debe tener al menos 8 caracteres." });
+      return;
+    }
+    if (pwdNew !== pwdConfirm) {
+      setPwdMsg({ type: "error", text: "Las contraseñas no coinciden." });
+      return;
+    }
+
+    const supabase = createBrowserSupabaseClient();
+    setBusyAction("change-password");
+
+    try {
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: pwdCurrent,
+      });
+      if (signInError) {
+        setPwdMsg({ type: "error", text: "La contraseña actual no es correcta." });
+        return;
+      }
+
+      const { error: updateError } = await supabase.auth.updateUser({ password: pwdNew });
+      if (updateError) throw updateError;
+
+      setPwdMsg({ type: "ok", text: "Contraseña actualizada correctamente." });
+      setPwdCurrent("");
+      setPwdNew("");
+      setPwdConfirm("");
+      setShowPasswordSection(false);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "No se pudo cambiar la contraseña.";
+      setPwdMsg({ type: "error", text: message });
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
   const onDeleteAccount = async () => {
-    setErrorMsg("Eliminar cuenta estará disponible próximamente.");
+    if (busyAction !== null) return;
+    setBusyAction("delete");
+    setErrorMsg(null);
+
+    try {
+      const { data: { session } } = await createBrowserSupabaseClient().auth.getSession();
+      const res = await fetch("/api/account/delete", {
+        method: "DELETE",
+        headers: session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {},
+      });
+      if (!res.ok) {
+        const body = await res.json() as { error?: string };
+        throw new Error(body.error ?? "Error al eliminar la cuenta.");
+      }
+      await signOut();
+      router.replace("/login");
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "No se pudo eliminar la cuenta.");
+      setBusyAction(null);
+      setShowDeleteConfirm(false);
+      setDeleteConfirmText("");
+    }
   };
 
   const disableEditing = settingsLoading || busyAction === "save" || busyAction === "upload-image";
@@ -454,7 +560,7 @@ export default function SettingsPage() {
 
   return (
     <div className="min-h-dvh bg-app text-app">
-      <div className="container-app pb-[calc(var(--space-12)+env(safe-area-inset-bottom))] pt-[var(--space-4)] lg:pt-[var(--space-8)]">
+      <div className="container-app pb-[calc(var(--space-12)+env(safe-area-inset-bottom))] pt-[calc(env(safe-area-inset-top)+var(--space-4))] lg:pt-[var(--space-8)]">
         <div className="mx-auto max-w-[980px]">
           <div className="flex items-center gap-[var(--space-3)]">
             <button
@@ -462,9 +568,9 @@ export default function SettingsPage() {
               onClick={() => void goBack()}
               disabled={busyAction === "save"}
               aria-label="Volver"
-              className="flex items-center justify-center text-app transition-opacity hover:opacity-60 disabled:opacity-[var(--disabled-opacity)]"
+              className="flex size-[32px] items-center justify-center rounded-full transition-colors hover:bg-surface disabled:opacity-[var(--disabled-opacity)]"
             >
-              <ArrowLeftIcon />
+              <ChevronLeft className="size-[18px]" aria-hidden />
             </button>
           </div>
 
@@ -472,228 +578,276 @@ export default function SettingsPage() {
             Configuración y privacidad
           </h1>
 
-          <section>
-            <SettingsSection
-              title="Perfil"
-            >
-              <div className="mt-[var(--space-2)] border-t border-app">
-                <SettingsRow
-                  icon={<UserIcon />}
-                  label="Nombre"
-                  description="Nombre público que se muestra en tu perfil."
-                  right={<span className="text-body-sm text-muted">{form.nombre || "Sin nombre"}</span>}
-                />
-                <SettingsRow
-                  icon={<CalendarIcon />}
-                  label="Fecha de nacimiento"
-                  description="Se usa para personalización y edad mínima."
-                  right={
-                    <input
-                      type="date"
-                      value={form.fechaNac}
-                      disabled={disableEditing}
-                      onChange={(e) => setForm((prev) => ({ ...prev, fechaNac: e.target.value }))}
-                      className="w-full rounded-input border border-app bg-surface px-[var(--space-3)] py-[var(--space-2)] text-body-sm disabled:opacity-[var(--disabled-opacity)] sm:w-auto"
-                    />
-                  }
-                />
-              </div>
+          <div>
+            <SettingsSection title="Perfil">
+              <SettingsRow
+                icon={<UserIcon />}
+                label="Nombre"
+                description="Nombre público que se muestra en tu perfil."
+                right={<span className="text-body-sm text-muted">{form.nombre || "Sin nombre"}</span>}
+              />
+              <SettingsRow
+                icon={<CalendarIcon />}
+                label="Fecha de nacimiento"
+                description="Se usa para personalización y edad mínima."
+                right={
+                  <input
+                    type="date"
+                    value={form.fechaNac}
+                    disabled={disableEditing}
+                    onChange={(e) => setForm((prev) => ({ ...prev, fechaNac: e.target.value }))}
+                    className="rounded-input border border-app bg-surface px-[var(--space-3)] py-[var(--space-2)] text-body-sm disabled:opacity-[var(--disabled-opacity)]"
+                  />
+                }
+              />
             </SettingsSection>
 
-            <SettingsSection
-              title="Preferencias"
-                         >
-              <div className="mt-[var(--space-2)] border-t border-app">
-                <SettingsRow
-                  icon={<MoonIcon />}
-                  label="Tema"
-                  description="Elige entre sistema, claro u oscuro."
-                  right={
-                    <div className="flex flex-wrap items-center gap-[var(--space-2)]">
-                      <ModeButton
-                        active={form.theme === "SYSTEM"}
-                        label="Sistema"
-                        disabled={disableEditing}
-                        onClick={() => setForm((prev) => ({ ...prev, theme: "SYSTEM" }))}
-                      />
-                      <ModeButton
-                        active={form.theme === "LIGHT"}
-                        label="Claro"
-                        disabled={disableEditing}
-                        onClick={() => setForm((prev) => ({ ...prev, theme: "LIGHT" }))}
-                      />
-                      <ModeButton
-                        active={form.theme === "DARK"}
-                        label="Oscuro"
-                        disabled={disableEditing}
-                        onClick={() => setForm((prev) => ({ ...prev, theme: "DARK" }))}
+            <SettingsSection title="Preferencias">
+              <SettingsRow
+                icon={<MoonIcon />}
+                label="Tema"
+                description="Elige el tema de la aplicación."
+                right={
+                  <div className="flex items-center gap-2">
+                    <IconModeButton
+                      active={form.theme === "LIGHT"}
+                      icon={<Sun className="size-[18px]" />}
+                      label="Claro"
+                      disabled={disableEditing}
+                      onClick={() => setForm((prev) => ({ ...prev, theme: "LIGHT" }))}
+                    />
+                    <IconModeButton
+                      active={form.theme === "DARK"}
+                      icon={<Moon className="size-[18px]" />}
+                      label="Oscuro"
+                      disabled={disableEditing}
+                      onClick={() => setForm((prev) => ({ ...prev, theme: "DARK" }))}
+                    />
+                  </div>
+                }
+              />
+            </SettingsSection>
+
+            <SettingsSection title="Notificaciones">
+              <SettingsRow
+                icon={<BellIcon />}
+                label="Push"
+                description="Alertas en el dispositivo."
+                right={
+                  <Switch
+                    checked={form.notifyPush}
+                    disabled={disableEditing}
+                    onChange={(next) => setForm((prev) => ({ ...prev, notifyPush: next }))}
+                  />
+                }
+              />
+              <SettingsRow
+                icon={<MailIcon />}
+                label="Email"
+                description="Resúmenes y actividad por correo."
+                right={
+                  <Switch
+                    checked={form.notifyEmail}
+                    disabled={disableEditing}
+                    onChange={(next) => setForm((prev) => ({ ...prev, notifyEmail: next }))}
+                  />
+                }
+              />
+              <SettingsRow
+                icon={<ChatIcon />}
+                label="In-app"
+                description="Avisos dentro de la aplicación."
+                right={
+                  <Switch
+                    checked={form.notifyInApp}
+                    disabled={disableEditing}
+                    onChange={(next) => setForm((prev) => ({ ...prev, notifyInApp: next }))}
+                  />
+                }
+              />
+            </SettingsSection>
+
+            <SettingsSection title="Privacidad">
+              <SettingsRow
+                icon={<UserIcon />}
+                label="Visibilidad del perfil"
+                description="Decide si tu perfil es público o privado."
+                right={
+                  <FieldSelect
+                    value={form.profileVisibility}
+                    disabled={disableEditing}
+                    onChange={(value) =>
+                      setForm((prev) => ({ ...prev, profileVisibility: value as VisibilityOption }))
+                    }
+                    options={VISIBILITY_OPTIONS}
+                  />
+                }
+              />
+              <SettingsRow
+                icon={<ShieldIcon />}
+                label="Solicitudes de amistad"
+                description="Permite que otras personas te agreguen."
+                right={
+                  <Switch
+                    checked={form.allowFriendRequests}
+                    disabled={disableEditing}
+                    onChange={(next) => setForm((prev) => ({ ...prev, allowFriendRequests: next }))}
+                  />
+                }
+              />
+            </SettingsSection>
+
+            <SettingsSection title="Google Calendar">
+              <SettingsRow
+                icon={<CalendarIcon />}
+                label="Sincronización habilitada"
+                description="Permite conectar Frimee con Google Calendar."
+                right={
+                  <Switch
+                    checked={form.googleSyncEnabled}
+                    disabled={disableEditing}
+                    onChange={(next) => setForm((prev) => ({ ...prev, googleSyncEnabled: next }))}
+                  />
+                }
+              />
+              <SettingsRow
+                icon={<CalendarIcon />}
+                label="Exportar planes"
+                description="Crea y actualiza tus planes en Google Calendar."
+                right={
+                  <Switch
+                    checked={form.googleSyncExportPlans}
+                    disabled={disableEditing || !form.googleSyncEnabled}
+                    onChange={(next) => setForm((prev) => ({ ...prev, googleSyncExportPlans: next }))}
+                  />
+                }
+              />
+            </SettingsSection>
+
+            <SettingsSection title="Seguridad">
+              <SettingsRow
+                icon={<KeyRoundIcon />}
+                label="Contraseña"
+                description="Cambia la contraseña de tu cuenta."
+                right={
+                  <button
+                    type="button"
+                    onClick={() => { setShowPasswordSection((v) => !v); setPwdMsg(null); }}
+                    className="rounded-chip border border-app bg-surface px-[var(--space-3)] py-[var(--space-2)] text-body-sm transition-colors hover:bg-surface-2"
+                  >
+                    {showPasswordSection ? "Cancelar" : "Cambiar"}
+                  </button>
+                }
+              />
+              {showPasswordSection && (
+                <div className="pb-[var(--space-4)]">
+                  <div className="flex flex-col gap-[var(--space-3)]">
+                    {(["current", "new", "confirm"] as const).map((field) => {
+                      const value = field === "current" ? pwdCurrent : field === "new" ? pwdNew : pwdConfirm;
+                      const setter = field === "current" ? setPwdCurrent : field === "new" ? setPwdNew : setPwdConfirm;
+                      const label = field === "current" ? "Contraseña actual" : field === "new" ? "Nueva contraseña" : "Confirmar nueva contraseña";
+                      return (
+                        <div key={field} className="relative">
+                          <input
+                            type={showPwd ? "text" : "password"}
+                            value={value}
+                            onChange={(e) => setter(e.target.value)}
+                            placeholder={label}
+                            autoComplete={field === "current" ? "current-password" : "new-password"}
+                            className="w-full rounded-input border border-app bg-surface px-[var(--space-3)] py-[var(--space-2)] pr-10 text-body-sm outline-none focus:border-primary-token"
+                          />
+                          {field === "confirm" && (
+                            <button
+                              type="button"
+                              onClick={() => setShowPwd((v) => !v)}
+                              className="absolute right-[var(--space-3)] top-1/2 -translate-y-1/2 text-muted"
+                              aria-label={showPwd ? "Ocultar contraseñas" : "Mostrar contraseñas"}
+                            >
+                              {showPwd ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {pwdMsg && (
+                      <p className={`text-body-sm ${pwdMsg.type === "ok" ? "text-success-token" : "text-error-token"}`}>
+                        {pwdMsg.text}
+                      </p>
+                    )}
+                    <div className="flex justify-end">
+                      <PrimaryButton
+                        label={busyAction === "change-password" ? "Guardando..." : "Guardar contraseña"}
+                        onClick={() => void onChangePassword()}
+                        disabled={busyAction !== null}
                       />
                     </div>
-                  }
-                />
-                <SettingsRow
-                  icon={<LanguageIcon />}
-                  label="Idioma"
-                  description="Idioma de interfaz."
-                  right={
-                    <FieldSelect
-                      value={form.language}
-                      disabled={disableEditing}
-                      onChange={(value) => setForm((prev) => ({ ...prev, language: value }))}
-                      options={LANGUAGE_OPTIONS}
-                    />
-                  }
-                />
-                <SettingsRow
-                  icon={<ClockIcon />}
-                  label="Zona horaria"
-                  description="Hora local para tus planes y recordatorios."
-                  right={
-                    <FieldSelect
-                      value={form.timezone}
-                      disabled={disableEditing}
-                      onChange={(value) => setForm((prev) => ({ ...prev, timezone: value }))}
-                      options={TIMEZONE_OPTIONS}
-                    />
-                  }
-                />
-              </div>
+                  </div>
+                </div>
+              )}
             </SettingsSection>
 
-            <SettingsSection
-              title="Notificaciones"
-                         >
-              <div className="mt-[var(--space-2)] border-t border-app">
-                <SettingsRow
-                  icon={<BellIcon />}
-                  label="Push"
-                  description="Alertas en el dispositivo."
-                  right={
-                    <Switch
-                      checked={form.notifyPush}
-                      disabled={disableEditing}
-                      onChange={(next) => setForm((prev) => ({ ...prev, notifyPush: next }))}
-                    />
-                  }
-                />
-                <SettingsRow
-                  icon={<MailIcon />}
-                  label="Email"
-                  description="Resúmenes y actividad por correo."
-                  right={
-                    <Switch
-                      checked={form.notifyEmail}
-                      disabled={disableEditing}
-                      onChange={(next) => setForm((prev) => ({ ...prev, notifyEmail: next }))}
-                    />
-                  }
-                />
-                <SettingsRow
-                  icon={<ChatIcon />}
-                  label="In-app"
-                  description="Avisos dentro de la aplicación."
-                  right={
-                    <Switch
-                      checked={form.notifyInApp}
-                      disabled={disableEditing}
-                      onChange={(next) => setForm((prev) => ({ ...prev, notifyInApp: next }))}
-                    />
-                  }
-                />
-              </div>
-            </SettingsSection>
-
-            <SettingsSection
-              title="Privacidad"
-                         >
-              <div className="mt-[var(--space-2)] border-t border-app">
-                <SettingsRow
-                  icon={<UserIcon />}
-                  label="Visibilidad del perfil"
-                  description="Decide si tu perfil es público o privado."
-                  right={
-                    <FieldSelect
-                      value={form.profileVisibility}
-                      disabled={disableEditing}
-                      onChange={(value) =>
-                        setForm((prev) => ({ ...prev, profileVisibility: value as VisibilityOption }))
-                      }
-                      options={VISIBILITY_OPTIONS}
-                    />
-                  }
-                />
-                <SettingsRow
-                  icon={<ShieldIcon />}
-                  label="Solicitudes de amistad"
-                  description="Permite que otras personas te agreguen."
-                  right={
-                    <Switch
-                      checked={form.allowFriendRequests}
-                      disabled={disableEditing}
-                      onChange={(next) => setForm((prev) => ({ ...prev, allowFriendRequests: next }))}
-                    />
-                  }
-                />
-              </div>
-            </SettingsSection>
-
-            <SettingsSection
-              title="Google Calendar"
-                         >
-              <div className="mt-[var(--space-2)] border-t border-app">
-                <SettingsRow
-                  icon={<CalendarIcon />}
-                  label="Sincronización habilitada"
-                  description="Permite conectar Frimee con Google Calendar."
-                  right={
-                    <Switch
-                      checked={form.googleSyncEnabled}
-                      disabled={disableEditing}
-                      onChange={(next) => setForm((prev) => ({ ...prev, googleSyncEnabled: next }))}
-                    />
-                  }
-                />
-                <SettingsRow
-                  icon={<CalendarIcon />}
-                  label="Exportar planes"
-                  description="Crea y actualiza tus planes en Google Calendar."
-                  right={
-                    <Switch
-                      checked={form.googleSyncExportPlans}
-                      disabled={disableEditing || !form.googleSyncEnabled}
-                      onChange={(next) => setForm((prev) => ({ ...prev, googleSyncExportPlans: next }))}
-                    />
-                  }
-                />
-              </div>
-            </SettingsSection>
-
-            <SettingsSection
-              title="Cuenta"
-                         >
-              <div className="mt-[var(--space-3)] flex flex-col gap-[var(--space-4)] lg:flex-row lg:items-center lg:justify-between">
-                <div className="min-w-0">
+            <SettingsSection title="Cuenta">
+              {(saveMsg || errorMsg) && (
+                <div className="mb-3">
                   {saveMsg && <p className="text-body-sm text-success-token">{saveMsg}</p>}
                   {errorMsg && <p className="text-body-sm text-error-token">{errorMsg}</p>}
                 </div>
-                <div className="flex flex-col gap-[var(--space-2)] sm:flex-row">
-                  <SettingsButton
-                    icon={<LogOutIcon />}
-                    label={busyAction === "signout" ? "Cerrando sesión..." : "Cerrar sesión"}
-                    onClick={onSignOut}
-                    disabled={busyAction !== null}
-                  />
-                  <SettingsButton
-                    icon={<TrashIcon />}
-                    label={busyAction === "delete" ? "Eliminando cuenta..." : "Eliminar cuenta"}
-                    onClick={onDeleteAccount}
-                    disabled={busyAction !== null}
-                    danger
-                  />
-                </div>
+              )}
+              <div className="flex flex-col">
+                <button
+                  type="button"
+                  onClick={() => void onSignOut()}
+                  disabled={busyAction !== null}
+                  className="flex min-h-[52px] w-full items-center gap-3 py-3 text-left text-body-sm font-[var(--fw-medium)] text-app transition-opacity hover:opacity-60 disabled:opacity-[var(--disabled-opacity)]"
+                >
+                  <LogOut className="size-[24px] shrink-0 text-muted" aria-hidden />
+                  <span>{busyAction === "signout" ? "Cerrando sesión..." : "Cerrar sesión"}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setShowDeleteConfirm(true); setDeleteConfirmText(""); }}
+                  disabled={busyAction !== null}
+                  className="flex min-h-[52px] w-full items-center gap-3 py-3 text-left text-body-sm font-[var(--fw-medium)] text-error-token transition-opacity hover:opacity-60 disabled:opacity-[var(--disabled-opacity)]"
+                >
+                  <Trash2 className="size-[24px] shrink-0" aria-hidden />
+                  <span>Eliminar cuenta</span>
+                </button>
               </div>
+              {showDeleteConfirm && (
+                <div className="mt-[var(--space-4)] rounded-[var(--radius-card)] border border-error-token bg-surface p-[var(--space-4)]">
+                  <p className="text-body font-[var(--fw-semibold)] text-error-token">¿Seguro que quieres eliminar tu cuenta?</p>
+                  <p className="mt-[var(--space-1)] text-body-sm text-muted">
+                    Esta acción es permanente e irreversible. Se borrarán todos tus datos.
+                    Escribe <strong>ELIMINAR</strong> para confirmar.
+                  </p>
+                  <input
+                    type="text"
+                    value={deleteConfirmText}
+                    onChange={(e) => setDeleteConfirmText(e.target.value)}
+                    placeholder="ELIMINAR"
+                    className="mt-[var(--space-3)] w-full rounded-input border border-app bg-surface px-[var(--space-3)] py-[var(--space-2)] text-body-sm outline-none focus:border-error-token"
+                  />
+                  <div className="mt-[var(--space-3)] flex gap-[var(--space-2)]">
+                    <button
+                      type="button"
+                      onClick={() => { setShowDeleteConfirm(false); setDeleteConfirmText(""); }}
+                      className="rounded-input border border-app bg-surface px-[var(--space-4)] py-[var(--space-2)] text-body-sm transition-colors hover:bg-surface-2"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={deleteConfirmText !== "ELIMINAR" || busyAction !== null}
+                      onClick={() => void onDeleteAccount()}
+                      className="rounded-input border border-error-token bg-error-token px-[var(--space-4)] py-[var(--space-2)] text-body-sm font-[var(--fw-semibold)] text-white transition-opacity disabled:opacity-[var(--disabled-opacity)]"
+                    >
+                      {busyAction === "delete" ? "Eliminando..." : "Sí, eliminar cuenta"}
+                    </button>
+                  </div>
+                </div>
+              )}
             </SettingsSection>
-          </section>
+          </div>
           <input
             ref={fileInputRef}
             type="file"
@@ -711,7 +865,7 @@ export default function SettingsPage() {
 function SettingsPageSkeleton() {
   return (
     <div className="min-h-dvh bg-app text-app" role="status" aria-label="Cargando ajustes">
-      <div className="container-app pb-[calc(var(--space-12)+env(safe-area-inset-bottom))] pt-[var(--space-4)] lg:pt-[var(--space-8)]">
+      <div className="container-app pb-[calc(var(--space-12)+env(safe-area-inset-bottom))] pt-[calc(env(safe-area-inset-top)+var(--space-4))] lg:pt-[var(--space-8)]">
         <div className="mx-auto max-w-[980px]">
           <div className="flex items-center gap-[var(--space-3)]">
             <div className="skeleton-shimmer h-8 w-8 rounded-full" />
@@ -760,13 +914,11 @@ function SettingsSection({
   children: ReactNode;
 }) {
   return (
-    <section>
-      <div className="px-[var(--space-4)] py-[var(--space-5)] lg:px-[var(--space-7)] lg:py-[var(--space-6)]">
-        <h2 className="[font-family:var(--font-display-face)] text-[var(--font-h5)] font-normal leading-[var(--lh-h5)]">
-          {title}
-        </h2>
-        {children}
-      </div>
+    <section className="mb-[var(--space-7)]">
+      <p className="mb-1 text-[14px] font-[600] uppercase tracking-[0.06em] text-muted">
+        {title}
+      </p>
+      {children}
     </section>
   );
 }
@@ -779,20 +931,20 @@ function SettingsRow({
 }: {
   icon: ReactNode;
   label: string;
-  description: string;
+  description?: string;
   right?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-[var(--space-3)] border-b border-app py-[var(--space-4)] sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex min-w-0 items-start gap-[var(--space-3)]">
-        <span className="mt-[var(--space-1)] text-app">{icon}</span>
+    <div className="flex min-h-[52px] items-center justify-between gap-3 py-3">
+      <div className="flex min-w-0 items-center gap-3">
+        <span className="shrink-0 text-muted">{icon}</span>
         <div className="min-w-0">
-          <p className="text-body font-[var(--fw-medium)]">{label}</p>
-          <p className="mt-[var(--space-1)] text-body-sm text-muted">{description}</p>
+          <p className="text-body-sm font-[var(--fw-medium)] text-app">{label}</p>
+          {description && <p className="text-[14px] leading-snug text-muted">{description}</p>}
         </div>
       </div>
-      <div className="flex w-full flex-wrap items-center gap-[var(--space-2)] sm:w-auto sm:justify-end">
-        {right ?? <ChevronRightIcon className="shrink-0 text-tertiary" />}
+      <div className="flex shrink-0 items-center gap-2">
+        {right ?? <ChevronRightIcon className="size-4 shrink-0 text-muted" />}
       </div>
     </div>
   );
@@ -907,6 +1059,37 @@ function ModeButton({
   );
 }
 
+function IconModeButton({
+  active,
+  icon,
+  label,
+  onClick,
+  disabled = false,
+}: {
+  active: boolean;
+  icon: ReactNode;
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className={`flex size-9 items-center justify-center rounded-full border transition-colors disabled:opacity-[var(--disabled-opacity)] ${
+        active
+          ? "border-primary-token bg-primary-token text-contrast-token"
+          : "border-app bg-surface text-muted hover:bg-surface-2"
+      }`}
+    >
+      {icon}
+    </button>
+  );
+}
+
 function Switch({
   checked,
   onChange,
@@ -946,8 +1129,8 @@ function Avatar({ profileImage, fallback }: { profileImage: string | null; fallb
           width={64}
           height={64}
           className="h-full w-full object-cover"
-          referrerPolicy="no-referrer"
           unoptimized
+          referrerPolicy="no-referrer"
         />
       ) : (
         <span className="text-[var(--font-h2)] font-[var(--fw-semibold)] text-app">{fallback}</span>
@@ -956,159 +1139,19 @@ function Avatar({ profileImage, fallback }: { profileImage: string | null; fallb
   );
 }
 
-function ArrowLeftIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" aria-hidden="true">
-      <path d="M14.5 5L7.5 12L14.5 19" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function ChevronRightIcon({ className = "" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" aria-hidden="true" className={className}>
-      <path d="M10 6L16 12L10 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  );
-}
 
 function PencilIcon({ className = "" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" width="17" height="17" fill="none" aria-hidden="true" className={className}>
-      <path d="M4 20H8L18.6 9.4L14.6 5.4L4 16V20Z" stroke="currentColor" strokeWidth="1.7" />
-      <path d="M12.8 7.2L16.8 11.2" stroke="currentColor" strokeWidth="1.7" />
-    </svg>
-  );
+  return <Pencil width="17" height="17" aria-hidden className={className} />;
 }
-
-function UserIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="21" height="21" fill="none" aria-hidden="true">
-      <circle cx="12" cy="8" r="3.2" stroke="currentColor" strokeWidth="1.7" />
-      <path d="M5.8 19C7 15.9 9.1 14.4 12 14.4C14.9 14.4 17 15.9 18.2 19" stroke="currentColor" strokeWidth="1.7" />
-    </svg>
-  );
-}
-
-function ShieldIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="21" height="21" fill="none" aria-hidden="true">
-      <path
-        d="M12 3L19 6V11.5C19 15.3 16.2 18.8 12 20.5C7.8 18.8 5 15.3 5 11.5V6L12 3Z"
-        stroke="currentColor"
-        strokeWidth="1.7"
-      />
-      <path d="M9.5 11.8L11.1 13.4L14.6 9.9" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function CalendarIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="21" height="21" fill="none" aria-hidden="true">
-      <rect x="3" y="5" width="18" height="16" rx="2" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M8 3V7M16 3V7M3 10.5H21" stroke="currentColor" strokeWidth="1.8" />
-    </svg>
-  );
-}
-
-function BellIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="21" height="21" fill="none" aria-hidden="true">
-      <path
-        d="M6.5 16H17.5L16.8 14.8V10.8C16.8 8.1 14.7 6 12 6C9.3 6 7.2 8.1 7.2 10.8V14.8L6.5 16Z"
-        stroke="currentColor"
-        strokeWidth="1.7"
-      />
-      <path
-        d="M10.1 18.2C10.4 19.1 11.1 19.7 12 19.7C12.9 19.7 13.6 19.1 13.9 18.2"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-function MoonIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="21" height="21" fill="none" aria-hidden="true">
-      <path
-        d="M14.8 4.7C10.8 5.2 7.8 8.6 7.8 12.7C7.8 16.9 11.2 20.3 15.4 20.3C17 20.3 18.4 19.8 19.6 18.9C18.8 19.1 18 19.2 17.2 19.2C12.9 19.2 9.5 15.8 9.5 11.5C9.5 8.9 10.8 6.6 12.8 5.2C13.4 4.8 14.1 4.6 14.8 4.7Z"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function LanguageIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="21" height="21" fill="none" aria-hidden="true">
-      <path d="M4 6H12M8 4V6M6 6C6.3 9 7.8 12 10 14" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-      <path d="M14 18L17.8 9.5L21.6 18M15.2 15.2H20.4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function ClockIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="21" height="21" fill="none" aria-hidden="true">
-      <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="1.7" />
-      <path d="M12 7.8V12.4L15.2 14.4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function MailIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="21" height="21" fill="none" aria-hidden="true">
-      <rect x="4" y="6" width="16" height="12" rx="2" stroke="currentColor" strokeWidth="1.7" />
-      <path d="M5.2 7.2L12 12.3L18.8 7.2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function ChatIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="21" height="21" fill="none" aria-hidden="true">
-      <path
-        d="M4 6.5A1.5 1.5 0 0 1 5.5 5H18.5A1.5 1.5 0 0 1 20 6.5V13.5A1.5 1.5 0 0 1 18.5 15H8.5L4 18.5V6.5Z"
-        stroke="currentColor"
-        strokeWidth="1.7"
-      />
-    </svg>
-  );
-}
-
-function LogOutIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="21" height="21" fill="none" aria-hidden="true">
-      <path
-        d="M9 5.5H6.8C5.8 5.5 5 6.3 5 7.3V16.7C5 17.7 5.8 18.5 6.8 18.5H9"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-      />
-      <path d="M13 16.5L17.5 12L13 7.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-      <path d="M17.5 12H9.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function TrashIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="21" height="21" fill="none" aria-hidden="true">
-      <path d="M4.8 7H19.2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-      <path d="M9.5 4.8H14.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-      <path
-        d="M8 7L8.6 18.1C8.6 18.9 9.2 19.5 10 19.5H14C14.8 19.5 15.4 18.9 15.4 18.1L16 7"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-      />
-      <path d="M10.2 10.3V16.1M13.8 10.3V16.1" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-    </svg>
-  );
-}
+const UserIcon = User;
+const ShieldIcon = Shield;
+const CalendarIcon = Calendar;
+const BellIcon = Bell;
+const MoonIcon = Moon;
+const LanguageIcon = Globe;
+const ClockIcon = Clock;
+const MailIcon = Mail;
+const ChatIcon = MessageSquare;
+const LogOutIcon = LogOut;
+const TrashIcon = Trash2;
+const KeyRoundIcon = KeyRound;

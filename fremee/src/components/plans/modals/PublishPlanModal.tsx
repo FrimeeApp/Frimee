@@ -11,6 +11,23 @@ import { getPlanFotos, type PlanFotoDto } from "@/services/api/repositories/plan
 import { listGastosForPlanEndpoint, fetchPlanMiembrosEndpoint, type GastoRow, type PlanMiembro } from "@/services/api/endpoints/gastos.endpoint";
 import type { SubplanRow } from "@/services/api/endpoints/subplanes.endpoint";
 import type { PublicationConfig, ItinerarySnapshotItem, ExpensesSnapshot, ParticipantsSnapshot } from "@/services/api/dtos/plan.dto";
+import {
+  Calendar,
+  Check,
+  CheckCircle,
+  ChevronLeft as ChevronLeftLucide,
+  ChevronRight as ChevronRightLucide,
+  Images,
+  Loader2,
+  MapPin,
+  ReceiptText,
+  Route,
+  UsersRound,
+} from "lucide-react";
+import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
+import { CloseX } from "@/components/ui/CloseX";
+import { ModalFeedback } from "@/components/ui/ModalFeedback";
+import { DiscardChangesDialog } from "@/components/ui/DiscardChangesDialog";
 
 type Props = {
   plan: PlanByIdRow;
@@ -18,8 +35,11 @@ type Props = {
 };
 
 const MAX_CAPTION = 280;
+const DEFAULT_PHOTO_LIMIT = 8;
 
-function formatDateRange(startsAt: string, endsAt: string, allDay: boolean): string {
+type PublishPreset = "recommended" | "visual" | "complete" | "custom";
+
+function formatDateRange(startsAt: string, endsAt: string): string {
   if (!startsAt) return "";
   const fmt = (d: string) => new Date(d).toLocaleDateString("es-ES", { day: "numeric", month: "short" });
   const s = fmt(startsAt);
@@ -46,65 +66,17 @@ function buildExpensesSnapshot(gastos: GastoRow[]): ExpensesSnapshot {
 
 // ── Icons ──────────────────────────────────────────────────────────────────────
 
-function CloseIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" className="size-5">
-      <path d="M6 6L18 18M6 18L18 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <svg viewBox="0 0 52 52" fill="none" className="size-[52px]">
-      <circle cx="26" cy="26" r="25" stroke="currentColor" strokeWidth="2" />
-      <path d="M14 27L22 35L38 18" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function CheckSmall() {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" className="size-4">
-      <path d="M3 8L6.5 11.5L13 4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function MapPinSmall() {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" className="size-3.5 shrink-0">
-      <path d="M8 1.5C5.79 1.5 4 3.29 4 5.5C4 8.5 8 14 8 14C8 14 12 8.5 12 5.5C12 3.29 10.21 1.5 8 1.5Z" stroke="currentColor" strokeWidth="1.2" />
-      <circle cx="8" cy="5.5" r="1.5" stroke="currentColor" strokeWidth="1.2" />
-    </svg>
-  );
-}
-
-function CalSmall() {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" className="size-3.5 shrink-0">
-      <rect x="2" y="3" width="12" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
-      <path d="M5 2V4M11 2V4M2 7H14" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function ChevronRight() {
-  return (
-    <svg viewBox="0 0 20 20" fill="none" className="size-4">
-      <path d="M7.5 5L12.5 10L7.5 15" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function SpinnerIcon() {
-  return (
-    <svg className="size-5 animate-spin" viewBox="0 0 24 24" fill="none">
-      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2.5" strokeOpacity="0.25" />
-      <path d="M12 2 A10 10 0 0 1 22 12" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-    </svg>
-  );
-}
+const CloseIcon = () => <CloseX />;
+const CheckIcon = () => <CheckCircle className="size-[52px]" aria-hidden />;
+const CheckSmall = () => <Check className="size-4" aria-hidden />;
+const MapPinSmall = () => <MapPin className="size-3.5 shrink-0" aria-hidden />;
+const CalSmall = () => <Calendar className="size-3.5 shrink-0" aria-hidden />;
+const ChevronRight = () => <ChevronRightLucide className="size-4" aria-hidden />;
+const SpinnerIcon = () => <Loader2 className="size-5 animate-spin" aria-hidden />;
+const ItineraryIcon = () => <Route className="size-[18px]" strokeWidth={1.9} aria-hidden />;
+const PhotosIcon = () => <Images className="size-[18px]" strokeWidth={1.9} aria-hidden />;
+const ExpensesIcon = () => <ReceiptText className="size-[18px]" strokeWidth={1.9} aria-hidden />;
+const ParticipantsIcon = () => <UsersRound className="size-[18px]" strokeWidth={1.9} aria-hidden />;
 
 // ── Toggle Row ─────────────────────────────────────────────────────────────────
 
@@ -116,7 +88,7 @@ function ToggleRow({
   onToggle,
   children,
 }: {
-  icon: string;
+  icon: React.ReactNode;
   label: string;
   sublabel?: string;
   enabled: boolean;
@@ -130,7 +102,7 @@ function ToggleRow({
         onClick={onToggle}
         className="w-full flex items-center gap-3 py-2.5 text-left"
       >
-        <span className="text-[18px] leading-none">{icon}</span>
+        <span className="flex size-[22px] shrink-0 items-center justify-center text-muted">{icon}</span>
         <div className="flex-1 min-w-0">
           <span className="text-[14px] font-[600] text-app">{label}</span>
           {sublabel && <span className="ml-2 text-[13px] text-muted">{sublabel}</span>}
@@ -184,9 +156,37 @@ function PillGroup<T extends string>({
   );
 }
 
+function PresetButton({
+  title,
+  description,
+  active,
+  onClick,
+}: {
+  title: string;
+  description: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded-[14px] border px-3 py-3 text-left transition-colors"
+      style={{
+        borderColor: active ? "var(--primary)" : "var(--border)",
+        background: active ? "color-mix(in srgb, var(--primary) 10%, transparent)" : "var(--surface-raised)",
+      }}
+    >
+      <span className="block text-[13px] font-[700] leading-tight text-app">{title}</span>
+      <span className="mt-1 block text-[12px] leading-snug text-muted">{description}</span>
+    </button>
+  );
+}
+
 // ── Main Component ─────────────────────────────────────────────────────────────
 
 export default function PublishPlanModal({ plan, onClose }: Props) {
+  const { isClosing, requestClose } = useModalCloseAnimation(onClose);
   const { user, profile } = useAuth();
   const router = useRouter();
 
@@ -194,6 +194,7 @@ export default function PublishPlanModal({ plan, onClose }: Props) {
   const [step, setStep] = useState<"compose" | "sections" | "success">("compose");
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [discardOpen, setDiscardOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -205,13 +206,13 @@ export default function PublishPlanModal({ plan, onClose }: Props) {
   const [miembros, setMiembros] = useState<PlanMiembro[]>([]);
 
   // Section config
-  const [showDescription, setShowDescription] = useState(!!plan.descripcion);
   const [showItinerary, setShowItinerary] = useState(true);
   const [showExpenses, setShowExpenses] = useState<false | "total" | "breakdown">(false);
   const [showParticipants, setShowParticipants] = useState<false | "count" | "avatars">("count");
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<Set<number>>(new Set());
+  const [activePreset, setActivePreset] = useState<PublishPreset>("recommended");
 
-  const dateLabel = formatDateRange(plan.inicio_at, plan.fin_at, plan.all_day);
+  const dateLabel = formatDateRange(plan.inicio_at, plan.fin_at);
   const infoLine = [plan.ubicacion_nombre, dateLabel].filter(Boolean).join("  ·  ");
 
   useEffect(() => {
@@ -220,10 +221,10 @@ export default function PublishPlanModal({ plan, onClose }: Props) {
 
   useEffect(() => {
     if (step === "success") {
-      timerRef.current = setTimeout(() => onClose(), 4000);
+      timerRef.current = setTimeout(() => requestClose(), 4000);
     }
     return () => { if (timerRef.current) clearTimeout(timerRef.current); };
-  }, [step, onClose]);
+  }, [requestClose, step]);
 
   // Load section data when entering step 2
   useEffect(() => {
@@ -240,8 +241,8 @@ export default function PublishPlanModal({ plan, onClose }: Props) {
         setFotos(photos);
         setGastos(gsts);
         setMiembros(mbs);
-        // default: select all photos
-        setSelectedPhotoIds(new Set(photos.map((f) => f.id)));
+        // Default to a curated visual summary instead of flooding the feed with every photo.
+        setSelectedPhotoIds(new Set(photos.slice(0, DEFAULT_PHOTO_LIMIT).map((f) => f.id)));
       })
       .catch((e) => console.error("[PublishPlanModal] data load error:", e))
       .finally(() => setDataLoading(false));
@@ -254,6 +255,7 @@ export default function PublishPlanModal({ plan, onClose }: Props) {
       else next.add(id);
       return next;
     });
+    setActivePreset("custom");
   }
 
   function toggleAllPhotos() {
@@ -262,6 +264,32 @@ export default function PublishPlanModal({ plan, onClose }: Props) {
     } else {
       setSelectedPhotoIds(new Set(fotos.map((f) => f.id)));
     }
+    setActivePreset("custom");
+  }
+
+  function applyPreset(preset: PublishPreset) {
+    setActivePreset(preset);
+
+    if (preset === "recommended") {
+      setShowItinerary(subplanes.length > 0);
+      setShowExpenses(false);
+      setShowParticipants(miembros.length > 0 ? "count" : false);
+      setSelectedPhotoIds(new Set(fotos.slice(0, DEFAULT_PHOTO_LIMIT).map((f) => f.id)));
+      return;
+    }
+
+    if (preset === "visual") {
+      setShowItinerary(false);
+      setShowExpenses(false);
+      setShowParticipants(false);
+      setSelectedPhotoIds(new Set(fotos.slice(0, DEFAULT_PHOTO_LIMIT).map((f) => f.id)));
+      return;
+    }
+
+    setShowItinerary(subplanes.length > 0);
+    setShowExpenses(gastos.some((g) => g.estado === "CONFIRMADO") ? "total" : false);
+    setShowParticipants(miembros.length > 0 ? "avatars" : false);
+    setSelectedPhotoIds(new Set(fotos.map((f) => f.id)));
   }
 
   async function handlePublish() {
@@ -270,7 +298,7 @@ export default function PublishPlanModal({ plan, onClose }: Props) {
     setError(null);
     try {
       const config: PublicationConfig = {
-        showDescription,
+        showDescription: false,
         showItinerary,
         showExpenses,
         showParticipants,
@@ -335,14 +363,32 @@ export default function PublishPlanModal({ plan, onClose }: Props) {
   const confirmedGastos = gastos.filter((g) => g.estado === "CONFIRMADO");
   const totalGastos = confirmedGastos.reduce((s, g) => s + g.total, 0);
   const currency = confirmedGastos[0]?.moneda ?? "EUR";
+  const selectedPhotosCount = selectedPhotoIds.size;
+  const visibleSummary = [
+    selectedPhotosCount > 0 ? `${selectedPhotosCount} foto${selectedPhotosCount === 1 ? "" : "s"}` : null,
+    showItinerary && subplanes.length > 0 ? `${subplanes.length} actividad${subplanes.length === 1 ? "" : "es"}` : null,
+    showParticipants !== false && miembros.length > 0 ? `${miembros.length} participante${miembros.length === 1 ? "" : "s"}` : null,
+    showExpenses !== false && confirmedGastos.length > 0 ? `${currency} ${totalGastos.toFixed(0)} en gastos` : null,
+  ].filter(Boolean);
+  const hasProgress = step !== "success" && (caption.trim().length > 0 || step !== "compose");
+
+  function requestDismiss() {
+    if (publishing) return;
+    if (hasProgress) {
+      setDiscardOpen(true);
+      return;
+    }
+    requestClose();
+  }
 
   return (
     <div
-      className="fixed inset-0 z-[90] flex items-end justify-center bg-black/60 backdrop-blur-[2px] px-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:items-center"
-      onClick={onClose}
+      data-closing={isClosing ? "true" : "false"}
+      className="app-modal-overlay fixed inset-0 z-[90] flex items-end justify-center px-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:items-center"
+      onClick={requestDismiss}
     >
       <div
-        className="w-full max-w-[460px] rounded-[22px] bg-app shadow-elev-4 overflow-hidden"
+        className="app-modal-panel relative w-full max-w-[460px] rounded-[22px] bg-app shadow-elev-4 overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
 
@@ -351,7 +397,7 @@ export default function PublishPlanModal({ plan, onClose }: Props) {
           <>
             <div className="flex items-center justify-between px-5 pt-5 pb-3">
               <span className="text-[15px] font-[700] text-app tracking-[-0.01em]">Publicar en el feed</span>
-              <button onClick={onClose} className="flex items-center justify-center size-8 rounded-full text-muted hover:text-app hover:bg-app-hover transition-colors">
+              <button onClick={requestDismiss} className="flex items-center justify-center size-8 rounded-full text-muted hover:text-app hover:bg-app-hover transition-colors">
                 <CloseIcon />
               </button>
             </div>
@@ -421,48 +467,70 @@ export default function PublishPlanModal({ plan, onClose }: Props) {
                   onClick={() => setStep("compose")}
                   className="flex items-center justify-center size-8 rounded-full text-muted hover:text-app hover:bg-app-hover transition-colors"
                 >
-                  <svg viewBox="0 0 20 20" fill="none" className="size-4">
-                    <path d="M12.5 5L7.5 10L12.5 15" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
+                  <ChevronLeftLucide className="size-4" aria-hidden />
                 </button>
                 <span className="text-[15px] font-[700] text-app tracking-[-0.01em]">¿Qué quieres mostrar?</span>
               </div>
-              <button onClick={onClose} className="flex items-center justify-center size-8 rounded-full text-muted hover:text-app hover:bg-app-hover transition-colors">
+              <button onClick={requestDismiss} className="flex items-center justify-center size-8 rounded-full text-muted hover:text-app hover:bg-app-hover transition-colors">
                 <CloseIcon />
               </button>
             </div>
 
-            <p className="px-5 pb-3 text-[13px] text-muted">Elige qué verán los demás al abrir tu plan publicado.</p>
+            <p className="px-5 pb-3 text-[13px] text-muted">Elige el resumen que tendra sentido para quien vea tu plan en el feed.</p>
 
             {dataLoading ? (
               <div className="flex items-center justify-center py-10 text-muted">
                 <SpinnerIcon />
               </div>
             ) : (
-              <div className="px-5 pb-2 space-y-1 max-h-[55vh] overflow-y-auto">
+              <div className="px-5 pb-2 space-y-4 max-h-[58vh] overflow-y-auto">
 
-                {/* Descripción */}
-                {plan.descripcion && (
-                  <ToggleRow
-                    icon="📝"
-                    label="Descripción"
-                    enabled={showDescription}
-                    onToggle={() => setShowDescription((v) => !v)}
+                <div className="grid grid-cols-3 gap-2">
+                  <PresetButton
+                    title="Recomendado"
+                    description="Fotos, ruta y asistentes."
+                    active={activePreset === "recommended"}
+                    onClick={() => applyPreset("recommended")}
                   />
-                )}
+                  <PresetButton
+                    title="Visual"
+                    description="Solo fotos del plan."
+                    active={activePreset === "visual"}
+                    onClick={() => applyPreset("visual")}
+                  />
+                  <PresetButton
+                    title="Completo"
+                    description="Todo lo importante."
+                    active={activePreset === "complete"}
+                    onClick={() => applyPreset("complete")}
+                  />
+                </div>
+
+                <div className="rounded-[14px] border border-app bg-[var(--surface-raised)] px-3.5 py-3">
+                  <p className="text-[12px] font-[700] uppercase tracking-[0.08em] text-muted">Vista del feed</p>
+                  <p className="mt-1 text-[14px] font-[700] leading-snug text-app">{plan.titulo}</p>
+                  <p className="mt-1 text-[13px] leading-snug text-muted">
+                    {visibleSummary.length > 0
+                      ? visibleSummary.join(" · ")
+                      : "Se publicara solo el texto que escribas y el enlace al plan."}
+                  </p>
+                </div>
 
                 {/* Itinerario */}
                 <ToggleRow
-                  icon="🗓️"
+                  icon={<ItineraryIcon />}
                   label="Itinerario"
                   sublabel={subplanes.length > 0 ? `${subplanes.length} actividades` : undefined}
                   enabled={showItinerary}
-                  onToggle={() => setShowItinerary((v) => !v)}
+                  onToggle={() => {
+                    setActivePreset("custom");
+                    setShowItinerary((v) => !v);
+                  }}
                 />
 
                 {/* Fotos */}
                 <ToggleRow
-                  icon="📸"
+                  icon={<PhotosIcon />}
                   label="Fotos del álbum"
                   sublabel={fotos.length > 0 ? `${selectedPhotoIds.size} / ${fotos.length} seleccionadas` : "Sin fotos aún"}
                   enabled={selectedPhotoIds.size > 0}
@@ -498,11 +566,14 @@ export default function PublishPlanModal({ plan, onClose }: Props) {
                 {/* Gastos */}
                 {gastos.filter((g) => g.estado === "CONFIRMADO").length > 0 && (
                   <ToggleRow
-                    icon="💸"
+                    icon={<ExpensesIcon />}
                     label="Gastos del viaje"
                     sublabel={showExpenses !== false ? `${currency} ${totalGastos.toFixed(0)} total` : undefined}
                     enabled={showExpenses !== false}
-                    onToggle={() => setShowExpenses((v) => (v === false ? "total" : false))}
+                    onToggle={() => {
+                      setActivePreset("custom");
+                      setShowExpenses((v) => (v === false ? "total" : false));
+                    }}
                   >
                     <PillGroup
                       options={[
@@ -510,7 +581,10 @@ export default function PublishPlanModal({ plan, onClose }: Props) {
                         { value: "breakdown" as const, label: "Con desglose" },
                       ]}
                       value={showExpenses as "total" | "breakdown"}
-                      onChange={(v) => setShowExpenses(v)}
+                      onChange={(v) => {
+                        setActivePreset("custom");
+                        setShowExpenses(v);
+                      }}
                     />
                   </ToggleRow>
                 )}
@@ -518,11 +592,14 @@ export default function PublishPlanModal({ plan, onClose }: Props) {
                 {/* Participantes */}
                 {miembros.length > 0 && (
                   <ToggleRow
-                    icon="👥"
+                    icon={<ParticipantsIcon />}
                     label="Quiénes van"
                     sublabel={miembros.length === 1 ? "1 persona" : `${miembros.length} personas`}
                     enabled={showParticipants !== false}
-                    onToggle={() => setShowParticipants((v) => (v === false ? "count" : false))}
+                    onToggle={() => {
+                      setActivePreset("custom");
+                      setShowParticipants((v) => (v === false ? "count" : false));
+                    }}
                   >
                     <PillGroup
                       options={[
@@ -530,14 +607,23 @@ export default function PublishPlanModal({ plan, onClose }: Props) {
                         { value: "avatars" as const, label: "Con fotos" },
                       ]}
                       value={showParticipants as "count" | "avatars"}
-                      onChange={(v) => setShowParticipants(v)}
+                      onChange={(v) => {
+                        setActivePreset("custom");
+                        setShowParticipants(v);
+                      }}
                     />
                   </ToggleRow>
                 )}
               </div>
             )}
 
-            {error && <p className="mx-5 mb-1 text-[13px] text-red-500">{error}</p>}
+            {error && (
+              <ModalFeedback
+                state={{ type: "error", message: error }}
+                onSuccess={() => {}}
+                onDismissError={() => setError(null)}
+              />
+            )}
 
             <div className="px-5 pt-3 pb-5">
               <button
@@ -581,6 +667,14 @@ export default function PublishPlanModal({ plan, onClose }: Props) {
           animation: publish-check-pop 420ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
         }
       `}</style>
+      <DiscardChangesDialog
+        open={discardOpen}
+        onCancel={() => setDiscardOpen(false)}
+        onDiscard={() => {
+          setDiscardOpen(false);
+          requestClose();
+        }}
+      />
     </div>
   );
 }

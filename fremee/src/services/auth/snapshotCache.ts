@@ -1,10 +1,11 @@
 import type { UserAuthSnapshotDto } from "@/services/api/repositories/users.repository";
+import { STORAGE_KEYS } from "@/config/storage";
 
 type SnapshotCacheStore = {
   byUserId: Record<string, UserAuthSnapshotDto>;
 };
 
-const SNAPSHOT_CACHE_KEY = "fremee.auth_snapshot.v1";
+const SNAPSHOT_CACHE_KEY = STORAGE_KEYS.authSnapshot;
 
 function readStore(): SnapshotCacheStore {
   if (typeof window === "undefined") return { byUserId: {} };

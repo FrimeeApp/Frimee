@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
-import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   createGastoEndpoint,
   fetchPlanMiembrosEndpoint,
@@ -12,62 +12,15 @@ import {
 import { fetchSubplanes, type SubplanRow } from "@/services/api/endpoints/subplanes.endpoint";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import type { OcrResult, OcrItem } from "@/app/api/receipts/ocr/route";
+import { todayISO, limitDecimals, adjustNumericString } from "@/lib/form-helpers";
+import { Avatar } from "@/components/ui/Avatar";
+import { FIELD_LINE_CLS } from "@/lib/styles";
+import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
+import { CloseX } from "@/components/ui/CloseX";
+import { ModalFeedback, type ModalFeedbackState } from "@/components/ui/ModalFeedback";
+import { DiscardChangesDialog } from "@/components/ui/DiscardChangesDialog";
 
 type CategoriaGasto = { id: number; nombre: string; icono: string | null; color: string | null };
-
-// ── helpers ───────────────────────────────────────────────────────────────────
-
-function todayISO() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function limitDecimals(value: string, decimals = 2): string {
-  const dot = value.indexOf(".");
-  if (dot === -1) return value;
-  return value.slice(0, dot + 1 + decimals);
-}
-
-function clampNumber(value: number, min?: number, max?: number) {
-  if (typeof min === "number" && value < min) return min;
-  if (typeof max === "number" && value > max) return max;
-  return value;
-}
-
-function adjustNumericString(
-  current: string,
-  delta: number,
-  { min, max, decimals = 0 }: { min?: number; max?: number; decimals?: number } = {},
-) {
-  const base = Number.parseFloat(current || "0");
-  const next = clampNumber((Number.isFinite(base) ? base : 0) + delta, min, max);
-  return decimals > 0 ? next.toFixed(decimals) : String(next);
-}
-
-function Avatar({ foto, nombre, size = 32 }: { foto: string | null; nombre: string | null; size?: number }) {
-  const initials = (nombre ?? "?").slice(0, 1).toUpperCase();
-  if (foto) {
-    return (
-      <Image
-        src={foto}
-        alt={nombre ?? ""}
-        width={size}
-        height={size}
-        style={{ width: size, height: size }}
-        className="rounded-full border border-app object-cover"
-        unoptimized
-      />
-    );
-  }
-  return (
-    <div
-      style={{ width: size, height: size, fontSize: size * 0.4 }}
-      className="flex items-center justify-center rounded-full border border-app bg-primary-token/20 font-[var(--fw-semibold)] text-primary-token"
-    >
-      {initials}
-    </div>
-  );
-}
 
 function StepperButtons({ onIncrement, onDecrement }: { onIncrement: () => void; onDecrement: () => void }) {
   return (
@@ -110,11 +63,11 @@ type Props = {
 // ── component ─────────────────────────────────────────────────────────────────
 
 export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Props) {
+  const { isClosing, requestClose } = useModalCloseAnimation(onClose);
   const [step, setStep] = useState(1);
 
   // ── form state ──
   const [titulo, setTitulo] = useState("");
-  const [descripcion, setDescripcion] = useState("");
   const [total, setTotal] = useState("");
   const [moneda, setMoneda] = useState("EUR");
   const [fechaGasto, setFechaGasto] = useState(todayISO());
@@ -149,6 +102,8 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
   // ── UI ──
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [feedbackState, setFeedbackState] = useState<ModalFeedbackState | null>(null);
+  const [discardOpen, setDiscardOpen] = useState(false);
   const [participantesExpanded, setParticipantesExpanded] = useState(true);
   const [participantesSearch, setParticipantesSearch] = useState("");
   const [pagadorOpen, setPagadorOpen] = useState(false);
@@ -168,12 +123,6 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
   useEffect(() => {
     fetchSubplanes(planId).then(setSubplanes).catch(() => {});
   }, [planId]);
-
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = prev; };
-  }, []);
 
   useEffect(() => {
     fetchPlanMiembrosEndpoint(planId)
@@ -203,6 +152,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
     setError(null);
     setNotAReceipt(false);
     try {
+      const { data: { session } } = await createBrowserSupabaseClient().auth.getSession();
       let fileToSend: File | Blob = file;
       const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
       if (!isPdf && file.type.startsWith("image/")) {
@@ -218,7 +168,11 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
       fd.append("file", fileToSend, isPdf ? file.name : "receipt.jpg");
       fd.append("plan_id", String(planId));
       fd.append("user_id", userId);
-      const res = await fetch("/api/receipts/ocr", { method: "POST", body: fd });
+      const res = await fetch("/api/receipts/ocr", {
+        method: "POST",
+        headers: session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {},
+        body: fd,
+      });
       const data = await res.json() as OcrResult;
       if ("error" in data) throw new Error((data as { error: string }).error);
       if (!data.is_receipt) setNotAReceipt(true);
@@ -299,6 +253,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
     if (participantes.length === 0) { setError("Selecciona al menos un participante"); return; }
     setSaving(true);
     setError(null);
+    setFeedbackState({ type: "loading" });
     try {
       await createGastoEndpoint({
         plan_id: planId,
@@ -309,16 +264,15 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
         moneda,
         metodo_reparto: metodo,
         participantes,
-        descripcion: descripcion.trim() || undefined,
+        descripcion: undefined,
         items: metodo === "POR_ITEMS" ? buildItems() : undefined,
         receipt_url: receiptUrl ?? undefined,
         categoria_id: categoriaId,
         subplan_id: subplanId ?? undefined,
       });
-      onCreated();
-      onClose();
+      setFeedbackState({ type: "success", label: "Gasto creado" });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al guardar el gasto");
+      setFeedbackState({ type: "error", message: err instanceof Error ? err.message : "Error al guardar el gasto" });
     } finally {
       setSaving(false);
     }
@@ -331,7 +285,24 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
   }
 
   const meta = STEP_META[step - 1];
-  const fieldLineCls = "border-b-2 border-app pb-[var(--space-2)] transition-colors focus-within:border-primary-token";
+  const fieldLineCls = FIELD_LINE_CLS;
+  const hasProgress =
+    step > 1 ||
+    titulo.trim().length > 0 ||
+    total.trim().length > 0 ||
+    receiptUrl !== null ||
+    items.length > 0 ||
+    subplanId !== null ||
+    metodo !== "IGUAL";
+
+  function requestDismiss() {
+    if (saving || ocrLoading) return;
+    if (hasProgress) {
+      setDiscardOpen(true);
+      return;
+    }
+    requestClose();
+  }
 
   // ── shared dropdown renderer ──
   function Dropdown({ btnRef, open, onClose: closeDropdown, items: dropdownItems }: {
@@ -342,31 +313,47 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
   }) {
     if (!open) return null;
     const r = btnRef.current?.getBoundingClientRect();
-    return (
+    const maxH = 224;
+    const spaceBelow = r ? window.innerHeight - r.bottom - 8 : 0;
+    const showAbove = spaceBelow < maxH && (r?.top ?? 0) > maxH;
+    const top = showAbove ? undefined : (r ? r.bottom + 4 : 0);
+    const bottom = showAbove ? (r ? window.innerHeight - r.top + 4 : 0) : undefined;
+    const width = r?.width ?? 300;
+    const left = r ? Math.min(r.left, window.innerWidth - width - 8) : 0;
+    return createPortal(
       <>
-        <div className="fixed inset-0 z-40" onClick={closeDropdown} />
-        <div className="fixed z-50 mt-1 max-h-56 overflow-y-auto rounded-xl border border-app bg-[var(--surface)] shadow-elev-3" style={{ top: r ? r.bottom + 4 : 0, left: r?.left ?? 0, width: r?.width ?? 300 }}>
+        <div className="fixed inset-0 z-[9998]" onClick={closeDropdown} />
+        <div className="fixed z-[9999] max-h-56 overflow-y-auto rounded-xl border border-app bg-[var(--surface)] shadow-elev-3" style={{ top, bottom, left, width }}>
           {dropdownItems.map(item => (
             <button key={item.key} type="button" onClick={item.onClick} className={`flex w-full items-center px-4 py-2.5 text-left text-body-sm transition-colors hover:bg-surface-2 ${item.active ? "text-[var(--primary,#298e7d)] font-[var(--fw-semibold)]" : "text-app"}`}>
               {item.label}
             </button>
           ))}
         </div>
-      </>
+      </>,
+      document.body
     );
   }
 
   return (
     <>
-      <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm" />
+      <div data-closing={isClosing ? "true" : "false"} className="app-modal-overlay fixed inset-0 z-40" />
       <div
         className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-[var(--space-4)]"
-        onClick={(e) => { if (e.target !== e.currentTarget) return; if (window.matchMedia("(min-width: 768px)").matches) onClose(); }}
+        onClick={(e) => { if (e.target !== e.currentTarget) return; if (window.matchMedia("(min-width: 768px)").matches) requestDismiss(); }}
       >
         <div
-          className="flex h-full w-full flex-col overflow-hidden bg-app md:h-auto md:max-h-[92dvh] md:max-w-[620px] md:rounded-[22px] md:border md:border-app md:shadow-elev-4"
+          data-closing={isClosing ? "true" : "false"}
+          className="app-modal-panel relative flex h-full w-full flex-col overflow-hidden bg-app md:h-auto md:max-h-[92dvh] md:max-w-[620px] md:rounded-[22px] md:border md:border-app md:shadow-elev-4"
           onClick={(e) => e.stopPropagation()}
         >
+          {feedbackState && (
+            <ModalFeedback
+              state={feedbackState}
+              onSuccess={() => { onCreated(); requestClose(); }}
+              onDismissError={() => setFeedbackState(null)}
+            />
+          )}
           {/* Progress bar */}
           <div className="h-[3px] w-full shrink-0 bg-[var(--surface-2)]">
             <div className="h-full bg-primary-token transition-all duration-[400ms] [transition-timing-function:var(--ease-standard)]" style={{ width: `${(step / TOTAL_STEPS) * 100}%` }} />
@@ -374,21 +361,21 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
 
           {/* Top nav */}
           <div className="flex shrink-0 items-center justify-between px-[var(--space-5)] py-[var(--space-3)]">
-            <button
-              type="button"
-              onClick={step === 1 ? onClose : () => setStep(s => s - 1)}
-              className="flex size-9 items-center justify-center rounded-full text-app transition-colors hover:bg-surface"
-              aria-label={step === 1 ? "Cerrar" : "Volver"}
-            >
-              {step === 1 ? (
-                <svg viewBox="0 0 24 24" fill="none" className="size-[18px]"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
-              ) : (
+            {step > 1 ? (
+              <button
+                type="button"
+                onClick={() => setStep(s => s - 1)}
+                className="flex size-9 items-center justify-center rounded-full text-app transition-colors hover:bg-surface"
+                aria-label="Volver"
+              >
                 <svg viewBox="0 0 24 24" fill="none" className="size-[18px]"><path d="M15 19l-7-7 7-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
-              )}
-            </button>
+              </button>
+            ) : (
+              <div className="size-9" aria-hidden="true" />
+            )}
             <span className="text-caption font-[var(--fw-medium)] text-muted">{step} de {TOTAL_STEPS}</span>
             {/* OCR button — only on step 1 */}
-            {step === 1 ? (
+            {false ? (
               <div>
                 <input ref={fileInputRef} type="file" accept="image/*,.pdf" className="hidden" onChange={handleFileChange} />
                 <button
@@ -403,28 +390,52 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                 </button>
               </div>
             ) : (
-              <div className="size-9" aria-hidden="true" />
+              <button
+                type="button"
+                onClick={requestDismiss}
+                className="flex size-9 items-center justify-center rounded-full text-app transition-colors hover:bg-surface"
+                aria-label="Cerrar"
+              >
+                <CloseX />
+              </button>
             )}
           </div>
 
           {/* Content */}
           <div className="flex-1 overflow-y-auto scrollbar-thin px-[var(--space-6)] pb-[var(--space-8)] pt-[var(--space-2)]">
             {/* Step header */}
-            <div className="mb-[var(--space-8)]">
-              <h2 className="font-[var(--fw-bold)] leading-tight text-app" style={{ fontSize: "clamp(22px, 5vw, 28px)" }}>{meta.title}</h2>
-              <p className="mt-[var(--space-1)] text-body-sm text-muted">{meta.subtitle}</p>
+            <div className="mb-[var(--space-8)] flex items-start justify-between gap-[var(--space-4)]">
+              <div className="min-w-0">
+                <h2 className="font-[var(--fw-bold)] leading-tight text-app" style={{ fontSize: "clamp(22px, 5vw, 28px)" }}>{meta.title}</h2>
+                <p className="mt-[var(--space-1)] text-body-sm text-muted">{meta.subtitle}</p>
+              </div>
+              {step === 1 && (
+                <div className="shrink-0 pt-1">
+                  <input ref={fileInputRef} type="file" accept="image/*,.pdf" className="hidden" onChange={handleFileChange} />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={ocrLoading}
+                    title="Leer ticket o factura"
+                    className={`inline-flex items-center justify-center gap-1.5 rounded-[10px] border border-app px-3 py-1.5 text-caption font-[var(--fw-medium)] transition-colors disabled:opacity-60 ${receiptUrl && !notAReceipt ? "bg-surface text-app" : "bg-neutral-100 text-muted hover:bg-neutral-200 hover:text-app dark:bg-neutral-800 dark:hover:bg-neutral-700"}`}
+                  >
+                    {ocrLoading ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" /> : receiptUrl && !notAReceipt ? <svg viewBox="0 0 24 24" fill="none" className="size-3.5" stroke="currentColor" strokeWidth="2"><path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round"/></svg> : <svg viewBox="0 0 24 24" fill="none" className="size-3.5" stroke="currentColor" strokeWidth="1.8"><path d="M12 16v-8M8 12l4-4 4 4" strokeLinecap="round" strokeLinejoin="round"/><rect x="3" y="3" width="18" height="18" rx="3"/></svg>}
+                    {ocrLoading ? "Analizando..." : receiptUrl && !notAReceipt ? "Leido" : "Leer factura"}
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* ── Step 1: Concepto + importe ── */}
             {step === 1 && (
               <div className="space-y-[var(--space-6)]">
-                <div className={fieldLineCls}>
+                <div className={`flex items-center gap-[var(--space-3)] ${fieldLineCls}`}>
                   <input
                     value={titulo}
                     onChange={(e) => setTitulo(e.target.value)}
                     placeholder="Concepto"
                     autoFocus
-                    className="w-full bg-transparent text-[22px] font-[var(--fw-semibold)] text-app outline-none placeholder:text-muted"
+                    className="min-w-0 flex-1 bg-transparent text-[22px] font-[var(--fw-semibold)] text-app outline-none placeholder:text-muted"
                   />
                 </div>
 
@@ -492,12 +503,12 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                   );
                 })()}
 
+                {false && (
                 <div>
                   <p className="mb-[var(--space-2)] text-[13px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Descripción <span className="font-normal normal-case tracking-normal opacity-60">(opcional)</span></p>
-                  <div className={fieldLineCls}>
-                    <input value={descripcion} onChange={(e) => setDescripcion(e.target.value)} placeholder="Notas sobre el gasto" className="w-full bg-transparent text-body text-app outline-none placeholder:text-muted" />
-                  </div>
                 </div>
+
+                )}
 
                 {notAReceipt && (
                   <div className="flex items-start gap-[var(--space-2)] rounded-[12px] border border-[var(--warning,#f59e0b)]/30 bg-[var(--warning,#f59e0b)]/10 px-[var(--space-3)] py-[var(--space-2)]">
@@ -520,7 +531,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                     onClick={() => { setPagadorOpen(o => !o); setPagadorSearch(""); }}
                     className="flex w-full items-center gap-3 py-2 outline-none"
                   >
-                    {(() => { const m = miembros.find(m => m.user_id === pagadoPor); return <Avatar foto={m?.foto ?? null} nombre={m?.nombre ?? null} size={28} />; })()}
+                    {(() => { const m = miembros.find(m => m.user_id === pagadoPor); return <Avatar src={m?.foto ?? null} name={m?.nombre ?? "?"} px={28} topMargin="" />; })()}
                     <span className="flex-1 text-left text-body text-app">{miembros.find(m => m.user_id === pagadoPor)?.nombre ?? "Seleccionar"}</span>
                     <svg className={`shrink-0 text-muted transition-transform duration-200 ${pagadorOpen ? "rotate-180" : ""}`} width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   </button>
@@ -532,12 +543,14 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                         <div className="fixed inset-0 z-40" onClick={() => setPagadorOpen(false)} />
                         <div className="fixed z-50 mt-1 rounded-xl border border-app bg-[var(--surface)] shadow-elev-3" style={{ top: r ? r.bottom + 4 : 0, left: r?.left ?? 0, width: r?.width ?? 300 }}>
                           <div className="border-b border-app px-3 py-2">
+                            <div className="flex h-9 items-center rounded-full border border-app bg-[var(--search-field-bg)] px-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
                             <input autoFocus value={pagadorSearch} onChange={e => setPagadorSearch(e.target.value)} placeholder="Buscar..." className="w-full bg-transparent text-body-sm text-app outline-none placeholder:text-muted" />
+                            </div>
                           </div>
                           <div className="max-h-48 overflow-y-auto">
                             {filtered.map(m => (
                               <button key={m.user_id} type="button" onClick={() => { setPagadoPor(m.user_id); setPagadorOpen(false); }} className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-surface-2 ${pagadoPor === m.user_id ? "text-primary-token font-[var(--fw-semibold)]" : "text-app"}`}>
-                                <Avatar foto={m.foto} nombre={m.nombre} size={24} />
+                                <Avatar src={m.foto} name={m.nombre ?? "?"} px={24} topMargin="" />
                                 <span className="text-body-sm">{m.nombre ?? m.user_id.slice(0, 8)}</span>
                               </button>
                             ))}
@@ -593,7 +606,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                         {participantesExpanded ? <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg> : <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>}
                       </button>
                     </div>
-                    {participantesExpanded && <div className="border-b border-[var(--surface-2)] px-3 py-2"><input value={participantesSearch} onChange={e => setParticipantesSearch(e.target.value)} placeholder="Buscar participante..." className="w-full bg-transparent text-body-sm text-app outline-none placeholder:text-muted" /></div>}
+                    {participantesExpanded && <div className="border-b border-[var(--surface-2)] px-3 py-2"><div className="flex h-9 items-center rounded-full border border-app bg-[var(--search-field-bg)] px-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"><input value={participantesSearch} onChange={e => setParticipantesSearch(e.target.value)} placeholder="Buscar participante..." className="w-full bg-transparent text-body-sm text-app outline-none placeholder:text-muted" /></div></div>}
                     {participantesExpanded && (
                       <div className="max-h-[220px] overflow-y-auto divide-y divide-[var(--surface-2)]">
                         {miembros.filter(m => !participantesSearch || (m.nombre ?? "").toLowerCase().includes(participantesSearch.toLowerCase())).map((m) => {
@@ -602,7 +615,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                           return (
                             <button key={m.user_id} type="button" onClick={() => setSeleccionados((prev) => { const next = new Set(prev); if (next.has(m.user_id)) next.delete(m.user_id); else next.add(m.user_id); return next; })} className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors ${checked ? "bg-primary-token/5" : "hover:bg-[var(--surface-inset)]"}`}>
                               <div className={`flex size-4 shrink-0 items-center justify-center rounded border ${checked ? "border-primary-token bg-primary-token" : "border-app"}`}>{checked && <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}</div>
-                              <Avatar foto={m.foto} nombre={m.nombre} size={24} />
+                              <Avatar src={m.foto} name={m.nombre ?? "?"} px={24} topMargin="" />
                               <span className={`min-w-0 flex-1 truncate text-body-sm ${checked ? "text-app font-[var(--fw-medium)]" : "text-muted"}`}>{m.nombre ?? m.user_id.slice(0, 8)}</span>
                               {checked && totalNum > 0 && <span className="shrink-0 text-caption text-primary-token font-[var(--fw-semibold)]">{part.toFixed(2)} {moneda}</span>}
                             </button>
@@ -626,7 +639,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                           {participantesExpanded ? <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg> : <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>}
                         </button>
                       </div>
-                      {participantesExpanded && <div className="border-b border-[var(--surface-2)] px-3 py-2"><input value={participantesSearch} onChange={e => setParticipantesSearch(e.target.value)} placeholder="Buscar participante..." className="w-full bg-transparent text-body-sm text-app outline-none placeholder:text-muted" /></div>}
+                      {participantesExpanded && <div className="border-b border-[var(--surface-2)] px-3 py-2"><div className="flex h-9 items-center rounded-full border border-app bg-[var(--search-field-bg)] px-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"><input value={participantesSearch} onChange={e => setParticipantesSearch(e.target.value)} placeholder="Buscar participante..." className="w-full bg-transparent text-body-sm text-app outline-none placeholder:text-muted" /></div></div>}
                       {participantesExpanded && (
                         <div className="max-h-[220px] overflow-y-auto divide-y divide-[var(--surface-2)]">
                           {miembros.filter(m => !participantesSearch || (m.nombre ?? "").toLowerCase().includes(participantesSearch.toLowerCase())).map((m) => {
@@ -644,7 +657,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                                 }} className={`flex size-4 shrink-0 items-center justify-center rounded border ${checked ? "border-primary-token bg-primary-token" : "border-app"}`}>
                                   {checked && <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                                 </button>
-                                <Avatar foto={m.foto} nombre={m.nombre} size={24} />
+                                <Avatar src={m.foto} name={m.nombre ?? "?"} px={24} topMargin="" />
                                 <span className="min-w-0 flex-1 truncate text-body-sm text-app">{m.nombre ?? m.user_id.slice(0, 8)}</span>
                                 {pct > 0 && totalNum > 0 && <span className="shrink-0 text-caption text-primary-token font-[var(--fw-semibold)]">{amount.toFixed(2)} {moneda}</span>}
                                 <div className="flex shrink-0 items-center gap-1">
@@ -675,7 +688,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                           {participantesExpanded ? <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg> : <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>}
                         </button>
                       </div>
-                      {participantesExpanded && <div className="border-b border-[var(--surface-2)] px-3 py-2"><input value={participantesSearch} onChange={e => setParticipantesSearch(e.target.value)} placeholder="Buscar participante..." className="w-full bg-transparent text-body-sm text-app outline-none placeholder:text-muted" /></div>}
+                      {participantesExpanded && <div className="border-b border-[var(--surface-2)] px-3 py-2"><div className="flex h-9 items-center rounded-full border border-app bg-[var(--search-field-bg)] px-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"><input value={participantesSearch} onChange={e => setParticipantesSearch(e.target.value)} placeholder="Buscar participante..." className="w-full bg-transparent text-body-sm text-app outline-none placeholder:text-muted" /></div></div>}
                       {participantesExpanded && (
                         <div className="max-h-[220px] overflow-y-auto divide-y divide-[var(--surface-2)]">
                           {miembros.filter(m => !participantesSearch || (m.nombre ?? "").toLowerCase().includes(participantesSearch.toLowerCase())).map((m) => {
@@ -683,7 +696,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                             const hasVal = parseFloat(val) > 0;
                             return (
                               <div key={m.user_id} className={`flex items-center gap-3 px-3 py-2.5 ${!hasVal ? "opacity-50" : ""}`}>
-                                <Avatar foto={m.foto} nombre={m.nombre} size={24} />
+                                <Avatar src={m.foto} name={m.nombre ?? "?"} px={24} topMargin="" />
                                 <span className="min-w-0 flex-1 truncate text-body-sm text-app">{m.nombre ?? m.user_id.slice(0, 8)}</span>
                                 <div className="flex shrink-0 items-center gap-1">
                                   <input type="number" min="0" step="0.01" value={val} onChange={(e) => setCantidades((prev) => ({ ...prev, [m.user_id]: limitDecimals(e.target.value) }))} placeholder="0.00" inputMode="decimal" className="w-[52px] bg-transparent text-right text-body-sm text-app outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
@@ -744,7 +757,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                             <div className="flex items-center gap-2 flex-wrap">
                               {miembros.filter(m => item.asignados[m.user_id]).map(m => (
                                 <button key={m.user_id} type="button" title={m.nombre ?? undefined} onClick={() => toggleItemUser(idx, m.user_id)} className="relative shrink-0 group">
-                                  <Avatar foto={m.foto} nombre={m.nombre} size={26} />
+                                  <Avatar src={m.foto} name={m.nombre ?? "?"} px={26} topMargin="" />
                                   <span className="absolute -top-0.5 -right-0.5 hidden group-hover:flex size-3.5 items-center justify-center rounded-full bg-[var(--error,#dc2626)] text-white"><svg width="7" height="7" viewBox="0 0 8 8" fill="none"><path d="M1 1l6 6M7 1L1 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></span>
                                 </button>
                               ))}
@@ -766,7 +779,9 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                                       <div className="fixed inset-0 z-40" onClick={() => setItemPopoverIdx(null)} />
                                       <div className="fixed z-50 rounded-xl border border-app bg-[var(--surface)] shadow-elev-3" style={{ top, bottom, left, width: 210 }}>
                                         <div className="flex items-center justify-between border-b border-app px-3 py-2 gap-2">
+                                          <div className="flex h-9 min-w-0 flex-1 items-center rounded-full border border-app bg-[var(--search-field-bg)] px-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
                                           <input autoFocus value={itemPopoverSearch} onChange={e => setItemPopoverSearch(e.target.value)} placeholder="Buscar..." className="min-w-0 flex-1 bg-transparent text-body-sm text-app outline-none placeholder:text-muted" />
+                                          </div>
                                           <button type="button" onClick={() => { const patch: Record<string, boolean> = {}; miembros.forEach(m => { patch[m.user_id] = !allChecked; }); updateItem(idx, { asignados: patch }); }} className="shrink-0 text-caption text-muted hover:text-primary-token transition-colors">{allChecked ? "Ninguno" : "Todos"}</button>
                                         </div>
                                         <div className="max-h-[200px] overflow-y-auto divide-y divide-[var(--surface-2)]">
@@ -775,7 +790,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                                             return (
                                               <button key={m.user_id} type="button" onClick={() => toggleItemUser(idx, m.user_id)} className="flex w-full items-center gap-2.5 px-3 py-2 text-left hover:bg-[var(--surface-2)] transition-colors">
                                                 <div className={`flex size-4 shrink-0 items-center justify-center rounded border ${checked ? "border-primary-token bg-primary-token" : "border-app"}`}>{checked && <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}</div>
-                                                <Avatar foto={m.foto} nombre={m.nombre} size={20} />
+                                                <Avatar src={m.foto} name={m.nombre ?? "?"} px={20} topMargin="" />
                                                 <span className="min-w-0 flex-1 truncate text-body-sm text-app">{m.nombre ?? m.user_id.slice(0, 8)}</span>
                                               </button>
                                             );
@@ -801,12 +816,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-between border-t border-app px-[var(--page-margin-x)] py-[var(--space-4)]">
-            {step < TOTAL_STEPS ? (
-              <span className="text-caption text-muted">{STEP_META[step].title}</span>
-            ) : (
-              <span />
-            )}
+          <div className="flex items-center justify-end border-t border-app px-[var(--page-margin-x)] py-[var(--space-4)]">
             <button
               type="button"
               onClick={handleNext}
@@ -818,6 +828,14 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
           </div>
         </div>
       </div>
+      <DiscardChangesDialog
+        open={discardOpen}
+        onCancel={() => setDiscardOpen(false)}
+        onDiscard={() => {
+          setDiscardOpen(false);
+          requestClose();
+        }}
+      />
     </>
   );
 }

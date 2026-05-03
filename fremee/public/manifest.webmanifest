@@ -1,4 +1,11 @@
 {
+  "name": "Frimee",
+  "short_name": "Frimee",
+  "description": "Planifica viajes y actividades con amigos",
+  "start_url": "/feed",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#298e7d",
   "icons": [
     {
       "src": "../icons/icon-48.webp",

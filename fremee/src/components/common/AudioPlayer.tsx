@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { Play, Pause, Loader2 } from "lucide-react";
 
 export default function AudioPlayer({ src, sending }: { src: string; sending?: boolean }) {
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -59,21 +60,13 @@ export default function AudioPlayer({ src, sending }: { src: string; sending?: b
         className="shrink-0 transition-opacity disabled:opacity-40"
         aria-label={playing ? "Pausar" : "Reproducir"}
       >
-        <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
-          <circle cx="18" cy="18" r="18" fill="currentColor" fillOpacity="0.18" />
-          {sending ? (
-            <path d="M18 10 A8 8 0 0 1 26 18" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-              <animateTransform attributeName="transform" type="rotate" from="0 18 18" to="360 18 18" dur="0.8s" repeatCount="indefinite" />
-            </path>
-          ) : playing ? (
-            <>
-              <rect x="13" y="12" width="4" height="12" rx="1.5" fill="currentColor" />
-              <rect x="20" y="12" width="4" height="12" rx="1.5" fill="currentColor" />
-            </>
-          ) : (
-            <path d="M15 12l11 6-11 6V12z" fill="currentColor" />
-          )}
-        </svg>
+        {sending ? (
+          <Loader2 className="size-[22px] animate-spin opacity-60" />
+        ) : playing ? (
+          <Pause className="size-[22px]" />
+        ) : (
+          <Play className="size-[22px]" />
+        )}
       </button>
 
       <div className="flex min-w-0 flex-1 flex-col gap-[4px]">

@@ -39,7 +39,7 @@ function entryToFeedItem(entry: FeedPostEntry): FeedItemDto {
     avatarLabel: (userName.trim()[0] || "U").toUpperCase(),
     avatarImage: creator?.profileImage ?? null,
     subtitle: entry.title,
-    text: entry.caption ?? entry.description,
+    text: entry.caption ?? "",
     caption: entry.caption,
     hasImage: Boolean(entry.coverImage),
     coverImage: entry.coverImage,
@@ -49,6 +49,7 @@ function entryToFeedItem(entry: FeedPostEntry): FeedItemDto {
     photosSnapshot: entry.photosSnapshot ?? null,
     itinerarySnapshot: entry.itinerarySnapshot ?? null,
     expensesSnapshot: entry.expensesSnapshot ?? null,
+    participantsSnapshot: entry.participantsSnapshot ?? null,
   };
 }
 

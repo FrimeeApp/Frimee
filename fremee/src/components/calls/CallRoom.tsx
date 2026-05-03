@@ -11,6 +11,8 @@ import {
   createLocalVideoTrack,
 } from "livekit-client";
 import type { CallMiembro } from "@/hooks/useCall";
+import { PhoneOffIcon } from "@/components/icons";
+import { Mic, MicOff, Video, VideoOff, ScreenShare, ScreenShareOff, ChevronLeft, Minus } from "lucide-react";
 
 type Props = {
   token: string;
@@ -287,7 +289,7 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
           <div className="flex flex-col items-center gap-2 z-10">
             <div className="h-14 w-14 overflow-hidden rounded-full bg-white/10 border border-white/10">
               {foto ? (
-                <Image src={foto} alt={baseName} width={56} height={56} className="h-full w-full object-cover" unoptimized />
+                <Image src={foto} alt={baseName} width={56} height={56} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
               ) : (
                 <div className="flex h-full w-full items-center justify-center text-xl font-bold">
                   {baseName[0]?.toUpperCase()}
@@ -332,7 +334,7 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
         <div className="flex items-center gap-2">
           {focusedId && (
             <button onClick={() => setFocusedId(null)} className="text-sm text-white/60 flex items-center gap-1">
-              <svg viewBox="0 0 24 24" fill="none" className="size-4" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6"/></svg>
+              <ChevronLeft className="size-4" aria-hidden />
               Todos
             </button>
           )}
@@ -342,9 +344,7 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
               className="flex size-7 items-center justify-center rounded-full bg-white/10 text-white/70 hover:bg-white/20 transition-colors"
               aria-label="Minimizar"
             >
-              <svg viewBox="0 0 24 24" fill="none" className="size-4" stroke="currentColor" strokeWidth="2">
-                <path d="M5 12h14" />
-              </svg>
+              <Minus className="size-4" aria-hidden />
             </button>
           )}
         </div>
@@ -363,7 +363,7 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
               {tiles.length === 0 && miembros.map((m) => (
                 <div key={m.id} className="aspect-square overflow-hidden rounded-2xl bg-[#2a2a2a] flex flex-col items-center justify-center gap-2 opacity-50">
                   <div className="h-14 w-14 overflow-hidden rounded-full bg-white/10">
-                    {m.foto ? <Image src={m.foto} alt={m.nombre} width={56} height={56} className="h-full w-full object-cover" unoptimized /> : (
+                    {m.foto ? <Image src={m.foto} alt={m.nombre} width={56} height={56} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" /> : (
                       <div className="flex h-full w-full items-center justify-center text-xl font-bold">{m.nombre[0]?.toUpperCase()}</div>
                     )}
                   </div>
@@ -394,27 +394,10 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
   );
 }
 
-function MicIcon() {
-  return <svg viewBox="0 0 24 24" fill="none" className="size-6" stroke="currentColor" strokeWidth="1.8"><rect x="9" y="2" width="6" height="11" rx="3" /><path d="M5 10a7 7 0 0 0 14 0M12 19v3M9 22h6" /></svg>;
-}
-function MicOffIcon() {
-  return <svg viewBox="0 0 24 24" fill="none" className="size-6" stroke="currentColor" strokeWidth="1.8"><line x1="2" y1="2" x2="22" y2="22" /><path d="M18.89 13.23A7 7 0 0 0 19 10M5 10a7 7 0 0 0 12 5.27M15 9.34V5a3 3 0 0 0-5.68-1.33M9 9v3a3 3 0 0 0 5.12 2.12" /><line x1="12" y1="19" x2="12" y2="22" /><line x1="9" y1="22" x2="15" y2="22" /></svg>;
-}
-function MicOffSmallIcon() {
-  return <svg viewBox="0 0 24 24" fill="none" className="size-3" stroke="currentColor" strokeWidth="2"><line x1="2" y1="2" x2="22" y2="22" /><path d="M18.89 13.23A7 7 0 0 0 19 10M5 10a7 7 0 0 0 12 5.27M15 9.34V5a3 3 0 0 0-5.68-1.33M9 9v3a3 3 0 0 0 5.12 2.12" /></svg>;
-}
-function VideoIcon() {
-  return <svg viewBox="0 0 24 24" fill="none" className="size-6" stroke="currentColor" strokeWidth="1.8"><polygon points="23 7 16 12 23 17 23 7" /><rect x="1" y="5" width="15" height="14" rx="2" /></svg>;
-}
-function VideoOffIcon() {
-  return <svg viewBox="0 0 24 24" fill="none" className="size-6" stroke="currentColor" strokeWidth="1.8"><path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2m5.66 0H14a2 2 0 0 1 2 2v3.34" /><path d="M23 7l-7 5 7 5V7z" /><line x1="2" y1="2" x2="22" y2="22" /></svg>;
-}
-function PhoneOffIcon() {
-  return <svg viewBox="0 0 24 24" fill="none" className="size-6" stroke="currentColor" strokeWidth="1.8"><path d="M10.68 13.31a16 16 0 0 0 3.01 2.99l1.96-1.96a1 1 0 0 1 1.09-.22 11.3 11.3 0 0 0 3.57.73 1 1 0 0 1 .93 1v3.57a1 1 0 0 1-.9 1A17 17 0 0 1 3 5.9a1 1 0 0 1 1-.9h3.57a1 1 0 0 1 1 .92 11.3 11.3 0 0 0 .73 3.57 1 1 0 0 1-.22 1.09l-1.96 1.96" /><line x1="2" y1="2" x2="22" y2="22" /></svg>;
-}
-function ScreenShareIcon({ small }: { small?: boolean }) {
-  return <svg viewBox="0 0 24 24" fill="none" className={small ? "size-3" : "size-6"} stroke="currentColor" strokeWidth="1.8"><rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8M12 17v4" /><path d="M10 9l2-2 2 2M12 7v6" /></svg>;
-}
-function ScreenShareOffIcon() {
-  return <svg viewBox="0 0 24 24" fill="none" className="size-6" stroke="currentColor" strokeWidth="1.8"><path d="M2 3l20 18M13.5 17H8m4-4.5V17m6-3V5a2 2 0 0 0-2-2H4.5" /><path d="M22 17a2 2 0 0 1-2 2H6" /><path d="M8 21h8" /></svg>;
-}
+const MicIcon = () => <Mic className="size-6" aria-hidden />;
+const MicOffIcon = () => <MicOff className="size-6" aria-hidden />;
+const MicOffSmallIcon = () => <MicOff className="size-3" aria-hidden />;
+const VideoIcon = () => <Video className="size-6" aria-hidden />;
+const VideoOffIcon = () => <VideoOff className="size-6" aria-hidden />;
+const ScreenShareIcon = ({ small }: { small?: boolean }) => <ScreenShare className={small ? "size-3" : "size-6"} aria-hidden />;
+const ScreenShareOffIcon = () => <ScreenShareOff className="size-6" aria-hidden />;

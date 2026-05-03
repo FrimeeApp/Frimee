@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AccessToken } from "livekit-server-sdk";
 import { createSupabaseServiceClient } from "@/services/supabase/server";
+import { sanitizeRoomName, sanitizeUuid } from "@/lib/sanitize";
+import { checkRateLimit, rateLimitedResponse } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
   const authHeader = req.headers.get("Authorization");
@@ -11,8 +13,20 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser(accessToken);
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  const { roomName, chatId } = await req.json();
-  if (!roomName) return NextResponse.json({ error: "roomName required" }, { status: 400 });
+  const rl = await checkRateLimit(`livekit:${user.id}`, 10, 60_000);
+  if (rl.limited) return rateLimitedResponse(rl.retryAfter);
+
+  const body = await req.json() as unknown;
+  if (typeof body !== "object" || body === null) {
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+  }
+  const raw = body as Record<string, unknown>;
+  const roomName = sanitizeRoomName(raw.roomName);
+  if (!roomName) return NextResponse.json({ error: "roomName inválido o requerido" }, { status: 400 });
+  const chatId = raw.chatId != null ? sanitizeUuid(raw.chatId) : null;
+  if (raw.chatId != null && !chatId) {
+    return NextResponse.json({ error: "chatId inválido" }, { status: 400 });
+  }
 
   const apiKey = process.env.LIVEKIT_API_KEY;
   const apiSecret = process.env.LIVEKIT_API_SECRET;

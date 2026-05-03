@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import AppSidebar from "@/components/common/AppSidebar";
 import LoadingScreen from "@/components/common/LoadingScreen";
-import CreatePlanModal, { type CreatePlanPayload } from "@/components/plans/CreatePlanModal";
+import CreatePlanModal, { type CreatePlanPayload } from "@/components/plans/modals/CreatePlanModal";
 import { useAuth } from "@/providers/AuthProvider";
 import { clearCachedGoogleProviderToken } from "@/services/auth/googleTokenCache";
 import { resolveGoogleProviderToken } from "@/services/auth/googleProviderToken";
@@ -15,6 +15,13 @@ import { createPlan, listPlansByIdsInOrder, listUserRelatedPlans } from "@/servi
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { insertNotificacion } from "@/services/api/repositories/notifications.repository";
 import { syncPlanWidget } from "@/services/widget/planWidget";
+import { Tabs } from "@/components/ui/Tabs";
+import { SearchInput } from "@/components/ui/SearchInput";
+import { DEFAULT_PLAN_COVER_IMAGE } from "@/config/app";
+import { STORAGE_KEYS } from "@/config/storage";
+import { ES_MONTHS_SHORT, ES_WEEK_DAYS_MIN } from "@/lib/date-labels";
+import { formatDateRange, formatTimeRange, formatDayHeading } from "@/lib/formatters";
+import { CloseX } from "@/components/ui/CloseX";
 
 type PlanTab = "active" | "done";
 type CalendarViewMode = "month" | "day" | "year";
@@ -41,9 +48,9 @@ type WeekPlanSegment = {
   isEnd: boolean;
 };
 
-const MONTHS_SHORT = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
-const WEEK_DAYS = ["Do", "Lu", "Ma", "Mi", "Ju", "Vi", "Sa"];
-const MOBILE_CALENDAR_OPEN_KEY = "frimee:calendar-mobile-open";
+const MONTHS_SHORT = ES_MONTHS_SHORT;
+const WEEK_DAYS = ES_WEEK_DAYS_MIN;
+const MOBILE_CALENDAR_OPEN_KEY = STORAGE_KEYS.mobileCalendarOpen;
 
 export default function CalendarPage() {
   return (
@@ -78,16 +85,13 @@ function CalendarPageInner() {
   const [viewMode, setViewMode] = useState<CalendarViewMode>("month");
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(true);
+  const [stripWeekOffset, setStripWeekOffset] = useState(0);
   const [pinnedPlanIds, setPinnedPlanIds] = useState<number[]>(() => {
     try {
-      const stored = localStorage.getItem("frimee:pinnedPlans");
+      const stored = localStorage.getItem(STORAGE_KEYS.pinnedPlans);
       return stored ? (JSON.parse(stored) as number[]) : [];
     } catch { return []; }
   });
-  const tabRowRef = useRef<HTMLDivElement | null>(null);
-  const activeTabRef = useRef<HTMLButtonElement | null>(null);
-  const doneTabRef = useRef<HTMLButtonElement | null>(null);
-  const [tabIndicator, setTabIndicator] = useState({ left: 0, width: 0, ready: false });
   const [reloadNonce, setReloadNonce] = useState(0);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [calendarModalOpen, setCalendarModalOpen] = useState(false);
@@ -98,20 +102,6 @@ function CalendarPageInner() {
   useEffect(() => {
     autoSyncTriggeredRef.current = false;
   }, [user?.id]);
-
-  useEffect(() => {
-    const updateIndicator = () => {
-      const row = tabRowRef.current;
-      const target = tab === "active" ? activeTabRef.current : doneTabRef.current;
-      if (!row || !target) return;
-      const rowRect = row.getBoundingClientRect();
-      const tabRect = target.getBoundingClientRect();
-      setTabIndicator({ left: tabRect.left - rowRect.left, width: tabRect.width, ready: true });
-    };
-    updateIndicator();
-    window.addEventListener("resize", updateIndicator);
-    return () => window.removeEventListener("resize", updateIndicator);
-  }, [tab]);
 
   useEffect(() => {
     if (createFromQuery === "1") {
@@ -163,7 +153,7 @@ function CalendarPageInner() {
       const next = prev.includes(planId)
         ? prev.filter((id) => id !== planId)
         : prev.length < 3 ? [...prev, planId] : prev;
-      try { localStorage.setItem("frimee:pinnedPlans", JSON.stringify(next)); } catch { /* noop */ }
+      try { localStorage.setItem(STORAGE_KEYS.pinnedPlans, JSON.stringify(next)); } catch { /* noop */ }
       return next;
     });
   };
@@ -316,7 +306,7 @@ function CalendarPageInner() {
 
   const runGoogleSync = useCallback(async () => {
     if (!user?.id || syncingGoogle) return;
-    let providerToken = await resolveGoogleProviderToken({
+    const providerToken = await resolveGoogleProviderToken({
       supabase,
       session,
       userId: user.id,
@@ -441,14 +431,23 @@ function CalendarPageInner() {
   const stripWeeks = useMemo(() => {
     const today = startOfDay(new Date());
     const dayOfWeek = today.getDay();
-    const weekStart = addDays(today, -dayOfWeek);
+    const weekStart = addDays(today, -dayOfWeek + stripWeekOffset);
     return [0, 1].map((weekOffset) =>
       Array.from({ length: 7 }, (_, i) => {
         const date = addDays(weekStart, weekOffset * 7 + i);
-        return { key: toDayKey(date), date, day: date.getDate(), isCurrentMonth: date.getMonth() === today.getMonth() };
+        return { key: toDayKey(date), date, day: date.getDate(), isCurrentMonth: true };
       })
     );
-  }, []);
+  }, [stripWeekOffset]);
+
+  const stripRangeLabel = useMemo(() => {
+    const first = stripWeeks[0]?.[0]?.date;
+    const last = stripWeeks[1]?.[6]?.date;
+    if (!first || !last) return "";
+    const firstLabel = first.toLocaleDateString("es-ES", { day: "numeric", month: "short" });
+    const lastLabel = last.toLocaleDateString("es-ES", { day: "numeric", month: "short" });
+    return `${firstLabel} - ${lastLabel}`;
+  }, [stripWeeks]);
 
   const stripCalendarWeeks = useMemo((): CalendarWeek[] =>
     stripWeeks.map((days, i) => ({ key: `strip-week-${i}`, days })),
@@ -467,7 +466,7 @@ function CalendarPageInner() {
         <AppSidebar onCreatePlan={() => setCreateModalOpen(true)} />
 
         <main
-          className={`px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-6)] transition-[padding] duration-[var(--duration-slow)] [transition-timing-function:var(--ease-standard)] md:py-[var(--space-10)] md:pr-[var(--space-14)]`}
+          className={`min-h-[calc(100dvh-env(safe-area-inset-top)-clamp(56px,8dvh,64px)-env(safe-area-inset-bottom))] px-safe pb-[calc(clamp(56px,8dvh,64px)+env(safe-area-inset-bottom))] pt-mobile-safe-top transition-[padding] duration-[var(--duration-slow)] [transition-timing-function:var(--ease-standard)] md:min-h-0 md:py-[var(--space-10)] md:pr-[var(--space-14)]`}
         >
           <div className="mx-auto w-full max-w-[1120px]">
 
@@ -477,59 +476,25 @@ function CalendarPageInner() {
             </h1>
 
             {/* Tabs */}
-            <div
-              ref={tabRowRef}
-              className="relative mb-[var(--space-4)] flex gap-[var(--space-5)] border-b border-app pb-[var(--space-2)] text-body text-muted"
-            >
-              <button
-                ref={activeTabRef}
-                type="button"
-                onClick={() => setTab("active")}
-                className={`-mb-[2px] pb-0 font-[var(--fw-semibold)] transition-colors duration-[var(--duration-base)] ${
-                  tab === "active" ? "text-app" : "text-muted hover:text-app"
-                }`}
-              >
-                Activos
-              </button>
-              <button
-                ref={doneTabRef}
-                type="button"
-                onClick={() => setTab("done")}
-                className={`-mb-[2px] pb-0 font-[var(--fw-semibold)] transition-colors duration-[var(--duration-base)] ${
-                  tab === "done" ? "text-app" : "text-muted hover:text-app"
-                }`}
-              >
-                Finalizados
-              </button>
-              <span
-                className={`pointer-events-none absolute bottom-0 h-[1.5px] bg-[var(--text-primary)] transition-[left,width,opacity] duration-[220ms] [transition-timing-function:var(--ease-standard)] ${
-                  tabIndicator.ready ? "opacity-100" : "opacity-0"
-                }`}
-                style={{ left: tabIndicator.left, width: tabIndicator.width }}
-                aria-hidden="true"
-              />
-            </div>
+            <Tabs
+              tabs={[
+                { value: "active", label: "Activos" },
+                { value: "done", label: "Finalizados" },
+              ]}
+              value={tab}
+              onChange={(v) => setTab(v as PlanTab)}
+              className="mb-[var(--space-4)]"
+              fontWeight="var(--fw-semibold)"
+            />
 
             {/* Buscador */}
             <div className="mb-[var(--space-5)]">
-              <div className="flex h-[40px] w-full items-center gap-[10px] rounded-[8px] bg-[var(--search-field-bg)] px-[12px] md:max-w-[220px]">
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[18px] shrink-0 text-muted">
-                  <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.8" />
-                  <path d="M16 16L20.5 20.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                </svg>
-                <input
-                  type="search"
-                  value={planSearch}
-                  onChange={(e) => setPlanSearch(e.target.value)}
-                  placeholder="Buscar"
-                  className="min-w-0 flex-1 border-none bg-transparent text-[15px] text-app shadow-none outline-none ring-0 focus:border-none focus:shadow-none focus:outline-none focus:ring-0 placeholder:text-muted [&::-webkit-search-cancel-button]:hidden"
-                />
-                {planSearch && (
-                  <button type="button" onClick={() => setPlanSearch("")} className="shrink-0 text-muted transition-opacity hover:opacity-70">
-                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[18px]"><path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
-                  </button>
-                )}
-              </div>
+              <SearchInput
+                value={planSearch}
+                onChange={setPlanSearch}
+                placeholder="Buscar"
+                className="h-[40px] w-full md:max-w-[260px]"
+              />
             </div>
 
             <div className="grid grid-cols-1 gap-[var(--space-5)] md:grid-cols-[minmax(0,1fr)_300px] md:gap-[var(--space-8)]">
@@ -538,15 +503,37 @@ function CalendarPageInner() {
               {!loading && (
                 <div className="md:hidden md:col-start-2 md:row-start-1 mb-[var(--space-2)]">
                   <div className="mb-[var(--space-3)] flex items-center justify-between">
-                    <span className="text-[11px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
-                      {monthLabel}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setStripWeekOffset((offset) => offset - 14)}
+                        aria-label="Ver dos semanas anteriores"
+                        className="flex size-8 items-center justify-center rounded-full text-muted transition-colors active:bg-surface-2 active:text-app"
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" className="size-[15px]" aria-hidden="true">
+                          <path d="M15 19L8 12L15 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </button>
+                      <span className="min-w-[96px] text-center text-[11px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
+                        {stripRangeLabel}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setStripWeekOffset((offset) => offset + 14)}
+                        aria-label="Ver dos semanas siguientes"
+                        className="flex size-8 items-center justify-center rounded-full text-muted transition-colors active:bg-surface-2 active:text-app"
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" className="size-[15px]" aria-hidden="true">
+                          <path d="M9 5L16 12L9 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </button>
+                    </div>
                     <button
                       type="button"
                       onClick={() => setCalendarModalOpen(true)}
-                      className="flex items-center gap-[5px] text-caption font-[var(--fw-medium)] text-[var(--primary)]"
+                      aria-label="Ver calendario completo"
+                      className="flex size-8 items-center justify-center rounded-full text-muted transition-colors active:bg-surface-2 active:text-app"
                     >
-                      Ver todo
                       <svg viewBox="0 0 24 24" fill="none" className="size-[13px]" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                         <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
                       </svg>
@@ -591,14 +578,14 @@ function CalendarPageInner() {
                               {lane.length ? lane.map((segment) => (
                                 <div
                                   key={segment.key}
-                                  className="h-[14px] cursor-pointer rounded-full border border-[color-mix(in_srgb,var(--primary)_24%,var(--border)_76%)] bg-[color-mix(in_srgb,var(--primary)_22%,var(--surface)_78%)] px-1 text-[8px] font-[var(--fw-semibold)] leading-[13px] text-app transition-opacity hover:opacity-80"
+                                  className="h-[22px] cursor-pointer rounded-full border border-[color-mix(in_srgb,var(--primary)_24%,var(--border)_76%)] bg-[color-mix(in_srgb,var(--primary)_22%,var(--surface)_78%)] px-1.5 text-[14px] font-[var(--fw-semibold)] leading-[22px] text-app transition-opacity hover:opacity-80"
                                   style={{ gridColumn: `${segment.startCol + 1} / ${segment.endCol + 2}` }}
                                   title={segment.title}
                                   onClick={() => { setSelectedDay(startOfDay(new Date(segment.planId))); setCalendarModalOpen(true); }}
                                 >
                                   <span className="block truncate">{segment.title}</span>
                                 </div>
-                              )) : <div className="h-[14px]" aria-hidden="true" />}
+                              )) : <div className="h-[22px]" aria-hidden="true" />}
                             </div>
                           );
                         })}
@@ -696,12 +683,12 @@ function CalendarPageInner() {
                                   <div key={`${week.key}-lane-${laneIndex}`} className="grid grid-cols-7 gap-x-1">
                                     {lane.length ? lane.map((segment) => (
                                       <div key={segment.key}
-                                        className="h-[14px] cursor-pointer overflow-hidden rounded-full bg-[var(--primary)]/20 px-1 text-[8px] font-[var(--fw-semibold)] leading-[14px] text-app transition-opacity hover:opacity-80"
+                                        className="h-[22px] cursor-pointer overflow-hidden rounded-full bg-[var(--primary)]/20 px-1.5 text-[14px] font-[var(--fw-semibold)] leading-[22px] text-app transition-opacity hover:opacity-80"
                                         style={{ gridColumn: `${segment.startCol + 1} / ${segment.endCol + 2}` }}
                                         title={segment.title} onClick={() => navigateToPlan(segment.planId)}>
                                         <span className="block truncate">{segment.title}</span>
                                       </div>
-                                    )) : <div className="h-3" aria-hidden="true" />}
+                                    )) : <div className="h-[22px]" aria-hidden="true" />}
                                   </div>
                                 );
                               })}
@@ -777,8 +764,7 @@ function CalendarPageInner() {
                   <>
                     {/* Mobile: lista con divisores */}
                     <div className="flex flex-col md:hidden">
-                      {filteredPlans.map((plan, index) => {
-                        const isLast = index === filteredPlans.length - 1;
+                      {filteredPlans.map((plan) => {
                         return (
                           <article
                             key={`plan-mobile-${plan.id}`}
@@ -786,12 +772,12 @@ function CalendarPageInner() {
                             onClick={() => navigateToPlan(plan.id)}
                           >
                             <div
-                              className="size-[68px] shrink-0 self-start rounded-[8px] bg-cover bg-center bg-no-repeat my-[var(--space-3)]"
-                              style={{ backgroundImage: `url(${plan.coverImage ?? "https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=400&q=60"})` }}
+                              className="size-[68px] shrink-0 self-start rounded-[8px] bg-cover bg-center bg-no-repeat my-[var(--space-2)]"
+                              style={{ backgroundImage: `url(${plan.coverImage ?? DEFAULT_PLAN_COVER_IMAGE.mobile})` }}
                               role="img"
                               aria-label={plan.title}
                             />
-                            <div className={`flex min-w-0 flex-1 items-start gap-2 py-[var(--space-3)] ${!isLast ? "border-b border-app" : ""}`}>
+                            <div className="flex min-w-0 flex-1 items-start gap-2 py-[var(--space-2)]">
                               <div className="min-w-0 flex-1">
                                 <p className="truncate text-body-sm font-[var(--fw-semibold)] text-app">{plan.title}</p>
                                 <p className="mt-[2px] text-caption text-muted">{formatDateRange(plan.startsAt, plan.endsAt)}</p>
@@ -806,7 +792,7 @@ function CalendarPageInner() {
                     </div>
 
                     {/* Desktop: grid sin borde */}
-                    <div className="hidden md:grid md:grid-cols-2 md:gap-x-[var(--space-5)] md:gap-y-[var(--space-8)]">
+                    <div className="hidden md:grid md:grid-cols-2 md:gap-x-[var(--space-5)] md:gap-y-[var(--space-6)]">
                       {filteredPlans.map((plan) => {
                         return (
                           <article
@@ -816,7 +802,7 @@ function CalendarPageInner() {
                           >
                             <div
                               className="relative h-[160px] w-full overflow-hidden rounded-[10px] bg-cover bg-center bg-no-repeat transition-opacity group-hover:opacity-95"
-                              style={{ backgroundImage: `url(${plan.coverImage ?? "https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=800&q=70"})` }}
+                              style={{ backgroundImage: `url(${plan.coverImage ?? DEFAULT_PLAN_COVER_IMAGE.desktop})` }}
                               role="img"
                               aria-label={plan.title}
                             >
@@ -879,32 +865,18 @@ function CalendarPageInner() {
 
 function PlanListSkeleton() {
   return (
-    <>
-      {/* Mobile skeleton */}
-      <div className="flex flex-col md:hidden">
-        {[1, 2, 3, 4].map((i, index, arr) => (
-          <div key={i} className={`flex items-center gap-3 ${index < arr.length - 1 ? "border-b border-app" : ""}`}>
-            <div className="size-[68px] shrink-0 animate-pulse rounded-[8px] bg-surface-2" style={{ animationDelay: `${index * 60}ms` }} />
-            <div className="flex min-w-0 flex-1 flex-col gap-[var(--space-2)] py-[var(--space-4)]">
-              <div className="h-[13px] w-[140px] animate-pulse rounded-full bg-surface-2" style={{ animationDelay: `${index * 60}ms` }} />
-              <div className="h-[11px] w-[90px] animate-pulse rounded-full bg-surface-2 opacity-60" style={{ animationDelay: `${index * 60 + 30}ms` }} />
-            </div>
+    <div className="space-y-[var(--space-4)]" aria-label="Cargando planes" role="status">
+      <div className="skeleton-shimmer h-[150px] w-full rounded-card" />
+
+      <div className="grid grid-cols-1 gap-[var(--space-3)] md:grid-cols-2">
+        {[1, 2].map((i) => (
+          <div key={i} className="flex items-center gap-3">
+            <div className="skeleton-shimmer size-[64px] shrink-0 rounded-card" />
+            <div className="skeleton-shimmer h-[14px] w-[150px] rounded-full" />
           </div>
         ))}
       </div>
-      {/* Desktop skeleton */}
-      <div className="hidden md:grid md:grid-cols-2 md:gap-[var(--space-5)]">
-        {[1, 2, 3, 4].map((i) => (
-          <div key={i}>
-            <div className="h-[160px] w-full animate-pulse rounded-[10px] bg-surface-2" />
-            <div className="mt-[var(--space-3)] space-y-[var(--space-2)]">
-              <div className="h-[16px] w-[70%] animate-pulse rounded-full bg-surface-2" />
-              <div className="h-[12px] w-[50%] animate-pulse rounded-full bg-surface-2 opacity-60" />
-            </div>
-          </div>
-        ))}
-      </div>
-    </>
+    </div>
   );
 }
 
@@ -1000,7 +972,7 @@ function FullCalendarModal({
         {/* Cerrar */}
         <div className="flex min-w-0 flex-1 justify-end">
           <button type="button" onClick={onClose} aria-label="Cerrar" className="flex size-9 items-center justify-center rounded-full text-muted transition-colors hover:bg-surface-2">
-            <svg viewBox="0 0 24 24" fill="none" className="size-[18px]"><path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
+            <CloseX />
           </button>
         </div>
       </div>
@@ -1064,13 +1036,13 @@ function FullCalendarModal({
                         <div key={`${week.key}-lane-${laneIndex}`} className="grid grid-cols-7 gap-x-1">
                           {lane.length ? lane.map((segment) => (
                             <div key={segment.key}
-                              className="h-[18px] cursor-pointer overflow-hidden rounded-full bg-[var(--primary)]/20 px-1.5 text-[9px] font-[var(--fw-semibold)] leading-[18px] text-app transition-opacity hover:opacity-80"
+                              className="h-[24px] cursor-pointer overflow-hidden rounded-full bg-[var(--primary)]/20 px-2 text-[14px] font-[var(--fw-semibold)] leading-[24px] text-app transition-opacity hover:opacity-80"
                               style={{ gridColumn: `${segment.startCol + 1} / ${segment.endCol + 2}` }}
                               title={segment.title}
                               onClick={() => { navigateToPlan(segment.planId); onClose(); }}>
                               <span className="block truncate">{segment.title}</span>
                             </div>
-                          )) : <div className="h-3" aria-hidden="true" />}
+                          )) : <div className="h-[24px]" aria-hidden="true" />}
                         </div>
                       );
                     })}
@@ -1151,65 +1123,6 @@ function FullCalendarModal({
   );
 }
 
-function CalendarPageSkeleton() {
-  return (
-    <>
-      <section className="grid grid-cols-1 gap-[var(--space-4)] md:grid-cols-2" aria-hidden="true">
-        {Array.from({ length: 4 }).map((_, index) => (
-          <article key={index} className="overflow-hidden rounded-card border border-app bg-surface shadow-elev-1">
-            <div className="skeleton-shimmer h-[138px] w-full" />
-            <div className="flex items-end justify-between gap-3 p-[var(--space-4)]">
-              <div className="min-w-0 flex-1 space-y-2">
-                <div className="skeleton-shimmer h-7 w-[62%] rounded-full" />
-                <div className="skeleton-shimmer h-4 w-[48%] rounded-full" />
-                <div className="skeleton-shimmer h-3 w-[34%] rounded-full" />
-              </div>
-              <div className="skeleton-shimmer h-10 w-24 rounded-[10px]" />
-            </div>
-          </article>
-        ))}
-      </section>
-
-      <aside
-        className="overflow-hidden rounded-modal border border-app bg-surface p-[var(--space-4)] shadow-elev-1 lg:sticky lg:top-[var(--space-6)] lg:self-start"
-        aria-hidden="true"
-      >
-        <div className="mb-[var(--space-2)] flex items-center justify-between">
-          <div className="skeleton-shimmer h-8 w-10 rounded-input" />
-          <div className="skeleton-shimmer h-4 w-24 rounded-full" />
-          <div className="skeleton-shimmer h-8 w-10 rounded-input" />
-        </div>
-
-        <div className="grid grid-cols-7 gap-x-1 gap-y-2 text-center">
-          {Array.from({ length: 7 }).map((_, index) => (
-            <div key={`calendar-head-${index}`} className="skeleton-shimmer mx-auto h-3 w-5 rounded-full" />
-          ))}
-        </div>
-
-        <div className="mt-2 space-y-1">
-          {Array.from({ length: 5 }).map((_, weekIndex) => (
-            <div key={`calendar-week-${weekIndex}`} className="h-[48px] p-1.5">
-              <div className="grid grid-cols-7 gap-x-1">
-                {Array.from({ length: 7 }).map((__, dayIndex) => (
-                  <div key={`calendar-day-${weekIndex}-${dayIndex}`} className="skeleton-shimmer h-7" />
-                ))}
-              </div>
-              <div className="mt-1 space-y-0.5">
-                <div className="grid grid-cols-7 gap-x-1">
-                  <div className="skeleton-shimmer col-span-4 h-3 rounded-full" />
-                </div>
-                <div className="grid grid-cols-7 gap-x-1">
-                  <div className="skeleton-shimmer col-span-3 h-3 rounded-full" />
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </aside>
-    </>
-  );
-}
-
 function addDays(date: Date, amount: number) {
   const next = new Date(date);
   next.setDate(next.getDate() + amount);
@@ -1249,29 +1162,6 @@ function rangesOverlap(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date) {
   return aStart <= bEnd && aEnd >= bStart;
 }
 
-function formatDateRange(startsAtIso: string, endsAtIso: string) {
-  const startsAt = new Date(startsAtIso);
-  const endsAt = new Date(endsAtIso);
-  const startDate = startsAt.toLocaleDateString("es-ES", { day: "2-digit", month: "short" });
-  const endDate = endsAt.toLocaleDateString("es-ES", { day: "2-digit", month: "short" });
-  return `${startDate} - ${endDate}`;
-}
-
-function formatTimeRange(startsAtIso: string, endsAtIso: string) {
-  const startsAt = new Date(startsAtIso);
-  const endsAt = new Date(endsAtIso);
-  const startTime = startsAt.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
-  const endTime = endsAt.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
-  return `${startTime} - ${endTime}`;
-}
-
-function formatDayHeading(date: Date) {
-  return date.toLocaleDateString("es-ES", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
-}
 
 function getMinutesWithinDay(iso: string, day: Date, clampToEnd = false) {
   const value = new Date(iso);

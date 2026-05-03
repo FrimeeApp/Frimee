@@ -2,22 +2,22 @@ import { createBrowserSupabaseClient } from "@/services/supabase/client";
 
 export async function savePlan(planId: number): Promise<void> {
   const supabase = createBrowserSupabaseClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not authenticated");
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) throw new Error("Not authenticated");
   const { error } = await supabase
     .from("planes_guardados")
-    .insert({ user_id: user.id, plan_id: planId });
+    .insert({ user_id: session.user.id, plan_id: planId });
   if (error && error.code !== "23505") throw error;
 }
 
 export async function unsavePlan(planId: number): Promise<void> {
   const supabase = createBrowserSupabaseClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not authenticated");
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) throw new Error("Not authenticated");
   const { error } = await supabase
     .from("planes_guardados")
     .delete()
-    .eq("user_id", user.id)
+    .eq("user_id", session.user.id)
     .eq("plan_id", planId);
   if (error) throw error;
 }

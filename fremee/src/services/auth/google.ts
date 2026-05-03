@@ -4,24 +4,29 @@ import { Browser } from "@capacitor/browser";
 import { App } from "@capacitor/app";
 import { Capacitor } from "@capacitor/core";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
+import { APP_AUTH_CALLBACK_PATH, APP_AUTH_CALLBACK_URI, APP_DEEP_LINK_SCHEME } from "@/config/app";
+import { GOOGLE_CALENDAR_SCOPE } from "@/config/external";
 
 /**
  * Debes registrar este redirect en Supabase -> Auth -> URL Configuration -> Redirect URLs
  * y configurar deep links en Android/iOS.
  */
-export const CAPACITOR_REDIRECT_URI = "fremee://auth/callback";
+export const CAPACITOR_REDIRECT_URI = APP_AUTH_CALLBACK_URI;
+
+const AUTH_CALLBACK_HOST = "auth";
+const AUTH_CALLBACK_HOST_PATH = APP_AUTH_CALLBACK_PATH.replace(`/${AUTH_CALLBACK_HOST}`, "") || "/";
 
 function isOurCallbackUrl(rawUrl: string) {
   try {
     const u = new URL(rawUrl);
     const pathname = u.pathname.replace(/\/+$/, "");
-    if (u.protocol !== "fremee:") return false;
+    if (u.protocol !== `${APP_DEEP_LINK_SCHEME}:`) return false;
 
     // fremee://auth/callback
-    if (u.host === "auth" && pathname === "/callback") return true;
+    if (u.host === AUTH_CALLBACK_HOST && pathname === AUTH_CALLBACK_HOST_PATH) return true;
 
     // fremee:///auth/callback (algunos entornos devuelven host vacío)
-    if (!u.host && pathname === "/auth/callback") return true;
+    if (!u.host && pathname === APP_AUTH_CALLBACK_PATH) return true;
 
     return false;
   } catch {
@@ -43,7 +48,7 @@ export async function signInWithGoogleCapacitor() {
     options: {
       redirectTo: CAPACITOR_REDIRECT_URI,
       skipBrowserRedirect: true,
-      scopes: "https://www.googleapis.com/auth/calendar",
+      scopes: GOOGLE_CALENDAR_SCOPE,
       queryParams: {
         access_type: "offline",
         prompt: "consent",

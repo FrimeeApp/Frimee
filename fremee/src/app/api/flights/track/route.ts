@@ -3,13 +3,13 @@
 export const dynamic = "force-static";
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { AIRPORTS, flightProgressFromPosition, flightProgressFromTime } from "@/lib/airports";
+import { buildOpenSkyStatesUrl } from "@/config/external";
+import { createSupabaseServiceClient } from "@/services/supabase/server";
+import { sanitizeCallsign, sanitizeIata, sanitizeIsoDate } from "@/lib/sanitize";
+import { checkRateLimit, rateLimitedResponse } from "@/lib/rate-limit";
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+const supabaseAdmin = createSupabaseServiceClient();
 
 export type FlightTrackResult = {
   callsign:         string;
@@ -27,18 +27,25 @@ export type FlightTrackResult = {
 
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
-  const callsign = searchParams.get("callsign")?.trim().toUpperCase();
-  const from     = searchParams.get("from")?.trim().toUpperCase();
-  const to       = searchParams.get("to")?.trim().toUpperCase();
+  const callsign = sanitizeCallsign(searchParams.get("callsign"));
+  const from     = searchParams.get("from") ? sanitizeIata(searchParams.get("from")) : null;
+  const to       = searchParams.get("to")   ? sanitizeIata(searchParams.get("to"))   : null;
 
   if (!callsign) {
-    return NextResponse.json({ error: "callsign required" }, { status: 400 });
+    return NextResponse.json({ error: "callsign inválido o requerido" }, { status: 400 });
+  }
+  if (searchParams.get("from") && !from) {
+    return NextResponse.json({ error: "Código IATA de origen inválido" }, { status: 400 });
+  }
+  if (searchParams.get("to") && !to) {
+    return NextResponse.json({ error: "Código IATA de destino inválido" }, { status: 400 });
   }
 
-  // OpenSky expects callsign padded to 8 chars with spaces
-  const padded = callsign.padEnd(8, " ");
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0].trim() ?? "unknown";
+  const rl = await checkRateLimit(`flights:${ip}`, 20, 60_000);
+  if (rl.limited) return rateLimitedResponse(rl.retryAfter);
 
-  const url = `https://opensky-network.org/api/states/all?callsign=${encodeURIComponent(padded)}`;
+  const url = buildOpenSkyStatesUrl(callsign);
 
   let osRes: Response;
   try {
@@ -68,8 +75,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "No position data available yet" }, { status: 404 });
   }
 
-  const startsAt = searchParams.get("starts_at");
-  const endsAt   = searchParams.get("ends_at");
+  const startsAt = sanitizeIsoDate(searchParams.get("starts_at"));
+  const endsAt   = sanitizeIsoDate(searchParams.get("ends_at"));
 
   const originAirport  = from ? (AIRPORTS[from] ?? null) : null;
   const destAirport    = to   ? (AIRPORTS[to]   ?? null) : null;
