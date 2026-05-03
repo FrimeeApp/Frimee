@@ -51,8 +51,8 @@ const defaultSections: Footer7Props["sections"] = [
 ];
 
 const defaultLegalLinks: Footer7Props["legalLinks"] = [
-  { name: "Terminos y condiciones", href: "/terminos-y-condiciones" },
-  { name: "Politica de privacidad", href: "/politica-de-privacidad" },
+  { name: "Términos y condiciones", href: "/terminos-y-condiciones" },
+  { name: "Política de privacidad", href: "/politica-de-privacidad" },
 ];
 
 export const Footer7 = ({
