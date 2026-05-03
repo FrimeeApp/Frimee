@@ -60,7 +60,7 @@ export function PricingSection({
         {description && (
           <p className="v3-pricing-desc v3-ac">{description}</p>
         )}
-        <div className="v3-ac" style={{ marginTop: "2rem" }}>
+        <div className="v3-ac flex justify-center" style={{ marginTop: "2rem" }}>
           <PricingFrequencyToggle
             frequency={frequency}
             setFrequency={setFrequency}
