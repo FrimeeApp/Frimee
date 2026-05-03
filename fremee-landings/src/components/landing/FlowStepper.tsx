@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Plus, UserPlus, CalendarCheck, PartyPopper } from "lucide-react";
 import React from "react";
 
@@ -14,9 +14,34 @@ const steps = [
 export default function FlowStepper() {
   const [active, setActive] = useState(0);
   const [allDone, setAllDone] = useState(false);
+  const [hasStarted, setHasStarted] = useState(false);
+  const stepperRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (allDone) return;
+    const stepper = stepperRef.current;
+    const section = stepper?.closest("section");
+
+    if (!section) {
+      setHasStarted(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting) return;
+        setHasStarted(true);
+        observer.disconnect();
+      },
+      { threshold: 0.25 },
+    );
+
+    observer.observe(section);
+
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!hasStarted || allDone) return;
     const timer = setTimeout(() => {
       if (active >= steps.length - 1) {
         setAllDone(true);
@@ -25,10 +50,10 @@ export default function FlowStepper() {
       }
     }, 2500);
     return () => clearTimeout(timer);
-  }, [active, allDone]);
+  }, [active, allDone, hasStarted]);
 
   return (
-    <div className="v3-stepper-h">
+    <div ref={stepperRef} className="v3-stepper-h">
       {steps.map((s, i) => {
         const Icon = s.icon;
         const isActive = !allDone && i === active;
