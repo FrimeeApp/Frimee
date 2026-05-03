@@ -173,13 +173,13 @@ export default function WaitlistSection({
   };
 
   const sectionClassName = standalone
-    ? "v3-section v3-waitlist-section flex min-h-dvh overflow-y-auto bg-[#17171d] py-0 lg:h-dvh lg:items-center lg:overflow-hidden"
+    ? "v3-section v3-waitlist-section flex min-h-dvh overflow-y-auto bg-[#17171d] py-0 lg:items-center"
     : "v3-section v3-animate-section v3-waitlist-section";
   const shellClassName = standalone
     ? "w-full"
     : "v3-waitlist-shell";
   const innerClassName = standalone
-    ? "mx-auto grid min-h-dvh w-full max-w-6xl grid-cols-1 gap-10 px-5 pb-[max(24px,env(safe-area-inset-bottom))] pt-[max(24px,env(safe-area-inset-top))] md:px-8 lg:h-dvh lg:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)] lg:items-center lg:gap-14 lg:px-12"
+    ? "mx-auto grid min-h-dvh w-full max-w-6xl grid-cols-1 gap-10 px-5 pb-[max(24px,env(safe-area-inset-bottom))] pt-[max(24px,env(safe-area-inset-top))] md:px-8 lg:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)] lg:items-center lg:gap-14 lg:px-12"
     : "mx-auto w-[min(100%-2rem,72rem)] py-20 md:py-28";
   const gridClassName = standalone
     ? "grid grid-cols-1 gap-5"

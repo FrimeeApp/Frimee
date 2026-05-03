@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 
 export default function WaitlistPage() {
   return (
-    <main className="landing-page v3-page h-dvh overflow-hidden">
+    <main className="landing-page v3-page min-h-dvh">
       <WaitlistSection standalone showModel={false} />
     </main>
   );
