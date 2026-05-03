@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import { Capacitor } from "@capacitor/core";
 import type { SubplanRow } from "@/services/api/endpoints/subplanes.endpoint";
 import { TIPOS_TRANSPORTE } from "@/services/api/endpoints/subplanes.endpoint";
 import { loadGoogleMapsScript } from "@/lib/googleMaps";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
+import { buildInternalApiUrl } from "@/config/external";
 
 type Props = {
   subplanes: SubplanRow[];
@@ -16,6 +18,11 @@ type Props = {
 };
 
 type Coord = { lat: number; lng: number };
+type DirectionsResultShape = {
+  polyline?: string;
+  legs?: { distance?: string; duration?: string }[];
+  error?: string;
+};
 
 function logDayRouteMap(message: string, details?: unknown) {
   if (details !== undefined) {
@@ -26,6 +33,142 @@ function logDayRouteMap(message: string, details?: unknown) {
 }
 
 function isoDateOnly(iso: string) { return iso.slice(0, 10); }
+function roundCoord(n: number) { return Math.round(n * 1e4) / 1e4; }
+
+function isNativePlatform() {
+  return Capacitor.isNativePlatform();
+}
+
+function mapTravelMode(travelMode?: string): google.maps.TravelMode {
+  switch (travelMode) {
+    case "APIE":
+      return google.maps.TravelMode.WALKING;
+    case "BUS":
+    case "METRO":
+    case "TREN":
+      return google.maps.TravelMode.TRANSIT;
+    case "COCHE":
+    case "TAXI":
+    default:
+      return google.maps.TravelMode.DRIVING;
+  }
+}
+
+async function requestDirectionsFromGoogleClient(params: {
+  from: Coord;
+  to: Coord;
+  travelMode?: string | null;
+}): Promise<DirectionsResultShape> {
+  const service = new window.google.maps.DirectionsService();
+  const result = await service.route({
+    origin: params.from,
+    destination: params.to,
+    travelMode: mapTravelMode(params.travelMode ?? undefined),
+    unitSystem: google.maps.UnitSystem.METRIC,
+  });
+
+  const route = result.routes[0];
+  const leg = route?.legs?.[0];
+
+  return {
+    polyline: route?.overview_polyline,
+    legs: leg
+      ? [{
+          distance: leg.distance?.text,
+          duration: leg.duration?.text,
+        }]
+      : undefined,
+  };
+}
+
+async function requestDirections(params: {
+  waypoints: string[];
+  from: Coord;
+  to: Coord;
+  travelMode?: string | null;
+  accessToken?: string;
+}): Promise<DirectionsResultShape> {
+  if (isNativePlatform()) {
+    const supabase = createBrowserSupabaseClient();
+    const { data, error } = await supabase
+      .from("route_cache")
+      .select("polyline, distance, duration")
+      .eq("origin_lat", roundCoord(params.from.lat))
+      .eq("origin_lng", roundCoord(params.from.lng))
+      .eq("dest_lat", roundCoord(params.to.lat))
+      .eq("dest_lng", roundCoord(params.to.lng))
+      .maybeSingle();
+
+    if (error) {
+      const errorCode = typeof error === "object" && error && "code" in error ? String(error.code) : null;
+      if (errorCode !== "PGRST205") {
+        logDayRouteMap("Error leyendo route_cache en nativo", {
+          error,
+          from: params.from,
+          to: params.to,
+        });
+      }
+      return {};
+    }
+
+    return data
+      ? {
+          polyline: data.polyline ?? undefined,
+          legs: [{
+            distance: data.distance ?? undefined,
+            duration: data.duration ?? undefined,
+          }],
+        }
+      : {};
+  }
+
+  try {
+    const res = await fetch(buildInternalApiUrl("/api/directions"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(params.accessToken ? { Authorization: `Bearer ${params.accessToken}` } : {}),
+      },
+      body: JSON.stringify({
+        waypoints: params.waypoints,
+        originCoords: params.from,
+        destCoords: params.to,
+        travelMode: params.travelMode ?? "COCHE",
+      }),
+    });
+
+    const contentType = res.headers.get("content-type") ?? "";
+    if (!contentType.includes("application/json")) {
+      throw new Error(`Respuesta no JSON de /api/directions (${res.status})`);
+    }
+
+    const data = await res.json() as DirectionsResultShape;
+    if (res.ok && !data.error) {
+      return data;
+    }
+
+    logDayRouteMap("Fallo /api/directions; usando fallback cliente", {
+      status: res.status,
+      responseError: data.error ?? null,
+      from: params.from,
+      to: params.to,
+      travelMode: params.travelMode ?? "COCHE",
+    });
+  } catch (error) {
+    logDayRouteMap("Excepcion en /api/directions; usando fallback cliente", {
+      error,
+      from: params.from,
+      to: params.to,
+      travelMode: params.travelMode ?? "COCHE",
+    });
+  }
+
+  return requestDirectionsFromGoogleClient({
+    from: params.from,
+    to: params.to,
+    travelMode: params.travelMode,
+  });
+}
 
 async function geocode(address: string): Promise<Coord | null> {
   return new Promise((resolve) => {
@@ -280,37 +423,22 @@ export default function DayRouteMap({
           if (routeKey) inFlightRouteKeysRef.current.add(routeKey);
           const fromCoord = coords[i];
           const toCoord = coords[i + 1];
+          if (!fromCoord || !toCoord) {
+            continue;
+          }
           const waypoints = [
-            fromCoord ? `${fromCoord.lat},${fromCoord.lng}` : points[i].name,
-            toCoord ? `${toCoord.lat},${toCoord.lng}` : points[i + 1].name,
+            `${fromCoord.lat},${fromCoord.lng}`,
+            `${toCoord.lat},${toCoord.lng}`,
           ];
 
           const { data: { session } } = await createBrowserSupabaseClient().auth.getSession();
-          const res = await fetch("/api/directions", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-            },
-            body: JSON.stringify({
-              waypoints,
-              originCoords: fromCoord ?? undefined,
-              destCoords: toCoord ?? undefined,
-              travelMode: destSubplan?.transporte_llegada ?? "COCHE",
-            }),
+          const data = await requestDirections({
+            waypoints,
+            from: fromCoord,
+            to: toCoord,
+            travelMode: destSubplan?.transporte_llegada ?? "COCHE",
+            accessToken: session?.access_token,
           });
-          const data = await res.json() as { polyline?: string; legs?: { distance?: string; duration?: string }[]; error?: string };
-
-          if (!res.ok || data.error) {
-            logDayRouteMap("Fallo /api/directions", {
-              status: res.status,
-              routeKey,
-              responseError: data.error ?? null,
-              fromCoord,
-              toCoord,
-              travelMode: destSubplan?.transporte_llegada ?? "COCHE",
-            });
-          }
 
           if (data.polyline) {
             if (routeKey) computedRouteKeysRef.current.add(routeKey);

@@ -8,6 +8,7 @@ import { Capacitor } from "@capacitor/core";
 import PlaneIcon from "@/components/ui/PlaneIcon";
 import { useFollow } from "@/hooks/useFollow";
 import { useToast } from "@/components/ui/Toaster";
+import { buildInternalApiUrl } from "@/config/external";
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { CSSProperties } from "react";
 import AppSidebar from "@/components/common/AppSidebar";
@@ -1586,7 +1587,7 @@ function FeedCard({
       // Moderation: async — delete silently if toxic
       const commentId = result.comment_id;
       void createBrowserSupabaseClient().auth.getSession().then(({ data: { session } }) =>
-        fetch("/api/moderate-comment", {
+        fetch(buildInternalApiUrl("/api/moderate-comment"), {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
