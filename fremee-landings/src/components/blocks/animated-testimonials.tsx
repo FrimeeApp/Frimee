@@ -70,7 +70,7 @@ export function AnimatedTestimonials({
   if (testimonials.length === 0) return null
 
   return (
-    <section ref={sectionRef} className={`v3-section ${className ?? ""}`}>
+    <section ref={sectionRef} className={`v3-section v3-section-alt ${className ?? ""}`}>
       <div className="v3-section-inner">
         <motion.div
           initial="hidden"
@@ -80,13 +80,7 @@ export function AnimatedTestimonials({
         >
           {/* Left — heading & controls */}
           <motion.div variants={itemVariants} className="v3-testimonials-left">
-            {badgeText && (
-              <div className="v3-testimonials-badge">
-                <Star size={13} fill="currentColor" />
-                <span>{badgeText}</span>
-              </div>
-            )}
-            <p className="v3-kicker" style={{ marginTop: "1.5rem" }}>Testimonios</p>
+            
             <h2 style={{ maxWidth: "12ch" }}>{title}</h2>
             <p className="v3-testimonials-subtitle">{subtitle}</p>
             <div className="v3-testimonials-dots">

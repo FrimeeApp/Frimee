@@ -256,6 +256,18 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
   const localMuted = localTile?.audioMuted ?? false;
   const localVideoOff = localTile?.videoMuted ?? true;
   const showVideo = hasAnyVideo;
+  const visibleTileCount = tiles.length > 0 ? tiles.length : miembros.length;
+
+  const getGridConfig = (count: number) => {
+    if (count <= 1) return { columns: 1, rows: 1 };
+    if (count === 2) return { columns: 2, rows: 1 };
+    if (count <= 4) return { columns: 2, rows: 2 };
+    if (count <= 6) return { columns: 2, rows: 3 };
+    if (count <= 9) return { columns: 3, rows: 3 };
+    return { columns: 4, rows: Math.ceil(count / 4) };
+  };
+
+  const gridConfig = getGridConfig(visibleTileCount);
 
   const renderTile = (tile: ParticipantTile, fullscreen = false) => {
     const miembro = getMiembro(tile.identity);
@@ -270,7 +282,8 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
       <div
         key={tile.id}
         onClick={() => setFocusedId(fullscreen ? null : tile.id)}
-        className={`relative overflow-hidden rounded-2xl bg-black flex items-center justify-center cursor-pointer ${fullscreen ? "w-full h-full" : tile.isScreenShare ? "col-span-2 aspect-video" : "aspect-square"}`}
+        className={`relative overflow-hidden rounded-2xl bg-black flex min-h-0 items-center justify-center cursor-pointer ${fullscreen ? "w-full h-full" : "h-full w-full"}`}
+        style={!fullscreen && tile.isScreenShare ? { gridColumn: `span ${gridConfig.columns}` } : undefined}
       >
         {/* Video element — always rendered for screen share, conditional for camera */}
         {(tile.isScreenShare || showVideo) && (
@@ -357,11 +370,16 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
             {renderTile(focusedTile, true)}
           </div>
         ) : (
-          <div className="h-full overflow-y-auto">
-            <div className="grid grid-cols-2 gap-2">
+          <div
+            className="grid h-full min-h-0 gap-2"
+            style={{
+              gridTemplateColumns: `repeat(${gridConfig.columns}, minmax(0, 1fr))`,
+              gridTemplateRows: `repeat(${gridConfig.rows}, minmax(0, 1fr))`,
+            }}
+          >
               {tiles.map((tile) => renderTile(tile, false))}
               {tiles.length === 0 && miembros.map((m) => (
-                <div key={m.id} className="aspect-square overflow-hidden rounded-2xl bg-[#2a2a2a] flex flex-col items-center justify-center gap-2 opacity-50">
+                <div key={m.id} className="flex h-full min-h-0 w-full flex-col items-center justify-center gap-2 overflow-hidden rounded-2xl bg-[#2a2a2a] opacity-50">
                   <div className="h-14 w-14 overflow-hidden rounded-full bg-white/10">
                     {m.foto ? <Image src={m.foto} alt={m.nombre} width={56} height={56} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" /> : (
                       <div className="flex h-full w-full items-center justify-center text-xl font-bold">{m.nombre[0]?.toUpperCase()}</div>
@@ -370,7 +388,6 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
                   <span className="text-sm text-white/40">Llamando...</span>
                 </div>
               ))}
-            </div>
           </div>
         )}
       </div>

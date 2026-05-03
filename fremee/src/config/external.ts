@@ -29,12 +29,16 @@ export function getProfileImagesBucket() {
   return process.env.NEXT_PUBLIC_SUPABASE_PROFILE_BUCKET ?? DEFAULT_SUPABASE_PROFILE_IMAGES_BUCKET;
 }
 
-export function buildGoogleMapsScriptUrl(apiKey: string | undefined) {
+export function buildGoogleMapsScriptUrl(apiKey: string | undefined, callback?: string) {
   const params = new URLSearchParams({
     key: apiKey ?? "",
     v: "weekly",
+    loading: "async",
     libraries: GOOGLE_MAPS_LIBRARIES.join(","),
   });
+  if (callback) {
+    params.set("callback", callback);
+  }
   return `https://maps.googleapis.com/maps/api/js?${params.toString()}`;
 }
 

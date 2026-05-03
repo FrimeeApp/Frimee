@@ -1,5 +1,4 @@
-import React from "react";
-import { FaInstagram, FaXTwitter } from "react-icons/fa6";
+﻿import React from "react";
 import Image from "next/image";
 
 interface Footer7Props {
@@ -14,11 +13,6 @@ interface Footer7Props {
     links: Array<{ name: string; href: string }>;
   }>;
   description?: string;
-  socialLinks?: Array<{
-    icon: React.ReactElement;
-    href: string;
-    label: string;
-  }>;
   copyright?: string;
   legalLinks?: Array<{
     name: string;
@@ -30,7 +24,7 @@ const defaultSections: Footer7Props["sections"] = [
   {
     title: "Producto",
     links: [
-      { name: "Características", href: "#" },
+      { name: "Caracteristicas", href: "#" },
       { name: "Demo", href: "#" },
       { name: "Descarga", href: "#" },
       { name: "Novedades", href: "#" },
@@ -49,21 +43,16 @@ const defaultSections: Footer7Props["sections"] = [
     title: "Soporte",
     links: [
       { name: "Ayuda", href: "#" },
-      { name: "Contacto", href: "mailto:hola@frimee.app" },
-      { name: "Feedback", href: "mailto:hola@frimee.app" },
+      { name: "Contacto", href: "mailto:contact@frimee.es" },
+      { name: "Feedback", href: "mailto:contact@frimee.es" },
       { name: "Estado", href: "#" },
     ],
   },
 ];
 
-const defaultSocialLinks: Footer7Props["socialLinks"] = [
-  { icon: <FaInstagram className="size-[1.1rem]" />, href: "https://instagram.com/frimeeapp", label: "Instagram" },
-  { icon: <FaXTwitter className="size-[1.1rem]" />, href: "https://twitter.com/frimeeapp", label: "X / Twitter" },
-];
-
 const defaultLegalLinks: Footer7Props["legalLinks"] = [
-  { name: "Términos y condiciones", href: "#" },
-  { name: "Política de privacidad", href: "#" },
+  { name: "Términos y condiciones", href: "/terminos-y-condiciones" },
+  { name: "Política de privacidad", href: "/politica-de-privacidad" },
 ];
 
 export const Footer7 = ({
@@ -75,16 +64,15 @@ export const Footer7 = ({
   },
   sections = defaultSections,
   description = "Organiza tus planes con amigos sin el caos. Todo en un solo lugar.",
-  socialLinks = defaultSocialLinks,
   copyright = `© ${new Date().getFullYear()} Frimee. Todos los derechos reservados.`,
   legalLinks = defaultLegalLinks,
 }: Footer7Props) => {
+  void description;
+
   return (
     <footer className="v3-footer">
       <div className="v3-footer-inner">
-        {/* Top row */}
         <div className="v3-footer-top">
-          {/* Brand column */}
           <div className="v3-footer-brand">
             <a href={logo.url} className="v3-footer-logo">
               <Image
@@ -95,27 +83,49 @@ export const Footer7 = ({
                 height={28}
                 className="v3-footer-logo-img"
               />
-              <span className="v3-footer-logo-name">{logo.title}</span>
             </a>
-            <p className="v3-footer-desc">{description}</p>
-            <ul className="v3-footer-socials">
-              {socialLinks!.map((social, idx) => (
-                <li key={idx}>
-                  <a
-                    href={social.href}
-                    aria-label={social.label}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="v3-footer-social-link"
-                  >
-                    {social.icon}
-                  </a>
-                </li>
-              ))}
-            </ul>
+
+            <div className="v3-footer-contact">
+              <p className="v3-footer-contact-title">Estamos construyendo esto contigo.</p>
+              <p className="v3-footer-contact-copy">Ideas o problemas? Queremos escucharte.</p>
+              <a href="mailto:contact@frimee.es" className="v3-footer-contact-mail">
+                contact@frimee.es
+              </a>
+              <div className="v3-footer-contact-socials">
+                <a
+                  href="https://instagram.com/frimeeapp"
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label="Instagram de Frimee"
+                  className="v3-footer-contact-social-link"
+                >
+                  <Image
+                    src="/images/Instagram_icon.png"
+                    alt="Instagram"
+                    width={22}
+                    height={22}
+                    className="v3-footer-contact-social-icon"
+                  />
+                </a>
+                <a
+                  href="https://twitter.com/frimeeapp"
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label="X de Frimee"
+                  className="v3-footer-contact-social-link"
+                >
+                  <Image
+                    src="/images/X_icon.png"
+                    alt="X"
+                    width={22}
+                    height={22}
+                    className="v3-footer-contact-social-icon"
+                  />
+                </a>
+              </div>
+            </div>
           </div>
 
-          {/* Link columns */}
           <div className="v3-footer-links">
             {sections!.map((section, sIdx) => (
               <div key={sIdx} className="v3-footer-col">
@@ -134,7 +144,6 @@ export const Footer7 = ({
           </div>
         </div>
 
-        {/* Bottom row */}
         <div className="v3-footer-bottom">
           <p className="v3-footer-copyright">{copyright}</p>
           <ul className="v3-footer-legal">
