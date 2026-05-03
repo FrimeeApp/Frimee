@@ -9,6 +9,7 @@ import { AnimatedTestimonials } from "@/components/blocks/animated-testimonials"
 import { PricingSection, type Plan } from "@/components/ui/pricing";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { Footer7 } from "@/components/ui/footer-7";
+import Image from "next/image";
 import {
   MapPin,
   Receipt,
@@ -18,7 +19,6 @@ import {
   X,
   MessageCircle,
   ReceiptText,
-  QrCode,
   Smartphone,
   WalletCards,
 } from "lucide-react";
@@ -328,7 +328,7 @@ export default function LandingV3Page() {
         <div className="v3-section-inner">
           <div className="v3-demo-split">
             <div className="v3-demo-left">
-              <span className="v3-demo-badge v3-ac">Acceso anticipado</span>
+              <span className="v3-demo-badge v3-ac">Registro anticipado</span>
               <h2 className="v3-demo-heading v3-ac">
                 Pruébalo<br />ahora.
               </h2>
@@ -340,9 +340,15 @@ export default function LandingV3Page() {
             <div className="v3-demo-qr-wrap v3-ac">
               <div className="v3-demo-qr">
                 <div className="v3-demo-qr-icon">
-                  <QrCode size={72} strokeWidth={1.25} />
+                  <Image
+                    src="/images/qr-witelist.svg"
+                    alt="QR para abrir landing.frimee.es/witelist"
+                    width={168}
+                    height={168}
+                    className="h-[168px] w-[168px] rounded-[18px] bg-white p-3"
+                  />
                 </div>
-                <p className="v3-demo-qr-label">Escanea para abrir la app</p>
+                <p className="v3-demo-qr-label">Escanea para registrate</p>
                 <p className="v3-demo-qr-sub">
                   <Smartphone size={13} strokeWidth={2} />
                   iOS y Android
