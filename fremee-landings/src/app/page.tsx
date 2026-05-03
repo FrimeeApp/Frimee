@@ -341,8 +341,8 @@ export default function LandingV3Page() {
               <div className="v3-demo-qr">
                 <div className="v3-demo-qr-icon">
                   <Image
-                    src="/images/qr-witelist.svg"
-                    alt="QR para abrir landing.frimee.es/witelist"
+                    src="/images/qr-waitlist.svg"
+                    alt="QR para abrir landing.frimee.es/waitlist"
                     width={168}
                     height={168}
                     className="h-[168px] w-[168px] rounded-[18px] bg-white p-3"
