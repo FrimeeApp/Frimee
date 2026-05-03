@@ -4,10 +4,9 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { isValidEmailInput, MAX_EMAIL_LENGTH, sanitizeEmailInput } from "@/lib/sanitize";
 
-type FormStatus = "idle" | "error" | "success";
-
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+type FormStatus = "idle" | "loading" | "error" | "success";
 
 export default function WaitlistSection() {
   const [email, setEmail] = useState("");
@@ -122,19 +121,43 @@ export default function WaitlistSection() {
     };
   }, []);
 
-  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const value = email.trim();
+    const value = sanitizeEmailInput(email);
 
-    if (!value || !EMAIL_REGEX.test(value)) {
+    if (!isValidEmailInput(value)) {
       setStatus("error");
       setFeedback("Introduce un email válido.");
       return;
     }
 
-    setStatus("success");
-    setFeedback("Listo, te avisaremos pronto.");
-    setEmail("");
+    setStatus("loading");
+    setFeedback("");
+
+    try {
+      const response = await fetch("/api/waitlist", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email: value }),
+      });
+
+      const result = (await response.json()) as { duplicate?: boolean; error?: string };
+
+      if (!response.ok) {
+        setStatus("error");
+        setFeedback(result.error ?? "No se pudo guardar el email.");
+        return;
+      }
+
+      setStatus("success");
+      setFeedback(result.duplicate ? "Este email ya está en la lista." : "Listo, te avisaremos pronto.");
+      setEmail("");
+    } catch {
+      setStatus("error");
+      setFeedback("No se pudo conectar con la waitlist.");
+    }
   };
 
   return (
@@ -160,22 +183,25 @@ export default function WaitlistSection() {
                   id="waitlist-email"
                   type="email"
                   value={email}
+                  disabled={status === "loading"}
                   onChange={(event) => {
-                    setEmail(event.target.value);
+                    setEmail(sanitizeEmailInput(event.target.value));
                     if (status !== "idle") {
                       setStatus("idle");
                       setFeedback("");
                     }
                   }}
+                  maxLength={MAX_EMAIL_LENGTH}
                   placeholder="tu@email.com"
                   required
-                  className="h-12 w-full rounded-xl border border-[var(--v3-border)] bg-transparent px-4 text-base text-[color:var(--v3-heading)] outline-none ring-0 placeholder:text-[color:var(--v3-sub)] focus:border-[var(--v3-heading)]"
+                  className="h-12 w-full rounded-xl border border-[var(--v3-border)] bg-transparent px-4 text-base text-[color:var(--v3-heading)] outline-none ring-0 placeholder:text-[color:var(--v3-sub)] focus:border-[var(--v3-heading)] disabled:cursor-not-allowed disabled:opacity-60"
                 />
                 <button
                   type="submit"
-                  className="group inline-flex h-12 w-full items-center justify-center gap-2 overflow-hidden rounded-[var(--radius-button)] bg-black px-5 text-base font-medium text-white transition-colors duration-200 hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/30 focus-visible:ring-offset-2 dark:bg-white dark:text-black dark:focus-visible:ring-white/35"
+                  disabled={status === "loading"}
+                  className="group inline-flex h-12 w-full items-center justify-center gap-2 overflow-hidden rounded-[var(--radius-button)] bg-black px-5 text-base font-medium text-white transition-colors duration-200 hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70 dark:bg-white dark:text-black dark:focus-visible:ring-white/35"
                 >
-                  <span>Quiero probar Frimee</span>
+                  <span>{status === "loading" ? "Enviando..." : "Quiero probar Frimee"}</span>
                   <span className="w-0 opacity-0 transition-all duration-200 group-hover:w-4 group-hover:opacity-100">
                     <svg
                       aria-hidden="true"
@@ -191,7 +217,7 @@ export default function WaitlistSection() {
                 </button>
               </form>
 
-              {status !== "idle" ? (
+              {feedback ? (
                 <p
                   className={`mt-4 text-base font-medium ${
                     status === "success" ? "text-[color:var(--v3-heading)]" : "text-red-500 dark:text-red-400"
