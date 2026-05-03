@@ -1,6 +1,13 @@
+import type { Metadata } from "next";
+import { Suspense } from "react";
 import ProfileClient from "./ProfileClient";
 
 export const dynamic = "auto";
+
+export const metadata: Metadata = {
+  title: "Perfil",
+  description: "Perfil de usuario en Frimee.",
+};
 
 export async function generateStaticParams() {
   // For Capacitor static export: pre-render a shell page.
@@ -9,5 +16,9 @@ export async function generateStaticParams() {
 }
 
 export default async function ProfilePage() {
-  return <ProfileClient />;
+  return (
+    <Suspense>
+      <ProfileClient />
+    </Suspense>
+  );
 }

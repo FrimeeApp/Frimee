@@ -9,38 +9,20 @@ import {
   removePlanFoto,
   type PlanFotoDto,
 } from "@/services/api/repositories/plan-fotos.repository";
+import { Plus, Trash2, Plane, Loader2 } from "lucide-react";
 
 type Props = {
   planId: number;
   currentUserId: string;
   isMember: boolean;
+  refreshKey?: number;
 };
 
-function PlusIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" className="size-5">
-      <path d="M12 5V19M5 12H19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  );
-}
+const PlusIcon = () => <Plus className="size-5" aria-hidden />;
+const TrashIcon = () => <Trash2 className="size-4" aria-hidden />;
+const PlaneEmptyIcon = () => <Plane className="size-12 text-muted opacity-40" aria-hidden />;
 
-function TrashIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" className="size-4">
-      <path d="M3 6H21M8 6V4H16V6M19 6L18 20H6L5 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function PlaneEmptyIcon() {
-  return (
-    <svg viewBox="0 0 48 48" fill="none" className="size-12 text-muted opacity-40">
-      <path d="M42 32V28L26 18V7C26 5.34 24.66 4 23 4C21.34 4 20 5.34 20 7V18L4 28V32L20 27V38L16 41V44L23 42L30 44V41L26 38V27L42 32Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-export default function PlanFotosTab({ planId, currentUserId, isMember }: Props) {
+export default function PlanFotosTab({ planId, currentUserId, isMember, refreshKey = 0 }: Props) {
   const [fotos, setFotos] = useState<PlanFotoDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -60,7 +42,7 @@ export default function PlanFotosTab({ planId, currentUserId, isMember }: Props)
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [planId]);
+  }, [planId, refreshKey]);
 
   async function handleFilesSelected(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
@@ -121,7 +103,7 @@ export default function PlanFotosTab({ planId, currentUserId, isMember }: Props)
     <div className="px-[var(--page-margin-x)] pt-5 pb-8">
       {/* Upload button */}
       {isMember && (
-        <div className="mb-4 flex items-center gap-3">
+        <div className="mb-4 hidden items-center gap-3 md:flex">
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
@@ -181,10 +163,7 @@ export default function PlanFotosTab({ planId, currentUserId, isMember }: Props)
                         className="flex items-center justify-center size-9 rounded-full bg-white/20 text-white backdrop-blur-sm hover:bg-red-500/80 transition-colors disabled:opacity-50"
                       >
                         {isDeleting ? (
-                          <svg className="size-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                          </svg>
+                          <Loader2 className="size-4 animate-spin" aria-hidden />
                         ) : (
                           <TrashIcon />
                         )}

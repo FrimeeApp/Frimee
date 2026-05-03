@@ -1,7 +1,7 @@
 import { Capacitor, registerPlugin } from "@capacitor/core";
 import { fetchUserRelatedPlans } from "@/services/api/endpoints/plans.endpoint";
 
-interface WidgetPluginInterface {
+type WidgetPluginInterface = {
   updatePlanWidget(options: {
     title: string;
     subtitle: string;

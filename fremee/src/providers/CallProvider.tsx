@@ -5,8 +5,9 @@ import { useCall, type CallState, type CallMiembro } from "@/hooks/useCall";
 import CallRoom from "@/components/calls/CallRoom";
 import IncomingCall from "@/components/calls/IncomingCall";
 import CallWidget from "@/components/calls/CallWidget";
+import { getLivekitUrl } from "@/config/external";
 
-const livekitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL ?? "wss://frimee-zxm2er85.livekit.cloud";
+const livekitUrl = getLivekitUrl();
 
 type CallContextValue = {
   callState: CallState;

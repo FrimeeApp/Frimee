@@ -1,0 +1,101 @@
+.overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: var(--bg);
+  border-radius: inherit;
+  animation: mf-fade-in 160ms var(--ease-standard) both;
+}
+
+@keyframes mf-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── Spinner ── */
+.spinner {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 2.5px solid color-mix(in srgb, var(--primary) 18%, transparent);
+  border-top-color: var(--primary);
+  border-right-color: color-mix(in srgb, var(--primary) 58%, transparent);
+  animation: mf-spin 1.35s linear infinite;
+}
+
+@keyframes mf-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Icono éxito / error ── */
+.iconWrap {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: mf-pop 420ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.iconWrap svg {
+  width: 34px;
+  height: 34px;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.iconSuccess {
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  color: var(--primary);
+}
+
+.iconError {
+  background: color-mix(in srgb, var(--error) 12%, transparent);
+  color: var(--error);
+}
+
+@keyframes mf-pop {
+  0%   { transform: scale(0.4); opacity: 0; }
+  60%  { transform: scale(1.14); opacity: 1; }
+  100% { transform: scale(1);   opacity: 1; }
+}
+
+/* ── Textos ── */
+.label {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-align: center;
+  animation: mf-fade-in 180ms 260ms var(--ease-standard) both;
+}
+
+.sublabel {
+  font-size: 13px;
+  color: var(--text-secondary);
+  text-align: center;
+  max-width: 220px;
+  line-height: 1.5;
+  animation: mf-fade-in 180ms 310ms var(--ease-standard) both;
+}
+
+/* ── Botón reintentar ── */
+.retryBtn {
+  margin-top: 4px;
+  padding: 10px 24px;
+  border-radius: 14px;
+  background: var(--surface-2);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  transition: opacity 120ms var(--ease-standard);
+  animation: mf-fade-in 180ms 360ms var(--ease-standard) both;
+}
+
+.retryBtn:hover { opacity: 0.72; }

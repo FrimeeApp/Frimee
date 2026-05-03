@@ -5,7 +5,7 @@ export const dynamic = "force-static";
 // Capacitor navigates client-side via router.push, never loads these HTML files directly.
 // The placeholder ensures Next.js static export accepts this dynamic route.
 export async function generateStaticParams() {
-  return [{ id: "_" }];
+  return [{ id: "_" }, { id: "static" }];
 }
 
 export default function PlanPostPage() {

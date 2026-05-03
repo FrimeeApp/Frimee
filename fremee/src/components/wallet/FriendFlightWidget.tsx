@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { PlanTicket } from "@/services/api/endpoints/wallet.endpoint";
+import { Plane } from "lucide-react";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -240,13 +241,4 @@ const STARS = Array.from({ length: 18 }, (_, i) => ({
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
 
-function PlaneIcon({ className = "size-8" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 32 32" fill="none" aria-hidden="true" className={className}>
-      <path
-        d="M4 16L13 11V6L16 7L15 12L24 10L28 12L20 17L22 26L19 27L16 21L11 23L11 27L8 26L9 19L4 16Z"
-        fill="white"
-      />
-    </svg>
-  );
-}
+const PlaneIcon = ({ className = "size-8" }: { className?: string }) => <Plane className={className} aria-hidden />;

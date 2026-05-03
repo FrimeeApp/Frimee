@@ -1,10 +1,15 @@
 ﻿"use client";
 
+import dynamic from "next/dynamic";
 import NextImage from "next/image";
+const EmojiMartPicker = dynamic(() => import("@emoji-mart/react"), { ssr: false });
 import Link from "next/link";
+import { Capacitor } from "@capacitor/core";
 import PlaneIcon from "@/components/ui/PlaneIcon";
 import { useFollow } from "@/hooks/useFollow";
+import { useToast } from "@/components/ui/Toaster";
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
+import type { CSSProperties } from "react";
 import AppSidebar from "@/components/common/AppSidebar";
 import LoadingScreen from "@/components/common/LoadingScreen";
 import { useAuth } from "@/providers/AuthProvider";
@@ -23,6 +28,10 @@ import {
 import { getPublicUserProfile, searchUsers, type PublicUserProfileDto } from "@/services/api/repositories/users.repository";
 import { fetchActiveFriends, getFollowStatuses } from "@/services/api/endpoints/users.endpoint";
 import { savePlan, unsavePlan, getSavedStatuses } from "@/services/api/endpoints/saved.endpoint";
+import { listActiveFriendFlightsEndpoint } from "@/services/api/endpoints/wallet.endpoint";
+import { Phone, Video } from "lucide-react";
+import type { PlanTicket } from "@/services/api/endpoints/wallet.endpoint";
+import FeedFlightCarousel from "@/components/feed/FeedFlightCarousel";
 import {
   listChats,
   listMensajes,
@@ -34,6 +43,10 @@ import {
 } from "@/services/api/repositories/chat.repository";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import AudioPlayer from "@/components/common/AudioPlayer";
+import { STORAGE_KEYS, STORAGE_TTLS } from "@/config/storage";
+import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
+import { CloseX } from "@/components/ui/CloseX";
+import { SearchInput } from "@/components/ui/SearchInput";
 
 const EMOJI_LIST = [
   "😀","😃","😄","😁","😆","😅","🤣","😂","🙂","😊",
@@ -51,13 +64,25 @@ const EMOJI_LIST = [
   "🍕","🍔","🍟","🌮","🍣","🍩","🍪","🎂","🍰","☕",
   "💪","🦾","👀","👁️","🫣","😈","👿","💀","☠️","👻",
 ];
-const COMMENT_AUTHOR_CACHE_TTL_MS = 60_000;
+const COMMENT_AUTHOR_CACHE_TTL_MS = STORAGE_TTLS.commentAuthorCacheMs;
 const commentAuthorCache = new Map<string, { name: string; profileImage: string | null; cachedAt: number }>();
 
-const RECENTS_KEY = "fremee:search-recents";
+const RECENTS_KEY = STORAGE_KEYS.feedSearchRecents;
 const RECENTS_MAX = 10;
 
 type RecentProfile = { id: string; nombre: string; profile_image: string | null };
+type MobileFeedViewportStyle = CSSProperties & { "--mobile-feed-viewport-height": string };
+type FeedMobileImageVars = CSSProperties & {
+  "--feed-mobile-side-inset": string;
+  "--feed-mobile-header-top": string;
+  "--feed-mobile-actions-gap": string;
+  "--feed-mobile-actions-bottom": string;
+  "--feed-mobile-footer-bottom": string;
+  "--feed-mobile-avatar-size": string;
+  "--feed-mobile-icon-size": string;
+  "--feed-mobile-title-size": string;
+  "--feed-mobile-meta-size": string;
+};
 
 function readRecents(): RecentProfile[] {
   try {
@@ -81,11 +106,8 @@ function removeRecent(id: string) {
   } catch { /* ignore */ }
 }
 
-const FEED_CACHE_KEY = "fremee:feed:v2";
-const FEED_CACHE_TTL_MS = 5 * 60 * 1000;
-const FRIENDS_CACHE_KEY = "fremee:friends:v1";
-const FRIENDS_CACHE_TTL_MS = 2 * 60 * 1000;
-
+const FEED_CACHE_KEY = STORAGE_KEYS.feedCache;
+const FEED_CACHE_TTL_MS = STORAGE_TTLS.feedCacheMs;
 function readFeedCache(userId: string): FeedItemDto[] | null {
   try {
     const raw = localStorage.getItem(`${FEED_CACHE_KEY}:${userId}`);
@@ -99,22 +121,6 @@ function readFeedCache(userId: string): FeedItemDto[] | null {
 function writeFeedCache(userId: string, items: FeedItemDto[]) {
   try {
     localStorage.setItem(`${FEED_CACHE_KEY}:${userId}`, JSON.stringify({ items, savedAt: Date.now() }));
-  } catch { /* ignorar errores de storage */ }
-}
-
-function readFriendsCache(userId: string): Set<string> | null {
-  try {
-    const raw = localStorage.getItem(`${FRIENDS_CACHE_KEY}:${userId}`);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as { ids: string[]; savedAt: number };
-    if (Date.now() - parsed.savedAt > FRIENDS_CACHE_TTL_MS) return null;
-    return new Set(parsed.ids);
-  } catch { return null; }
-}
-
-function writeFriendsCache(userId: string, ids: string[]) {
-  try {
-    localStorage.setItem(`${FRIENDS_CACHE_KEY}:${userId}`, JSON.stringify({ ids, savedAt: Date.now() }));
   } catch { /* ignorar errores de storage */ }
 }
 
@@ -141,19 +147,19 @@ export default function FeedPage() {
   const [tabIndicator, setTabIndicator] = useState({ left: 0, width: 0, ready: false });
   const [unreadNotifs, setUnreadNotifs] = useState(0);
   const [notifPanelOpen, setNotifPanelOpen] = useState(false);
-  const [friendIds, setFriendIds] = useState<Set<string>>(() => {
-    if (typeof window === "undefined") return new Set();
-    return new Set();
-  });
   const [followedIds, setFollowedIds] = useState<Set<string>>(new Set());
   const [savedPlanIds, setSavedPlanIds] = useState<Set<number>>(new Set());
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [mobileSearchValue, setMobileSearchValue] = useState("");
   const [mobileSearchResults, setMobileSearchResults] = useState<PublicUserProfileDto[]>([]);
   const [mobileSearchLoading, setMobileSearchLoading] = useState(false);
+  const [createPlanModalOpen, setCreatePlanModalOpen] = useState(false);
   const [suggestedProfiles, setSuggestedProfiles] = useState<PublicUserProfileDto[]>([]);
+  const [friendFlights, setFriendFlights] = useState<PlanTicket[]>([]);
   const [recentProfiles, setRecentProfiles] = useState<RecentProfile[]>([]);
   const mobileSearchInputRef = useRef<HTMLInputElement>(null);
+  const mobileHeaderRef = useRef<HTMLDivElement | null>(null);
+  const [mobileHeaderHeight, setMobileHeaderHeight] = useState(60);
 
   useEffect(() => {
     if (!currentUserId) {
@@ -161,10 +167,6 @@ export default function FeedPage() {
       setLoadingFeed(false);
       return;
     }
-
-    // Cargar caché de amigos inmediatamente
-    const cachedFriends = readFriendsCache(currentUserId);
-    if (cachedFriends) setFriendIds(cachedFriends);
 
     let cancelled = false;
 
@@ -181,6 +183,7 @@ export default function FeedPage() {
 
       try {
         // 2. Posts + amigos en paralelo — ninguno bloquea al otro
+        listActiveFriendFlightsEndpoint().then(data => { if (!cancelled) setFriendFlights(data); }).catch(() => {});
         const [feedResult, friends] = await Promise.all([
           getFeedPostsOnly({ limit: 20 }),
           fetchActiveFriends(),
@@ -188,10 +191,7 @@ export default function FeedPage() {
         const posts = feedResult.posts;
         if (cancelled) return;
 
-        const newFriendIds = new Set(friends.map((f) => f.id));
-        setFriendIds(newFriendIds);
         setSuggestedProfiles(friends.slice(0, 12));
-        writeFriendsCache(currentUserId, [...newFriendIds]);
 
         const firstWithImage = posts.find((p) => p.coverImage);
         if (!firstWithImage) setFirstImageReady(true);
@@ -245,7 +245,7 @@ export default function FeedPage() {
     if (typeof window === "undefined") return;
 
     const checkProfileUpdate = () => {
-      const marker = window.localStorage.getItem("fremee.profile.updated_at");
+      const marker = window.localStorage.getItem(STORAGE_KEYS.profileUpdatedAt);
       if (!marker || marker === lastProfileUpdatedAtRef.current) return;
 
       lastProfileUpdatedAtRef.current = marker;
@@ -273,6 +273,17 @@ export default function FeedPage() {
   }, []);
 
   useEffect(() => {
+    const syncCreatePlanOpen = () => {
+      setCreatePlanModalOpen(document.body.hasAttribute("data-create-plan-open"));
+    };
+
+    syncCreatePlanOpen();
+    const observer = new MutationObserver(syncCreatePlanOpen);
+    observer.observe(document.body, { attributes: true, attributeFilter: ["data-create-plan-open"] });
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
     const updateIndicator = () => {
       const row = tabRowRef.current;
       const target = activeFeedTab === "following" ? followingTabRef.current : exploreTabRef.current;
@@ -291,6 +302,27 @@ export default function FeedPage() {
     window.addEventListener("resize", updateIndicator);
     return () => window.removeEventListener("resize", updateIndicator);
   }, [activeFeedTab]);
+
+  useEffect(() => {
+    const header = mobileHeaderRef.current;
+    if (!header || typeof window === "undefined") return;
+
+    const measure = () => {
+      const nextHeight = Math.ceil(header.getBoundingClientRect().height);
+      setMobileHeaderHeight((prev) => (prev === nextHeight ? prev : nextHeight));
+    };
+
+    measure();
+
+    const observer = new ResizeObserver(measure);
+    observer.observe(header);
+    window.addEventListener("resize", measure);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, []);
 
   // Unread notifications badge
   useEffect(() => {
@@ -375,81 +407,85 @@ export default function FeedPage() {
     closeMobileSearch();
   };
 
+  const mobileBottomNavBaseHeight = "clamp(56px, 8dvh, 64px)";
+  const mobileFeedViewportHeight = `calc(100dvh - ${mobileHeaderHeight}px - ${mobileBottomNavBaseHeight} - env(safe-area-inset-bottom))`;
+
   if (loading) return <LoadingScreen />;
 
   return (
-    <div className="min-h-dvh bg-app text-app">
-      <div className="relative mx-auto min-h-dvh max-w-[1440px]">
+    <div className="h-dvh overflow-hidden bg-app text-app">
+      <div className="relative mx-auto h-dvh max-w-[1440px] overflow-hidden">
         <AppSidebar />
 
         <main
-          className={`pt-0 pb-0 md:px-safe md:pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] md:py-[var(--space-8)] md:pr-[var(--space-14)] transition-[padding] duration-[var(--duration-slow)] [transition-timing-function:var(--ease-standard)]`}
+          className={`pt-0 pb-0 md:px-safe md:pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] md:py-[var(--space-8)] md:pl-[102px] md:pr-[var(--space-14)] transition-[padding] duration-[var(--duration-slow)] [transition-timing-function:var(--ease-standard)]`}
         >
           <div className="mx-auto max-w-[1160px]">
             <div className="md:border-b md:border-[#262626]">
-              <div className="mx-auto w-full max-w-[760px] xl:mx-0">
-              <div className="sticky top-0 z-[100] bg-app flex items-center gap-[var(--space-3)] py-[var(--space-2)] pl-[max(var(--page-margin-x),env(safe-area-inset-left))] pr-[max(var(--page-margin-x),env(safe-area-inset-right))] md:hidden">
-                <button
-                  type="button"
-                  onClick={() => setActiveFeedTab((prev) => (prev === "explore" ? "following" : "explore"))}
-                  className="flex h-[44px] items-center gap-[8px] px-[4px] text-body-sm font-[700] text-app"
-                >
-                  <span>{activeFeedTab === "explore" ? "Explorar" : "Siguiendo"}</span>
-                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[18px]">
-                    <path d="M7 10L12 15L17 10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </button>
+              <div className="mx-auto w-full max-w-[760px] md:ml-[72px] xl:mx-0 xl:ml-[72px]">
+              <div
+                ref={mobileHeaderRef}
+                className={`sticky top-0 z-[100] bg-app pb-[clamp(6px,1.6dvh,var(--space-2))] pt-mobile-safe-top pl-[max(var(--page-margin-x),env(safe-area-inset-left))] pr-[max(var(--page-margin-x),env(safe-area-inset-right))] md:hidden ${createPlanModalOpen ? "hidden" : ""}`}
+              >
+                <div className="relative flex flex-col items-center gap-[10px]">
+                  <div className="relative h-[40px] w-full">
+                    <button
+                      type="button"
+                      onClick={() => setMobileSearchOpen(true)}
+                      aria-label="Buscar"
+                      className="absolute left-0 right-[44px] top-0 flex h-[40px] items-center gap-[10px] rounded-full border border-app bg-[var(--search-field-bg)] px-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-[opacity,background-color] duration-200 ease-out hover:opacity-90 active:scale-[0.98]"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[18px] shrink-0 text-muted">
+                        <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.8" />
+                        <path d="M16 16L20.5 20.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                      </svg>
+                      <span className="truncate text-body-sm font-[400] text-muted">Buscar</span>
+                    </button>
 
-                <button
-                  type="button"
-                  onClick={() => setMobileSearchOpen(true)}
-                  aria-label="Buscar"
-                  className="flex h-[44px] min-w-0 flex-1 items-center gap-[10px] rounded-[8px] bg-[var(--search-field-bg)] px-[14px] text-muted transition-opacity hover:opacity-80"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[22px] shrink-0">
-                    <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.8" />
-                    <path d="M16 16L20.5 20.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                  </svg>
-                  <span className="truncate text-[15px]">Buscar</span>
-                </button>
+                    <button
+                      type="button"
+                      onClick={() => setNotifPanelOpen(true)}
+                      aria-label="Notificaciones"
+                      className="absolute right-0 top-1/2 flex size-[34px] -translate-y-1/2 items-center justify-center text-app transition-opacity hover:opacity-70"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[23px]">
+                        <path
+                          d="M6 10.5C6 7.46 8.24 5 12 5s6 2.46 6 5.5v3l1.5 2.5H4.5L6 13.5v-3Z"
+                          stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"
+                        />
+                        <path
+                          d="M10 17.5a2 2 0 0 0 4 0"
+                          stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"
+                        />
+                      </svg>
+                      {unreadNotifs > 0 && (
+                        <span className="absolute right-0 top-0 flex size-[14px] items-center justify-center rounded-full bg-blue-500 text-white text-[9px] font-[var(--fw-semibold)] leading-none">
+                          {unreadNotifs > 9 ? "9+" : unreadNotifs}
+                        </span>
+                      )}
+                    </button>
+                  </div>
 
-                <button
-                  type="button"
-                  onClick={() => setNotifPanelOpen(true)}
-                  aria-label="Notificaciones"
-                  className="relative flex h-[44px] w-[44px] shrink-0 items-center justify-center text-app transition-opacity hover:opacity-70"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[28px]">
-                    <path
-                      d="M6 10.5C6 7.46 8.24 5 12 5s6 2.46 6 5.5v3l1.5 2.5H4.5L6 13.5v-3Z"
-                      stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"
-                    />
-                    <path
-                      d="M10 17.5a2 2 0 0 0 4 0"
-                      stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"
-                    />
-                  </svg>
-                  {unreadNotifs > 0 && (
-                    <span className="absolute right-0 top-0 flex size-[14px] items-center justify-center rounded-full bg-blue-500 text-white text-[9px] font-[var(--fw-semibold)] leading-none">
-                      {unreadNotifs > 9 ? "9+" : unreadNotifs}
-                    </span>
-                  )}
-                </button>
-
-                <Link
-                  href={currentUserId ? `/profile/${currentUserId}` : "/settings"}
-                  aria-label="Perfil"
-                  className="flex h-[44px] w-[44px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset transition-opacity hover:opacity-80"
-                >
-                  {profile?.profile_image ? (
-                    <NextImage src={profile.profile_image} alt="Foto de perfil" width={44} height={44} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
-                  ) : (
-                    <span className="text-[14px] font-[var(--fw-semibold)] text-app">
-                      {(profile?.nombre?.trim()[0] ?? "P").toUpperCase()}
-                    </span>
-                  )}
-                </Link>
-
+                  <div className="relative flex min-h-[28px] w-full items-center justify-center">
+                    <div className="flex items-center justify-center gap-[10px] text-[13px] font-[700] leading-none">
+                      <button
+                        type="button"
+                        onClick={() => setActiveFeedTab("following")}
+                        className={`py-2 transition-colors ${activeFeedTab === "following" ? "text-app" : "text-muted"}`}
+                      >
+                        Siguiendo
+                      </button>
+                      <span className="h-[14px] w-px bg-muted/35" aria-hidden="true" />
+                      <button
+                        type="button"
+                        onClick={() => setActiveFeedTab("explore")}
+                        className={`py-2 transition-colors ${activeFeedTab === "explore" ? "text-app" : "text-muted"}`}
+                      >
+                        Explorar
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* Fullscreen mobile search panel — fade in/out, above bottom nav */}
@@ -459,43 +495,23 @@ export default function FeedPage() {
                 }`}
               >
                 {/* Search bar at the top */}
-                <div className="flex items-center gap-[8px] px-[var(--space-4)] pt-[var(--space-4)]">
+                <div className="flex items-center gap-2 pb-[var(--space-4)] pl-[max(var(--space-2),env(safe-area-inset-left))] pr-[max(var(--space-4),env(safe-area-inset-right))] pt-[calc(env(safe-area-inset-top)+var(--space-4))]">
                   <button
                     type="button"
                     onClick={closeMobileSearch}
                     aria-label="Cerrar búsqueda"
-                    className="flex h-[44px] w-[36px] shrink-0 items-center justify-center text-app transition-opacity hover:opacity-70"
+                    className="flex h-[40px] w-[36px] shrink-0 items-center justify-center text-app transition-opacity hover:opacity-70"
                   >
                     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[20px]">
                       <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                   </button>
-                  <div className="flex h-[44px] min-w-0 flex-1 items-center gap-[10px] rounded-[8px] bg-[var(--search-field-bg)] px-[14px]">
-                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[20px] shrink-0 text-muted">
-                      <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.8" />
-                      <path d="M16 16L20.5 20.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                    </svg>
-                    <input
-                      ref={mobileSearchInputRef}
-                      type="search"
-                      value={mobileSearchValue}
-                      onChange={(e) => setMobileSearchValue(e.target.value)}
-                      placeholder="Buscar"
-                      className="min-w-0 flex-1 border-none bg-transparent text-[15px] text-app shadow-none outline-none ring-0 focus:border-none focus:shadow-none focus:outline-none focus:ring-0 placeholder:text-muted [&::-webkit-search-cancel-button]:hidden"
-                    />
-                    {mobileSearchValue && (
-                      <button
-                        type="button"
-                        onClick={() => setMobileSearchValue("")}
-                        aria-label="Limpiar"
-                        className="shrink-0 text-muted transition-opacity hover:opacity-70"
-                      >
-                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[18px]">
-                          <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                        </svg>
-                      </button>
-                    )}
-                  </div>
+                  <SearchInput
+                    ref={mobileSearchInputRef}
+                    value={mobileSearchValue}
+                    onChange={setMobileSearchValue}
+                    className="mobile-search-expand-field h-[40px] flex-1"
+                  />
                 </div>
 
                 <div className="flex-1 overflow-y-auto overscroll-contain px-[var(--space-4)]">
@@ -599,6 +615,33 @@ export default function FeedPage() {
                 </div>
               </div>
 
+              <style jsx>{`
+                @keyframes mobile-search-expand {
+                  from {
+                    width: min(66vw, 300px);
+                    transform: translateX(-22px) scale(0.98);
+                    opacity: 0.92;
+                  }
+                  to {
+                    width: calc(100% - 44px);
+                    transform: translateX(0) scale(1);
+                    opacity: 1;
+                  }
+                }
+
+                .mobile-search-expand-field {
+                  width: calc(100% - 44px);
+                  animation: mobile-search-expand 260ms var(--ease-decelerate) both;
+                  transform-origin: center center;
+                }
+
+                @media (prefers-reduced-motion: reduce) {
+                  .mobile-search-expand-field {
+                    animation: none;
+                  }
+                }
+              `}</style>
+
               <div
                 ref={tabRowRef}
                 className="relative hidden w-full gap-[var(--space-4)] pb-[var(--space-2)] text-body text-muted md:flex"
@@ -607,7 +650,7 @@ export default function FeedPage() {
                   ref={exploreTabRef}
                   type="button"
                   onClick={() => setActiveFeedTab("explore")}
-                  className={`-mb-[2px] pb-0 font-[700] transition-colors duration-[var(--duration-base)] ${
+                  className={`-mb-[2px] shrink-0 whitespace-nowrap pb-0 font-[700] transition-colors duration-[var(--duration-base)] ${
                     activeFeedTab === "explore" ? "text-app" : "hover:text-app"
                   }`}
                 >
@@ -617,7 +660,7 @@ export default function FeedPage() {
                   ref={followingTabRef}
                   type="button"
                   onClick={() => setActiveFeedTab("following")}
-                  className={`-mb-[2px] pb-0 font-[700] transition-colors duration-[var(--duration-base)] ${
+                  className={`-mb-[2px] shrink-0 whitespace-nowrap pb-0 font-[700] transition-colors duration-[var(--duration-base)] ${
                     activeFeedTab === "following" ? "text-app" : "hover:text-app"
                   }`}
                 >
@@ -669,6 +712,7 @@ export default function FeedPage() {
             <div className="md:mt-[var(--space-5)] grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] xl:gap-[var(--space-6)]">
             <section className="w-full">
               <div className="md:ml-[72px] xl:ml-[72px]">
+                {activeFeedTab === "following" && <FeedFlightCarousel flights={friendFlights} />}
                 {loadingFeed || !firstImageReady ? (
                   <>
                     <FeedSkeleton />
@@ -682,19 +726,45 @@ export default function FeedPage() {
                   </>
                 ) : (() => {
                   const visiblePosts = activeFeedTab === "following"
-                    ? uiPosts.filter((p) => p.plan.ownerUserId && friendIds.has(p.plan.ownerUserId))
+                    ? uiPosts.filter((p) => p.plan.ownerUserId && followedIds.has(p.plan.ownerUserId))
                     : uiPosts;
+                  const mobileViewportStyle: MobileFeedViewportStyle = {
+                    "--mobile-feed-viewport-height": mobileFeedViewportHeight,
+                  };
                   return visiblePosts.length === 0 ? (
-                    <div className="rounded-modal border border-app bg-surface p-[var(--space-5)] text-body text-muted shadow-elev-1">
+                      <div className="rounded-modal border border-app bg-surface p-[var(--space-5)] text-body text-muted shadow-elev-1">
                       {activeFeedTab === "following"
-                        ? "Aún no hay publicaciones de tus amigos."
+                        ? "Aún no hay publicaciones de las personas que sigues."
                         : "Aun no hay publicaciones para mostrar."}
                     </div>
                   ) : (
-                    <div className="overflow-y-scroll snap-y snap-mandatory scrollbar-hide h-[calc(100svh-60px-env(safe-area-inset-bottom))] md:h-[calc(100dvh-100px)]">
+                    <div
+                      className="overflow-y-scroll snap-y snap-mandatory scrollbar-hide h-[var(--mobile-feed-viewport-height)] md:h-[calc(100dvh-100px)]"
+                      style={mobileViewportStyle}
+                    >
                       {visiblePosts.map((post, idx) => (
-                        <div key={post.id} className="snap-start h-full">
-                          <FeedCard post={post} currentUserId={currentUserId} currentUserName={profile?.nombre ?? null} currentUserProfileImage={profile?.profile_image ?? null} nextPostHasImage={visiblePosts[idx + 1]?.hasImage ?? true} initialFollowing={followedIds.has(post.plan.ownerUserId ?? "")} initialSaved={savedPlanIds.has(post.plan.id)} />
+                        <div
+                          key={post.id}
+                          className="h-[var(--mobile-feed-viewport-height)] snap-start snap-always md:h-full"
+                          style={mobileViewportStyle}
+                        >
+                          <FeedCard
+                            post={post}
+                            currentUserId={currentUserId}
+                            currentUserName={profile?.nombre ?? null}
+                            currentUserProfileImage={profile?.profile_image ?? null}
+                            nextPostHasImage={visiblePosts[idx + 1]?.hasImage ?? true}
+                            initialFollowing={followedIds.has(post.plan.ownerUserId ?? "")}
+                            initialSaved={savedPlanIds.has(post.plan.id)}
+                            onFollowingChange={(ownerUserId, nextFollowing) => {
+                              setFollowedIds((prev) => {
+                                const next = new Set(prev);
+                                if (nextFollowing) next.add(ownerUserId);
+                                else next.delete(ownerUserId);
+                                return next;
+                              });
+                            }}
+                          />
                         </div>
                       ))}
                     </div>
@@ -855,31 +925,53 @@ function FeedChatPanel({ currentUserId }: { currentUserId: string | null }) {
     const chatAvatar = resolveChatAvatar(openChat, currentUserId);
 
     return (
-      <div className="pt-[var(--space-10)]">
-        <div className="flex items-center gap-[var(--space-2)]">
-          <button type="button" onClick={() => { setOpenChatId(null); setText(""); void listChats().then(setChats); }}
-            className="flex size-[28px] items-center justify-center rounded-full transition-colors hover:bg-surface" aria-label="Volver">
+      <div className="pt-[var(--space-8)]">
+        {/* Header conversación */}
+        <div className="flex items-center gap-2 pb-3 border-b border-app">
+          <button
+            type="button"
+            onClick={() => { setOpenChatId(null); setText(""); void listChats().then(setChats); }}
+            className="flex size-[30px] shrink-0 items-center justify-center rounded-full transition-colors hover:bg-surface"
+            aria-label="Volver"
+          >
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[16px]">
-              <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
-          <div className="flex size-[32px] items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-[14px] font-[var(--fw-semibold)] text-app">
-            {chatAvatar ? <NextImage src={chatAvatar} alt={chatName} width={32} height={32} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" /> : (chatName[0] ?? "?").toUpperCase()}
+          <div className="flex size-[36px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-[14px] font-[var(--fw-semibold)] text-app">
+            {chatAvatar
+              ? <NextImage src={chatAvatar} alt={chatName} width={36} height={36} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
+              : (chatName[0] ?? "?").toUpperCase()}
           </div>
-          <span className="min-w-0 truncate text-body-sm font-[var(--fw-semibold)]">{chatName}</span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[14px] font-[700] text-app leading-tight">{chatName}</p>
+            {openChat.tipo === "GRUPO" && (
+              <p className="text-[12px] text-muted">{openChat.miembros.length} miembros</p>
+            )}
+          </div>
+          <Link href="/messages" className="shrink-0 flex size-[28px] items-center justify-center rounded-full text-muted transition-colors hover:bg-surface" aria-label="Abrir en mensajes">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[14px]">
+              <path d="M7 17L17 7M17 7H7M17 7V17" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </Link>
         </div>
 
-        <div ref={scrollContainerRef} className="scrollbar-thin mt-[var(--space-4)] max-h-[340px] overflow-x-hidden overflow-y-auto overscroll-contain">
+        <div ref={scrollContainerRef} className="scrollbar-thin mt-3 max-h-[320px] overflow-x-hidden overflow-y-auto overscroll-contain">
           {msgLoading ? (
-            <p className="py-4 text-center text-body-sm text-muted">Cargando...</p>
+            <p className="py-4 text-center text-[13px] text-muted">Cargando...</p>
           ) : (
-            <div className="space-y-[1px]">
+            <div className="space-y-[2px] py-1">
               {messages.map((msg, idx, arr) => {
                 const isMe = msg.sender_id === currentUserId;
                 const prevMsg = arr[idx - 1];
+                const nextMsg = arr[idx + 1];
                 const isFirstInGroup = !prevMsg || prevMsg.sender_id !== msg.sender_id;
+                const isLastInGroup = !nextMsg || nextMsg.sender_id !== msg.sender_id;
+                const br = isMe
+                  ? `${isFirstInGroup ? "20px" : "8px"} 20px 4px ${isLastInGroup ? "20px" : "8px"}`
+                  : `20px ${isFirstInGroup ? "20px" : "8px"} ${isLastInGroup ? "20px" : "8px"} 4px`;
                 return (
-                  <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"} ${isFirstInGroup ? "mt-[var(--space-2)]" : "mt-[2px]"}`}>
+                  <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"} ${isFirstInGroup ? "mt-3" : "mt-[2px]"}`}>
                     {!isMe && openChat.tipo === "GRUPO" && (
                       <div className="mr-[6px] w-[20px] shrink-0">
                         {isFirstInGroup && (
@@ -891,9 +983,12 @@ function FeedChatPanel({ currentUserId }: { currentUserId: string | null }) {
                         )}
                       </div>
                     )}
-                    <div className={`max-w-[85%] rounded-[14px] px-3 py-[6px] ${isMe ? "bg-[var(--text-primary)] text-contrast-token" : "bg-surface-inset"}`}>
+                    <div
+                      className={`max-w-[85%] px-3 py-[6px] ${isMe ? "bg-[var(--primary)] text-white" : "bg-surface-inset text-app"}`}
+                      style={{ borderRadius: br }}
+                    >
                       {!isMe && openChat.tipo === "GRUPO" && isFirstInGroup && (
-                        <p className="mb-[2px] text-[14px] font-[var(--fw-semibold)] text-muted">{msg.sender_nombre}</p>
+                        <p className="mb-[2px] text-[11px] font-[600] text-muted">{msg.sender_nombre}</p>
                       )}
                       {msg.audio_url ? (
                         <AudioPlayer src={msg.audio_url} />
@@ -907,7 +1002,7 @@ function FeedChatPanel({ currentUserId }: { currentUserId: string | null }) {
                           <video src={msg.image_url} controls playsInline className="max-w-[200px] rounded-card" style={{ maxHeight: 200 }} />
                         ) : (
                           <a href={msg.image_url} target="_blank" rel="noopener noreferrer">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            { }
                             <NextImage src={msg.image_url} alt="Imagen" width={200} height={200} className="max-w-[200px] rounded-card object-cover" style={{ maxHeight: 200 }} unoptimized referrerPolicy="no-referrer" />
                           </a>
                         )
@@ -919,8 +1014,8 @@ function FeedChatPanel({ currentUserId }: { currentUserId: string | null }) {
                           const mins = Math.floor(duracion / 60);
                           const secs = duracion % 60;
                           return (
-                            <div className={`flex items-center gap-[8px] py-[2px] ${missed ? "opacity-60" : ""}`}>
-                              <span className="text-[18px]">{missed ? "📵" : (isVideo ? "📹" : "📞")}</span>
+                            <div className={`flex items-start gap-[8px] py-[2px] ${missed ? "text-red-700 dark:text-red-800" : ""}`}>
+                              {isVideo ? <Video className="mt-[2px] size-[15px] shrink-0" /> : <Phone className="mt-[2px] size-[15px] shrink-0" />}
                               <div>
                                 <p className="text-[14px] font-[var(--fw-medium)]">{label}</p>
                                 {!missed && duracion > 0 && <p className="text-[14px] opacity-70">{mins}:{String(secs).padStart(2, "0")}</p>}
@@ -929,7 +1024,9 @@ function FeedChatPanel({ currentUserId }: { currentUserId: string | null }) {
                           );
                         })()
                       : (() => { try { const p = JSON.parse(msg.texto); if (p?.type === "poll") return <div className="flex items-center gap-[6px] py-[2px] opacity-80"><span className="text-[16px]">📊</span><span className="text-[14px]">{p.question as string}</span></div>; } catch { /* noop */ } return <p className="break-all text-body-sm">{msg.texto}</p>; })()}
-                      <p className={`mt-[2px] text-right text-[14px] ${isMe ? "text-contrast-token/60" : "text-muted"}`}>{formatChatTime(msg.created_at)}</p>
+                      {isLastInGroup && (
+                        <p className={`mt-[2px] text-right text-[11px] ${isMe ? "text-white/55" : "text-muted"}`}>{formatChatTime(msg.created_at)}</p>
+                      )}
                     </div>
                   </div>
                 );
@@ -939,16 +1036,25 @@ function FeedChatPanel({ currentUserId }: { currentUserId: string | null }) {
           )}
         </div>
 
-        <div className="mt-[var(--space-3)] flex items-center gap-[var(--space-2)]">
-          <input type="text" value={text} onChange={(e) => setText(e.target.value)}
+        <div className="mt-3 flex items-center gap-2">
+          <input
+            type="text"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void onSend(); } }}
             placeholder="Escribe un mensaje..."
-            className="min-w-0 flex-1 rounded-full border border-app bg-surface px-3 py-[6px] text-body-sm text-app outline-none transition-colors focus:border-[var(--border-strong)]" />
-          <button type="button" onClick={() => void onSend()} disabled={!text.trim() || sending}
-            className="flex size-[30px] shrink-0 items-center justify-center rounded-full bg-[var(--text-primary)] text-contrast-token transition-opacity hover:opacity-80 disabled:opacity-30" aria-label="Enviar">
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[14px]">
-              <path d="M22 2L11 13" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-              <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+            className="min-w-0 flex-1 rounded-full border border-app bg-surface-inset px-4 py-[8px] text-[13px] text-app outline-none transition-colors focus:border-[var(--border-strong)] placeholder:text-muted"
+          />
+          <button
+            type="button"
+            onClick={() => void onSend()}
+            disabled={!text.trim() || sending}
+            className="flex size-[34px] shrink-0 items-center justify-center rounded-full bg-[var(--primary)] text-white transition-all hover:opacity-85 disabled:opacity-30 active:scale-90"
+            aria-label="Enviar"
+          >
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[15px] translate-x-[1px]">
+              <path d="M22 2L11 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
             </svg>
           </button>
         </div>
@@ -957,35 +1063,56 @@ function FeedChatPanel({ currentUserId }: { currentUserId: string | null }) {
   }
 
   return (
-    <div className="pt-[var(--space-10)]">
-      <div className="flex items-center justify-between">
-        <h3 className="text-[20px] font-[var(--fw-medium)] tracking-[0.03em] leading-[1.3]">Chats recientes</h3>
-        <Link href="/messages" className="text-[14px] text-muted transition-opacity hover:opacity-70">Ver todos</Link>
+    <div className="pt-[var(--space-8)]">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-[17px] font-[800] tracking-[-0.01em] text-app">Mensajes</h3>
+        <Link
+          href="/messages"
+          className="flex items-center gap-1 text-[13px] font-[600] text-muted transition-all hover:text-app"
+        >
+          Ver todos
+          <svg viewBox="0 0 24 24" fill="none" className="size-[11px]" aria-hidden="true">
+            <path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </Link>
       </div>
-      <div className="mt-[var(--space-4)] space-y-[2px]">
+      <div className="space-y-[1px]">
         {chats.length === 0 ? (
-          <p className="text-body-sm text-muted">No tienes conversaciones aún</p>
+          <p className="py-3 text-[13px] text-muted">No tienes conversaciones aún</p>
         ) : (
           chats.slice(0, 4).map((chat) => {
             const name = resolveChatName(chat, currentUserId ?? "");
             const avatar = resolveChatAvatar(chat, currentUserId ?? "");
             const hasUnread = chat.unread_count > 0;
+            const lastMsg = (() => { const m = chat.last_message ?? ""; try { return JSON.parse(m)?.type === "poll" ? "📊 Encuesta" : m; } catch { return m; } })();
             return (
-              <button key={chat.chat_id} type="button" onClick={() => setOpenChatId(chat.chat_id)}
-                className="flex w-full items-center gap-[var(--space-3)] rounded-[10px] px-2 py-[10px] text-left transition-colors hover:bg-surface">
+              <button
+                key={chat.chat_id}
+                type="button"
+                onClick={() => setOpenChatId(chat.chat_id)}
+                className="flex w-full items-center gap-3 rounded-[12px] px-2.5 py-[9px] text-left transition-colors hover:bg-surface"
+              >
                 <div className="relative shrink-0">
-                  <div className="flex size-[42px] items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">
-                    {avatar ? <NextImage src={avatar} alt={name} width={42} height={42} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
-                      : chat.tipo === "GRUPO" ? <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[16px] text-muted"><circle cx="9" cy="7" r="3" stroke="currentColor" strokeWidth="1.6" /><path d="M2 19c1-3 3.5-4.5 7-4.5s6 1.5 7 4.5" stroke="currentColor" strokeWidth="1.6" /></svg>
-                      : (name[0] ?? "?").toUpperCase()}
+                  <div className="flex size-[44px] items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-[15px] font-[700] text-app">
+                    {avatar
+                      ? <NextImage src={avatar} alt={name} width={44} height={44} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
+                      : chat.tipo === "GRUPO"
+                        ? <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[18px] text-muted"><circle cx="9" cy="7" r="3" stroke="currentColor" strokeWidth="1.6" /><path d="M2 19c1-3 3.5-4.5 7-4.5s6 1.5 7 4.5" stroke="currentColor" strokeWidth="1.6" /></svg>
+                        : (name[0] ?? "?").toUpperCase()}
                   </div>
-                  {hasUnread && <span className="absolute -right-[2px] -top-[2px] size-[10px] rounded-full border-2 border-[var(--bg)] bg-[#ff6a3d]" />}
+                  {hasUnread && (
+                    <span className="absolute -right-[3px] -top-[3px] flex min-w-[18px] items-center justify-center rounded-full border-2 border-[var(--bg)] bg-[var(--primary)] px-[3px] text-[10px] font-[700] text-white leading-none h-[18px]">
+                      {chat.unread_count > 9 ? "9+" : chat.unread_count}
+                    </span>
+                  )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className={`truncate text-body-sm ${hasUnread ? "font-[var(--fw-semibold)]" : ""} text-app`}>{name}</p>
-                  <p className={`truncate text-[14px] leading-[16px] ${hasUnread ? "font-[var(--fw-medium)] text-app" : "text-muted"}`}>{(() => { const m = chat.last_message ?? ""; try { return JSON.parse(m)?.type === "poll" ? "📊 Encuesta" : m; } catch { return m; } })()}</p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className={`truncate text-[14px] ${hasUnread ? "font-[700]" : "font-[600]"} text-app`}>{name}</p>
+                    <span className="shrink-0 text-[11px] text-muted">{formatChatTime(chat.last_message_at)}</span>
+                  </div>
+                  <p className={`truncate text-[13px] leading-[18px] ${hasUnread ? "font-[600] text-app" : "text-muted"}`}>{lastMsg}</p>
                 </div>
-                <span className="shrink-0 text-[14px] text-muted">{formatChatTime(chat.last_message_at)}</span>
               </button>
             );
           })
@@ -997,51 +1124,34 @@ function FeedChatPanel({ currentUserId }: { currentUserId: string | null }) {
 
 function FeedSkeleton() {
   return (
-    <div className="space-y-[var(--space-3)]" aria-label="Cargando publicaciones" role="status">
-      {/* Image post skeleton */}
-      {[0, 1].map((i) => (
-        <article key={`img-${i}`} className="pb-[var(--space-2)]">
-          <div className="feed-image-container relative overflow-hidden">
-            <div className="skeleton-shimmer aspect-[4/3] w-full" />
-            {/* Top overlay shimmer — avatar + name */}
-            <div className="absolute inset-x-0 top-0 flex items-center gap-[var(--space-2)] px-[var(--space-4)] pt-[var(--space-3)]">
-              <div className="size-[32px] rounded-full bg-white/20" />
-              <div className="h-3 w-[80px] rounded-full bg-white/20" />
-            </div>
-            {/* Bottom overlay shimmer — location + date */}
-            <div className="absolute inset-x-0 bottom-0 px-[var(--space-4)] pb-[var(--space-3)]">
-              <div className="h-4 w-[140px] rounded-full bg-white/20" />
-              <div className="mt-[6px] h-3 w-[100px] rounded-full bg-white/20" />
-            </div>
-          </div>
-          {/* Actions + text shimmer */}
-          <div className="mt-[var(--space-2)] flex items-center gap-[var(--space-2)] px-[var(--space-1)]">
-            <div className="skeleton-shimmer h-[24px] w-[24px] rounded-full" />
-            <div className="skeleton-shimmer h-3 w-[120px] rounded-full" />
-          </div>
-        </article>
-      ))}
-      {/* Text-only post skeleton (Twitter style) */}
-      <article className="pb-[var(--space-2)]">
-        <div className="flex gap-[var(--space-2)] px-[var(--space-1)]">
-          <div className="skeleton-shimmer size-[32px] shrink-0 rounded-full" />
-          <div className="min-w-0 flex-1">
-            <div className="skeleton-shimmer h-3 w-[90px] rounded-full" />
-            <div className="skeleton-shimmer mt-[6px] h-3 w-[85%] rounded-full" />
-            <div className="skeleton-shimmer mt-[4px] h-3 w-[60%] rounded-full" />
-            <div className="mt-[var(--space-3)] flex items-center gap-[10px]">
-              <div className="skeleton-shimmer h-[24px] w-[24px] rounded-full" />
-              <div className="skeleton-shimmer h-[24px] w-[24px] rounded-full" />
-              <div className="skeleton-shimmer h-[24px] w-[24px] rounded-full" />
-            </div>
-          </div>
-        </div>
+    <div className="flex min-h-[min(620px,calc(100dvh-140px))] items-center px-[max(12px,env(safe-area-inset-left))] py-4 md:px-0" aria-label="Cargando publicaciones" role="status">
+      <article className="mx-auto flex w-full max-w-[560px] items-start gap-3 md:max-w-[520px]">
+        <div className="skeleton-shimmer size-10 shrink-0 rounded-full" />
+        <div className="skeleton-shimmer aspect-[4/5] min-w-0 flex-1 rounded-[18px]" />
       </article>
     </div>
   );
 }
 
-function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImage, nextPostHasImage, initialFollowing, initialSaved }: { post: FeedItemDto; currentUserId: string | null; currentUserName: string | null; currentUserProfileImage: string | null; nextPostHasImage: boolean; initialFollowing: boolean; initialSaved: boolean }) {
+function FeedCard({
+  post,
+  currentUserId,
+  currentUserName,
+  currentUserProfileImage,
+  nextPostHasImage,
+  initialFollowing,
+  initialSaved,
+  onFollowingChange,
+}: {
+  post: FeedItemDto;
+  currentUserId: string | null;
+  currentUserName: string | null;
+  currentUserProfileImage: string | null;
+  nextPostHasImage: boolean;
+  initialFollowing: boolean;
+  initialSaved: boolean;
+  onFollowingChange?: (ownerUserId: string, nextFollowing: boolean) => void;
+}) {
   const [liked, setLiked] = useState(post.initiallyLiked);
   const [likeCount, setLikeCount] = useState(post.initialLikeCount);
   const [likeLoading, setLikeLoading] = useState(false);
@@ -1054,10 +1164,31 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [authorAvatars, setAuthorAvatars] = useState<Record<string, string | null>>({});
   const [imgLoaded, setImgLoaded] = useState(false);
+  const [coverAspect, setCoverAspect] = useState<number | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const { isClosing: commentsClosing, requestClose: closeCommentsModal } = useModalCloseAnimation(() => {
+    setCommentsModalOpen(false);
+    setEmojiPickerOpen(false);
+  }, commentsModalOpen);
+  const { isClosing: deleteClosing, requestClose: closeDeleteConfirm } = useModalCloseAnimation(() => setConfirmDeleteId(null), !!confirmDeleteId);
   const [replyingTo, setReplyingTo] = useState<{ commentId: string; userName: string } | null>(null);
+  const [modalHeight, setModalHeight] = useState<number | null>(null);
   const [saved, setSaved] = useState(initialSaved);
+  const { toastError } = useToast();
   const isOwnPost = post.plan.ownerUserId === currentUserId;
+  const mobileImagePostVars: FeedMobileImageVars | undefined = post.hasImage
+    ? ({
+        "--feed-mobile-side-inset": "clamp(12px, 4vw, 16px)",
+        "--feed-mobile-header-top": "clamp(12px, 2.2dvh, 18px)",
+        "--feed-mobile-actions-gap": "clamp(12px, 2dvh, 16px)",
+        "--feed-mobile-actions-bottom": "clamp(72px, 10dvh, 92px)",
+        "--feed-mobile-footer-bottom": "clamp(16px, calc(env(safe-area-inset-bottom) + 8px), 28px)",
+        "--feed-mobile-avatar-size": "clamp(30px, 8.6vw, 34px)",
+        "--feed-mobile-icon-size": "clamp(30px, 9vw, 34px)",
+        "--feed-mobile-title-size": "clamp(16px, 4.8vw, 18px)",
+        "--feed-mobile-meta-size": "clamp(12px, 3.7vw, 14px)",
+      })
+    : undefined;
 
   // ── Slides (swipeable stories) ────────────────────────────────────────────
   const [slideIndex, setSlideIndex] = useState(0);
@@ -1076,7 +1207,6 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
   }
   const slidesLen = slides.length;
   const clampedIndex = Math.min(slideIndex, slidesLen - 1);
-  const currentSlide = slides[clampedIndex];
 
   const goNext = useCallback(() => setSlideIndex((p) => Math.min(p + 1, slidesLen - 1)), [slidesLen]);
   const goPrev = useCallback(() => setSlideIndex((p) => Math.max(p - 1, 0)), []);
@@ -1124,14 +1254,10 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
     return m[tipo] ?? "📌";
   }
 
-  function fmtSlideTime(iso: string): string {
-    return new Date(iso).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
-  }
-
   function renderImageSlide(imageUrl: string, alt: string, active: boolean, key: string) {
     const base = "absolute inset-0 transition-opacity duration-200 ease-out will-change-[opacity] " + (active ? "opacity-100 z-[1]" : "opacity-0 z-0");
     return (
-      <div key={key} className={base}>
+      <div key={key} className={`${base} bg-black`}>
         <NextImage
           src={imageUrl}
           alt={alt}
@@ -1161,8 +1287,48 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
   const { following, showUnfollowDialog, setShowUnfollowDialog, onPress: onFollowPress, handleUnfollow } = useFollow(
     post.plan.ownerUserId,
     currentUserId,
-    initialFollowing
+    initialFollowing,
+    (nextFollowing) => {
+      const ownerUserId = post.plan.ownerUserId;
+      if (!ownerUserId) return;
+      onFollowingChange?.(ownerUserId, nextFollowing);
+    }
   );
+  const [unfollowDialogClosing, setUnfollowDialogClosing] = useState(false);
+  const unfollowCloseTimeoutRef = useRef<number | null>(null);
+  const unfollowDialogVisible = showUnfollowDialog || unfollowDialogClosing;
+
+  const closeUnfollowDialog = useCallback(() => {
+    if (unfollowDialogClosing) return;
+    setUnfollowDialogClosing(true);
+    unfollowCloseTimeoutRef.current = window.setTimeout(() => {
+      setShowUnfollowDialog(false);
+      setUnfollowDialogClosing(false);
+      unfollowCloseTimeoutRef.current = null;
+    }, 140);
+  }, [setShowUnfollowDialog, unfollowDialogClosing]);
+
+  const confirmUnfollow = useCallback(() => {
+    if (unfollowDialogClosing) return;
+    setUnfollowDialogClosing(true);
+    unfollowCloseTimeoutRef.current = window.setTimeout(() => {
+      void handleUnfollow();
+      setUnfollowDialogClosing(false);
+      unfollowCloseTimeoutRef.current = null;
+    }, 140);
+  }, [handleUnfollow, unfollowDialogClosing]);
+
+  useEffect(() => {
+    if (showUnfollowDialog) setUnfollowDialogClosing(false);
+  }, [showUnfollowDialog]);
+
+  useEffect(() => {
+    return () => {
+      if (unfollowCloseTimeoutRef.current !== null) {
+        window.clearTimeout(unfollowCloseTimeoutRef.current);
+      }
+    };
+  }, []);
   const [expandedReplies, setExpandedReplies] = useState<Record<string, number>>({});
   const commentInputRef = useRef<HTMLInputElement | null>(null);
   const emojiPickerRef = useRef<HTMLDivElement | null>(null);
@@ -1266,8 +1432,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
     if (!commentsModalOpen) return;
     const handler = (e: globalThis.KeyboardEvent) => {
       if (e.key === "Escape") {
-        setCommentsModalOpen(false);
-        setEmojiPickerOpen(false);
+        closeCommentsModal();
       }
     };
     const previousBodyOverflow = document.body.style.overflow;
@@ -1282,12 +1447,29 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
       document.removeEventListener("keydown", handler);
       window.cancelAnimationFrame(frame);
     };
+  }, [closeCommentsModal, commentsModalOpen]);
+
+  useEffect(() => {
+    if (!commentsModalOpen) { setModalHeight(null); return; }
+    const update = () => setModalHeight(window.visualViewport?.height ?? window.innerHeight);
+    update();
+    window.visualViewport?.addEventListener("resize", update);
+    return () => window.visualViewport?.removeEventListener("resize", update);
   }, [commentsModalOpen]);
 
-  const insertEmoji = (emoji: string) => {
-    setCommentText((prev) => prev + emoji);
+  const insertEmoji = (emoji: { native: string }) => {
+    const input = commentInputRef.current;
+    if (!input) { setCommentText((prev) => (prev + emoji.native).slice(0, 300)); setEmojiPickerOpen(false); return; }
+    const start = input.selectionStart ?? input.value.length;
+    const end = input.selectionEnd ?? input.value.length;
+    const newText = (input.value.slice(0, start) + emoji.native + input.value.slice(end)).slice(0, 300);
+    setCommentText(newText);
     setEmojiPickerOpen(false);
-    commentInputRef.current?.focus();
+    requestAnimationFrame(() => {
+      input.focus();
+      const pos = start + emoji.native.length;
+      input.setSelectionRange(pos, pos);
+    });
   };
 
   const openCommentsModal = () => {
@@ -1337,6 +1519,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
       setLiked(liked);
       setLikeCount((c) => newLiked ? Math.max(0, c - 1) : c + 1);
       console.error("[feed] Error toggling like:", e);
+      toastError("No se pudo actualizar el like. Inténtalo de nuevo.");
     } finally {
       setLikeLoading(false);
     }
@@ -1402,11 +1585,16 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
 
       // Moderation: async — delete silently if toxic
       const commentId = result.comment_id;
-      void fetch("/api/moderate-comment", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: content }),
-      })
+      void createBrowserSupabaseClient().auth.getSession().then(({ data: { session } }) =>
+        fetch("/api/moderate-comment", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
+          },
+          body: JSON.stringify({ text: content }),
+        })
+      )
         .then((r) => r.json())
         .then((data: { toxic: boolean }) => {
           if (data.toxic) {
@@ -1428,6 +1616,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
       }
     } catch (e) {
       console.error("[feed] Error creating comment:", e);
+      toastError("No se pudo enviar el comentario. Inténtalo de nuevo.");
     } finally {
       setCommentSubmitting(false);
     }
@@ -1465,6 +1654,51 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
     const day = d.getDate();
     const months = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
     return `${day} ${months[d.getMonth()]}`;
+  };
+
+  const formatMobileDate = (iso: string) => {
+    const d = new Date(iso);
+    return `${d.getDate()}/${d.getMonth() + 1}`;
+  };
+
+  const getLocationFirstPart = (location: string | null | undefined) => {
+    return location?.split(",")[0]?.trim() ?? "";
+  };
+
+  const desktopDateLabel = formatDate(post.plan.startsAt) === formatDate(post.plan.endsAt)
+    ? formatDate(post.plan.startsAt)
+    : `${formatDate(post.plan.startsAt)} – ${formatDate(post.plan.endsAt)}`;
+  const mobileDateLabel = formatMobileDate(post.plan.startsAt) === formatMobileDate(post.plan.endsAt)
+    ? formatMobileDate(post.plan.startsAt)
+    : `${formatMobileDate(post.plan.startsAt)}-${formatMobileDate(post.plan.endsAt)}`;
+  const mobileLocationLabel = getLocationFirstPart(post.plan.locationName);
+  const mobileActionButtonClass = "flex min-w-[52px] items-center gap-1.5 text-muted transition-colors hover:text-primary-token disabled:opacity-40";
+  const mobileSaveButtonClass = "flex min-w-[52px] items-center gap-1.5 text-muted transition-colors hover:text-primary-token";
+
+  const renderMobileFollowButton = () => {
+    if (isOwnPost) return null;
+
+    return (
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); onFollowPress(); }}
+        className="ml-auto flex size-[28px] shrink-0 items-center justify-center rounded-full text-primary-token transition-colors hover:text-primary-token"
+        aria-label={following ? "Siguiendo" : "Seguir"}
+      >
+        {following ? (
+          <svg viewBox="0 0 24 24" fill="none" className="size-[19px]" aria-hidden="true">
+            <path d="M9 11.5L11.2 13.7L15.5 9.4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="1.8" />
+          </svg>
+        ) : (
+          <svg viewBox="0 0 24 24" fill="none" className="size-[19px]" aria-hidden="true">
+            <circle cx="10" cy="8" r="3.2" stroke="currentColor" strokeWidth="1.8" />
+            <path d="M4.5 19C5.25 15.8 7.25 14.2 10 14.2C12.75 14.2 14.75 15.8 15.5 19" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            <path d="M18 8V14M15 11H21" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          </svg>
+        )}
+      </button>
+    );
   };
 
   const formatRelativeTime = (iso: string | null) => {
@@ -1596,7 +1830,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
   };
 
   return (
-    <article className={`relative h-full overflow-hidden md:overflow-visible ${post.hasImage && !nextPostHasImage ? "" : ""}`}>
+    <article className={`relative h-full overflow-hidden md:overflow-visible ${post.hasImage && !nextPostHasImage ? "" : ""}`} style={mobileImagePostVars}>
 
       {/* ── MOBILE: full-screen snap card ── */}
       <div
@@ -1614,12 +1848,12 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
       >
         {/* Progress bars — rendered below the header row, see header section below */}
 
-        {/* Backgrounds — all rendered at once so images preload in parallel */}
-        {slides.map((slide, i) => {
+        {/* Backgrounds for text-only posts */}
+        {!post.hasImage && slides.map((slide, i) => {
           const active = i === clampedIndex;
           if (slide.type === "cover") {
             return post.hasImage && post.coverImage ? (
-              <div key="cover" className="absolute inset-0">
+              <div key="cover" className="absolute inset-0 bg-black">
                 {renderImageSlide(post.coverImage, "Imagen del plan", active, "cover-image")}
                 {!imgLoaded && active && <div className="skeleton-shimmer absolute inset-0 z-[2]" aria-hidden="true" />}
                 <NextImage
@@ -1657,325 +1891,75 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
           return null;
         })}
 
-        {/* Text content (only for text-only posts) — same layout as desktop */}
+        {/* Text content (only for text-only posts) */}
         {!post.hasImage && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center px-[max(var(--page-margin-x),env(safe-area-inset-left))]">
-            <div className="w-full max-w-[420px] rounded-2xl border border-[var(--border)] p-6">
-              <div className="flex items-center gap-3 mb-5">
-                <Link href={`/profile/${post.plan.ownerUserId}`} onClick={(e) => e.stopPropagation()}>
-                  <div className="flex size-[40px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-raised)]">
-                    {post.avatarImage ? (
-                      <NextImage src={post.avatarImage} alt={post.avatarLabel} width={40} height={40} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
-                    ) : (
-                      <span className="text-[14px] font-[700] text-[var(--text-primary)]">{post.avatarLabel}</span>
-                    )}
-                  </div>
-                </Link>
-                <div className="min-w-0 flex-1">
-                  <Link href={`/profile/${post.plan.ownerUserId}`} onClick={(e) => e.stopPropagation()} className="text-[15px] font-[800] text-[var(--text-primary)]">{post.userName}</Link>
-                  {post.plan.locationName && (
-                    <p className="text-[14px] text-[var(--text-tertiary)] mt-[1px]">{post.plan.locationName}</p>
+          <div className="absolute inset-0 z-10 flex items-center justify-center px-[max(12px,env(safe-area-inset-left))]">
+            <div className="w-full max-w-[560px] px-4 py-3 text-app">
+              <div className="flex items-start gap-3">
+                <Link href={`/profile/${post.plan.ownerUserId}`} onClick={(e) => e.stopPropagation()} className="shrink-0">
+                  <div className="flex size-[42px] items-center justify-center overflow-hidden rounded-full border border-app">
+                  {post.avatarImage ? (
+                    <NextImage src={post.avatarImage} alt={post.avatarLabel} width={42} height={42} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
+                  ) : (
+                    <span className="text-[15px] font-[800] text-app">{post.avatarLabel}</span>
                   )}
-                </div>
-                {!isOwnPost && (
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); onFollowPress(); }}
-                    className={`shrink-0 text-[14px] font-[700] transition-opacity hover:opacity-70 ${following ? "text-[var(--text-tertiary)]" : "text-[var(--text-secondary)]"}`}
-                  >
-                    {following ? "Siguiendo" : "Seguir"}
-                  </button>
-                )}
-              </div>
-              {post.plan.title && (
-                <p className="text-[20px] font-[800] leading-tight text-[var(--text-primary)]">{post.plan.title}</p>
-              )}
-              {post.text && (
-                <p className="mt-3 text-[17px] leading-[1.55] text-[var(--text-primary)]">{post.text}</p>
-              )}
-              <p className="mt-3 text-[14px] font-[600] text-[var(--text-tertiary)]">
-                {formatDate(post.plan.startsAt) === formatDate(post.plan.endsAt)
-                  ? formatDate(post.plan.startsAt)
-                  : `${formatDate(post.plan.startsAt)} – ${formatDate(post.plan.endsAt)}`}
-              </p>
-              <div className="mt-4 flex items-center gap-3">
-                <button
-                  type="button"
-                  className="flex items-center gap-1.5 text-[var(--text-secondary)] disabled:opacity-40 transition-opacity hover:opacity-70"
-                  onClick={(e) => { e.stopPropagation(); onLikeToggle(); }}
-                  disabled={!currentUserId || likeLoading}
-                  aria-label={liked ? "Quitar like" : "Dar like"}
-                >
-                  <PlaneIcon liked={liked} animating={likeAnimating} size={24} className={liked ? "text-primary-token" : ""} />
-                  <span className={`text-[14px] font-[700] ${likeCount > 0 ? "" : "invisible"}`}>{likeCount || 0}</span>
-                </button>
-                <button
-                  type="button"
-                  className="flex items-center gap-1.5 text-[var(--text-secondary)] transition-opacity hover:opacity-70"
-                  onClick={(e) => { e.stopPropagation(); openCommentsModal(); }}
-                  aria-label="Comentarios"
-                >
-                  <svg viewBox="0 0 24 24" fill="currentColor" className="size-[24px]" aria-hidden="true">
-                    <path d="M12 4C7.582 4 4 6.91 4 10.5C4 12.31 4.913 13.947 6.39 15.109C6.272 16.213 5.79 17.343 4.98 18.316C4.787 18.549 5.02 18.88 5.315 18.785C7.005 18.243 8.357 17.471 9.235 16.86C10.115 17.113 11.04 17.25 12 17.25C16.418 17.25 20 14.34 20 10.75C20 7.16 16.418 4 12 4Z" />
-                  </svg>
-                  <span className={`text-[14px] font-[700] ${commentsSection.length > 0 ? "" : "invisible"}`}>{commentsSection.length || 0}</span>
-                </button>
-                <button
-                  type="button"
-                  className={`transition-opacity hover:opacity-70 ${saved ? "text-primary-token" : "text-[var(--text-secondary)]"}`}
-                  onClick={(e) => { e.stopPropagation(); handleToggleSave(); }}
-                  aria-label={saved ? "Quitar guardado" : "Guardar"}
-                >
-                  <BookmarkIcon size={24} />
-                </button>
-                <Link
-                  href={`/plan/${post.plan.id}`}
-                  onClick={(e) => e.stopPropagation()}
-                  className="ml-auto flex items-center gap-1 text-[14px] font-[700] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
-                >
-                  Ver plan
-                  <svg viewBox="0 0 24 24" fill="none" className="size-[12px]" aria-hidden="true">
-                    <path d="M13 3L21 12M21 12L13 21M21 12H3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </Link>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Top: avatar + name + follow + progress bars (image posts only) */}
-        {post.hasImage && <div className="absolute inset-x-0 top-0 z-20 flex flex-col pt-4" style={{ filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.45))" }}>
-          {/* Progress bars row */}
-          {slides.length > 1 && (
-            <div className="flex items-center gap-[3px] px-3 pb-2">
-              {slides.map((_, i) => (
-                <div
-                  key={i}
-                  className="h-[2.5px] rounded-full transition-all duration-300"
-                  style={{ flex: 1, background: i === clampedIndex ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.28)" }}
-                />
-              ))}
-            </div>
-          )}
-          {/* Avatar + name row */}
-          <div className="flex items-center gap-2.5 px-4">
-          <Link
-            href={`/profile/${post.plan.ownerUserId}`}
-            onClick={(e) => e.stopPropagation()}
-            className="flex items-center gap-2 min-w-0"
-          >
-            <div className="flex size-[34px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-raised)]">
-              {post.avatarImage ? (
-                <NextImage src={post.avatarImage} alt={post.avatarLabel} width={34} height={34} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
-              ) : (
-                <span className="text-[14px] font-[700] text-white">{post.avatarLabel}</span>
-              )}
-            </div>
-            <span className="text-[15px] font-[800] text-white truncate">{post.userName}</span>
-          </Link>
-          {!isOwnPost && (
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); onFollowPress(); }}
-              className={`ml-1 shrink-0 text-[14px] font-[700] transition-opacity ${following ? "text-white/50" : "text-white"}`}
-            >
-              {following ? "· Siguiendo" : "· Seguir"}
-            </button>
-          )}
-          <Link
-            href={`/plan/${post.plan.id}`}
-            onClick={(e) => e.stopPropagation()}
-            className="ml-auto shrink-0 flex items-center gap-1 text-[14px] font-[700] text-white transition-opacity hover:opacity-70"
-          >
-            Ver plan
-            <svg viewBox="0 0 24 24" fill="none" className="size-[11px]" aria-hidden="true">
-              <path d="M13 3L21 12M21 12L13 21M21 12H3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </Link>
-          </div>{/* end avatar row */}
-        </div>}{/* end header */}
-
-        {/* Right: actions (image posts only) */}
-        {post.hasImage && <div
-          className="absolute right-4 bottom-0 z-20 flex flex-col items-center gap-4"
-          style={{ paddingBottom: `calc(152px + env(safe-area-inset-bottom))`, filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.4))" }}
-        >
-          <button
-            type="button"
-            className="flex flex-col items-center gap-1 text-white disabled:opacity-40 active:scale-90 transition-transform"
-            onClick={(e) => { e.stopPropagation(); onLikeToggle(); }}
-            disabled={!currentUserId || likeLoading}
-            aria-label={liked ? "Quitar like" : "Dar like"}
-          >
-            <PlaneIcon liked={liked} animating={likeAnimating} size={34} className={liked ? "text-primary-token" : "text-white"} />
-            <span className={`text-[13px] font-[700] leading-none ${likeCount > 0 ? "text-white" : "invisible"}`}>{likeCount || 0}</span>
-          </button>
-          <button
-            type="button"
-            className="flex flex-col items-center gap-1 text-white active:scale-90 transition-transform"
-            onClick={(e) => { e.stopPropagation(); openCommentsModal(); }}
-            aria-label="Comentarios"
-          >
-            <svg viewBox="0 0 24 24" fill="currentColor" className="size-[34px]" aria-hidden="true">
-              <path d="M12 4C7.582 4 4 6.91 4 10.5C4 12.31 4.913 13.947 6.39 15.109C6.272 16.213 5.79 17.343 4.98 18.316C4.787 18.549 5.02 18.88 5.315 18.785C7.005 18.243 8.357 17.471 9.235 16.86C10.115 17.113 11.04 17.25 12 17.25C16.418 17.25 20 14.34 20 10.75C20 7.16 16.418 4 12 4Z" />
-            </svg>
-            <span className={`text-[13px] font-[700] leading-none ${commentsSection.length > 0 ? "text-white" : "invisible"}`}>{commentsSection.length || 0}</span>
-          </button>
-        </div>}
-
-        {post.hasImage && !isOwnPost && (
-          <button
-            type="button"
-            className="absolute bottom-0 right-4 z-20 flex items-center justify-center text-white active:scale-90 transition-transform"
-            style={{ paddingBottom: `max(88px, calc(88px + env(safe-area-inset-bottom)))`, filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.4))" }}
-            onClick={(e) => { e.stopPropagation(); handleToggleSave(); }}
-            aria-label={saved ? "Quitar guardado" : "Guardar"}
-          >
-            <svg width={34} height={34} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className={saved ? "text-primary-token" : "text-white"}>
-              <path d="M7 4.5H17C17.55 4.5 18 4.95 18 5.5V20L12 16.2L6 20V5.5C6 4.95 6.45 4.5 7 4.5Z" />
-            </svg>
-          </button>
-        )}
-
-        {/* Bottom: info (image posts only) */}
-        {post.hasImage && <div
-          className="absolute inset-x-0 bottom-0 z-20 px-4 pr-[76px]"
-          style={{ paddingBottom: `max(88px, calc(88px + env(safe-area-inset-bottom)))`, filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.45))" }}
-        >
-          {currentSlide.type === "summary" ? (
-            /* Summary slide: mini itinerary + expenses (sombra en contenedor padre) */
-            <div className="space-y-4">
-              {post.itinerarySnapshot && post.itinerarySnapshot.length > 0 && (() => {
-                const items = post.itinerarySnapshot.slice(0, 4);
-                const hasMore = post.itinerarySnapshot.length > 4;
-                return (
-                  <div>
-                    <p className="text-[10px] font-[700] text-white/45 uppercase tracking-[0.14em] mb-2.5">
-                      {post.itinerarySnapshot.length} {post.itinerarySnapshot.length === 1 ? "actividad" : "actividades"}
-                    </p>
-                    <div className="relative pl-6">
-                      {/* vertical line */}
-                      <div className="absolute left-[8px] top-1 bottom-1 w-px bg-white/15" />
-                      <div className="space-y-2.5">
-                        {items.map((item, i) => (
-                          <div key={i} className="relative flex items-start gap-2.5">
-                            {/* node */}
-                            <div
-                              className="absolute -left-6 top-[3px] size-[17px] rounded-full flex items-center justify-center text-[9px] leading-none border border-white/15"
-                              style={{ background: "rgba(255,255,255,0.08)" }}
-                            >
-                              {getSlideActivityEmoji(item.tipo)}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-[13px] font-[700] text-white leading-snug truncate">{item.titulo}</p>
-                              {item.ubicacion_nombre && (
-                                <p className="text-[11px] text-white/45 truncate mt-0.5">{item.ubicacion_nombre}</p>
-                              )}
-                            </div>
-                            <span className="text-[11px] text-white/40 shrink-0 tabular-nums mt-0.5 font-[500]">{fmtSlideTime(item.inicio_at)}</span>
-                          </div>
-                        ))}
-                        {hasMore && (
-                          <div className="relative flex items-center gap-2">
-                            <div className="absolute -left-6 size-[17px] flex items-center justify-center">
-                              <div className="flex flex-col gap-[3px] items-center">
-                                <div className="size-[3px] rounded-full bg-white/25" />
-                                <div className="size-[3px] rounded-full bg-white/25" />
-                                <div className="size-[3px] rounded-full bg-white/25" />
-                              </div>
-                            </div>
-                            <p className="text-[12px] text-white/35 font-[500]">+{post.itinerarySnapshot.length - 4} más</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
                   </div>
-                );
-              })()}
-              {post.expensesSnapshot && (
-                <div className="flex items-baseline gap-2">
-                  <p className="text-[11px] font-[600] text-white/45 uppercase tracking-[0.1em]">Total</p>
-                  <p className="text-[22px] font-[800] text-white tracking-tight leading-none">
-                    {post.expensesSnapshot.currency} {Math.round(post.expensesSnapshot.total).toLocaleString("es-ES")}
-                  </p>
-                </div>
-              )}
-            </div>
-          ) : (
-            /* Cover / photo slides: title + location */
-            <div className="min-w-0">
-              {post.plan.title && (
-                <p className="text-[18px] font-[800] leading-tight text-white">{post.plan.title}</p>
-              )}
-              <p className="mt-[2px] text-[14px] font-[600] text-white/80">
-                {[
-                  post.plan.locationName,
-                  formatDate(post.plan.startsAt) === formatDate(post.plan.endsAt)
-                    ? formatDate(post.plan.startsAt)
-                    : `${formatDate(post.plan.startsAt)} – ${formatDate(post.plan.endsAt)}`
-                ].filter(Boolean).join(" · ")}
-              </p>
-            </div>
-          )}
-        </div>}
-      </div>
+                </Link>
 
-      {/* ── DESKTOP: TikTok-style full-screen ── */}
-      <div className="hidden md:flex h-full items-center justify-center overflow-hidden">
+                <div className="min-w-0 flex-1">
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <div className="flex min-w-0 items-baseline gap-1.5">
+                      <Link href={`/profile/${post.plan.ownerUserId}`} onClick={(e) => e.stopPropagation()} className="truncate text-[15px] font-[800] leading-tight text-app">{post.userName}</Link>
+                      {[mobileLocationLabel, mobileDateLabel].filter(Boolean).map((meta) => (
+                        <span key={meta} className="min-w-0 truncate text-[14px] text-muted">
+                          <span className="px-1.5">·</span>{meta}
+                        </span>
+                      ))}
+                    </div>
+                    {renderMobileFollowButton()}
+                  </div>
 
-        {/* Content: image centered, no side column */}
-        <div className="flex h-full w-full items-center justify-center px-8 py-8">
-
-          {post.hasImage && post.coverImage ? (
-            <div className="flex items-center gap-5">
-              {/* Image */}
-              <div
-                className="relative flex shrink-0 items-center justify-center overflow-hidden rounded-2xl"
-                style={{
-                  width: "min(50dvw, 620px)",
-                  height: "min(calc(100dvh - 160px), 820px)",
-                  minWidth: "340px",
-                  minHeight: "420px",
-                }}
-              >
-                {!imgLoaded && <div className="skeleton-shimmer absolute inset-0 rounded-2xl" aria-hidden="true" />}
-                <NextImage
-                  src={post.coverImage}
-                  alt="Imagen del plan"
-                  width={1600}
-                  height={1600}
-                  className="block max-h-full max-w-full rounded-2xl object-contain transition-opacity duration-300"
-                  style={{ opacity: imgLoaded ? 1 : 0 }}
-                  unoptimized
-                  onLoad={() => setImgLoaded(true)}
-                  onError={() => setImgLoaded(true)}
-                />
-
-                {/* Top overlay: avatar + name + follow */}
-                <div className="absolute inset-x-0 top-0 px-4 pb-8 pt-4" style={{ filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.45))" }}>
-                  <div className="flex items-center gap-2.5">
-                    <Link href={`/profile/${post.plan.ownerUserId}`} className="flex items-center gap-2.5 min-w-0">
-                      <div className="flex size-[34px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/30 bg-white/10">
-                        {post.avatarImage ? (
-                          <NextImage src={post.avatarImage} alt={post.avatarLabel} width={34} height={34} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
-                        ) : (
-                          <span className="text-[14px] font-[700] text-white">{post.avatarLabel}</span>
-                        )}
-                      </div>
-                      <span className="text-[14px] font-[800] text-white truncate">{post.userName}</span>
-                    </Link>
-                    {!isOwnPost && (
-                      <button
-                        type="button"
-                        onClick={onFollowPress}
-                        className={`ml-1 shrink-0 text-[14px] font-[700] transition-opacity hover:opacity-70 ${following ? "text-white/45" : "text-white/80"}`}
-                      >
-                        {following ? "Siguiendo" : "· Seguir"}
-                      </button>
-                    )}
+                  {post.plan.title && (
+                    <p className="mt-1 text-[15px] font-[700] leading-snug text-app">{post.plan.title}</p>
+                  )}
+                  {post.text && (
+                    <p className="mt-0.5 text-[15px] leading-snug text-app">{post.text}</p>
+                  )}
+                  <div className="mt-3 flex items-center justify-between gap-3 text-muted">
+                    <button
+                      type="button"
+                      className={mobileActionButtonClass}
+                      onClick={(e) => { e.stopPropagation(); onLikeToggle(); }}
+                      disabled={!currentUserId || likeLoading}
+                      aria-label={liked ? "Quitar like" : "Dar like"}
+                    >
+                      <PlaneIcon liked={liked} animating={likeAnimating} size={18} className={liked ? "text-primary-token" : ""} />
+                      <span className={`text-[13px] ${likeCount > 0 ? "" : "invisible"}`}>{likeCount || 0}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={mobileActionButtonClass}
+                      onClick={(e) => { e.stopPropagation(); openCommentsModal(); }}
+                      aria-label="Comentarios"
+                    >
+                      <svg viewBox="0 0 24 24" fill="currentColor" className="size-[18px]" aria-hidden="true">
+                        <path d="M12 4C7.582 4 4 6.91 4 10.5C4 12.31 4.913 13.947 6.39 15.109C6.272 16.213 5.79 17.343 4.98 18.316C4.787 18.549 5.02 18.88 5.315 18.785C7.005 18.243 8.357 17.471 9.235 16.86C10.115 17.113 11.04 17.25 12 17.25C16.418 17.25 20 14.34 20 10.75C20 7.16 16.418 4 12 4Z" />
+                      </svg>
+                      <span className={`text-[13px] ${commentsSection.length > 0 ? "" : "invisible"}`}>{commentsSection.length || 0}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`${mobileSaveButtonClass} ${saved ? "text-primary-token" : ""}`}
+                      onClick={(e) => { e.stopPropagation(); void handleToggleSave(); }}
+                      disabled={!currentUserId}
+                      aria-label={saved ? "Quitar guardado" : "Guardar"}
+                    >
+                      <BookmarkIcon size={18} />
+                    </button>
                     <Link
-                      href={`/plan/${post.plan.id}`}
-                      className="ml-auto shrink-0 flex items-center gap-1 text-[14px] font-[700] text-white transition-opacity hover:opacity-70"
+                      href={Capacitor.isNativePlatform() ? `/plan/static?id=${post.plan.id}` : `/plan/${post.plan.id}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="flex items-center gap-1 text-[13px] font-[700] text-muted transition-colors hover:text-primary-token"
                     >
                       Ver plan
                       <svg viewBox="0 0 24 24" fill="none" className="size-[11px]" aria-hidden="true">
@@ -1984,87 +1968,437 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                     </Link>
                   </div>
                 </div>
-
-                {/* Bottom: title + location */}
-                <div className="absolute inset-x-0 bottom-0 z-20 px-4 pb-6" style={{ filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.45))" }}>
-                  <div className="min-w-0">
-                    {post.plan.title && (
-                      <p className="text-[16px] font-[800] leading-tight text-white">{post.plan.title}</p>
-                    )}
-                    <p className="mt-[2px] text-[14px] font-[600] text-white/85">
-                      {[
-                        post.plan.locationName,
-                        formatDate(post.plan.startsAt) === formatDate(post.plan.endsAt)
-                          ? formatDate(post.plan.startsAt)
-                          : `${formatDate(post.plan.startsAt)} – ${formatDate(post.plan.endsAt)}`
-                      ].filter(Boolean).join(" · ")}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Actions column — lateral derecho, centrado verticalmente */}
-              <div className="flex shrink-0 flex-col items-center justify-center gap-6" style={{ filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.35))" }}>
-                <button
-                  type="button"
-                  className="flex flex-col items-center gap-1 disabled:opacity-40 active:scale-90 transition-transform"
-                  onClick={onLikeToggle}
-                  disabled={!currentUserId || likeLoading}
-                  aria-label={liked ? "Quitar like" : "Dar like"}
-                >
-                  <PlaneIcon liked={liked} animating={likeAnimating} size={34} className={liked ? "text-primary-token" : "text-white"} />
-                  <span className={`text-[13px] font-[700] leading-none text-white ${likeCount > 0 ? "" : "invisible"}`}>{likeCount || 0}</span>
-                </button>
-                <button
-                  type="button"
-                  className="flex flex-col items-center gap-1 text-white active:scale-90 transition-transform"
-                  onClick={openCommentsModal}
-                  aria-label="Comentarios"
-                >
-                  <svg viewBox="0 0 24 24" fill="currentColor" className="size-[34px]" aria-hidden="true">
-                    <path d="M12 4C7.582 4 4 6.91 4 10.5C4 12.31 4.913 13.947 6.39 15.109C6.272 16.213 5.79 17.343 4.98 18.316C4.787 18.549 5.02 18.88 5.315 18.785C7.005 18.243 8.357 17.471 9.235 16.86C10.115 17.113 11.04 17.25 12 17.25C16.418 17.25 20 14.34 20 10.75C20 7.16 16.418 4 12 4Z" />
-                  </svg>
-                  <span className={`text-[13px] font-[700] leading-none text-white ${commentsSection.length > 0 ? "" : "invisible"}`}>{commentsSection.length || 0}</span>
-                </button>
-                {!isOwnPost && (
-                  <button
-                    type="button"
-                    className="flex flex-col items-center gap-1 active:scale-90 transition-transform"
-                    onClick={handleToggleSave}
-                    aria-label={saved ? "Quitar guardado" : "Guardar"}
-                  >
-                    <svg width={34} height={34} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className={saved ? "text-primary-token" : "text-white"}>
-                      <path d="M7 4.5H17C17.55 4.5 18 4.95 18 5.5V20L12 16.2L6 20V5.5C6 4.95 6.45 4.5 7 4.5Z" />
-                    </svg>
-                    <span className="invisible text-[13px] font-[700] leading-none">0</span>
-                  </button>
-                )}
               </div>
             </div>
-          ) : (
-            /* Text-only post */
-            <div className="w-full max-w-[500px] rounded-2xl border border-[var(--border)] p-8">
-              <div className="flex items-center gap-3 mb-5">
-                <Link href={`/profile/${post.plan.ownerUserId}`}>
-                  <div className="flex size-[40px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-raised)] transition-opacity hover:opacity-80">
+          </div>
+        )}
+
+        {/* Image post in Twitter-like mobile layout */}
+        {post.hasImage && post.coverImage && (
+          <>
+          <div className="absolute inset-0 z-10 flex items-center justify-center overflow-y-auto bg-app px-[max(12px,env(safe-area-inset-left))] py-4">
+            <div className="w-full max-w-[560px] text-app">
+              <div className="flex items-start gap-3">
+                <Link href={`/profile/${post.plan.ownerUserId}`} onClick={(e) => e.stopPropagation()} className="shrink-0">
+                  <div className="flex size-[42px] items-center justify-center overflow-hidden rounded-full border border-app">
                     {post.avatarImage ? (
-                      <NextImage src={post.avatarImage} alt={post.avatarLabel} width={40} height={40} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
+                      <NextImage src={post.avatarImage} alt={post.avatarLabel} width={42} height={42} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
                     ) : (
-                      <span className="text-[14px] font-[700] text-[var(--text-primary)]">{post.avatarLabel}</span>
+                      <span className="text-[15px] font-[800] text-app">{post.avatarLabel}</span>
                     )}
                   </div>
                 </Link>
+
                 <div className="min-w-0 flex-1">
-                  <Link href={`/profile/${post.plan.ownerUserId}`} className="text-[15px] font-[800] text-[var(--text-primary)]">{post.userName}</Link>
-                  {post.plan.locationName && (
-                    <p className="text-[14px] text-[var(--text-tertiary)] mt-[1px]">{post.plan.locationName}</p>
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <div className="flex min-w-0 items-baseline gap-1.5">
+                      <Link href={`/profile/${post.plan.ownerUserId}`} onClick={(e) => e.stopPropagation()} className="truncate text-[15px] font-[800] leading-tight text-app">{post.userName}</Link>
+                      {[mobileLocationLabel, mobileDateLabel].filter(Boolean).map((meta) => (
+                        <span key={meta} className="min-w-0 truncate text-[14px] text-muted">
+                          <span className="px-1.5">·</span>{meta}
+                        </span>
+                      ))}
+                    </div>
+                    {renderMobileFollowButton()}
+                  </div>
+
+                  {post.plan.title && (
+                    <p className="mt-1 text-[15px] font-[700] leading-snug text-app">{post.plan.title}</p>
                   )}
+                  {post.text && (
+                    <p className="mt-0.5 text-[15px] leading-snug text-app">{post.text}</p>
+                  )}
+
+                  <div
+                    className="relative mt-3 w-full overflow-hidden rounded-[14px] border border-app bg-surface-inset"
+                    style={{ aspectRatio: coverAspect ? String(coverAspect) : "4/5", maxHeight: "calc(100svh - 360px)" }}
+                  >
+                    {!imgLoaded && <div className="skeleton-shimmer absolute inset-0 z-[2]" aria-hidden="true" />}
+                    {slides.map((slide, i) => {
+                      const active = i === clampedIndex;
+                      const base = "absolute inset-0 transition-opacity duration-300 ease-out";
+                      if (slide.type === "cover") return (
+                        <div key="mobile-twitter-cover" className={`${base} bg-surface-inset ${active ? "z-[1] opacity-100" : "z-0 opacity-0"}`}>
+                          <NextImage
+                            src={post.coverImage!}
+                            alt="Imagen del plan"
+                            fill
+                            className="object-contain"
+                            style={{ opacity: imgLoaded ? 1 : 0, transition: "opacity 0.3s" }}
+                            unoptimized
+                            onLoad={(e) => {
+                              const img = e.currentTarget as HTMLImageElement;
+                              if (img.naturalWidth && img.naturalHeight) {
+                                setCoverAspect(img.naturalWidth / img.naturalHeight);
+                              }
+                              setImgLoaded(true);
+                            }}
+                            onError={() => setImgLoaded(true)}
+                          />
+                        </div>
+                      );
+                      if (slide.type === "photo") return (
+                        <div key={`mobile-twitter-photo-${i}`} className={`${base} bg-surface-inset ${active ? "z-[1] opacity-100" : "z-0 opacity-0"}`}>
+                          <NextImage src={slide.url} alt="" fill className="object-contain" unoptimized />
+                        </div>
+                      );
+                      if (slide.type === "summary") return (
+                        <div key="mobile-twitter-summary" className={`${base} bg-[#0d0e12] ${active ? "z-[1] opacity-100" : "z-0 opacity-0"}`}>
+                          <NextImage src={post.coverImage!} alt="" fill className="scale-110 object-cover opacity-15 blur-xl" unoptimized />
+                          <div className="absolute inset-0 bg-black/60" />
+                          <div className="absolute inset-0 z-10 flex flex-col justify-between p-5">
+                            <div>
+                              <p className="text-[12px] font-[700] uppercase tracking-[0.12em] text-white/55">Resumen del plan</p>
+                              <p className="mt-1 line-clamp-2 text-[22px] font-[800] leading-[1.05] tracking-tight text-white">{post.plan.title}</p>
+                              <p className="mt-2 truncate text-[13px] font-[600] text-white/65">{[mobileLocationLabel, mobileDateLabel].filter(Boolean).join(" · ")}</p>
+                            </div>
+                            <div className="space-y-3">
+                              {post.itinerarySnapshot && post.itinerarySnapshot.length > 0 && (
+                                <div className="space-y-[6px] rounded-[14px] bg-white/[0.08] p-3">
+                                  {post.itinerarySnapshot.slice(0, 4).map((item, idx) => (
+                                    <div key={idx} className="flex items-center gap-2">
+                                      <span className="text-[12px]">{getSlideActivityEmoji(item.tipo)}</span>
+                                      <span className="truncate text-[13px] font-[600] text-white/90">{item.titulo}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              <div className="flex flex-wrap gap-2">
+                                {post.photosSnapshot && post.photosSnapshot.length > 0 && (
+                                  <span className="rounded-full bg-white/[0.1] px-3 py-1 text-[12px] font-[700] text-white/80">{post.photosSnapshot.length} fotos</span>
+                                )}
+                                {post.participantsSnapshot && (
+                                  <span className="rounded-full bg-white/[0.1] px-3 py-1 text-[12px] font-[700] text-white/80">{post.participantsSnapshot.count} personas</span>
+                                )}
+                                {post.expensesSnapshot && (
+                                  <span className="rounded-full bg-white/[0.1] px-3 py-1 text-[12px] font-[700] text-white/80">{post.expensesSnapshot.currency} {Math.round(post.expensesSnapshot.total).toLocaleString("es-ES")}</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                      return null;
+                    })}
+                    {slidesLen > 1 && (
+                      <div className="absolute inset-x-0 bottom-3 z-20 flex items-center justify-center gap-[5px]">
+                        {slides.map((_, i) => (
+                          <div
+                            key={i}
+                            className="rounded-full transition-all duration-200"
+                            style={{
+                              width: i === clampedIndex ? "16px" : "6px",
+                              height: "6px",
+                              background: i === clampedIndex ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.45)",
+                            }}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-between gap-3 text-muted" style={{ touchAction: "manipulation" }}>
+                    <button
+                      type="button"
+                      className={mobileActionButtonClass}
+                      onClick={(e) => { e.stopPropagation(); onLikeToggle(); }}
+                      onTouchStart={(e) => e.stopPropagation()}
+                      disabled={!currentUserId || likeLoading}
+                      aria-label={liked ? "Quitar like" : "Dar like"}
+                    >
+                      <PlaneIcon liked={liked} animating={likeAnimating} size={18} className={liked ? "text-primary-token" : ""} />
+                      <span className={`text-[13px] ${likeCount > 0 ? "" : "invisible"}`}>{likeCount || 0}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={mobileActionButtonClass}
+                      onClick={(e) => { e.stopPropagation(); openCommentsModal(); }}
+                      onTouchStart={(e) => e.stopPropagation()}
+                      aria-label="Comentarios"
+                    >
+                      <svg viewBox="0 0 24 24" fill="currentColor" className="size-[18px]" aria-hidden="true">
+                        <path d="M12 4C7.582 4 4 6.91 4 10.5C4 12.31 4.913 13.947 6.39 15.109C6.272 16.213 5.79 17.343 4.98 18.316C4.787 18.549 5.02 18.88 5.315 18.785C7.005 18.243 8.357 17.471 9.235 16.86C10.115 17.113 11.04 17.25 12 17.25C16.418 17.25 20 14.34 20 10.75C20 7.16 16.418 4 12 4Z" />
+                      </svg>
+                      <span className={`text-[13px] ${commentsSection.length > 0 ? "" : "invisible"}`}>{commentsSection.length || 0}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`${mobileSaveButtonClass} ${saved ? "text-primary-token" : ""}`}
+                      onClick={(e) => { e.stopPropagation(); void handleToggleSave(); }}
+                      onTouchStart={(e) => e.stopPropagation()}
+                      disabled={!currentUserId}
+                      aria-label={saved ? "Quitar guardado" : "Guardar"}
+                    >
+                      <BookmarkIcon size={18} />
+                    </button>
+                    <Link
+                      href={Capacitor.isNativePlatform() ? `/plan/static?id=${post.plan.id}` : `/plan/${post.plan.id}`}
+                      onClick={(e) => e.stopPropagation()}
+                      onTouchStart={(e) => e.stopPropagation()}
+                      className="flex items-center gap-1 text-[13px] font-[700] text-muted transition-colors hover:text-primary-token"
+                    >
+                      Ver plan
+                      <svg viewBox="0 0 24 24" fill="none" className="size-[11px]" aria-hidden="true">
+                        <path d="M13 3L21 12M21 12L13 21M21 12H3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          </>
+        )}
+      </div>
+
+      {/* ── DESKTOP: Instagram-style card ── */}
+      <div className="hidden md:flex h-full items-center justify-center overflow-hidden">
+        <div className="flex h-full w-full items-center justify-center px-8 py-6">
+
+          {post.hasImage && post.coverImage ? (
+            /* ── Card Instagram ── */
+            <div className="flex items-start gap-3 w-full max-w-[520px]">
+              {/* Avatar outside card — top left */}
+              <Link href={`/profile/${post.plan.ownerUserId}`} className="shrink-0 mt-1">
+                <div className="flex size-10 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset">
+                  {post.avatarImage ? (
+                    <NextImage src={post.avatarImage} alt={post.avatarLabel} width={40} height={40} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
+                  ) : (
+                    <span className="text-[13px] font-[700] text-app">{post.avatarLabel}</span>
+                  )}
+                </div>
+              </Link>
+
+              {/* Card */}
+              <div className="min-w-0 flex-1 overflow-hidden rounded-[18px] border border-app bg-surface">
+
+              {/* Header */}
+              <div className="flex items-start gap-3 px-4 py-[11px]">
+                <div className="min-w-0 flex-1">
+                  <Link href={`/profile/${post.plan.ownerUserId}`} className="text-[14px] font-[700] text-app hover:underline">{post.userName}</Link>
+                  <p className="text-[12px] text-muted leading-tight">
+                    {[
+                      post.plan.locationName,
+                      formatDate(post.plan.startsAt) === formatDate(post.plan.endsAt)
+                        ? formatDate(post.plan.startsAt)
+                        : `${formatDate(post.plan.startsAt)} – ${formatDate(post.plan.endsAt)}`
+                    ].filter(Boolean).join(" · ")}
+                  </p>
                 </div>
                 {!isOwnPost && (
                   <button
                     type="button"
                     onClick={onFollowPress}
-                    className={`shrink-0 text-[14px] font-[700] transition-opacity hover:opacity-70 ${following ? "text-[var(--text-tertiary)]" : "text-[var(--text-secondary)]"}`}
+                    className="mt-[1px] shrink-0 text-[13px] font-[700] leading-tight text-primary-token transition-colors"
+                  >
+                    {following ? "Siguiendo" : "Seguir"}
+                  </button>
+                )}
+              </div>
+
+              {/* Image / Slides section — ratio from cover image */}
+              <div
+                className="relative w-full bg-black"
+                style={{ aspectRatio: coverAspect ? String(coverAspect) : "4/5", maxHeight: "70vh" }}
+              >
+                {/* Skeleton while loading */}
+                {!imgLoaded && <div className="skeleton-shimmer absolute inset-0 z-[2]" aria-hidden="true" />}
+
+                {/* All slides */}
+                {slides.map((slide, i) => {
+                  const active = i === clampedIndex;
+                  const base = "absolute inset-0 transition-opacity duration-300 ease-out";
+                  if (slide.type === "cover") return (
+                    <div key="cover" className={`${base} bg-black ${active ? "opacity-100 z-[1]" : "opacity-0 z-0"}`}>
+                      <NextImage
+                        src={post.coverImage!}
+                        alt="Imagen del plan"
+                        fill
+                        className="object-contain"
+                        style={{ opacity: imgLoaded ? 1 : 0, transition: "opacity 0.3s" }}
+                        unoptimized
+                        onLoad={(e) => {
+                          const img = e.currentTarget as HTMLImageElement;
+                          if (img.naturalWidth && img.naturalHeight) {
+                            setCoverAspect(img.naturalWidth / img.naturalHeight);
+                          }
+                          setImgLoaded(true);
+                        }}
+                        onError={() => setImgLoaded(true)}
+                      />
+                    </div>
+                  );
+                  if (slide.type === "photo") return (
+                    <div key={`photo-${i}`} className={`${base} bg-black ${active ? "opacity-100 z-[1]" : "opacity-0 z-0"}`}>
+                      <NextImage src={slide.url} alt="" fill className="object-contain" unoptimized />
+                    </div>
+                  );
+                  if (slide.type === "summary") return (
+                    <div key="summary" className={`${base} bg-[#0d0e12] ${active ? "opacity-100 z-[1]" : "opacity-0 z-0"}`}>
+                      <NextImage src={post.coverImage!} alt="" fill className="object-cover opacity-15 scale-110 blur-xl" unoptimized />
+                      <div className="absolute inset-0 bg-black/60" />
+                      <div className="absolute inset-0 z-10 flex flex-col justify-between p-5">
+                        <div>
+                          <p className="text-[12px] font-[700] uppercase tracking-[0.12em] text-white/55">Resumen del plan</p>
+                          <p className="mt-1 line-clamp-2 text-[24px] font-[800] leading-[1.05] tracking-tight text-white">{post.plan.title}</p>
+                          <p className="mt-2 truncate text-[13px] font-[600] text-white/65">{[post.plan.locationName, desktopDateLabel].filter(Boolean).join(" · ")}</p>
+                        </div>
+                        <div className="space-y-3">
+                          {post.itinerarySnapshot && post.itinerarySnapshot.length > 0 && (
+                            <div className="space-y-[6px] rounded-[14px] bg-white/[0.08] p-3">
+                              {post.itinerarySnapshot.slice(0, 4).map((item, idx) => (
+                                <div key={idx} className="flex items-center gap-2">
+                                  <span className="text-[12px]">{getSlideActivityEmoji(item.tipo)}</span>
+                                  <span className="truncate text-[13px] font-[600] text-white/90">{item.titulo}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <div className="flex flex-wrap gap-2">
+                            {post.photosSnapshot && post.photosSnapshot.length > 0 && (
+                              <span className="rounded-full bg-white/[0.1] px-3 py-1 text-[12px] font-[700] text-white/80">{post.photosSnapshot.length} fotos</span>
+                            )}
+                            {post.participantsSnapshot && (
+                              <span className="rounded-full bg-white/[0.1] px-3 py-1 text-[12px] font-[700] text-white/80">{post.participantsSnapshot.count} personas</span>
+                            )}
+                            {post.expensesSnapshot && (
+                              <span className="rounded-full bg-white/[0.1] px-3 py-1 text-[12px] font-[700] text-white/80">{post.expensesSnapshot.currency} {Math.round(post.expensesSnapshot.total).toLocaleString("es-ES")}</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                  return null;
+                })}
+
+                {/* Carousel arrows — solo fotos/slides reales */}
+                {slidesLen > 1 && clampedIndex > 0 && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); goPrev(); }}
+                    className="absolute left-2.5 top-1/2 -translate-y-1/2 z-30 flex size-8 items-center justify-center text-white transition-all active:scale-90" style={{ filter: "drop-shadow(0 1px 3px rgba(0,0,0,0.6))" }}
+                    aria-label="Foto anterior"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" className="size-4" aria-hidden="true"><path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                  </button>
+                )}
+                {slidesLen > 1 && clampedIndex < slidesLen - 1 && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); goNext(); }}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 z-30 flex size-8 items-center justify-center text-white transition-all active:scale-90" style={{ filter: "drop-shadow(0 1px 3px rgba(0,0,0,0.6))" }}
+                    aria-label="Foto siguiente"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" className="size-4" aria-hidden="true"><path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                  </button>
+                )}
+
+                {/* Dots inside image — bottom center */}
+                {slidesLen > 1 && (
+                  <div className="absolute bottom-3 inset-x-0 z-20 flex items-center justify-center gap-[5px]">
+                    {slides.map((_, i) => (
+                      <div
+                        key={i}
+                        className="rounded-full transition-all duration-200"
+                        style={{
+                          width: i === clampedIndex ? "16px" : "6px",
+                          height: "6px",
+                          background: i === clampedIndex ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.45)",
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Action bar */}
+              <div className="flex items-center gap-4 px-4 pt-3 pb-[10px]">
+                <button
+                  type="button"
+                  className="flex items-center gap-1.5 disabled:opacity-40 active:scale-90 transition-transform"
+                  onClick={onLikeToggle}
+                  disabled={!currentUserId || likeLoading}
+                  aria-label={liked ? "Quitar like" : "Dar like"}
+                >
+                  <PlaneIcon liked={liked} animating={likeAnimating} size={24} className={liked ? "text-primary-token" : "text-app"} />
+                  {likeCount > 0 && <span className="text-[13px] font-[700] text-app">{likeCount}</span>}
+                </button>
+                <button
+                  type="button"
+                  className="flex items-center gap-1.5 text-app active:scale-90 transition-transform"
+                  onClick={openCommentsModal}
+                  aria-label="Comentarios"
+                >
+                  <svg viewBox="0 0 24 24" fill="currentColor" className="size-6" aria-hidden="true">
+                    <path d="M12 4C7.582 4 4 6.91 4 10.5C4 12.31 4.913 13.947 6.39 15.109C6.272 16.213 5.79 17.343 4.98 18.316C4.787 18.549 5.02 18.88 5.315 18.785C7.005 18.243 8.357 17.471 9.235 16.86C10.115 17.113 11.04 17.25 12 17.25C16.418 17.25 20 14.34 20 10.75C20 7.16 16.418 4 12 4Z" />
+                  </svg>
+                  {commentsSection.length > 0 && <span className="text-[13px] font-[700] text-app">{commentsSection.length}</span>}
+                </button>
+                {!isOwnPost && (
+                  <button
+                    type="button"
+                    className="active:scale-90 transition-transform text-app"
+                    onClick={handleToggleSave}
+                    aria-label={saved ? "Quitar guardado" : "Guardar"}
+                  >
+                    <span className={saved ? "text-primary-token" : ""}><BookmarkIcon size={24} /></span>
+                  </button>
+                )}
+                <Link
+                  href={Capacitor.isNativePlatform() ? `/plan/static?id=${post.plan.id}` : `/plan/${post.plan.id}`}
+                  className="ml-auto flex items-center gap-1 text-[14px] font-[700] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
+                >
+                  Ver plan
+                  <svg viewBox="0 0 24 24" fill="none" className="size-[12px]" aria-hidden="true">
+                    <path d="M13 3L21 12M21 12L13 21M21 12H3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </Link>
+              </div>
+
+              {/* Caption */}
+              {(post.plan.title || post.text) && (
+                <div className="px-4 pb-4 space-y-[2px]">
+                  {post.plan.title && (
+                    <p className="text-[15px] font-[800] text-app leading-snug">{post.plan.title}</p>
+                  )}
+                  {post.text && (
+                    <p className="text-[14px] text-app leading-snug">
+                      <span className="font-[600] mr-1">{post.userName}</span>{post.text}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+            </div>
+          ) : (
+            /* Text-only post */
+            <div className="flex items-start gap-3 w-full max-w-[540px]">
+              {/* Avatar outside card — top left */}
+              <Link href={`/profile/${post.plan.ownerUserId}`} className="shrink-0 mt-1">
+                <div className="flex size-10 items-center justify-center overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-raised)] transition-opacity hover:opacity-80">
+                  {post.avatarImage ? (
+                    <NextImage src={post.avatarImage} alt={post.avatarLabel} width={40} height={40} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
+                  ) : (
+                    <span className="text-[14px] font-[700] text-[var(--text-primary)]">{post.avatarLabel}</span>
+                  )}
+                </div>
+              </Link>
+
+              {/* Card */}
+              <div className="min-w-0 flex-1 rounded-2xl border border-[var(--border)] p-8">
+              <div className="mb-5 flex items-start gap-3">
+                <div className="min-w-0 flex-1">
+                  <Link href={`/profile/${post.plan.ownerUserId}`} className="text-[15px] font-[800] text-[var(--text-primary)]">{post.userName}</Link>
+                  <p className="mt-[1px] truncate text-[14px] text-[var(--text-tertiary)]">
+                    {[post.plan.locationName, desktopDateLabel].filter(Boolean).join(" · ")}
+                  </p>
+                </div>
+                {!isOwnPost && (
+                  <button
+                    type="button"
+                    onClick={onFollowPress}
+                    className="mt-[1px] shrink-0 text-[14px] font-[700] leading-tight text-primary-token transition-opacity hover:opacity-70"
                   >
                     {following ? "Siguiendo" : "Seguir"}
                   </button>
@@ -2073,11 +2407,6 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
               {post.text && (
                 <p className="text-[17px] leading-[1.55] text-[var(--text-primary)]">{post.text}</p>
               )}
-              <p className="mt-4 text-[14px] font-[600] text-[var(--text-tertiary)]">
-                {formatDate(post.plan.startsAt) === formatDate(post.plan.endsAt)
-                  ? formatDate(post.plan.startsAt)
-                  : `${formatDate(post.plan.startsAt)} – ${formatDate(post.plan.endsAt)}`}
-              </p>
               <div className="mt-4 flex items-center gap-3">
                 <button
                   type="button"
@@ -2109,7 +2438,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                   <BookmarkIcon size={24} />
                 </button>
                 <Link
-                  href={`/plan/${post.plan.id}`}
+                  href={Capacitor.isNativePlatform() ? `/plan/static?id=${post.plan.id}` : `/plan/${post.plan.id}`}
                   className="ml-auto flex items-center gap-1 text-[14px] font-[700] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
                 >
                   Ver plan
@@ -2119,14 +2448,15 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                 </Link>
               </div>
             </div>
+            </div>
           )}
 
         </div>
       </div>{/* end desktop wrapper */}
 
       {commentsModalOpen && (
-        <div className="comments-modal-overlay fixed inset-0 z-[1100] flex items-end justify-center bg-black/65 md:items-center md:p-[var(--space-6)]" onClick={() => { setCommentsModalOpen(false); setEmojiPickerOpen(false); }}>
-          <div className="comments-modal-panel grid h-dvh w-full overflow-hidden bg-app shadow-elev-4 md:h-[min(88dvh,760px)] md:max-w-[1120px] md:rounded-[6px] md:grid-cols-[minmax(0,1fr)_420px]" onClick={(e) => e.stopPropagation()}>
+        <div data-closing={commentsClosing ? "true" : "false"} className="app-modal-overlay fixed inset-0 z-[1100] flex items-end justify-center md:items-center md:p-[var(--space-6)]" onClick={closeCommentsModal}>
+          <div className="app-modal-panel grid h-dvh w-full overflow-hidden bg-app shadow-elev-4 md:h-[min(88dvh,760px)] md:max-w-[1120px] md:rounded-[6px] md:grid-cols-[minmax(0,1fr)_420px]" style={modalHeight ? { height: modalHeight } : undefined} onClick={(e) => e.stopPropagation()}>
             <div className="relative hidden min-h-0 bg-[#111] md:block">
               {post.hasImage && post.coverImage ? (
                 <NextImage src={post.coverImage} alt="Imagen del plan" width={1200} height={900} className="h-full w-full object-contain" unoptimized referrerPolicy="no-referrer" />
@@ -2150,7 +2480,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                     <Link href={`/profile/${post.plan.ownerUserId}`} className="truncate font-[800] text-white">{post.userName}</Link>
                     <span className="px-2 text-white/50">•</span>
                     {!isOwnPost && (
-                      <button type="button" onClick={onFollowPress} className={`font-[700] transition-opacity hover:opacity-80 ${following ? "text-muted" : "text-primary-token"}`}>
+                      <button type="button" onClick={onFollowPress} className="font-[700] text-primary-token transition-opacity hover:opacity-80">
                         {following ? "Siguiendo" : "Seguir"}
                       </button>
                     )}
@@ -2160,7 +2490,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
             </div>
 
             <div className="flex min-h-0 flex-col bg-app">
-              <div className="flex items-center justify-between border-b px-[22px] py-[18px]">
+              <div className="flex items-center justify-between border-b px-[22px] pb-[18px] pt-[max(18px,calc(env(safe-area-inset-top)+10px))] md:py-[18px]">
                 <div className="flex min-w-0 items-center gap-3">
                   <div className="flex size-[42px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset">
                     {post.avatarImage ? (
@@ -2173,7 +2503,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                     <div className="flex items-center gap-2 min-w-0">
                       <Link href={`/profile/${post.plan.ownerUserId}`} className="truncate text-[15px] font-[800] text-app">{post.userName}</Link>
                       {!isOwnPost && (
-                        <button type="button" onClick={onFollowPress} className={`shrink-0 text-[13px] font-[700] transition-opacity hover:opacity-80 ${following ? "text-muted" : "text-primary-token"}`}>
+                        <button type="button" onClick={onFollowPress} className="shrink-0 text-[13px] font-[700] text-primary-token transition-opacity hover:opacity-80">
                           {following ? "Siguiendo" : "· Seguir"}
                         </button>
                       )}
@@ -2193,7 +2523,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                     )}
                   </div>
                 </div>
-                <button type="button" onClick={() => { setCommentsModalOpen(false); setEmojiPickerOpen(false); }} aria-label="Cerrar comentarios" className="text-muted transition-opacity hover:opacity-70">
+                <button type="button" onClick={closeCommentsModal} aria-label="Cerrar comentarios" className="text-muted transition-opacity hover:opacity-70">
                   <CloseIcon />
                 </button>
               </div>
@@ -2202,7 +2532,7 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                 {renderCommentsList()}
               </div>
 
-              <div className="px-[22px] py-[14px]">
+              <div className="hidden md:block px-[22px] py-[14px]">
                 <div className="flex items-center gap-4 text-app">
                   <button type="button" className="flex items-center gap-[6px] transition-opacity hover:opacity-70" aria-label="Me gusta" onClick={onLikeToggle} disabled={!currentUserId}>
                     <PlaneIcon liked={liked} animating={likeAnimating} size={28} />
@@ -2223,26 +2553,72 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                 </div>
               </div>
 
-              <div ref={emojiPickerRef} className="relative px-[22px] py-[14px]">
-                {emojiPickerOpen && (
-                  <div className="absolute bottom-[calc(100%+8px)] left-[22px] z-[70] w-[256px] rounded-[10px] border border-app bg-[var(--surface-raised)] p-2 shadow-lg backdrop-blur-md">
-                    <div className="scrollbar-thin grid max-h-[180px] grid-cols-8 gap-0.5 overflow-x-hidden overflow-y-auto overscroll-contain">
-                      {EMOJI_LIST.map((emoji) => (
-                        <button key={emoji} type="button" className="flex size-[30px] items-center justify-center rounded-[6px] text-[18px] transition-colors hover:bg-[var(--interactive-hover-surface)]" onClick={() => insertEmoji(emoji)}>
-                          {emoji}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
+              <div ref={emojiPickerRef} className="relative border-t border-app px-4 py-3 md:border-t-0 md:px-[22px] md:py-[14px] md:pt-0">
                 {replyingTo && (
-                  <div className="flex items-center justify-between px-[2px] pb-[4px] text-[14px] text-muted">
+                  <div className="flex items-center justify-between px-[2px] pb-[6px] text-[14px] text-muted">
                     <span>Respondiendo a <span className="font-[700] text-app">@{replyingTo.userName}</span></span>
                     <button type="button" onClick={() => { setReplyingTo(null); setCommentText(""); }} className="text-muted hover:opacity-70">✕</button>
                   </div>
                 )}
-                <div className="flex items-center gap-[var(--space-2)]">
+
+                {/* Mobile: chat-style pill input with emoji inside */}
+                <div className="flex items-center gap-2 md:hidden">
+                  <div className="relative flex min-w-0 flex-1 items-center rounded-full border border-app bg-surface px-3">
+                    {emojiPickerOpen && (
+                      <div className="absolute bottom-[calc(100%+8px)] left-0 z-[70] max-w-[calc(100vw-32px)]">
+                        <EmojiMartPicker
+                          data={async () => { const r = await fetch("https://cdn.jsdelivr.net/npm/@emoji-mart/data"); return r.json(); }}
+                          onEmojiSelect={insertEmoji}
+                          locale="es"
+                          theme="auto"
+                          set="native"
+                          previewPosition="none"
+                          skinTonePosition="search"
+                        />
+                      </div>
+                    )}
+                    <button type="button" className="shrink-0 py-2 pr-1 text-muted transition-colors hover:text-app" aria-label="Emoji" onClick={() => setEmojiPickerOpen((v) => !v)}>
+                      <SmileyIcon />
+                    </button>
+                    <input
+                      ref={commentInputRef}
+                      type="text"
+                      value={commentText}
+                      onChange={(e) => setCommentText(e.target.value.slice(0, 300))}
+                      onKeyDown={onCommentKeyDown}
+                      placeholder={replyingTo ? `Responder a @${replyingTo.userName}...` : "Añade un comentario..."}
+                      maxLength={300}
+                      className="min-w-0 flex-1 bg-transparent py-2 text-[15px] text-app outline-none placeholder:text-muted"
+                      disabled={!currentUserId || commentSubmitting}
+                    />
+                    {commentText.length > 250 && (
+                      <span className="shrink-0 text-[11px] text-muted">{300 - commentText.length}</span>
+                    )}
+                  </div>
+                  {commentText.trim() && (
+                    <button type="button" onClick={onSubmitComment} disabled={!currentUserId || commentSubmitting} aria-label="Enviar comentario" className="shrink-0 text-primary-token transition-opacity hover:opacity-70 disabled:opacity-40">
+                      <svg viewBox="0 0 24 24" fill="currentColor" className="size-[22px]" aria-hidden>
+                        <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+
+                {/* Desktop: original input */}
+                <div className="hidden md:flex items-center gap-[var(--space-2)]">
+                  {emojiPickerOpen && (
+                    <div className="absolute bottom-[calc(100%+8px)] left-[22px] z-[70] max-w-[calc(100vw-32px)]">
+                      <EmojiMartPicker
+                        data={async () => { const r = await fetch("https://cdn.jsdelivr.net/npm/@emoji-mart/data"); return r.json(); }}
+                        onEmojiSelect={insertEmoji}
+                        locale="es"
+                        theme="auto"
+                        set="native"
+                        previewPosition="none"
+                        skinTonePosition="search"
+                      />
+                    </div>
+                  )}
                   <button type="button" className="flex items-center justify-center text-muted" aria-label="Emoticonos" onClick={() => setEmojiPickerOpen((prev) => !prev)}>
                     <SmileyIcon />
                   </button>
@@ -2250,9 +2626,10 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
                     ref={commentInputRef}
                     type="text"
                     value={commentText}
-                    onChange={(e) => setCommentText(e.target.value)}
+                    onChange={(e) => setCommentText(e.target.value.slice(0, 300))}
                     onKeyDown={onCommentKeyDown}
                     placeholder={replyingTo ? `Responder a @${replyingTo.userName}...` : "Añade un comentario..."}
+                    maxLength={300}
                     className="min-w-0 flex-1 bg-transparent py-[4px] text-[15px] text-app outline-none ring-0 focus:outline-none focus:ring-0 focus:border-transparent placeholder:text-muted"
                     disabled={!currentUserId || commentSubmitting}
                   />
@@ -2271,12 +2648,12 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
 
       {/* Delete comment confirmation modal */}
       {confirmDeleteId && (
-        <div className="fixed inset-0 z-[1200] flex items-end justify-center pb-[max(var(--space-6),env(safe-area-inset-bottom))] sm:items-center" onClick={() => setConfirmDeleteId(null)}>
-          <div className="w-full max-w-[340px] rounded-modal border border-app bg-surface p-[var(--space-5)] shadow-elev-2 mx-[var(--space-4)]" onClick={(e) => e.stopPropagation()}>
+        <div data-closing={deleteClosing ? "true" : "false"} className="app-modal-overlay fixed inset-0 z-[1200] flex items-end justify-center pb-[max(var(--space-6),env(safe-area-inset-bottom))] sm:items-center" onClick={closeDeleteConfirm}>
+          <div className="app-modal-panel mx-[var(--space-4)] w-full max-w-[340px] rounded-modal border border-app bg-surface p-[var(--space-5)] shadow-elev-2" onClick={(e) => e.stopPropagation()}>
             <p className="text-body font-[var(--fw-semibold)] text-app">¿Eliminar comentario?</p>
             <p className="mt-[var(--space-1)] text-body-sm text-muted">Esta acción no se puede deshacer.</p>
             <div className="mt-[var(--space-4)] flex gap-[var(--space-2)]">
-              <button type="button" onClick={() => setConfirmDeleteId(null)} className="flex-1 rounded-button border border-app py-[10px] text-body-sm font-[var(--fw-medium)] text-app transition-colors hover:bg-[var(--interactive-hover-surface)]">
+              <button type="button" onClick={closeDeleteConfirm} className="flex-1 rounded-button border border-app py-[10px] text-body-sm font-[var(--fw-medium)] text-app transition-colors hover:bg-[var(--interactive-hover-surface)]">
                 Cancelar
               </button>
               <button type="button" onClick={() => onDeleteComment(confirmDeleteId)} className="flex-1 rounded-button bg-[var(--error-token,#ef4444)] py-[10px] text-body-sm font-[var(--fw-medium)] text-white transition-opacity hover:opacity-80">
@@ -2286,21 +2663,49 @@ function FeedCard({ post, currentUserId, currentUserName, currentUserProfileImag
           </div>
         </div>
       )}
-      {showUnfollowDialog && (
-        <div className="fixed inset-0 z-[1200] flex items-end justify-center pb-[max(var(--space-6),env(safe-area-inset-bottom))] sm:items-center" onClick={() => setShowUnfollowDialog(false)}>
-          <div className="w-full max-w-[340px] rounded-modal border border-app bg-surface p-[var(--space-5)] shadow-elev-2 mx-[var(--space-4)]" onClick={(e) => e.stopPropagation()}>
-            <p className="text-body font-[var(--fw-semibold)] text-app">¿Dejar de seguir a {post.userName}?</p>
-            <p className="mt-[var(--space-1)] text-body-sm text-muted">Dejará de aparecer en tu feed.</p>
-            <div className="mt-[var(--space-4)] flex gap-[var(--space-2)]">
-              <button type="button" onClick={() => setShowUnfollowDialog(false)} className="flex-1 rounded-button border border-app py-[10px] text-body-sm font-[var(--fw-medium)] text-app transition-colors hover:bg-[var(--interactive-hover-surface)]">
-                Cancelar
-              </button>
-              <button type="button" onClick={handleUnfollow} className="flex-1 rounded-button bg-[var(--error-token,#ef4444)] py-[10px] text-body-sm font-[var(--fw-medium)] text-white transition-opacity hover:opacity-80">
+      {unfollowDialogVisible && (
+        <dialog
+          open
+          data-closing={unfollowDialogClosing ? "true" : "false"}
+          className="feed-dialog-overlay fixed inset-0 z-[1200] m-0 flex h-dvh w-dvw max-w-none items-center justify-center bg-black/55 p-[var(--space-4)] text-app backdrop:bg-black/55"
+          onCancel={(e) => { e.preventDefault(); closeUnfollowDialog(); }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) closeUnfollowDialog();
+          }}
+        >
+          <div className="feed-dialog-box w-full max-w-[380px] rounded-[20px] border border-app bg-surface p-[var(--space-5)] shadow-elev-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3">
+              <div className="flex size-[44px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset">
+                {post.avatarImage ? (
+                  <NextImage src={post.avatarImage} alt={post.avatarLabel} width={44} height={44} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
+                ) : (
+                  <span className="text-[15px] font-[800] text-app">{post.avatarLabel}</span>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-[18px] font-[600] leading-tight text-app">Dejar de seguir a {post.userName}</h3>
+              </div>
+            </div>
+            <div className="mt-5 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={confirmUnfollow}
+                className="w-full rounded-[10px] bg-[var(--error-token,#ef4444)] px-4 py-[11px] text-[14px] font-[600] text-white transition-opacity hover:opacity-90"
+              >
                 Dejar de seguir
               </button>
+              <form method="dialog">
+                <button
+                  type="button"
+                  onClick={closeUnfollowDialog}
+                  className="w-full rounded-[10px] border border-app px-4 py-[11px] text-[14px] font-[500] text-app transition-colors hover:border-app hover:bg-black/[0.04] dark:hover:bg-white/[0.08]"
+                >
+                  Cancelar
+                </button>
+              </form>
             </div>
           </div>
-        </div>
+        </dialog>
       )}
     </article>
   );
@@ -2364,9 +2769,5 @@ function SmileyIcon() {
 }
 
 function CloseIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  );
+  return <CloseX className="size-5" />;
 }

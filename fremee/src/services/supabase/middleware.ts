@@ -10,7 +10,7 @@ export const createMiddlewareClient = (request: NextRequest) => {
     request: { headers: request.headers },
   });
 
-  const supabase = createServerClient(supabaseUrl!, supabaseAnonKey!, {
+  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {
       getAll() {
         return request.cookies.getAll();

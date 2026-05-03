@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ChevronLeftIcon } from "@/components/icons";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import {
   listActiveFriendFlightsEndpoint,
@@ -9,6 +10,39 @@ import {
 } from "@/services/api/endpoints/wallet.endpoint";
 import type { PlanTicket } from "@/services/api/endpoints/wallet.endpoint";
 import { flightProgressFromPosition, flightProgressFromTime, AIRPORTS } from "@/lib/airports";
+import { buildOpenSkyStatesUrl } from "@/config/external";
+
+// ── Time-of-day theming ───────────────────────────────────────────────────────
+
+type DayPhase = "night" | "dawn" | "day" | "dusk";
+
+function getDayPhase(hour: number): DayPhase {
+  if (hour >= 5  && hour < 7)  return "dawn";
+  if (hour >= 7  && hour < 19) return "day";
+  if (hour >= 19 && hour < 21) return "dusk";
+  return "night";
+}
+
+const SKY_GRADIENTS: Record<DayPhase, string> = {
+  day:   "linear-gradient(180deg,#b8d4f0 0%,#cde4f7 50%,#daeeff 100%)",
+  dawn:  "linear-gradient(180deg,#f7c59f 0%,#f4a261 30%,#e8c4a0 60%,#d4e8f7 100%)",
+  dusk:  "linear-gradient(180deg,#2d1b69 0%,#c0392b 30%,#e67e22 60%,#f39c12 100%)",
+  night: "linear-gradient(180deg,#060d1f 0%,#0a1628 40%,#0d2040 70%,#142850 100%)",
+};
+
+const SEA_GRADIENTS: Record<DayPhase, string> = {
+  day:   "linear-gradient(180deg,#062d45 0%,#0a5070 35%,#1282a2 70%,#23b5d3 100%)",
+  dawn:  "linear-gradient(180deg,#1a3a5c 0%,#1a6080 35%,#2e8fa5 60%,#f4a261 100%)",
+  dusk:  "linear-gradient(180deg,#1a0a2e 0%,#2c1654 30%,#7b2d8b 60%,#c0392b 100%)",
+  night: "linear-gradient(180deg,#020b14 0%,#041525 35%,#062035 70%,#082a42 100%)",
+};
+
+const SKY_TEXT: Record<DayPhase, string> = {
+  day:   "#1a3a6b",
+  dawn:  "#7a2e00",
+  dusk:  "#ffffff",
+  night: "#ffffff",
+};
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -23,31 +57,16 @@ type FlightPosition = {
   updated_at:  string;
 };
 
-type VesselPosition = {
-  mmsi:        string;
-  name:        string | null;
-  latitude:    number;
-  longitude:   number;
-  sog:         number | null; // speed over ground (knots)
-  cog:         number | null; // course over ground
-  heading:     number | null;
-  destination: string | null;
-  updated_at:  string;
-};
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-const AISHUB_KEY = process.env.NEXT_PUBLIC_AISHUB_KEY ?? "";
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function FlightsPage() {
   const router = useRouter();
-  const [flights,   setFlights]   = useState<PlanTicket[]>([]);
-  const [ferries,   setFerries]   = useState<PlanTicket[]>([]);
+  const [nowTs, setNowTs]       = useState(() => Date.now());
+  const [flights,   setFlights] = useState<PlanTicket[]>([]);
+  const [ferries,   setFerries] = useState<PlanTicket[]>([]);
   const [positions, setPositions] = useState<Record<string, FlightPosition>>({});
-  const [vessels,   setVessels]   = useState<Record<string, VesselPosition>>({});
-  const [loading,   setLoading]   = useState(true);
+  const [loading,   setLoading] = useState(true);
 
   async function refreshAll() {
     const [f, v] = await Promise.allSettled([
@@ -61,9 +80,9 @@ export default function FlightsPage() {
 
   // ── Flight polling (OpenSky) ──────────────────────────────────────────────
 
-  const flightPollRef  = useRef<ReturnType<typeof setInterval> | null>(null);
-  const flightsRef     = useRef<PlanTicket[]>([]);
-  flightsRef.current   = flights;
+  const flightPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const flightsRef    = useRef<PlanTicket[]>([]);
+  flightsRef.current  = flights;
 
   async function pollFlight(ticket: PlanTicket) {
     const callsign = ticket.booking_code?.trim();
@@ -72,8 +91,7 @@ export default function FlightsPage() {
 
     if (isCapacitor) {
       try {
-        const padded = callsign.padEnd(8, " ");
-        const url = `https://opensky-network.org/api/states/all?callsign=${encodeURIComponent(padded)}`;
+        const url = buildOpenSkyStatesUrl(callsign);
         const res = await fetch(url, { headers: { Accept: "application/json" } });
         if (!res.ok) return;
         const data = await res.json() as { states: unknown[][] | null };
@@ -111,40 +129,12 @@ export default function FlightsPage() {
     }
   }
 
-  // ── Ferry polling (AISHub) ────────────────────────────────────────────────
+  async function pollAllFlights() { for (const t of flightsRef.current) await pollFlight(t); }
 
-  const ferryPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const ferriesRef   = useRef<PlanTicket[]>([]);
-  ferriesRef.current = ferries;
-
-  async function pollVessel(ticket: PlanTicket) {
-    const mmsi = ticket.booking_code?.trim();
-    if (!mmsi || !AISHUB_KEY) return;
-    try {
-      const url = `https://data.aishub.net/ws.php?username=${AISHUB_KEY}&format=1&output=json&compress=0&mmsi=${mmsi}`;
-      const res = await fetch(url, { headers: { Accept: "application/json" } });
-      if (!res.ok) return;
-      const raw = await res.json() as unknown[];
-      if (!Array.isArray(raw) || raw.length < 2) return;
-      const d = raw[1] as Record<string, unknown>;
-      if (!d.LATITUDE || !d.LONGITUDE) return;
-      const pos: VesselPosition = {
-        mmsi:        String(d.MMSI),
-        name:        d.NAME ? String(d.NAME) : null,
-        latitude:    Number(d.LATITUDE),
-        longitude:   Number(d.LONGITUDE),
-        sog:         d.SOG != null ? Number(d.SOG) : null,
-        cog:         d.COG != null ? Number(d.COG) : null,
-        heading:     d.HEADING != null ? Number(d.HEADING) : null,
-        destination: d.DEST ? String(d.DEST) : null,
-        updated_at:  new Date().toISOString(),
-      };
-      setVessels(prev => ({ ...prev, [pos.mmsi]: pos }));
-    } catch { /* silent */ }
-  }
-
-  async function pollAllFlights()  { for (const t of flightsRef.current)  await pollFlight(t); }
-  async function pollAllVessels()  { for (const t of ferriesRef.current)   await pollVessel(t); }
+  useEffect(() => {
+    const interval = setInterval(() => setNowTs(Date.now()), 30_000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     refreshAll();
@@ -178,7 +168,6 @@ export default function FlightsPage() {
       supabase.removeChannel(ticketsChannel);
       supabase.removeChannel(positionsChannel);
       if (flightPollRef.current) clearInterval(flightPollRef.current);
-      if (ferryPollRef.current)  clearInterval(ferryPollRef.current);
     };
   }, []);
 
@@ -191,21 +180,12 @@ export default function FlightsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flights]);
 
-  useEffect(() => {
-    if (ferryPollRef.current) clearInterval(ferryPollRef.current);
-    if (ferries.length === 0) return;
-    pollAllVessels();
-    ferryPollRef.current = setInterval(pollAllVessels, 60_000); // AISHub: 60s
-    return () => { if (ferryPollRef.current) clearInterval(ferryPollRef.current); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ferries]);
-
   const hasFlights = flights.length > 0;
   const hasFerries = ferries.length > 0;
   const isEmpty    = !hasFlights && !hasFerries;
 
   return (
-    <main className="min-h-screen px-safe pt-[var(--space-6)] pb-[calc(var(--space-20)+env(safe-area-inset-bottom))]">
+    <main className="min-h-screen px-safe pt-[calc(env(safe-area-inset-top)+var(--space-6))] pb-[calc(var(--space-20)+env(safe-area-inset-bottom))]">
       <div className="mx-auto w-full max-w-[420px] px-4">
 
         <div className="mb-6 flex items-center gap-3">
@@ -214,7 +194,7 @@ export default function FlightsPage() {
             onClick={() => router.back()}
             className="flex size-9 items-center justify-center rounded-full text-app transition-opacity hover:opacity-70"
           >
-            <BackIcon className="size-5" />
+            <ChevronLeftIcon className="size-5" />
           </button>
           <h1 className="text-[20px] font-[var(--fw-bold)] text-app">En ruta</h1>
         </div>
@@ -250,6 +230,7 @@ export default function FlightsPage() {
                     key={ticket.id}
                     ticket={ticket}
                     position={ticket.booking_code ? positions[ticket.booking_code.trim()] ?? null : null}
+                    nowTs={nowTs}
                   />
                 ))}
               </section>
@@ -264,7 +245,7 @@ export default function FlightsPage() {
                   <FerryWidget
                     key={ticket.id}
                     ticket={ticket}
-                    position={ticket.booking_code ? vessels[ticket.booking_code.trim()] ?? null : null}
+                    nowTs={nowTs}
                   />
                 ))}
               </section>
@@ -278,7 +259,7 @@ export default function FlightsPage() {
 
 // ── FlightWidget ──────────────────────────────────────────────────────────────
 
-function FlightWidget({ ticket, position }: { ticket: PlanTicket; position: FlightPosition | null }) {
+function FlightWidget({ ticket, position, nowTs }: { ticket: PlanTicket; position: FlightPosition | null; nowTs: number }) {
   const from = ticket.from_label ?? "";
   const to   = ticket.to_label   ?? "";
 
@@ -286,7 +267,7 @@ function FlightWidget({ ticket, position }: { ticket: PlanTicket; position: Flig
     ? (flightProgressFromPosition(from, to, position.latitude, position.longitude) ?? flightProgressFromTime(ticket.starts_at, ticket.ends_at ?? ticket.starts_at))
     : flightProgressFromTime(ticket.starts_at, ticket.ends_at ?? ticket.starts_at);
 
-  const PLANE_W  = 72;
+  const PLANE_W  = 64;
   const trackRef = useRef<HTMLDivElement>(null);
   const [trackW, setTrackW] = useState(0);
 
@@ -297,68 +278,99 @@ function FlightWidget({ ticket, position }: { ticket: PlanTicket; position: Flig
     return () => ro.disconnect();
   }, []);
 
-  const planeX   = progress * Math.max(0, trackW - PLANE_W);
-  const speedKmh = position?.velocity_ms ? Math.round(position.velocity_ms * 3.6) : null;
-  const altKm    = position?.altitude_m  ? (position.altitude_m / 1000).toFixed(1) : null;
+  const planeX = progress * Math.max(0, trackW - PLANE_W);
+  void nowTs;
 
-  const originCity = AIRPORTS[from.toUpperCase()]?.city ?? from;
-  const destCity   = AIRPORTS[to.toUpperCase()]?.city   ?? to;
+  const phase = getDayPhase(new Date().getHours());
+  const skyBg = SKY_GRADIENTS[phase];
+  const textColor = SKY_TEXT[phase];
+  const isLight = phase === "day" || phase === "dawn";
 
-  const staleMs = position ? Date.now() - new Date(position.updated_at).getTime() : null;
-  const isStale = staleMs != null && staleMs > 90_000;
+  const aereolineaLabel = ticket.title ?? "Vuelo";
+  const pct = Math.round(progress * 100);
+
+  const remainingLabel = (() => {
+    if (!ticket.ends_at) return null;
+    const msLeft = new Date(ticket.ends_at).getTime() - Date.now();
+    if (msLeft <= 0) return "Aterrizado";
+    const totalMin = Math.round(msLeft / 60_000);
+    const h = Math.floor(totalMin / 60);
+    const m = totalMin % 60;
+    if (h === 0) return `${m}min`;
+    if (m === 0) return `${h}h`;
+    return `${h}h ${m}min`;
+  })();
 
   return (
-    <div className="overflow-hidden rounded-[20px] shadow-[0_4px_24px_rgba(0,0,0,0.12)]">
+    <div
+      className="overflow-hidden rounded-[24px]"
+      style={{ boxShadow: "0 8px 32px rgba(26,58,107,0.22)" }}
+    >
+      {/* ── Cielo ── */}
       <div
         className="relative overflow-hidden"
-        style={{ height: 130, background: "linear-gradient(180deg,#b8d4f0 0%,#cde4f7 60%,#daeeff 100%)" }}
+        style={{ height: 148, background: skyBg }}
       >
-        <CloudRow y={8}  speed={28} opacity={0.9} scale={1}   delay={0}  />
-        <CloudRow y={36} speed={40} opacity={0.6} scale={0.7} delay={8}  />
-        <CloudRow y={60} speed={22} opacity={0.4} scale={1.1} delay={14} />
+        {ticket.booking_code && (
+          <div className="absolute right-3 top-3 rounded-md px-2 py-0.5"
+            style={{ background: isLight ? "rgba(26,58,107,0.1)" : "rgba(255,255,255,0.12)", backdropFilter: "blur(4px)" }}>
+            <span className="text-[10px] font-bold tracking-widest" style={{ color: isLight ? `${textColor}99` : "rgba(255,255,255,0.7)" }}>{ticket.booking_code}</span>
+          </div>
+        )}
 
-        <div className="absolute inset-x-5 top-3 flex justify-between">
-          <span className="text-[22px] font-black leading-none text-[#1a3a6b]">{from || "—"}</span>
-          <span className="text-[22px] font-black leading-none text-[#1a3a6b]">{to   || "—"}</span>
+        <div className="absolute inset-x-0 top-4 flex items-center justify-center gap-3">
+          <span className="text-[26px] font-black leading-none tracking-tight drop-shadow-sm" style={{ color: textColor }}>{from || "—"}</span>
+          <span className="text-[14px] font-light" style={{ color: `${textColor}60` }}>⟶</span>
+          <span className="text-[26px] font-black leading-none tracking-tight drop-shadow-sm" style={{ color: textColor }}>{to || "—"}</span>
         </div>
 
-        <div ref={trackRef} className="absolute left-6 right-6" style={{ bottom: 18 }}>
+        <CloudRow y={55}  speed={28} opacity={isLight ? 0.9 : 0.08} scale={1}   delay={0}  />
+        <CloudRow y={80}  speed={40} opacity={isLight ? 0.6 : 0.05} scale={0.7} delay={8}  />
+        <CloudRow y={100} speed={22} opacity={isLight ? 0.4 : 0.04} scale={1.1} delay={14} />
+
+        <div ref={trackRef} className="absolute left-8 right-8" style={{ bottom: 18 }}>
           <div
-            className="plane-bob absolute"
-            style={{ bottom: 10, left: planeX, width: PLANE_W, transition: "left 2s linear", zIndex: 1 }}
+            className="absolute"
+            style={{ bottom: 6, left: planeX, width: PLANE_W, transition: "left 2.5s ease-in-out", zIndex: 4 }}
           >
             <PlaneSvg size={PLANE_W} />
-          </div>
-          <div className="relative" style={{ zIndex: 2 }}>
-            <div className="absolute left-0 right-0" style={{ top: 6, height: 2, background: "rgba(26,58,107,0.15)", borderRadius: 1 }} />
-            <div className="absolute left-0" style={{ top: 6, height: 2, width: `${progress * 100}%`, background: "#1a3a6b", borderRadius: 1, transition: "width 2s linear" }} />
-            <div className="absolute" style={{ left: -6, top: 0, width: 14, height: 14, borderRadius: "50%", background: "#1a3a6b", border: "2.5px solid white", boxShadow: "0 1px 4px rgba(0,0,0,0.2)" }} />
-            <div className="absolute" style={{ right: -6, top: 0, width: 14, height: 14, borderRadius: "50%", background: "white", border: "2.5px solid #1a3a6b", boxShadow: "0 1px 4px rgba(0,0,0,0.15)" }} />
           </div>
         </div>
       </div>
 
-      <div className="flex items-center gap-3 bg-white px-4 py-3">
-        <div
-          className="flex size-8 shrink-0 items-center justify-center rounded-full text-[13px] font-bold text-white"
-          style={{ background: "#1a3a6b" }}
-        >
-          {(ticket.shared_by_nombre ?? "?")[0].toUpperCase()}
+      {/* ── Info strip ── */}
+      <div style={{ background: "#ffffff" }}>
+        <div className="h-[3px] w-full" style={{ background: "#e8eef5" }}>
+          <div
+            className="h-full"
+            style={{
+              width: `${pct}%`,
+              background: "linear-gradient(90deg,#1a3a6b,#2d6aad)",
+              transition: "width 2s linear",
+              borderRadius: "0 2px 2px 0",
+            }}
+          />
         </div>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-[13px] font-semibold text-[#1a3a6b]">
-            {ticket.shared_by_nombre} · {originCity} → {destCity}
-          </p>
-          <p className="mt-0.5 text-[11px] text-[#2d6aad]/70">
-            {position?.on_ground
-              ? "En tierra"
-              : `${Math.round(progress * 100)}% del trayecto${isStale ? " · actualizando…" : ""}`}
-          </p>
-        </div>
-        <div className="shrink-0 text-right">
-          <p className="text-[11px] font-bold tracking-widest text-[#1a3a6b]/60">{ticket.booking_code}</p>
-          {speedKmh && (
-            <p className="mt-0.5 text-[11px] text-[#2d6aad]/50">{speedKmh} km/h · {altKm} km</p>
+        <div className="flex items-center gap-3 px-4 py-3">
+          <div
+            className="flex size-9 shrink-0 items-center justify-center rounded-full text-[13px] font-bold text-white"
+            style={{ background: "linear-gradient(135deg,#0d1f3c,#2d6aad)" }}
+          >
+            {(ticket.shared_by_nombre ?? "?")[0].toUpperCase()}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[13px] font-semibold leading-tight text-[#0d1f3c]">
+              {ticket.shared_by_nombre}
+            </p>
+            <p className="mt-0.5 truncate text-[11px] text-[#2d6aad]/70">{aereolineaLabel}</p>
+          </div>
+          {remainingLabel && (
+            <div className="shrink-0 text-right">
+              <p className="text-[13px] font-bold tabular-nums text-[#2d6aad]">{remainingLabel}</p>
+              <p className="mt-0.5 text-[10px] text-[#0d1f3c]/40">
+                {position?.on_ground ? "En tierra" : "restante"}
+              </p>
+            </div>
           )}
         </div>
       </div>
@@ -368,13 +380,13 @@ function FlightWidget({ ticket, position }: { ticket: PlanTicket; position: Flig
 
 // ── FerryWidget ───────────────────────────────────────────────────────────────
 
-function FerryWidget({ ticket, position }: { ticket: PlanTicket; position: VesselPosition | null }) {
+function FerryWidget({ ticket, nowTs }: { ticket: PlanTicket; nowTs: number }) {
   const from = ticket.from_label ?? "";
   const to   = ticket.to_label   ?? "";
 
-  const progress  = flightProgressFromTime(ticket.starts_at, ticket.ends_at ?? ticket.starts_at);
+  const progress = flightProgressFromTime(ticket.starts_at, ticket.ends_at ?? ticket.starts_at);
 
-  const BOAT_W   = 56;
+  const BOAT_W   = 52;
   const trackRef = useRef<HTMLDivElement>(null);
   const [trackW, setTrackW] = useState(0);
 
@@ -385,69 +397,106 @@ function FerryWidget({ ticket, position }: { ticket: PlanTicket; position: Vesse
     return () => ro.disconnect();
   }, []);
 
-  const boatX    = progress * Math.max(0, trackW - BOAT_W);
-  const speedKn  = position?.sog ? Math.round(position.sog) : null;
+  const boatX = progress * Math.max(0, trackW - BOAT_W);
+  void nowTs;
 
-  const staleMs  = position ? Date.now() - new Date(position.updated_at).getTime() : null;
-  const isStale  = staleMs != null && staleMs > 180_000;
+  const phase = getDayPhase(new Date().getHours());
+  const seaBg = SEA_GRADIENTS[phase];
+
+  const companiaLabel = ticket.title ?? "Ferry";
+  const pct = Math.round(progress * 100);
+
+  const remainingLabel = (() => {
+    if (!ticket.ends_at) return null;
+    const msLeft = new Date(ticket.ends_at).getTime() - Date.now();
+    if (msLeft <= 0) return "Llegado";
+    const totalMin = Math.round(msLeft / 60_000);
+    const h = Math.floor(totalMin / 60);
+    const m = totalMin % 60;
+    if (h === 0) return `${m}min`;
+    if (m === 0) return `${h}h`;
+    return `${h}h ${m}min`;
+  })();
 
   return (
-    <div className="overflow-hidden rounded-[20px] shadow-[0_4px_24px_rgba(0,0,0,0.12)]">
-      {/* Sea */}
+    <div
+      className="overflow-hidden rounded-[24px]"
+      style={{ boxShadow: "0 8px 32px rgba(10,61,92,0.22)" }}
+    >
+      {/* ── Mar ── */}
       <div
         className="relative overflow-hidden"
-        style={{ height: 130, background: "linear-gradient(180deg,#0a3d5c 0%,#0e6b8c 40%,#1a9abd 70%,#2ab8d9 100%)" }}
+        style={{ height: 148, background: seaBg }}
       >
-        {/* Wave layers */}
-        <WaveRow y={55}  speed={6}  opacity={0.35} amplitude={6}  />
-        <WaveRow y={70}  speed={9}  opacity={0.5}  amplitude={8}  />
-        <WaveRow y={85}  speed={7}  opacity={0.7}  amplitude={5}  />
-        <WaveRow y={100} speed={5}  opacity={0.9}  amplitude={9}  />
+        {/* Estrellas / horizon glow */}
+        <div className="absolute inset-x-0 top-0 h-16 opacity-30"
+          style={{ background: "radial-gradient(ellipse 80% 60% at 50% 0%,rgba(100,200,255,0.4),transparent)" }} />
 
-        {/* Port labels */}
-        <div className="absolute inset-x-5 top-3 flex justify-between">
-          <span className="text-[22px] font-black leading-none text-white/90">{from || "—"}</span>
-          <span className="text-[22px] font-black leading-none text-white/90">{to   || "—"}</span>
+        {/* Código en esquina */}
+        {ticket.booking_code && (
+          <div className="absolute right-3 top-3 rounded-md px-2 py-0.5"
+            style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(4px)" }}>
+            <span className="text-[10px] font-bold tracking-widest text-white/70">{ticket.booking_code}</span>
+          </div>
+        )}
+
+        {/* Ruta centrada */}
+        <div className="absolute inset-x-0 top-4 flex items-center justify-center gap-3">
+          <span className="text-[26px] font-black leading-none tracking-tight text-white drop-shadow-sm">{from || "—"}</span>
+          <span className="text-[14px] font-light text-white/40">⟶</span>
+          <span className="text-[26px] font-black leading-none tracking-tight text-white drop-shadow-sm">{to || "—"}</span>
         </div>
 
-        {/* Boat track */}
-        <div ref={trackRef} className="absolute left-6 right-6" style={{ bottom: 16 }}>
+        {/* Olas */}
+        <WaveRow y={68}  speed={8}  opacity={0.18} amplitude={5}  />
+        <WaveRow y={82}  speed={11} opacity={0.35} amplitude={7}  />
+        <WaveRow y={96}  speed={7}  opacity={0.55} amplitude={5}  />
+        <WaveRow y={110} speed={5}  opacity={0.85} amplitude={8}  />
+
+        {/* Barco + track */}
+        <div ref={trackRef} className="absolute left-8 right-8" style={{ bottom: 14 }}>
           <div
             className="absolute"
-            style={{ bottom: 8, left: boatX, width: BOAT_W, transition: "left 2s linear", zIndex: 3 }}
+            style={{ bottom: 6, left: boatX, width: BOAT_W, transition: "left 2.5s ease-in-out", zIndex: 4 }}
           >
             <BoatSvg size={BOAT_W} />
-          </div>
-          <div className="relative" style={{ zIndex: 2 }}>
-            {/* Wake line */}
-            <div className="absolute left-0 right-0" style={{ top: 6, height: 2, background: "rgba(255,255,255,0.15)", borderRadius: 1 }} />
-            <div className="absolute left-0" style={{ top: 6, height: 2, width: `${progress * 100}%`, background: "rgba(255,255,255,0.5)", borderRadius: 1, transition: "width 2s linear" }} />
-            <div className="absolute" style={{ left: -6, top: 0, width: 14, height: 14, borderRadius: "50%", background: "white", border: "2.5px solid rgba(255,255,255,0.5)", boxShadow: "0 1px 4px rgba(0,0,0,0.3)" }} />
-            <div className="absolute" style={{ right: -6, top: 0, width: 14, height: 14, borderRadius: "50%", background: "transparent", border: "2.5px solid rgba(255,255,255,0.5)", boxShadow: "0 1px 4px rgba(0,0,0,0.2)" }} />
           </div>
         </div>
       </div>
 
-      {/* Info strip */}
-      <div className="flex items-center gap-3 bg-white px-4 py-3">
-        <div
-          className="flex size-8 shrink-0 items-center justify-center rounded-full text-[13px] font-bold text-white"
-          style={{ background: "#0a3d5c" }}
-        >
-          {(ticket.shared_by_nombre ?? "?")[0].toUpperCase()}
+      {/* ── Info strip ── */}
+      <div style={{ background: "#ffffff" }}>
+        {/* Progress bar */}
+        <div className="h-[3px] w-full" style={{ background: "#e8f4fb" }}>
+          <div
+            className="h-full"
+            style={{
+              width: `${pct}%`,
+              background: "linear-gradient(90deg,#1282a2,#23b5d3)",
+              transition: "width 2s linear",
+              borderRadius: "0 2px 2px 0",
+            }}
+          />
         </div>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-[13px] font-semibold text-[#0a3d5c]">
-            {ticket.shared_by_nombre} · {from} → {to}
-          </p>
-          <p className="mt-0.5 text-[11px] text-[#0e6b8c]/70">
-            {`${Math.round(progress * 100)}% del trayecto${isStale ? " · actualizando…" : ""}`}
-          </p>
-        </div>
-        <div className="shrink-0 text-right">
-          <p className="text-[11px] font-bold tracking-widest text-[#0a3d5c]/60">{ticket.booking_code}</p>
-          {speedKn && (
-            <p className="mt-0.5 text-[11px] text-[#0e6b8c]/50">{speedKn} kn</p>
+
+        <div className="flex items-center gap-3 px-4 py-3">
+          <div
+            className="flex size-9 shrink-0 items-center justify-center rounded-full text-[13px] font-bold text-white"
+            style={{ background: "linear-gradient(135deg,#062d45,#1282a2)" }}
+          >
+            {(ticket.shared_by_nombre ?? "?")[0].toUpperCase()}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[13px] font-semibold leading-tight text-[#062d45]">
+              {ticket.shared_by_nombre}
+            </p>
+            <p className="mt-0.5 truncate text-[11px] text-[#1282a2]/70">{companiaLabel}</p>
+          </div>
+          {remainingLabel && (
+            <div className="shrink-0 text-right">
+              <p className="text-[13px] font-bold tabular-nums text-[#1282a2]">{remainingLabel}</p>
+              <p className="mt-0.5 text-[10px] text-[#062d45]/40">restante</p>
+            </div>
           )}
         </div>
       </div>
@@ -490,11 +539,9 @@ function CloudRow({ y, speed, opacity, scale, delay }: {
 function WaveRow({ y, speed, opacity, amplitude }: {
   y: number; speed: number; opacity: number; amplitude: number;
 }) {
-  // SVG sinusoidal wave that tiles horizontally
   const w = 400;
   const h = amplitude * 2 + 4;
   const mid = h / 2;
-  // Build a smooth wave path
   const pts: string[] = [];
   for (let x = 0; x <= w; x += 2) {
     const yy = mid + amplitude * Math.sin((x / w) * Math.PI * 4);
@@ -528,30 +575,21 @@ function PlaneSvg({ size = 72 }: { size?: number }) {
   );
 }
 
-// ── Boat SVG (placeholder — reemplazar con el SVG real) ───────────────────────
+// ── Boat SVG ──────────────────────────────────────────────────────────────────
 
 function BoatSvg({ size = 56 }: { size?: number }) {
-  // TODO: reemplazar con el SVG del barco real cuando lo proporcione el usuario
   return (
-    <svg viewBox="0 0 64 40" aria-hidden="true" style={{ width: size, height: size * (40 / 64) }}>
-      {/* Casco */}
-      <path d="M8 24 L56 24 L50 34 Q32 38 14 34 Z" fill="white" />
-      {/* Cubierta */}
-      <rect x="20" y="16" width="24" height="8" rx="1" fill="#e8eef5" />
-      {/* Superestructura */}
-      <rect x="26" y="10" width="14" height="6" rx="1" fill="white" />
-      {/* Chimenea */}
-      <rect x="31" y="5" width="4" height="5" rx="1" fill="#cc2222" />
-      {/* Línea de flotación */}
-      <line x1="8" y1="28" x2="56" y2="28" stroke="#1a3a6b" strokeWidth="1.5" opacity="0.3" />
-    </svg>
-  );
-}
-
-function BackIcon({ className = "size-5" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    <svg
+      viewBox="0 0 1280 640"
+      aria-hidden="true"
+      style={{ width: size, height: size * (640 / 1280) }}
+    >
+      <g transform="translate(0,640) scale(0.1,-0.1)" fill="#062d45" stroke="none">
+        <path d="M2255 4856 c-27 -7 -63 -19 -80 -26 l-30 -13 31 -7 c60 -13 72 -34 26 -45 -16 -3 -39 -19 -50 -35 l-22 -29 41 14 c23 8 63 15 90 15 69 0 95 13 102 49 4 17 4 45 1 61 -7 34 -25 37 -109 16z"/>
+        <path d="M10630 4731 c-54 -17 -120 -48 -120 -55 0 -2 8 -2 18 1 10 2 31 -1 47 -8 l30 -12 -45 -8 c-25 -4 -205 -15 -400 -23 -334 -16 -438 -20 -970 -46 -709 -34 -1758 -73 -2695 -100 -508 -15 -1216 -12 -1525 5 -662 38 -1736 139 -2545 241 -29 4 -46 3 -42 -2 9 -10 18 -11 662 -83 406 -45 899 -94 1235 -121 69 -6 152 -13 185 -15 207 -18 510 -36 765 -46 540 -22 2075 20 4045 111 848 39 1071 50 1168 56 53 4 97 3 97 -1 0 -5 -7 -17 -17 -27 -25 -27 -12 -30 45 -8 29 11 70 20 91 20 22 0 46 7 55 15 8 8 19 15 25 15 8 0 8 6 2 18 -6 9 -13 34 -16 55 -7 43 -13 44 -95 18z"/>
+        <path d="M1680 3695 l-715 -974 -295 0 -295 -1 -100 155 -100 154 -35 -26 c-46 -34 -130 -115 -130 -125 0 -5 9 -4 19 2 25 13 71 13 71 1 0 -6 -9 -16 -20 -24 -13 -9 -23 -30 -26 -53 l-6 -39 27 33 c15 18 52 47 83 64 30 17 57 40 60 50 3 15 22 -7 72 -84 36 -57 63 -105 59 -108 -5 -3 -1 -33 8 -66 15 -54 22 -65 62 -92 25 -17 82 -45 126 -63 100 -41 135 -73 135 -126 0 -42 -16 -72 -83 -152 -76 -90 -83 -156 -37 -337 48 -191 118 -270 295 -331 l80 -28 5500 3 c5489 3 5500 3 5620 23 277 48 478 117 564 194 64 58 83 117 92 290 5 108 18 204 45 340 21 105 40 220 42 258 l4 67 -47 0 -46 0 1 108 c1 59 1 112 1 118 -1 7 -11 12 -23 12 -13 0 -60 3 -105 7 -60 6 -83 5 -83 -4 0 -6 6 -11 13 -11 15 0 64 -37 57 -43 -3 -2 -24 -7 -48 -10 l-42 -5 -867 853 c-477 470 -869 852 -872 850 -2 -3 1 -11 7 -18 7 -8 8 -17 4 -21 -4 -4 -2 -6 4 -4 14 4 67 -48 904 -872 349 -344 675 -664 724 -711 49 -47 85 -89 80 -92 -14 -8 -1628 1290 -1635 1316 -3 12 -19 93 -35 181 -15 87 -30 154 -32 148 -1 -5 9 -77 23 -160 14 -82 25 -156 25 -164 0 -11 -18 -17 -66 -22 -37 -4 -68 -5 -70 -3 -2 1 15 77 37 167 22 91 38 171 36 180 -2 8 -23 -67 -47 -167 l-44 -183 -31 -5 c-29 -5 -1288 -135 -1306 -135 -5 0 -9 7 -9 16 0 19 4 19 -232 -12 -146 -19 -135 -8 -118 -128 9 -58 8 -71 -4 -78 -8 -4 -12 -16 -10 -25 5 -22 104 -783 104 -800 0 -10 -126 -13 -619 -13 l-619 0 -5 28 c-3 15 -29 212 -57 437 -44 337 -56 413 -71 425 -12 11 -19 37 -24 93 -5 48 -12 80 -20 83 -12 5 -334 -34 -346 -42 -5 -3 3 -89 15 -156 4 -21 1 -28 -10 -28 -11 0 -14 -8 -10 -32 3 -18 26 -190 51 -383 25 -192 48 -367 51 -387 l6 -38 -649 0 -649 0 -53 413 c-66 508 -61 477 -76 477 -9 0 -17 30 -26 90 -9 71 -15 90 -28 90 -24 0 -335 -42 -340 -46 -1 -1 2 -42 9 -90 9 -69 9 -89 -1 -95 -10 -6 -2 -87 35 -376 27 -202 51 -389 54 -415 l5 -48 -581 0 -580 0 -10 68 c-5 37 -31 237 -58 444 -35 266 -53 378 -61 378 -14 0 -20 20 -31 110 l-7 65 -40 -1 c-22 0 -102 -9 -179 -19 l-139 -18 7 -70 c4 -39 9 -81 12 -94 5 -17 2 -23 -10 -23 -14 0 -16 -7 -11 -32 5 -33 105 -793 105 -804 0 -30 -140 106 -785 766 -411 421 -784 802 -829 847 l-81 82 -715 -974z m841 828 c63 -65 423 -433 799 -817 377 -385 678 -696 669 -690 -8 5 -353 287 -766 627 l-751 617 -10 48 c-6 26 -16 82 -23 125 -6 43 -14 75 -16 73 -3 -3 2 -49 11 -103 108 -663 256 -1593 256 -1605 0 -4 -47 -8 -105 -8 l-105 0 0 -80 0 -80 -325 0 -325 0 0 40 0 40 -425 0 c-234 0 -425 3 -425 6 0 10 1411 1924 1419 1924 4 0 59 -53 122 -117z m739 -928 l754 -620 -432 -3 -432 -2 0 -90 0 -90 -212 2 -212 3 -43 245 c-24 135 -79 452 -124 705 -44 253 -82 468 -85 479 -6 17 -4 17 13 5 11 -8 359 -293 773 -634z m7560 537 c0 -10 -43 -142 -96 -293 -235 -672 -384 -1099 -390 -1124 -3 -14 -8 -24 -10 -22 -2 2 36 172 86 378 50 206 104 430 120 499 16 69 54 224 83 345 l53 220 54 6 c99 10 100 10 100 -9z m-174 -19 c-3 -10 -24 -97 -47 -193 -23 -96 -54 -227 -69 -290 -193 -805 -241 -1007 -245 -1018 -4 -11 -16 -8 -49 12 -25 14 -64 28 -88 30 l-43 4 -3 66 -3 66 -59 0 -60 0 0 90 0 90 -255 0 c-207 0 -255 3 -255 13 0 8 -22 182 -49 388 -27 206 -53 400 -56 432 -5 37 -12 57 -21 57 -8 0 -15 18 -19 48 -14 95 -26 85 120 100 72 7 355 37 630 66 587 63 578 62 571 39z m1801 -1272 l182 -146 -82 -3 c-611 -20 -1433 -39 -1438 -34 -3 4 -34 160 -68 347 -34 187 -93 510 -131 719 -39 208 -70 385 -70 392 0 7 321 -244 713 -558 391 -314 794 -637 894 -717z m-1502 515 c62 -386 112 -702 111 -703 -1 -1 -50 -3 -110 -4 l-108 -1 -21 -35 -20 -35 -246 7 c-135 4 -246 8 -247 9 -1 0 40 118 91 261 50 143 167 478 260 744 93 266 171 478 173 471 3 -7 55 -329 117 -714z m1590 -558 l40 -42 -42 33 c-45 34 -60 51 -46 51 5 0 27 -19 48 -42z m79 15 c34 -11 42 -11 63 2 l23 15 0 -68 c0 -92 -16 -92 -111 4 -80 81 -78 83 25 47z"/>
+        <path d="M2412 4540 c0 -14 2 -19 5 -12 2 6 2 18 0 25 -3 6 -5 1 -5 -13z"/>
+      </g>
     </svg>
   );
 }

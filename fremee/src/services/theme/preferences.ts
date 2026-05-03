@@ -1,6 +1,8 @@
+import { STORAGE_KEYS } from "@/config/storage";
+
 export type AppThemePreference = "SYSTEM" | "LIGHT" | "DARK";
 
-const THEME_STORAGE_KEY = "fremee.theme";
+const THEME_STORAGE_KEY = STORAGE_KEYS.themePreference;
 
 export function normalizeThemePreference(value: unknown): AppThemePreference {
   if (value === "SYSTEM" || value === "LIGHT" || value === "DARK") return value;

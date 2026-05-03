@@ -5,6 +5,8 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/providers/AuthProvider";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
+import { ChevronLeft, X, Bell } from "lucide-react";
+import { CloseX } from "@/components/ui/CloseX";
 import {
   listNotificaciones,
   marcarNotificacionesLeidas,
@@ -18,6 +20,7 @@ import {
 // ─── helpers ────────────────────────────────────────────────────────────────
 
 const TIPO_LABELS: Record<string, string> = {
+  follow: "empezó a seguirte.",
   like: "le dio me gusta a tu plan.",
   comment: "comentó tu plan.",
   friend_request: "te envió una solicitud de amistad.",
@@ -107,7 +110,7 @@ function groupByPeriod(notifs: NotificacionDto[]): { label: string; items: Notif
 function Avatar({ src, name }: { src: string | null; name: string | null }) {
   const letter = (name ?? "?")[0].toUpperCase();
   if (src) {
-    return <Image src={src} alt={name ?? ""} width={40} height={40} className="size-10 rounded-full border border-app object-cover shrink-0" unoptimized />;
+    return <Image src={src} alt={name ?? ""} width={40} height={40} className="size-10 rounded-full border border-app object-cover shrink-0" unoptimized referrerPolicy="no-referrer" />;
   }
   return (
     <div className="size-10 rounded-full border border-app bg-[var(--surface-2)] flex items-center justify-center text-body-sm font-[var(--fw-medium)] shrink-0">
@@ -117,6 +120,19 @@ function Avatar({ src, name }: { src: string | null; name: string | null }) {
 }
 
 // ─── NotifItem ───────────────────────────────────────────────────────────────
+
+function NotificationsSkeleton() {
+  return (
+    <div className="flex flex-col gap-[var(--space-4)] px-[var(--space-4)] py-[var(--space-3)]" aria-label="Cargando notificaciones" role="status">
+      {[1, 2, 3].map((i) => (
+        <div key={i} className="flex items-center gap-[var(--space-3)]">
+          <div className="skeleton-shimmer size-12 shrink-0 rounded-full" />
+          <div className="skeleton-shimmer h-[14px] w-[148px] rounded-full" />
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function NotifItem({
   n,
@@ -152,7 +168,7 @@ function NotifItem({
       if (accept) {
         await acceptPlanInvite(Number(n.entity_id), n.id);
         onAction(n.id);
-        onPlanAccepted?.(n.entity_id!);
+        onPlanAccepted?.(n.entity_id);
       } else {
         await rejectPlanInvite(n.id);
         onAction(n.id);
@@ -180,7 +196,7 @@ function NotifItem({
         )}
       </div>
       <div className="min-w-0 flex-1 pt-0.5">
-        <div className="flex min-w-0 flex-col gap-2 md:flex-row md:items-start md:justify-between md:gap-3">
+        <div className="flex min-w-0 items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <p className="text-body-sm leading-snug">
               {n.tipo === "recordatorio_deuda" ? (
@@ -203,7 +219,7 @@ function NotifItem({
           </div>
 
           {(isFriendRequest || isPlanInvite) && (
-            <div className="flex shrink-0 items-center gap-1.5 md:pt-0.5">
+            <div className="flex shrink-0 items-center gap-1.5 pt-0.5">
               <button
                 type="button"
                 disabled={acting}
@@ -216,9 +232,10 @@ function NotifItem({
                 type="button"
                 disabled={acting}
                 onClick={() => void (isFriendRequest ? handleFriend(false) : handlePlanInvite(false))}
-                className="rounded-full border border-[var(--border)] px-3 py-1 text-[14px] font-[var(--fw-semibold)] transition-colors hover:bg-[var(--surface)] disabled:opacity-50"
+                aria-label="Rechazar"
+                className="flex size-8 items-center justify-center rounded-full text-muted transition-colors hover:text-app disabled:opacity-50"
               >
-                Rechazar
+                <X className="size-5" aria-hidden />
               </button>
             </div>
           )}
@@ -230,7 +247,7 @@ function NotifItem({
 
 // ─── panel ──────────────────────────────────────────────────────────────────
 
-interface Props {
+type Props = {
   open: boolean;
   onClose: () => void;
   onRead: () => void; // called when all are marked read → reset badge
@@ -348,7 +365,7 @@ export default function NotificationsPanel({ open, onClose, onRead, desktopPosit
         ref={panelRef}
         role="dialog"
         aria-label="Notificaciones"
-        className={`fixed inset-0 flex h-dvh w-full flex-col bg-[var(--bg)] transition-transform duration-300 [transition-timing-function:var(--ease-standard)] md:inset-auto md:top-0 md:max-w-[408px] md:shadow-elev-3 ${
+        className={`fixed inset-0 flex h-dvh w-full flex-col bg-[var(--bg)] pb-safe transition-transform duration-300 [transition-timing-function:var(--ease-standard)] md:inset-auto md:top-0 md:max-w-[408px] md:shadow-elev-3 md:pb-0 ${
           open ? "translate-x-0" : "translate-x-full"
         } ${
           desktopPosition === "left"
@@ -358,16 +375,14 @@ export default function NotificationsPanel({ open, onClose, onRead, desktopPosit
         style={{ zIndex: "calc(var(--z-modal) + 1)" }}
       >
         {/* Header */}
-        <div className="flex items-center gap-[var(--space-3)] px-[var(--space-4)] py-[var(--space-3)] border-b border-[var(--border)]">
+        <div className="flex items-center gap-[var(--space-3)] border-b border-[var(--border)] px-[var(--space-4)] pb-[var(--space-3)] pt-[max(var(--space-2),env(safe-area-inset-top))] md:py-[var(--space-3)]">
           <button
             type="button"
             onClick={onClose}
             aria-label="Volver"
             className="flex size-[36px] items-center justify-center rounded-full transition-colors hover:bg-surface md:hidden"
           >
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[18px]">
-              <path d="M15 19l-7-7 7-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
+            <ChevronLeft className="size-[18px]" aria-hidden />
           </button>
           <h1 className="flex-1 text-[var(--font-h2)] font-[var(--fw-regular)] leading-[1.15] text-app">Notificaciones</h1>
           <button
@@ -376,24 +391,17 @@ export default function NotificationsPanel({ open, onClose, onRead, desktopPosit
             aria-label="Cerrar"
             className="hidden text-muted hover:text-app transition-colors md:block"
           >
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-5">
-              <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-            </svg>
+            <CloseX />
           </button>
         </div>
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto overscroll-contain">
           {loading ? (
-            <div className="flex justify-center py-12">
-              <div className="size-5 rounded-full border-2 border-current border-t-transparent animate-spin opacity-40" />
-            </div>
+            <NotificationsSkeleton />
           ) : notifs.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-3 py-20 px-6 text-center">
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-12 opacity-20">
-                <path d="M6 10.5C6 7.46 8.24 5 12 5s6 2.46 6 5.5v3l1.5 2.5H4.5L6 13.5v-3Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-                <path d="M10 17.5a2 2 0 0 0 4 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-              </svg>
+              <Bell className="size-12 opacity-20" aria-hidden />
               <p className="text-body-sm text-muted">No tienes notificaciones aún</p>
             </div>
           ) : (

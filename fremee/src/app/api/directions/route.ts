@@ -1,23 +1,84 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Client, TravelMode, UnitSystem, Language } from "@googlemaps/google-maps-services-js";
-import { createSupabaseServiceClient } from "@/services/supabase/server";
+import { getGoogleMapsServerKey } from "@/config/env";
+import { createSupabaseServerClient, createSupabaseServiceClient } from "@/services/supabase/server";
+import { sanitizeLatLng } from "@/lib/sanitize";
+import { checkRateLimit, rateLimitedResponse } from "@/lib/rate-limit";
 
 const client = new Client({});
 
 // Round coords to 4 decimal places (~11m) for cache key stability
 function r(n: number) { return Math.round(n * 1e4) / 1e4; }
 
-type LatLng = { lat: number; lng: number };
+type DirectionsRequestBody = {
+  waypoints: string[];
+  travelMode?: string;
+};
+
+type ApiErrorLike = {
+  response?: {
+    data?: {
+      status?: string;
+    };
+  };
+};
+
+const MAX_WAYPOINTS = 25;
+const MAX_WAYPOINT_LENGTH = 500;
+
+function isDirectionsRequestBody(value: unknown): value is DirectionsRequestBody {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  const { waypoints, travelMode } = candidate;
+  return (
+    Array.isArray(waypoints) &&
+    waypoints.length >= 2 &&
+    waypoints.length <= MAX_WAYPOINTS &&
+    waypoints.every((item) => typeof item === "string" && item.trim().length > 0 && item.length <= MAX_WAYPOINT_LENGTH) &&
+    (travelMode === undefined || typeof travelMode === "string")
+  );
+}
+
+function getApiStatus(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null) return undefined;
+  return (error as ApiErrorLike).response?.data?.status;
+}
 
 export async function POST(req: NextRequest) {
+  // Try cookie-based auth first, then Bearer token fallback (browser client uses localStorage)
+  let user = null;
+  const authHeader = req.headers.get("authorization");
+  if (authHeader?.startsWith("Bearer ")) {
+    const token = authHeader.slice(7);
+    const supabase = createSupabaseServiceClient();
+    const { data } = await supabase.auth.getUser(token);
+    user = data.user;
+  } else {
+    const authClient = await createSupabaseServerClient();
+    const { data } = await authClient.auth.getUser();
+    user = data.user;
+  }
+  if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+
+  const rl = await checkRateLimit(`directions:${user.id}`, 60, 60_000);
+  if (rl.limited) return rateLimitedResponse(rl.retryAfter);
+
   try {
-    const body = await req.json() as {
-      waypoints: string[];
-      originCoords?: LatLng;
-      destCoords?: LatLng;
-      travelMode?: string;
-    };
-    const { waypoints, originCoords, destCoords, travelMode } = body;
+    const body = await req.json() as unknown;
+    if (!isDirectionsRequestBody(body)) {
+      return NextResponse.json({ error: "Body inválido" }, { status: 400 });
+    }
+    const rawBody = body as Record<string, unknown>;
+    const { waypoints, travelMode } = body;
+    const originCoords = sanitizeLatLng(rawBody.originCoords);
+    const destCoords = sanitizeLatLng(rawBody.destCoords);
+
+    if (rawBody.originCoords != null && !originCoords) {
+      return NextResponse.json({ error: "originCoords inválidas" }, { status: 400 });
+    }
+    if (rawBody.destCoords != null && !destCoords) {
+      return NextResponse.json({ error: "destCoords inválidas" }, { status: 400 });
+    }
 
     const TRAVEL_MODE_MAP: Record<string, TravelMode> = {
       APIE:  TravelMode.walking,
@@ -28,10 +89,6 @@ export async function POST(req: NextRequest) {
       TREN:  TravelMode.transit,
     };
     const mode = (travelMode && TRAVEL_MODE_MAP[travelMode]) ? TRAVEL_MODE_MAP[travelMode] : TravelMode.driving;
-
-    if (!waypoints || waypoints.length < 2) {
-      return NextResponse.json({ error: "Se necesitan al menos 2 ubicaciones" }, { status: 400 });
-    }
 
     // ── Cache lookup (only when both endpoints have stored coords) ──
     if (originCoords && destCoords) {
@@ -71,7 +128,7 @@ export async function POST(req: NextRequest) {
         mode,
         units: UnitSystem.metric,
         language: Language.es,
-        key: process.env.GOOGLE_MAPS_SERVER_KEY!,
+        key: getGoogleMapsServerKey(),
       },
     });
 
@@ -105,8 +162,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ polyline, legs, bounds: route.bounds });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const apiStatus = (err as any)?.response?.data?.status;
+    const apiStatus = getApiStatus(err);
     console.error("[directions]", msg, apiStatus);
     return NextResponse.json({ error: apiStatus ?? msg }, { status: 500 });
   }

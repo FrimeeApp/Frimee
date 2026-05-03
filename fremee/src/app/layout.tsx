@@ -4,6 +4,10 @@ import "../styles/globals.css";
 import { AuthProvider } from "@/providers/AuthProvider";
 import NativeDeepLinks from "@/components/common/NativeDeepLinks";
 import NativeSystemUi from "@/components/common/NativeSystemUi";
+import { ToastProvider } from "@/components/ui/Toaster";
+import OfflineBanner from "@/components/common/OfflineBanner";
+import { APP_DESCRIPTION, APP_NAME } from "@/config/app";
+import { STORAGE_KEYS } from "@/config/storage";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -20,8 +24,17 @@ const instrumentSerif = Instrument_Serif({
 });
 
 export const metadata: Metadata = {
-  title: "Fremee",
-  description: "Organiza planes, viajes y grupos",
+  title: { default: APP_NAME, template: `%s · ${APP_NAME}` },
+  description: APP_DESCRIPTION,
+  icons: {
+    icon: [{ url: "/favicoon-frimee-black.svg", type: "image/svg+xml" }],
+    apple: [{ url: "/logo-frimee.png", sizes: "180x180", type: "image/png" }],
+    shortcut: ["/favicoon-frimee-black.svg"],
+  },
+  openGraph: {
+    siteName: APP_NAME,
+    images: [{ url: "/logo-frimee.png", width: 512, height: 512 }],
+  },
 };
 
 export const viewport: Viewport = {
@@ -30,12 +43,16 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: "cover",
+  interactiveWidget: "overlays-content",
 };
 
 const themeInitScript = `
 (() => {
   try {
-    const stored = localStorage.getItem("fremee.theme");
+    document.documentElement.dataset.platform =
+      window.Capacitor?.isNativePlatform?.() ? "native" : "web";
+
+    const stored = localStorage.getItem("${STORAGE_KEYS.themePreference}");
     const theme = stored === "DARK" || stored === "LIGHT" || stored === "SYSTEM" ? stored : "SYSTEM";
     const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
     const useDark = theme === "DARK" || (theme === "SYSTEM" && prefersDark);
@@ -78,7 +95,10 @@ export default function RootLayout({
       <body className={`${inter.variable} ${instrumentSerif.variable} antialiased`}>
         <NativeSystemUi />
         <NativeDeepLinks />
-        <AuthProvider>{children}</AuthProvider>
+        <OfflineBanner />
+        <AuthProvider>
+          <ToastProvider>{children}</ToastProvider>
+        </AuthProvider>
       </body>
     </html>
   );

@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { MapPin } from "lucide-react";
+import { GOOGLE_MAPS_SCRIPT_ID } from "@/config/external";
+import { loadGoogleMapsScript } from "@/lib/googleMaps";
 
 type PlaceSuggestion = {
   placePrediction: {
@@ -23,6 +25,7 @@ export default function LocationAutocomplete({
   onCommit,
   onEnter,
   dropdownVariant = "plain",
+  autoFocus = false,
 }: {
   value: string;
   onChange: (v: string, coords?: Coords) => void;
@@ -31,12 +34,12 @@ export default function LocationAutocomplete({
   onCommit?: () => void;
   onEnter?: () => void;
   dropdownVariant?: "plain" | "surface";
+  autoFocus?: boolean;
 }) {
   const [mapsReady, setMapsReady] = useState(
     () =>
       typeof window !== "undefined" &&
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      Boolean((window as any).google?.maps?.places?.AutocompleteSuggestion)
+      Boolean(window.google?.maps?.places?.AutocompleteSuggestion)
   );
   const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
   const [open, setOpen] = useState(false);
@@ -47,19 +50,19 @@ export default function LocationAutocomplete({
   const isMounted = typeof document !== "undefined";
 
   useEffect(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if ((window as any).google?.maps?.places?.AutocompleteSuggestion) return;
-    if (document.getElementById("google-maps-script")) {
-      const existing = document.getElementById("google-maps-script");
+    if (!autoFocus) return;
+    const frame = window.requestAnimationFrame(() => inputRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [autoFocus]);
+
+  useEffect(() => {
+    if (window.google?.maps?.places?.AutocompleteSuggestion) return;
+    if (document.getElementById(GOOGLE_MAPS_SCRIPT_ID)) {
+      const existing = document.getElementById(GOOGLE_MAPS_SCRIPT_ID);
       existing?.addEventListener("load", () => setMapsReady(true));
       return;
     }
-    const script = document.createElement("script");
-    script.id = "google-maps-script";
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&v=weekly&libraries=places,geometry`;
-    script.async = true;
-    script.onload = () => setMapsReady(true);
-    document.head.appendChild(script);
+    void loadGoogleMapsScript().then(() => setMapsReady(true));
   }, []);
 
   // Recalculate dropdown position whenever it opens or window scrolls/resizes
@@ -99,9 +102,8 @@ export default function LocationAutocomplete({
   const fetchSuggestions = async (input: string) => {
     if (!input || input.length < 2) { setSuggestions([]); setOpen(false); return; }
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { suggestions: results } = await (window as any).google.maps.places.AutocompleteSuggestion.fetchAutocompleteSuggestions({ input });
-      setSuggestions(results ?? []);
+      const { suggestions: results } = await window.google.maps.places.AutocompleteSuggestion.fetchAutocompleteSuggestions({ input });
+      setSuggestions((results ?? []) as unknown as PlaceSuggestion[]);
       setOpen((results ?? []).length > 0);
     } catch { setSuggestions([]); }
   };
@@ -129,15 +131,22 @@ export default function LocationAutocomplete({
   };
 
   return (
-    <div ref={wrapperRef} className={`relative flex-1 ${className ?? ""}`}>
+    <div
+      ref={wrapperRef}
+      className={`relative flex-1 ${className ?? ""}`}
+      onPointerUp={() => inputRef.current?.focus()}
+    >
       <input
         ref={inputRef}
         value={value}
+        autoFocus={autoFocus}
         onChange={(e) => handleChange(e.target.value)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         onKeyDown={(e) => {
           if (e.key === "Enter") { e.preventDefault(); setOpen(false); onEnter?.(); }
         }}
+        inputMode="search"
+        enterKeyHint="search"
         placeholder={placeholder}
         className="w-full border-none bg-transparent text-body outline-none ring-0 focus:border-none focus:outline-none focus:ring-0 placeholder:text-muted"
       />

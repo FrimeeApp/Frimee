@@ -1,4 +1,5 @@
 import { collection, getDocs, limit, orderBy, query, where } from "firebase/firestore";
+import type { ParticipantsSnapshot } from "@/services/api/dtos/plan.dto";
 import { db } from "@/services/firebase/firestore";
 
 type FeedPostDoc = {
@@ -36,6 +37,7 @@ type FeedPostDoc = {
   photosSnapshot?: { url: string }[] | null;
   itinerarySnapshot?: { titulo: string; tipo: string; inicio_at: string; ubicacion_nombre: string }[] | null;
   expensesSnapshot?: { total: number; currency: string } | null;
+  participantsSnapshot?: ParticipantsSnapshot | null;
 };
 
 export type FeedPostEntry = {
@@ -54,6 +56,7 @@ export type FeedPostEntry = {
   photosSnapshot: { url: string }[] | null;
   itinerarySnapshot: { titulo: string; tipo: string; inicio_at: string; ubicacion_nombre: string }[] | null;
   expensesSnapshot: { total: number; currency: string } | null;
+  participantsSnapshot: ParticipantsSnapshot | null;
 };
 
 export async function listPublishedPostPlanIdsRoute(params: { limit: number }): Promise<FeedPostEntry[]> {
@@ -95,6 +98,7 @@ export async function listPublishedPostPlanIdsRoute(params: { limit: number }): 
       photosSnapshot: doc.photosSnapshot ?? null,
       itinerarySnapshot: doc.itinerarySnapshot ?? null,
       expensesSnapshot: doc.expensesSnapshot ?? null,
+      participantsSnapshot: doc.participantsSnapshot ?? null,
     });
   }
 

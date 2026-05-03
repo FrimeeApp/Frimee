@@ -1,4 +1,4 @@
-import type { FeedPlanItemDto } from "@/services/api/dtos/plan.dto";
+import type { FeedPlanItemDto, ParticipantsSnapshot } from "@/services/api/dtos/plan.dto";
 
 export type FeedItemDto = {
   id: string;
@@ -17,4 +17,5 @@ export type FeedItemDto = {
   photosSnapshot: { url: string }[] | null;
   itinerarySnapshot: { titulo: string; tipo: string; inicio_at: string; ubicacion_nombre: string }[] | null;
   expensesSnapshot: { total: number; currency: string } | null;
+  participantsSnapshot: ParticipantsSnapshot | null;
 };

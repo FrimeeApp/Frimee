@@ -1,3 +1,5 @@
+import { GOOGLE_CALENDAR_API_BASE_URL } from "@/config/external";
+
 export type GoogleCalendarListItem = {
   id: string;
   summary?: string;
@@ -31,7 +33,7 @@ export type GoogleCalendarUpsertInput = {
   };
 };
 
-const GOOGLE_API_BASE = "https://www.googleapis.com/calendar/v3";
+const GOOGLE_API_BASE = GOOGLE_CALENDAR_API_BASE_URL;
 
 async function googleFetch<T>(url: string, accessToken: string): Promise<T> {
   const response = await fetch(url, {

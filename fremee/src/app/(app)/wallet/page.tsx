@@ -4,6 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppSidebar from "@/components/common/AppSidebar";
 import AddTicketModal from "@/components/wallet/AddTicketModal";
+import { PlusIcon } from "@/components/icons";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { CloseX } from "@/components/ui/CloseX";
 import {
   listTicketsEndpoint,
   getTicketSourceSignedUrl,
@@ -65,7 +68,7 @@ export default function WalletPage() {
       <div className="relative mx-auto min-h-dvh max-w-[1440px]">
         <AppSidebar />
 
-        <main className="px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[var(--space-6)] md:py-[var(--space-8)] md:pr-[var(--space-14)]">
+        <main className="px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-[calc(env(safe-area-inset-top)+var(--space-6))] md:py-[var(--space-8)] md:pr-[var(--space-14)]">
           <div className="mx-auto w-full max-w-[980px]">
             <div className="flex items-center justify-between">
               <button
@@ -102,7 +105,7 @@ export default function WalletPage() {
                 <span className="text-body-sm text-muted">Cargando...</span>
               </div>
             ) : tickets.length === 0 ? (
-              <EmptyState onAdd={() => setAddOpen(true)} />
+              <WalletEmptyState onAdd={() => setAddOpen(true)} />
             ) : (
               <div className="mt-6">
                 <WalletStack tickets={tickets} onOpen={setViewTicket} />
@@ -237,7 +240,7 @@ function WalletStack({ tickets, onOpen }: { tickets: PlanTicket[]; onOpen: (t: P
                 willChange:      "transform, opacity",
               }}
             >
-              <TicketCard ticket={ticket} index={0} />
+              <TicketCard ticket={ticket} />
             </div>
           );
         })}
@@ -249,7 +252,7 @@ function WalletStack({ tickets, onOpen }: { tickets: PlanTicket[]; onOpen: (t: P
 
 // ── TicketCard ─────────────────────────────────────────────────────────────────
 
-function TicketCard({ ticket, index }: { ticket: PlanTicket; index: number }) {
+function TicketCard({ ticket }: { ticket: PlanTicket }) {
   const gradient = ticket.cover_color ?? getTicketColor(ticket.type, ticket.id);
   const textCls  = TICKET_TEXT[ticket.type];
   const mutedCls = TICKET_MUTED[ticket.type];
@@ -361,19 +364,32 @@ function TicketCard({ ticket, index }: { ticket: PlanTicket; index: number }) {
 
 function TicketSourceViewer({ ticket, onClose }: { ticket: PlanTicket; onClose: () => void }) {
   const [url, setUrl]         = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
   const [error, setError]     = useState<string | null>(null);
+  const [resolvedSourcePath, setResolvedSourcePath] = useState<string | null>(null);
 
   const sourcePath = ticket.source_image_url ?? ticket.source_pdf_url ?? null;
   const isPdf      = !!ticket.source_pdf_url && !ticket.source_image_url;
+  const loading    = !!sourcePath && resolvedSourcePath !== sourcePath && !error;
 
   useEffect(() => {
     if (!sourcePath) return;
-    setLoading(true);
+    let cancelled = false;
     getTicketSourceSignedUrl(sourcePath)
-      .then(setUrl)
-      .catch(() => setError("No se pudo cargar la imagen original."))
-      .finally(() => setLoading(false));
+      .then((nextUrl) => {
+        if (cancelled) return;
+        setUrl(nextUrl);
+        setError(null);
+        setResolvedSourcePath(sourcePath);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setUrl(null);
+        setError("No se pudo cargar la imagen original.");
+        setResolvedSourcePath(sourcePath);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [sourcePath]);
 
   // Close on Escape
@@ -390,7 +406,7 @@ function TicketSourceViewer({ ticket, onClose }: { ticket: PlanTicket; onClose: 
     >
       {/* Top bar */}
       <div
-        className="flex shrink-0 items-center justify-between px-5 py-4"
+        className="flex shrink-0 items-center justify-between px-5 pb-4 pt-[max(1rem,calc(env(safe-area-inset-top)+0.5rem))]"
         onClick={e => e.stopPropagation()}
       >
         <div>
@@ -404,9 +420,7 @@ function TicketSourceViewer({ ticket, onClose }: { ticket: PlanTicket; onClose: 
           onClick={onClose}
           className="flex size-9 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
         >
-          <svg viewBox="0 0 24 24" fill="none" className="size-[18px]">
-            <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-          </svg>
+          <CloseX />
         </button>
       </div>
 
@@ -453,24 +467,16 @@ function TicketSourceViewer({ ticket, onClose }: { ticket: PlanTicket; onClose: 
   );
 }
 
-function EmptyState({ onAdd }: { onAdd: () => void }) {
+function WalletEmptyState({ onAdd }: { onAdd: () => void }) {
   return (
-    <div className="mt-16 flex flex-col items-center gap-4 text-center">
-      <div className="flex size-16 items-center justify-center rounded-full border border-app">
-        <TicketTypeIcon type="other" className="size-7 text-muted" />
-      </div>
-      <div>
-        <p className="text-body font-[var(--fw-semibold)] text-app">Sin tickets todavía</p>
-        <p className="mt-1 text-body-sm text-muted">Añade tu primera entrada, billete o reserva.</p>
-      </div>
-      <button
-        type="button"
-        onClick={onAdd}
-        className="mt-2 rounded-full bg-[var(--accent)] px-5 py-2.5 text-body-sm font-[var(--fw-semibold)] text-white transition-opacity hover:opacity-90"
-      >
-        Añadir ticket
-      </button>
-    </div>
+    <EmptyState
+      icon={<TicketTypeIcon type="other" className="size-7 text-muted" />}
+      title="Sin tickets todavía"
+      description="Añade tu primera entrada, billete o reserva."
+      actionLabel="Añadir ticket"
+      onAction={onAdd}
+      className="mt-16"
+    />
   );
 }
 
@@ -564,14 +570,5 @@ function QrStamp() {
         )),
       )}
     </div>
-  );
-}
-
-function PlusIcon({ className = "size-[18px]" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <path d="M12 5V19" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      <path d="M5 12H19" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
   );
 }
