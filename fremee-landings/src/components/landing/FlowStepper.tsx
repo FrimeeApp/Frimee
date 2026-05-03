@@ -6,7 +6,7 @@ import React from "react";
 
 const steps = [
   { step: "01", icon: Plus, title: "Crear", desc: "Nuevo plan en segundos" },
-  { step: "02", icon: UserPlus, title: "Invitar", desc: "Link directo al grupo" },
+  { step: "02", icon: UserPlus, title: "Invitar", desc: "Directo al grupo" },
   { step: "03", icon: CalendarCheck, title: "Organizar", desc: "Gastos, tickets e ideas" },
   { step: "04", icon: PartyPopper, title: "Disfrutar", desc: "Sin estrés" },
 ];
