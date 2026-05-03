@@ -3,8 +3,33 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useAuth } from "@/providers/AuthProvider";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
+import { buildInternalApiUrl } from "@/config/external";
 
 const supabase = createBrowserSupabaseClient();
+
+async function fetchLivekitToken(roomName: string, chatId: string, accessToken?: string) {
+  const res = await fetch(buildInternalApiUrl("/api/livekit/token"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
+    body: JSON.stringify({ roomName, chatId }),
+  });
+
+  const contentType = res.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    const body = await res.text();
+    throw new Error(`LiveKit token API devolvio ${contentType || "contenido no JSON"}: ${body.slice(0, 120)}`);
+  }
+
+  const data = await res.json() as { token?: string; error?: string };
+  if (!res.ok || !data.token) {
+    throw new Error(data.error ?? `No se pudo obtener token de LiveKit (${res.status})`);
+  }
+
+  return data.token;
+}
 
 export type CallMiembro = { id: string; nombre: string; foto?: string };
 
@@ -88,15 +113,7 @@ export function useCall() {
     if (error || !llamada) { console.error("[call] create error", error?.message, error?.code, error?.details, error?.hint); return; }
 
     const { data: { session } } = await supabase.auth.getSession();
-    const res = await fetch("/api/livekit/token", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${session?.access_token}`,
-      },
-      body: JSON.stringify({ roomName, chatId }),
-    });
-    const { token } = await res.json();
+    const token = await fetchLivekitToken(roomName, chatId, session?.access_token);
 
     activeSinceRef.current = null;
     setCallState({ status: "outgoing", roomName, chatId, tipo, token, isInitiator: true, participanteNombre, participanteFoto, miembros });
@@ -109,15 +126,7 @@ export function useCall() {
     await supabase.from("llamadas").update({ estado: "active" }).eq("id", llamadaId);
 
     const { data: { session } } = await supabase.auth.getSession();
-    const res = await fetch("/api/livekit/token", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${session?.access_token}`,
-      },
-      body: JSON.stringify({ roomName, chatId }),
-    });
-    const { token } = await res.json();
+    const token = await fetchLivekitToken(roomName, chatId, session?.access_token);
 
     activeSinceRef.current = Date.now();
     setCallState({ status: "active", roomName, chatId, tipo, token, isInitiator: false, participanteNombre: callState.callerName, participanteFoto: callState.callerFoto, miembros });
@@ -172,12 +181,7 @@ export function useCall() {
     if (!userId) return;
     void llamadaId; // kept for potential future use (e.g. marking active)
     const { data: { session } } = await supabase.auth.getSession();
-    const res = await fetch("/api/livekit/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session?.access_token}` },
-      body: JSON.stringify({ roomName, chatId }),
-    });
-    const { token } = await res.json() as { token: string };
+    const token = await fetchLivekitToken(roomName, chatId, session?.access_token);
     activeSinceRef.current = Date.now();
     setCallState({ status: "active", roomName, chatId, tipo, token, isInitiator: false, participanteNombre, participanteFoto, miembros });
   }, [userId]);

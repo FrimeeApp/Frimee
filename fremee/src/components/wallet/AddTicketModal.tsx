@@ -12,6 +12,7 @@ import {
 import { TicketTypeIcon } from "@/app/(app)/wallet/page";
 import type { TicketOcrResult } from "@/app/api/tickets/ocr/route";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
+import { buildInternalApiUrl } from "@/config/external";
 import { Upload, Loader2, Check, FileText, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { FIELD_LINE_CLS } from "@/lib/styles";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
@@ -261,7 +262,7 @@ export default function AddTicketModal({
       fd.append("file", fileToSend, isPdf ? file.name : "ticket.jpg");
       fd.append("user_id", user.id);
 
-      const res  = await fetch("/api/tickets/ocr", {
+      const res  = await fetch(buildInternalApiUrl("/api/tickets/ocr"), {
         method: "POST",
         headers: session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {},
         body: fd,
