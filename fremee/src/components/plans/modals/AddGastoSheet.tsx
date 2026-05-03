@@ -13,6 +13,7 @@ import { fetchSubplanes, type SubplanRow } from "@/services/api/endpoints/subpla
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import type { OcrResult, OcrItem } from "@/app/api/receipts/ocr/route";
 import { todayISO, limitDecimals, adjustNumericString } from "@/lib/form-helpers";
+import { buildInternalApiUrl } from "@/config/external";
 import { Avatar } from "@/components/ui/Avatar";
 import { FIELD_LINE_CLS } from "@/lib/styles";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
@@ -168,7 +169,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
       fd.append("file", fileToSend, isPdf ? file.name : "receipt.jpg");
       fd.append("plan_id", String(planId));
       fd.append("user_id", userId);
-      const res = await fetch("/api/receipts/ocr", {
+      const res = await fetch(buildInternalApiUrl("/api/receipts/ocr"), {
         method: "POST",
         headers: session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {},
         body: fd,

@@ -14,6 +14,7 @@ import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
 import { useAuth } from "@/providers/AuthProvider";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { applyThemePreference, cacheThemePreference } from "@/services/theme/preferences";
+import { buildInternalApiUrl } from "@/config/external";
 import {
   getUserSettings,
   saveUserProfileAndSettings,
@@ -536,7 +537,7 @@ export default function SettingsPage() {
 
     try {
       const { data: { session } } = await createBrowserSupabaseClient().auth.getSession();
-      const res = await fetch("/api/account/delete", {
+      const res = await fetch(buildInternalApiUrl("/api/account/delete"), {
         method: "DELETE",
         headers: session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {},
       });
