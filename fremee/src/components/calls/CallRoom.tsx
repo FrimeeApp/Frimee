@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { Capacitor } from "@capacitor/core";
 import { useEffect, useRef, useState, useCallback } from "react";
 import {
   Room,
@@ -38,7 +39,10 @@ type ParticipantTile = {
 };
 
 export default function CallRoom({ token, livekitUrl, tipo, miembros, participanteNombre, isActive, isGroup, onEnd, onEndForAll, onParticipantConnected, onMinimize }: Props) {
+  const isNative = Capacitor.isNativePlatform();
   const roomRef = useRef<Room | null>(null);
+  const audioSinkRef = useRef<HTMLDivElement | null>(null);
+  const attachedAudioElsRef = useRef<Map<string, HTMLMediaElement>>(new Map());
   const [connected, setConnected] = useState(false);
   const [tiles, setTiles] = useState<ParticipantTile[]>([]);
   const [focusedId, setFocusedId] = useState<string | null>(null);
@@ -79,6 +83,33 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
     if (t) t.attach(el);
   }, []);
 
+  const attachAudioTrack = useCallback((participantIdentity: string, track: Track) => {
+    const existing = attachedAudioElsRef.current.get(participantIdentity);
+    if (existing) {
+      track.attach(existing);
+      return;
+    }
+
+    const el = track.attach() as HTMLMediaElement;
+    el.autoplay = true;
+    if (el instanceof HTMLVideoElement) {
+      el.playsInline = true;
+    }
+    el.style.display = "none";
+    audioSinkRef.current?.appendChild(el);
+    attachedAudioElsRef.current.set(participantIdentity, el);
+  }, []);
+
+  const detachAudioTrack = useCallback((participantIdentity: string, track?: Track) => {
+    const el = attachedAudioElsRef.current.get(participantIdentity);
+    if (!el) return;
+    if (track) {
+      track.detach(el);
+    }
+    el.remove();
+    attachedAudioElsRef.current.delete(participantIdentity);
+  }, []);
+
   useEffect(() => {
     if (!token || !livekitUrl) return;
     let cancelled = false;
@@ -102,13 +133,15 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
           if (el) track.attach(el);
         }
       } else if (track.kind === Track.Kind.Audio) {
-        track.attach();
+        attachAudioTrack(participant.identity, track);
       }
     });
 
     room.on(RoomEvent.TrackUnsubscribed, (track, _pub, participant) => {
       if (track.kind === Track.Kind.Video && track.source === Track.Source.ScreenShare) {
         removeTile(`${participant.identity}:screen`);
+      } else if (track.kind === Track.Kind.Audio) {
+        detachAudioTrack(participant.identity, track);
       }
     });
 
@@ -126,6 +159,8 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
       }
     });
     room.on(RoomEvent.Disconnected, () => {
+      attachedAudioElsRef.current.forEach((el) => el.remove());
+      attachedAudioElsRef.current.clear();
       if (!cancelled) { setConnected(false); onEndRef.current(); }
     });
     room.on(RoomEvent.ParticipantConnected, (participant: RemoteParticipant) => {
@@ -161,7 +196,12 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
       });
 
       try {
-        const audioTrack = await createLocalAudioTrack();
+        const audioTrack = await createLocalAudioTrack({
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1,
+        });
         if (cancelled) { room.disconnect(); return; }
         await room.localParticipant.publishTrack(audioTrack);
 
@@ -179,9 +219,14 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
     };
 
     connect().catch(console.error);
-    return () => { cancelled = true; room.disconnect(); };
+    return () => {
+      cancelled = true;
+      attachedAudioElsRef.current.forEach((el) => el.remove());
+      attachedAudioElsRef.current.clear();
+      room.disconnect();
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, livekitUrl, tipo]);
+  }, [token, livekitUrl, tipo, attachAudioTrack, detachAudioTrack]);
 
   useEffect(() => {
     if (!isActive) return;
@@ -293,7 +338,7 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
             playsInline
             muted={tile.isLocal}
             ref={(el) => { if (el) attachTrack(trackKey, el); }}
-            className={`absolute inset-0 h-full w-full ${tile.isScreenShare ? "object-contain bg-black" : "object-cover"} ${!tile.isScreenShare && tile.videoMuted ? "hidden" : ""}`}
+            className={`absolute inset-0 h-full w-full ${tile.isScreenShare ? "object-contain bg-black" : "object-cover"} ${tile.isLocal && !tile.isScreenShare ? "-scale-x-100" : ""} ${!tile.isScreenShare && tile.videoMuted ? "hidden" : ""}`}
           />
         )}
 
@@ -335,7 +380,11 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
   const focusedTile = focusedId ? tiles.find((t) => t.id === focusedId) : null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col bg-[#1a1a1a] text-white">
+    <div
+      className="fixed inset-0 z-[100] flex flex-col bg-[#1a1a1a] text-white"
+      style={isNative ? { paddingTop: "env(safe-area-inset-top)", paddingBottom: "calc(env(safe-area-inset-bottom) + 12px)" } : undefined}
+    >
+      <div ref={audioSinkRef} aria-hidden="true" />
       {/* Header */}
       <div className="shrink-0 flex items-center justify-between px-4 pt-4 pb-2">
         <div className="flex flex-col">
@@ -364,7 +413,7 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
       </div>
 
       {/* Main area */}
-      <div className="flex-1 overflow-hidden px-2 pb-2">
+      <div className={`flex-1 overflow-hidden pb-2 ${isNative ? "px-1" : "px-2"}`}>
         {focusedTile ? (
           <div className="h-full w-full">
             {renderTile(focusedTile, true)}
@@ -393,7 +442,7 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
       </div>
 
       {/* Controls */}
-      <div className="shrink-0 flex items-center justify-center gap-4 pb-10 pt-3 px-4">
+      <div className={`shrink-0 flex items-center justify-center gap-4 pt-3 px-4 ${isNative ? "pb-2" : "pb-10"}`}>
         <button onClick={() => void toggleMute()} className={`flex h-13 w-13 items-center justify-center rounded-full transition-all ${localMuted ? "bg-white text-black" : "bg-white/15 text-white"}`}>
           {localMuted ? <MicOffIcon /> : <MicIcon />}
         </button>

@@ -183,10 +183,14 @@ export default function WaitlistSection({
     : "mx-auto w-[min(100%-2rem,72rem)] py-20 md:py-28";
   const gridClassName = standalone
     ? "grid grid-cols-1 gap-5"
-    : "mt-10 grid grid-cols-1 gap-5 md:mt-12 md:grid-cols-2 md:items-center";
+    : showModel
+      ? "mt-10 grid grid-cols-1 gap-5 md:mt-12 md:grid-cols-2 md:items-center"
+      : "mt-10 grid grid-cols-1 gap-5 md:mt-12";
   const articleClassName = standalone
     ? "w-full rounded-[28px] border border-white/8 bg-white/[0.03] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.24)] backdrop-blur-sm md:p-7"
-    : "md:p-8";
+    : showModel
+      ? "md:p-8"
+      : "mx-auto w-full max-w-[34rem] md:p-8";
 
   return (
     <section className={sectionClassName}>
