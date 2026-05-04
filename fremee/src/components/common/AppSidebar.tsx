@@ -85,6 +85,8 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
   const [hovered, setHovered] = useState(false);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [mobileFabOpen, setMobileFabOpen] = useState(false);
+  const [mobileFabVisible, setMobileFabVisible] = useState(false);
+  const [mobileFabAnimatingIn, setMobileFabAnimatingIn] = useState(false);
   const [desktopCreateMenuOpen, setDesktopCreateMenuOpen] = useState(false);
   const [expensePickerOpen, setExpensePickerOpen] = useState(false);
   const [selectedExpensePlanId, setSelectedExpensePlanId] = useState<number | null>(null);
@@ -143,6 +145,28 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [mobileFabOpen]);
+
+  useEffect(() => {
+    if (mobileFabOpen) {
+      setMobileFabVisible(true);
+      setMobileFabAnimatingIn(false);
+      const frameId = window.requestAnimationFrame(() => {
+        setMobileFabAnimatingIn(true);
+      });
+      return () => window.cancelAnimationFrame(frameId);
+    }
+
+    setMobileFabAnimatingIn(false);
+    if (!mobileFabVisible) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setMobileFabVisible(false);
+    }, 180);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [mobileFabOpen, mobileFabVisible]);
 
   useEffect(() => {
     if (!desktopCreateMenuOpen) return;
@@ -429,18 +453,19 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
           ref={mobileFabRef}
           className="pointer-events-none fixed right-[max(16px,env(safe-area-inset-right))] bottom-[calc(clamp(56px,8dvh,64px)+env(safe-area-inset-bottom)+16px)] z-[70] md:hidden"
         >
-          <div className={`absolute bottom-[calc(100%+12px)] right-0 flex flex-col items-end gap-2 transition-all duration-200 ease-out ${mobileFabOpen ? "pointer-events-auto translate-y-0 opacity-100" : "pointer-events-none translate-y-2 opacity-0"}`}>
+          {mobileFabVisible && (
+            <div className={`absolute bottom-[calc(100%+12px)] right-0 flex flex-col items-end gap-2 transition-all duration-200 ease-out ${(mobileFabOpen && mobileFabAnimatingIn) ? "pointer-events-auto translate-y-0 opacity-100" : "pointer-events-none translate-y-2 opacity-0"}`}>
             <button
               type="button"
               onClick={openCreatePlan}
               aria-label="Crear plan"
               className="pointer-events-auto flex items-center gap-[var(--space-2)]"
             >
-              <span className="rounded-full border border-app bg-app px-[var(--space-3)] py-[7px] text-caption font-[var(--fw-semibold)] text-app shadow-elev-2">
+              <span className="whitespace-nowrap rounded-full border border-app bg-app px-[var(--space-3)] py-[9px] text-caption font-[var(--fw-semibold)] leading-none text-app shadow-elev-2">
                 Crear plan
               </span>
-              <span className="flex size-14 items-center justify-center rounded-full border border-app bg-surface text-app shadow-elev-3">
-                <PlansIcon className="size-6" />
+              <span className="flex size-12 shrink-0 items-center justify-center rounded-full border border-app bg-surface text-app shadow-elev-3">
+                <PlansIcon className="size-5" />
               </span>
             </button>
             <button
@@ -449,11 +474,11 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
               aria-label="Crear gasto"
               className="pointer-events-auto flex items-center gap-[var(--space-2)]"
             >
-              <span className="rounded-full border border-app bg-app px-[var(--space-3)] py-[7px] text-caption font-[var(--fw-semibold)] text-app shadow-elev-2">
+              <span className="whitespace-nowrap rounded-full border border-app bg-app px-[var(--space-3)] py-[9px] text-caption font-[var(--fw-semibold)] leading-none text-app shadow-elev-2">
                 Crear gasto
               </span>
-              <span className="flex size-14 items-center justify-center rounded-full border border-app bg-surface text-app shadow-elev-3">
-                <CardIcon className="size-6" />
+              <span className="flex size-12 shrink-0 items-center justify-center rounded-full border border-app bg-surface text-app shadow-elev-3">
+                <CardIcon className="size-5" />
               </span>
             </button>
             {onCreateConversation && (
@@ -463,15 +488,16 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
                 aria-label="Crear conversación"
                 className="pointer-events-auto flex items-center gap-[var(--space-2)]"
               >
-                <span className="rounded-full border border-app bg-app px-[var(--space-3)] py-[7px] text-caption font-[var(--fw-semibold)] text-app shadow-elev-2">
+                <span className="whitespace-nowrap rounded-full border border-app bg-app px-[var(--space-3)] py-[9px] text-caption font-[var(--fw-semibold)] leading-none text-app shadow-elev-2">
                   Crear conversación
                 </span>
-                <span className="flex size-14 items-center justify-center rounded-full border border-app bg-surface text-app shadow-elev-3">
-                  <SendIcon className="size-6" />
+                <span className="flex size-12 shrink-0 items-center justify-center rounded-full border border-app bg-surface text-app shadow-elev-3">
+                  <SendIcon className="size-5" />
                 </span>
               </button>
             )}
-          </div>
+            </div>
+          )}
           <button
             type="button"
             aria-label={mobileFabOpen ? "Cerrar crear" : "Crear"}
