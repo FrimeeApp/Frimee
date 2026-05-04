@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { Capacitor } from "@capacitor/core";
 import { PhoneOffIcon } from "@/components/icons";
 import { Phone } from "lucide-react";
 
@@ -13,10 +14,15 @@ type Props = {
 };
 
 export default function IncomingCall({ callerName, callerFoto, tipo, onAccept, onReject }: Props) {
+  const isNative = Capacitor.isNativePlatform();
+
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col items-center justify-between bg-[#111] text-white pb-safe pt-safe">
-      <div className="flex flex-col items-center gap-[var(--space-3)] pt-[var(--space-20)]">
-        <p className="text-caption text-muted">{tipo === "video" ? "Llamada de vídeo entrante" : "Llamada de voz entrante"}</p>
+    <div
+      className="fixed inset-0 z-[100] flex flex-col items-center justify-between bg-[#111] text-white"
+      style={isNative ? { paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)" } : undefined}
+    >
+      <div className={`flex flex-col items-center gap-[var(--space-3)] ${isNative ? "pt-[var(--space-12)]" : "pt-[var(--space-20)]"}`}>
+        <p className="text-caption text-muted">{tipo === "video" ? "Llamada de video entrante" : "Llamada de voz entrante"}</p>
         <div className="h-24 w-24 overflow-hidden rounded-full border border-white/10 bg-white/10">
           {callerFoto ? (
             <Image src={callerFoto} alt={callerName} width={96} height={96} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
@@ -29,7 +35,7 @@ export default function IncomingCall({ callerName, callerFoto, tipo, onAccept, o
         <p className="text-[var(--font-h2)] font-[var(--fw-bold)]">{callerName}</p>
       </div>
 
-      <div className="flex items-center gap-[var(--space-16)] pb-[var(--space-20)]">
+      <div className={`flex items-center gap-[var(--space-16)] ${isNative ? "pb-[var(--space-8)]" : "pb-[var(--space-20)]"}`}>
         <div className="flex flex-col items-center gap-[var(--space-2)]">
           <button
             onClick={onReject}
@@ -55,4 +61,3 @@ export default function IncomingCall({ callerName, callerFoto, tipo, onAccept, o
 }
 
 const PhoneIcon = () => <Phone className="size-6" aria-hidden />;
-
