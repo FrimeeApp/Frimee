@@ -427,14 +427,14 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
       {!hideMobileNav && !modalOpen && (
         <div
           ref={mobileFabRef}
-          className="fixed right-[max(16px,env(safe-area-inset-right))] bottom-[calc(clamp(56px,8dvh,64px)+env(safe-area-inset-bottom)+16px)] z-[70] flex flex-col items-end gap-3 md:hidden"
+          className="pointer-events-none fixed right-[max(16px,env(safe-area-inset-right))] bottom-[calc(clamp(56px,8dvh,64px)+env(safe-area-inset-bottom)+16px)] z-[70] md:hidden"
         >
-          <div className={`flex flex-col items-end gap-2 transition-all duration-200 ease-out ${mobileFabOpen ? "pointer-events-auto translate-y-0 opacity-100" : "pointer-events-none translate-y-2 opacity-0"}`}>
+          <div className={`absolute bottom-[calc(100%+12px)] right-0 flex flex-col items-end gap-2 transition-all duration-200 ease-out ${mobileFabOpen ? "pointer-events-auto translate-y-0 opacity-100" : "pointer-events-none translate-y-2 opacity-0"}`}>
             <button
               type="button"
               onClick={openCreatePlan}
               aria-label="Crear plan"
-              className="flex items-center gap-[var(--space-2)]"
+              className="pointer-events-auto flex items-center gap-[var(--space-2)]"
             >
               <span className="rounded-full border border-app bg-app px-[var(--space-3)] py-[7px] text-caption font-[var(--fw-semibold)] text-app shadow-elev-2">
                 Crear plan
@@ -447,7 +447,7 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
               type="button"
               onClick={() => void openCreateExpense()}
               aria-label="Crear gasto"
-              className="flex items-center gap-[var(--space-2)]"
+              className="pointer-events-auto flex items-center gap-[var(--space-2)]"
             >
               <span className="rounded-full border border-app bg-app px-[var(--space-3)] py-[7px] text-caption font-[var(--fw-semibold)] text-app shadow-elev-2">
                 Crear gasto
@@ -461,7 +461,7 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
                 type="button"
                 onClick={openCreateConversation}
                 aria-label="Crear conversación"
-                className="flex items-center gap-[var(--space-2)]"
+                className="pointer-events-auto flex items-center gap-[var(--space-2)]"
               >
                 <span className="rounded-full border border-app bg-app px-[var(--space-3)] py-[7px] text-caption font-[var(--fw-semibold)] text-app shadow-elev-2">
                   Crear conversación
@@ -477,7 +477,7 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
             aria-label={mobileFabOpen ? "Cerrar crear" : "Crear"}
             aria-expanded={mobileFabOpen}
             onClick={() => setMobileFabOpen((open) => !open)}
-            className="flex size-14 items-center justify-center rounded-full bg-primary-token text-[var(--contrast)] shadow-[0_16px_32px_rgba(0,0,0,0.24)] transition-transform duration-200 active:scale-95"
+            className="pointer-events-auto flex size-14 items-center justify-center rounded-full bg-primary-token text-[var(--contrast)] shadow-[0_16px_32px_rgba(0,0,0,0.24)] transition-transform duration-200 active:scale-95"
           >
             <PlusIcon className={`size-7 transition-transform duration-200 ${mobileFabOpen ? "rotate-45" : "rotate-0"}`} />
           </button>
