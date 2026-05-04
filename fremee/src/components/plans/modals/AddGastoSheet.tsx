@@ -539,13 +539,20 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                   {pagadorOpen && (() => {
                     const r = pagadorBtnRef.current?.getBoundingClientRect();
                     const filtered = pagadorSearch ? miembros.filter(m => (m.nombre ?? "").toLowerCase().includes(pagadorSearch.toLowerCase())) : miembros;
-                    return (
+                    const popoverH = 260;
+                    const spaceBelow = r ? window.innerHeight - r.bottom - 8 : 0;
+                    const showAbove = spaceBelow < popoverH && (r?.top ?? 0) > popoverH;
+                    const top = showAbove ? undefined : (r ? r.bottom + 4 : 0);
+                    const bottom = showAbove ? (r ? window.innerHeight - r.top + 4 : 0) : undefined;
+                    const width = r?.width ?? 300;
+                    const left = r ? Math.min(r.left, window.innerWidth - width - 8) : 0;
+                    return createPortal(
                       <>
-                        <div className="fixed inset-0 z-40" onClick={() => setPagadorOpen(false)} />
-                        <div className="fixed z-50 mt-1 rounded-xl border border-app bg-[var(--surface)] shadow-elev-3" style={{ top: r ? r.bottom + 4 : 0, left: r?.left ?? 0, width: r?.width ?? 300 }}>
+                        <div className="fixed inset-0 z-[9998]" onClick={() => setPagadorOpen(false)} />
+                        <div className="fixed z-[9999] rounded-xl border border-app bg-[var(--surface)] shadow-elev-3" style={{ top, bottom, left, width }}>
                           <div className="border-b border-app px-3 py-2">
                             <div className="flex h-9 items-center rounded-full border border-app bg-[var(--search-field-bg)] px-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-                            <input autoFocus value={pagadorSearch} onChange={e => setPagadorSearch(e.target.value)} placeholder="Buscar..." className="w-full bg-transparent text-body-sm text-app outline-none placeholder:text-muted" />
+                              <input autoFocus value={pagadorSearch} onChange={e => setPagadorSearch(e.target.value)} placeholder="Buscar..." className="w-full bg-transparent text-body-sm text-app outline-none placeholder:text-muted" />
                             </div>
                           </div>
                           <div className="max-h-48 overflow-y-auto">
@@ -558,7 +565,8 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                             {filtered.length === 0 && <p className="px-3 py-3 text-body-sm text-muted">Sin resultados</p>}
                           </div>
                         </div>
-                      </>
+                      </>,
+                      document.body
                     );
                   })()}
                 </div>
