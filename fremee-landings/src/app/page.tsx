@@ -323,6 +323,8 @@ export default function LandingV3Page() {
         />
       </section>
 
+      <WaitlistSection showModel={false} />
+
       {/* -- 7. Demo ------------------------------------ */}
       <section id="demo" className="v3-demo-dark v3-animate-section">
         <div className="v3-section-inner">
@@ -343,9 +345,9 @@ export default function LandingV3Page() {
                   <Image
                     src="/images/qr-waitlist.svg"
                     alt="QR para abrir landing.frimee.es/waitlist"
-                    width={168}
-                    height={168}
-                    className="h-[168px] w-[168px] rounded-[18px] bg-white p-3"
+                    width={196}
+                    height={196}
+                    className="h-[196px] w-[196px] rounded-[10px] bg-white p-2"
                   />
                 </div>
                 <p className="v3-demo-qr-label">Escanea para registrate</p>
@@ -358,8 +360,6 @@ export default function LandingV3Page() {
           </div>
         </div>
       </section>
-
-      <WaitlistSection />
       {/* -- 8. FAQ ------------------------------------- */}
       <section className="v3-section v3-animate-section">
         <div className="v3-section-inner">

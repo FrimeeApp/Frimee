@@ -818,7 +818,7 @@ export default function PlanDetailPage() {
                 ))}
               </div>
               {activeTab === "chat" && planChat && (
-                <div className="flex items-center gap-[var(--space-1)] pb-[2px]">
+                <div className="hidden items-center gap-[var(--space-1)] pb-[2px] md:flex">
                   <button
                     type="button"
                     onClick={() => {

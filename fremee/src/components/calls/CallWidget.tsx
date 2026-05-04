@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { Capacitor } from "@capacitor/core";
 
 type Props = {
   participanteNombre: string;
@@ -12,6 +13,7 @@ type Props = {
 };
 
 export default function CallWidget({ participanteNombre, participanteFoto, duration, isActive, onExpand, onEnd }: Props) {
+  const isNative = Capacitor.isNativePlatform();
   const formatDuration = (s: number) => {
     const m = Math.floor(s / 60).toString().padStart(2, "0");
     const sec = (s % 60).toString().padStart(2, "0");
@@ -19,7 +21,10 @@ export default function CallWidget({ participanteNombre, participanteFoto, durat
   };
 
   return (
-    <div className="fixed top-4 right-4 z-[200] flex items-center gap-2 rounded-[16px] bg-[#1a1a1a]/95 backdrop-blur-md border border-white/10 shadow-elev-4 px-3 py-2">
+    <div
+      className="fixed right-4 z-[200] flex items-center gap-2 rounded-[16px] bg-[#1a1a1a]/95 backdrop-blur-md border border-white/10 shadow-elev-4 px-3 py-2"
+      style={isNative ? { top: "calc(env(safe-area-inset-top) + 16px)" } : { top: "16px" }}
+    >
       {/* Avatar */}
       <div className="size-8 shrink-0 overflow-hidden rounded-full bg-white/10 border border-white/10">
         {participanteFoto ? (
