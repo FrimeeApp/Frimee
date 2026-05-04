@@ -1777,14 +1777,14 @@ export default function PlanDetailPage() {
       {activeTab !== "chat" && !showAddSheet && !showAddGastoSheet && (
         activeTab === "itinerario" || activeTab === "gastos" || activeTab === "fotos"
       ) && (!isPast || membershipChecked || isAdmin) && (membershipChecked || isAdmin || activeTab === "gastos") && (
-        <div className="fixed bottom-[calc(var(--space-6)+env(safe-area-inset-bottom))] right-[var(--page-margin-x)] z-[65] flex flex-col items-end gap-3 md:hidden">
-          <div className={`flex flex-col items-end gap-2 transition-all duration-200 ease-out ${mobileCreateOpen ? "pointer-events-auto translate-y-0 opacity-100" : "pointer-events-none translate-y-2 opacity-0"}`}>
+        <div className="pointer-events-none fixed bottom-[calc(var(--space-6)+env(safe-area-inset-bottom))] right-[var(--page-margin-x)] z-[65] md:hidden">
+          <div className={`absolute bottom-[calc(100%+12px)] right-0 flex flex-col items-end gap-2 transition-all duration-200 ease-out ${mobileCreateOpen ? "pointer-events-auto translate-y-0 opacity-100" : "pointer-events-none translate-y-2 opacity-0"}`}>
             {!isPast && isAdmin && (
               <button
                 type="button"
                 onClick={openCreateSubplan}
                 aria-label="Crear subplan"
-                className="flex items-center gap-[var(--space-2)]"
+                className="pointer-events-auto flex items-center gap-[var(--space-2)]"
               >
                 <span className="rounded-full border border-app bg-app px-[var(--space-3)] py-[7px] text-caption font-[var(--fw-semibold)] text-app shadow-elev-2">
                   Crear subplan
@@ -1799,7 +1799,7 @@ export default function PlanDetailPage() {
                 type="button"
                 onClick={openCreateGasto}
                 aria-label="Crear gasto"
-                className="flex items-center gap-[var(--space-2)]"
+                className="pointer-events-auto flex items-center gap-[var(--space-2)]"
               >
                 <span className="rounded-full border border-app bg-app px-[var(--space-3)] py-[7px] text-caption font-[var(--fw-semibold)] text-app shadow-elev-2">
                   Crear gasto
@@ -1815,7 +1815,7 @@ export default function PlanDetailPage() {
                 onClick={openPhotoUpload}
                 aria-label="Subir foto"
                 disabled={fabPhotoUploading}
-                className="flex items-center gap-[var(--space-2)]"
+                className="pointer-events-auto flex items-center gap-[var(--space-2)]"
               >
                 <span className="rounded-full border border-app bg-app px-[var(--space-3)] py-[7px] text-caption font-[var(--fw-semibold)] text-app shadow-elev-2">
                   {fabPhotoUploading ? "Subiendo..." : "Subir foto"}
@@ -1839,7 +1839,7 @@ export default function PlanDetailPage() {
             aria-label={mobileCreateOpen ? "Cerrar crear" : "Crear"}
             aria-expanded={mobileCreateOpen}
             onClick={() => setMobileCreateOpen((open) => !open)}
-            className="flex size-14 items-center justify-center rounded-full bg-primary-token text-contrast-token shadow-[0_16px_32px_rgba(0,0,0,0.24)] transition-transform duration-200 active:scale-95"
+            className="pointer-events-auto flex size-14 items-center justify-center rounded-full bg-primary-token text-contrast-token shadow-[0_16px_32px_rgba(0,0,0,0.24)] transition-transform duration-200 active:scale-95"
           >
             <PlusIcon className={`size-7 transition-transform duration-200 ${mobileCreateOpen ? "rotate-45" : "rotate-0"}`} />
           </button>
