@@ -101,6 +101,7 @@ export default function RegisterPage() {
 
       setRegistrationComplete(true);
     } catch (err: unknown) {
+      console.error("[register] signUp error", err);
       setErrorMsg(getAuthErrorMessage(err, "No se pudo crear la cuenta. Inténtalo de nuevo."));
       focusInput(emailRef);
     } finally {
