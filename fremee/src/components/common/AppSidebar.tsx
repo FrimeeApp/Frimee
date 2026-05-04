@@ -156,6 +156,11 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
   }, [desktopCreateMenuOpen]);
 
   useEffect(() => {
+    if (expanded) return;
+    setDesktopCreateMenuOpen(false);
+  }, [expanded]);
+
+  useEffect(() => {
     if (!searchPopoverOpen) return;
     const frame = window.requestAnimationFrame(() => searchInputRef.current?.focus());
     return () => window.cancelAnimationFrame(frame);

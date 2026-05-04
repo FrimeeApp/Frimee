@@ -111,6 +111,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
   const [pagadorSearch, setPagadorSearch] = useState("");
   const [itemPopoverIdx, setItemPopoverIdx] = useState<number | null>(null);
   const [itemPopoverSearch, setItemPopoverSearch] = useState("");
+  const [itemPopoverStyle, setItemPopoverStyle] = useState<{ top?: number; bottom?: number; left: number; width: number } | null>(null);
   const pagadorBtnRef = useRef<HTMLButtonElement>(null);
   const itemPopoverBtnRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
@@ -303,6 +304,28 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
       return;
     }
     requestClose();
+  }
+
+  function openItemPopover(idx: number) {
+    if (itemPopoverIdx === idx) {
+      setItemPopoverIdx(null);
+      setItemPopoverStyle(null);
+      setItemPopoverSearch("");
+      return;
+    }
+
+    const r = itemPopoverBtnRefs.current[idx]?.getBoundingClientRect();
+    const popoverH = 260;
+    const popoverW = 210;
+    const spaceBelow = r ? window.innerHeight - r.bottom - 8 : 0;
+    const showAbove = spaceBelow < popoverH && (r?.top ?? 0) > popoverH;
+    const top = showAbove ? undefined : (r ? r.bottom + 4 : 0);
+    const bottom = showAbove ? (r ? window.innerHeight - r.top + 4 : 0) : undefined;
+    const left = r ? Math.min(r.left, window.innerWidth - popoverW - 8) : 0;
+
+    setItemPopoverIdx(idx);
+    setItemPopoverStyle({ top, bottom, left, width: popoverW });
+    setItemPopoverSearch("");
   }
 
   // ── shared dropdown renderer ──
@@ -771,25 +794,18 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                                 </button>
                               ))}
                               <div className="relative">
-                                <button ref={el => { itemPopoverBtnRefs.current[idx] = el; }} type="button" onClick={() => { setItemPopoverIdx(itemPopoverIdx === idx ? null : idx); setItemPopoverSearch(""); }} className="flex size-[26px] items-center justify-center rounded-full border border-dashed border-app text-muted hover:border-primary-token hover:text-primary-token transition-colors">
+                                <button ref={el => { itemPopoverBtnRefs.current[idx] = el; }} type="button" onClick={() => openItemPopover(idx)} className="flex size-[26px] items-center justify-center rounded-full border border-dashed border-app text-muted hover:border-primary-token hover:text-primary-token transition-colors">
                                   <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
                                 </button>
-                                {itemPopoverIdx === idx && (() => {
-                                  const r = itemPopoverBtnRefs.current[idx]?.getBoundingClientRect();
-                                  const popoverH = 260;
-                                  const spaceBelow = r ? window.innerHeight - r.bottom - 8 : 0;
-                                  const showAbove = spaceBelow < popoverH;
-                                  const top = showAbove ? undefined : (r ? r.bottom + 4 : 0);
-                                  const bottom = showAbove ? (r ? window.innerHeight - r.top + 4 : 0) : undefined;
-                                  const left = r ? Math.min(r.left, window.innerWidth - 220) : 0;
+                                {itemPopoverIdx === idx && itemPopoverStyle && (() => {
                                   const allChecked = miembros.every(m => !!item.asignados[m.user_id]);
-                                  return (
+                                  return createPortal(
                                     <>
-                                      <div className="fixed inset-0 z-40" onClick={() => setItemPopoverIdx(null)} />
-                                      <div className="fixed z-50 rounded-xl border border-app bg-[var(--surface)] shadow-elev-3" style={{ top, bottom, left, width: 210 }}>
-                                        <div className="flex items-center justify-between border-b border-app px-3 py-2 gap-2">
+                                      <div className="fixed inset-0 z-[9998]" onClick={() => { setItemPopoverIdx(null); setItemPopoverStyle(null); }} />
+                                      <div className="fixed z-[9999] rounded-xl border border-app bg-[var(--surface)] shadow-elev-3" style={itemPopoverStyle}>
+                                        <div className="flex items-center justify-between gap-2 border-b border-app px-3 py-2">
                                           <div className="flex h-9 min-w-0 flex-1 items-center rounded-full border border-app bg-[var(--search-field-bg)] px-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-                                          <input autoFocus value={itemPopoverSearch} onChange={e => setItemPopoverSearch(e.target.value)} placeholder="Buscar..." className="min-w-0 flex-1 bg-transparent text-body-sm text-app outline-none placeholder:text-muted" />
+                                            <input autoFocus value={itemPopoverSearch} onChange={e => setItemPopoverSearch(e.target.value)} placeholder="Buscar..." className="min-w-0 flex-1 bg-transparent text-body-sm text-app outline-none placeholder:text-muted" />
                                           </div>
                                           <button type="button" onClick={() => { const patch: Record<string, boolean> = {}; miembros.forEach(m => { patch[m.user_id] = !allChecked; }); updateItem(idx, { asignados: patch }); }} className="shrink-0 text-caption text-muted hover:text-primary-token transition-colors">{allChecked ? "Ninguno" : "Todos"}</button>
                                         </div>
@@ -806,7 +822,8 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                                           })}
                                         </div>
                                       </div>
-                                    </>
+                                    </>,
+                                    document.body
                                   );
                                 })()}
                               </div>
