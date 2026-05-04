@@ -1699,8 +1699,8 @@ export function ChatConversation({
 
       {/* Header */}
       {!embedded && (
-        <div className="flex items-center gap-[var(--space-3)] border-b border-app px-[var(--space-3)] pb-[var(--space-3)] pt-mobile-safe-top md:px-[var(--space-4)] md:py-[var(--space-3)]">
-          <button type="button" onClick={onBack} className="flex size-[32px] items-center justify-center rounded-full transition-colors hover:bg-surface" aria-label="Volver">
+        <div className="flex min-w-0 items-center gap-[var(--space-3)] border-b border-app px-[var(--space-3)] pb-[var(--space-3)] pt-mobile-safe-top md:px-[var(--space-4)] md:py-[var(--space-3)]">
+          <button type="button" onClick={onBack} className="flex size-[32px] shrink-0 items-center justify-center rounded-full transition-colors hover:bg-surface" aria-label="Volver">
             <BackIcon className="size-[18px]" />
           </button>
           <button type="button" onClick={() => setShowInfo(true)} className="flex min-w-0 flex-1 items-center gap-[var(--space-3)] rounded-[8px] px-1 py-1 text-left transition-colors hover:bg-surface">
@@ -1712,10 +1712,10 @@ export function ChatConversation({
               {chat.tipo === "GRUPO" && <p className="text-[14px] text-muted">{chat.miembros.length} miembros</p>}
             </div>
           </button>
-          <button type="button" onClick={() => onStartCall?.("audio")} className="flex size-[32px] items-center justify-center rounded-full text-muted transition-colors hover:bg-surface hover:text-app md:hidden" aria-label="Llamada de voz">
+          <button type="button" onClick={() => onStartCall?.("audio")} className="flex size-[32px] shrink-0 items-center justify-center rounded-full text-muted transition-colors hover:bg-surface hover:text-app" aria-label="Llamada de voz">
             <PhoneCallIcon className="size-[18px]" />
           </button>
-          <button type="button" onClick={() => onStartCall?.("video")} className="flex size-[32px] items-center justify-center rounded-full text-muted transition-colors hover:bg-surface hover:text-app md:hidden" aria-label="Llamada de vídeo">
+          <button type="button" onClick={() => onStartCall?.("video")} className="flex size-[32px] shrink-0 items-center justify-center rounded-full text-muted transition-colors hover:bg-surface hover:text-app" aria-label="Llamada de vídeo">
             <VideoCallIcon className="size-[18px]" />
           </button>
         </div>
