@@ -338,7 +338,7 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
             playsInline
             muted={tile.isLocal}
             ref={(el) => { if (el) attachTrack(trackKey, el); }}
-            className={`absolute inset-0 h-full w-full ${tile.isScreenShare ? "object-contain bg-black" : "object-cover"} ${!tile.isScreenShare && tile.videoMuted ? "hidden" : ""}`}
+            className={`absolute inset-0 h-full w-full ${tile.isScreenShare ? "object-contain bg-black" : "object-cover"} ${tile.isLocal && !tile.isScreenShare ? "-scale-x-100" : ""} ${!tile.isScreenShare && tile.videoMuted ? "hidden" : ""}`}
           />
         )}
 

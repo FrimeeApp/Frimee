@@ -1712,11 +1712,32 @@ export function ChatConversation({
               {chat.tipo === "GRUPO" && <p className="text-[14px] text-muted">{chat.miembros.length} miembros</p>}
             </div>
           </button>
-          <button type="button" onClick={() => onStartCall?.("audio")} className="flex size-[32px] items-center justify-center rounded-full transition-colors hover:bg-surface text-muted hover:text-app" aria-label="Llamada de voz">
+          <button type="button" onClick={() => onStartCall?.("audio")} className="flex size-[32px] items-center justify-center rounded-full text-muted transition-colors hover:bg-surface hover:text-app md:hidden" aria-label="Llamada de voz">
             <PhoneCallIcon className="size-[18px]" />
           </button>
-          <button type="button" onClick={() => onStartCall?.("video")} className="flex size-[32px] items-center justify-center rounded-full transition-colors hover:bg-surface text-muted hover:text-app" aria-label="Llamada de vídeo">
+          <button type="button" onClick={() => onStartCall?.("video")} className="flex size-[32px] items-center justify-center rounded-full text-muted transition-colors hover:bg-surface hover:text-app md:hidden" aria-label="Llamada de vídeo">
             <VideoCallIcon className="size-[18px]" />
+          </button>
+        </div>
+      )}
+
+      {embedded && onStartCall && (
+        <div className="flex items-center justify-end gap-1 px-[var(--space-3)] pt-2 md:hidden">
+          <button
+            type="button"
+            onClick={() => onStartCall("audio")}
+            className="flex size-[30px] items-center justify-center rounded-full text-muted transition-colors hover:bg-surface hover:text-app"
+            aria-label="Llamada de voz"
+          >
+            <PhoneCallIcon className="size-[16px]" />
+          </button>
+          <button
+            type="button"
+            onClick={() => onStartCall("video")}
+            className="flex size-[30px] items-center justify-center rounded-full text-muted transition-colors hover:bg-surface hover:text-app"
+            aria-label="Videollamada"
+          >
+            <VideoCallIcon className="size-[16px]" />
           </button>
         </div>
       )}
