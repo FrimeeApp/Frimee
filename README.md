@@ -4,7 +4,7 @@
 
 [![Web App](https://img.shields.io/badge/-frimee.es-brightgreen?style=for-the-badge&logo=vercel&logoColor=white)](https://frimee.es "Abrir la app")
 [![Landing](https://img.shields.io/badge/-landing.frimee.es-blue?style=for-the-badge&logo=safari&logoColor=white)](https://landing.frimee.es "Página de presentación")
-[![License: MIT](https://img.shields.io/badge/-MIT-blue.svg?style=for-the-badge)](LICENSE "Licencia")
+[![License](https://img.shields.io/badge/-Propietario-red.svg?style=for-the-badge)](LICENSE "Licencia")
 [![Last Commit](https://img.shields.io/github/last-commit/FrimeeApp/Frimee/dev?label=último+commit&style=for-the-badge&display_timestamp=committer)](https://github.com/FrimeeApp/Frimee/commits "Historial de commits")
 [![Commits](https://img.shields.io/github/commit-activity/m/FrimeeApp/Frimee?label=commits&style=for-the-badge)](https://github.com/FrimeeApp/Frimee/commits "Actividad")
 
