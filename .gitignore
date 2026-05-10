@@ -42,3 +42,16 @@ coverage/
 
 seed-test-gastos.mjs
 seed-test-users.mjs
+
+# Supabase local state
+supabase/.temp/
+
+# SQL con estructura interna de BBDD y datos sensibles
+supabase/sql/
+
+# Firebase config (contienen claves privadas)
+fremee/ios/App/App/GoogleService-Info.plist
+fremee/android/app/google-services.json
+
+# Agent context
+.agents/
