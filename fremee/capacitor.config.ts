@@ -20,6 +20,13 @@ const config: CapacitorConfig = {
       resizeOnFullScreen: true,
       scrollOnFocus: false,
     },
+    PushNotifications: {
+      presentationOptions: ["badge", "sound", "alert"],
+    },
+    LocalNotifications: {
+      smallIcon: "ic_stat_icon_config_sample",
+      iconColor: "#5B4EFF",
+    },
   },
 };
 
