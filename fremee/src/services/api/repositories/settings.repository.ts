@@ -1,5 +1,7 @@
 import {
   fetchUserSettingsByUserId,
+  fetchNotificationPreferences,
+  upsertNotificationPreferences,
   uploadProfileImageToSupabaseStorage,
   upsertUserProfileAndSettingsRpc,
   type ProfileVisibility,
@@ -8,6 +10,7 @@ import {
   type UserProfileAndSettingsRow,
   type UserSettingsRow,
 } from "@/services/api/endpoints/settings.endpoint";
+import type { NotificationPreferences } from "@/services/notifications/preferences";
 
 export type UserSettingsDto = UserSettingsRow;
 export type UserSettingsTheme = ThemePreference;
@@ -27,4 +30,14 @@ export async function saveUserProfileAndSettings(
 
 export async function uploadProfileImage(params: { userId: string; file: File }) {
   return uploadProfileImageToSupabaseStorage(params);
+}
+
+export async function getNotificationPreferences(): Promise<NotificationPreferences> {
+  return fetchNotificationPreferences();
+}
+
+export async function saveNotificationPreferences(
+  prefs: NotificationPreferences
+): Promise<NotificationPreferences> {
+  return upsertNotificationPreferences(prefs);
 }
