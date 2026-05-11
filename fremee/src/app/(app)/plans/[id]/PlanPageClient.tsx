@@ -24,7 +24,7 @@ import AppSidebar from "@/components/common/AppSidebar";
 import PublishPlanModal from "@/components/plans/modals/PublishPlanModal";
 import PlanFotosTab from "@/components/plans/PlanFotosTab";
 import { PlanGastoDetailModal } from "@/components/plans/modals/PlanGastoDetailModal";
-import { uploadPlanAlbumFile } from "@/services/firebase/upload";
+import { uploadPlanAlbumFile, uploadPlanCoverFile } from "@/services/firebase/upload";
 import { addPlanFoto } from "@/services/api/repositories/plan-fotos.repository";
 import { formatMoney, formatExpenseDateTime, getInitial, formatDateRange, fmtTime, fmtDayHeader } from "@/lib/formatters";
 import { FIELD_LINE_CLS } from "@/lib/styles";
@@ -2414,6 +2414,13 @@ export default function PlanDetailPage() {
             initialValues={initialValues}
             onCreate={async (payload) => {
               const planId = Number(id);
+              let coverUrl = payload.coverImageUrl;
+
+              if (payload.coverFile) {
+                const { downloadUrl } = await uploadPlanCoverFile({ file: payload.coverFile, userId: user.id });
+                coverUrl = downloadUrl;
+              }
+
               await updatePlanEndpoint({
                 planId,
                 titulo: payload.title,
@@ -2423,7 +2430,7 @@ export default function PlanDetailPage() {
                 ubicacionNombre: payload.location,
                 allDay: true,
                 visibilidad: payload.visibility,
-                fotoPortada: payload.coverImageUrl,
+                fotoPortada: coverUrl,
               });
               const updated = await fetchPlansByIds({ planIds: [planId] });
               if (updated[0]) setPlan(updated[0]);
