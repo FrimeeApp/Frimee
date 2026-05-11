@@ -736,7 +736,7 @@ export default function FeedPage() {
                       <div className="rounded-modal border border-app bg-surface p-[var(--space-5)] text-body text-muted shadow-elev-1">
                       {activeFeedTab === "following"
                         ? "Aún no hay publicaciones de las personas que sigues."
-                        : "Aun no hay publicaciones para mostrar."}
+                        : "Aún no hay publicaciones para mostrar."}
                     </div>
                   ) : (
                     <div

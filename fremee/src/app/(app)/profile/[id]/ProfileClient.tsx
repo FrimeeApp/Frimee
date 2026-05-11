@@ -439,7 +439,7 @@ export default function ProfilePage() {
                   <span className="text-[18px] font-[600] leading-[1.2]" style={{ fontFamily: "var(--font-inter), sans-serif" }}>
                     0
                   </span>
-                  <span className="text-body-sm text-muted">Paises</span>
+                  <span className="text-body-sm text-muted">Países</span>
                 </div>
               </div>
             </div>
@@ -486,7 +486,7 @@ export default function ProfilePage() {
               {activeTab === "planes" ? (
                 plans.length === 0 ? (
                   <p className="py-[var(--space-6)] text-center text-body-sm text-muted">
-                    {isOwnProfile ? "Aun no tienes planes publicados." : "No hay planes publicos."}
+                    {isOwnProfile ? "Aún no tienes planes publicados." : "No hay planes públicos."}
                   </p>
                 ) : (
                   <PlanGrid plans={plans} onPlanClick={(planId) => router.push(Capacitor.isNativePlatform() ? `/plans/static?id=${planId}` : `/plans/${planId}`)} />
@@ -497,7 +497,7 @@ export default function ProfilePage() {
                 </div>
               ) : savedPlans.length === 0 ? (
                 <p className="py-[var(--space-6)] text-center text-body-sm text-muted">
-                  Aun no has guardado ningun plan.
+                  Aún no has guardado ningún plan.
                 </p>
               ) : (
                 <PlanGrid plans={savedPlans} onPlanClick={(planId) => router.push(Capacitor.isNativePlatform() ? `/plans/static?id=${planId}` : `/plans/${planId}`)} />
