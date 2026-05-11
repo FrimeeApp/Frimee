@@ -10,7 +10,7 @@ import { applyThemePreference, cacheThemePreference, type AppThemePreference } f
 
 type FormStatus = "idle" | "loading" | "error" | "success";
 
-const waitlistSuccessTitle = "Estas en la waitlist";
+const waitlistSuccessTitle = "Estás en la waitlist";
 const waitlistSuccessMessage = "Te escribiremos cuando abramos acceso anticipado a Frimee.";
 
 type WaitlistSectionProps = {
@@ -228,7 +228,7 @@ export default function WaitlistSection({
       setStatus("error");
       setEmailHasError(true);
       setEmail(value);
-      setFeedback(value ? "Revisa el email. Debe tener un formato valido." : "Introduce tu email para unirte a la waitlist.");
+      setFeedback(value ? "Revisa el email. Debe tener un formato válido." : "Introduce tu email para unirte a la waitlist.");
       requestAnimationFrame(() => {
         emailInputRef.current?.focus();
       });
@@ -258,8 +258,8 @@ export default function WaitlistSection({
         setEmailHasError(response.status === 400);
         setFeedback(
           response.status === 400
-            ? "Revisa el email. Debe tener un formato valido."
-            : result.error ?? "No hemos podido guardar tu email. Intentalo de nuevo en unos segundos.",
+            ? "Revisa el email. Debe tener un formato válido."
+            : result.error ?? "No hemos podido guardar tu email. Inténtalo de nuevo en unos segundos.",
         );
         if (response.status === 400) {
           requestAnimationFrame(() => {
@@ -273,7 +273,7 @@ export default function WaitlistSection({
         setStatus("error");
         setEmailHasError(true);
         setEmail(value);
-        setFeedback("Este email ya esta en la waitlist.");
+        setFeedback("Este email ya está en la waitlist.");
         requestAnimationFrame(() => {
           emailInputRef.current?.focus();
           emailInputRef.current?.select();
@@ -288,7 +288,7 @@ export default function WaitlistSection({
     } catch {
       setStatus("error");
       setEmailHasError(false);
-      setFeedback("No hemos podido conectar con la waitlist. Revisa tu conexion e intentalo de nuevo.");
+      setFeedback("No hemos podido conectar con la waitlist. Revisa tu conexión e inténtalo de nuevo.");
     }
   };
 
