@@ -97,7 +97,7 @@ function CategorySection({
   const hasChildren = items.length > 0;
 
   return (
-    <div className="border-b border-[var(--border)] last:border-b-0">
+    <div>
       {/* Category header */}
       <div className="flex min-h-[56px] items-center gap-3 py-3">
         <span className="shrink-0 text-muted">{icon}</span>
@@ -134,13 +134,11 @@ function CategorySection({
 
       {/* Child items */}
       {hasChildren && open && !locked && (
-        <div className="mb-2 ml-8 flex flex-col gap-0 rounded-[var(--radius-card)] border border-[var(--border)] bg-[var(--surface)] overflow-hidden">
-          {items.map((item, idx) => (
+        <div className="mb-2 ml-8 flex flex-col gap-0">
+          {items.map((item) => (
             <div
               key={item.key}
-              className={`flex min-h-[48px] items-center justify-between gap-3 px-4 py-2 ${
-                idx < items.length - 1 ? "border-b border-[var(--border)]" : ""
-              }`}
+              className="flex min-h-[48px] items-center justify-between gap-3 px-4 py-2"
             >
               <div className="min-w-0 flex-1">
                 <p className="text-body-sm text-app">{item.label}</p>
@@ -183,7 +181,7 @@ function QuietHoursRow({
 }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="border-b border-[var(--border)] last:border-b-0">
+    <div>
       <div className="flex min-h-[56px] items-center gap-3 py-3">
         <span className="shrink-0 text-muted"><Clock className="size-[20px]" /></span>
         <div className="min-w-0 flex-1">
@@ -209,7 +207,7 @@ function QuietHoursRow({
       </div>
 
       {open && (
-        <div className="mb-2 ml-8 flex flex-col gap-3 rounded-[var(--radius-card)] border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+        <div className="mb-2 ml-8 flex flex-col gap-3 px-4 py-3">
           <p className="text-[13px] text-muted">
             No recibirás notificaciones en este intervalo (excepto alertas de seguridad).
           </p>
@@ -332,7 +330,7 @@ export function NotificationSettingsSection({ disabled: parentDisabled }: { disa
         </p>
       )}
 
-      <div className="rounded-[var(--radius-card)] border border-[var(--border)] bg-[var(--bg)] divide-y divide-[var(--border)] px-1">
+      <div>
 
         {/* ─ Viajes ─ */}
         <CategorySection
@@ -492,7 +490,7 @@ export function NotificationSettingsSection({ disabled: parentDisabled }: { disa
       </div>
 
       {/* ─ Quiet hours ─ */}
-      <div className="mt-3 rounded-[var(--radius-card)] border border-[var(--border)] bg-[var(--bg)] px-1">
+      <div>
         <QuietHoursRow
           enabled={quiet_hours.enabled}
           start={quiet_hours.start}

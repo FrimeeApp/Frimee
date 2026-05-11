@@ -10,6 +10,7 @@ import {
   Mail, MessageSquare, LogOut, Trash2, KeyRound, Eye, EyeOff, ChevronLeft,
 } from "lucide-react";
 import { NotificationSettingsSection } from "@/components/notifications/NotificationSettingsSection";
+import { BirthDatePicker } from "@/components/ui/BirthDatePicker";
 import { App } from "@capacitor/app";
 import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
 import { useAuth } from "@/providers/AuthProvider";
@@ -593,12 +594,10 @@ export default function SettingsPage() {
                 label="Fecha de nacimiento"
                 description="Se usa para personalización y edad mínima."
                 right={
-                  <input
-                    type="date"
+                  <BirthDatePicker
                     value={form.fechaNac}
+                    onChange={(iso) => setForm((prev) => ({ ...prev, fechaNac: iso }))}
                     disabled={disableEditing}
-                    onChange={(e) => setForm((prev) => ({ ...prev, fechaNac: e.target.value }))}
-                    className="rounded-input border border-app bg-surface px-[var(--space-3)] py-[var(--space-2)] text-body-sm disabled:opacity-[var(--disabled-opacity)]"
                   />
                 }
               />
