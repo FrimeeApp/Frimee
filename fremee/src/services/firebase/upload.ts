@@ -61,7 +61,7 @@ export async function uploadPhotoDataUrl(params: {
 }
 
 export async function uploadPlanCoverFile(params: { file: File; userId: string }) {
-  const webp = await toWebP(params.file);
+  const webp = await toWebP(params.file, 0.92);
   const filePath = `plans/${params.userId}/${Date.now()}.webp`;
   const fileRef = ref(storage, filePath);
   await uploadBytes(fileRef, webp, { contentType: "image/webp" });
@@ -102,7 +102,7 @@ export async function uploadAudioFile(params: { file: File; userId: string }) {
 }
 
 export async function uploadPlanAlbumFile(params: { file: File; planId: number }) {
-  const webp = await toWebP(params.file);
+  const webp = await toWebP(params.file, 0.92);
   const filePath = `plan-albums/${params.planId}/${Date.now()}.webp`;
   const fileRef = ref(storage, filePath);
   await uploadBytes(fileRef, webp, { contentType: "image/webp" });
