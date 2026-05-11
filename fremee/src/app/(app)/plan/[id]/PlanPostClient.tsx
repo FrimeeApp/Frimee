@@ -234,7 +234,7 @@ function ParticipantsSection({ snapshot, mode }: { snapshot: { count: number; av
                   initials(av.name)
                 )}
               </div>
-              <span className="text-[11px] text-muted max-w-[48px] truncate text-center">{av.name.split(" ")[0]}</span>
+              <span className="text-[11px] text-muted max-w-[48px] truncate text-center">{av.name?.split(" ")[0]}</span>
             </div>
           ))}
           {snapshot.count > snapshot.avatars.length && (

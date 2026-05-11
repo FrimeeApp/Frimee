@@ -128,7 +128,7 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, refreshK
       {fotos.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
           <PlaneEmptyIcon />
-          <p className="text-[14px] font-[600] text-muted">Aun no hay fotos</p>
+          <p className="text-[14px] font-[600] text-muted">Aún no hay fotos</p>
           {isMember && (
             <p className="text-[14px] text-muted opacity-70">Sube la primera foto del plan</p>
           )}

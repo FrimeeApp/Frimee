@@ -217,7 +217,7 @@ export default function MessagesPage() {
                       onClick={() => toggleMember(friend.id)}
                       className="flex items-center gap-[6px] rounded-full border border-app bg-surface px-[10px] py-[5px] text-[14px] font-[var(--fw-medium)] text-app transition-colors hover:bg-surface-inset"
                     >
-                      <span>{friend.nombre.split(" ")[0]}</span>
+                      <span>{friend.nombre?.split(" ")[0]}</span>
                       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[12px] text-muted">
                         <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
                       </svg>

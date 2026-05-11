@@ -15,7 +15,7 @@ type DiscardChangesDialogProps = {
 export function DiscardChangesDialog({
   open,
   title = "Descartar cambios",
-  message = "Si cierras ahora, se perdera la informacion que has completado.",
+  message = "Si cierras ahora, se perderá la información que has completado.",
   confirmLabel = "Descartar",
   cancelLabel = "Cancelar",
   onCancel,

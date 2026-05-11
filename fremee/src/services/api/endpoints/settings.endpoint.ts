@@ -1,5 +1,7 @@
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { getProfileImagesBucket } from "@/config/external";
+import type { NotificationPreferences } from "@/services/notifications/preferences";
+import { mergeWithDefaults } from "@/services/notifications/preferences";
 
 export type ThemePreference = "SYSTEM" | "LIGHT" | "DARK";
 export type ProfileVisibility = "PUBLICO" | "PRIVADO";
@@ -16,6 +18,7 @@ export type UserSettingsRow = {
   allow_friend_requests: boolean;
   google_sync_enabled: boolean;
   google_sync_export_plans: boolean;
+  notification_preferences?: NotificationPreferences | null;
 };
 
 export type UpsertUserSettingsParams = {
@@ -30,6 +33,7 @@ export type UpsertUserSettingsParams = {
   allowFriendRequests?: boolean | null;
   googleSyncEnabled?: boolean | null;
   googleSyncExportPlans?: boolean | null;
+  notificationPreferences?: NotificationPreferences | null;
 };
 
 export type UpsertUserProfileAndSettingsParams = {
@@ -48,6 +52,7 @@ export type UpsertUserProfileAndSettingsParams = {
   allowFriendRequests?: boolean | null;
   googleSyncEnabled?: boolean | null;
   googleSyncExportPlans?: boolean | null;
+  notificationPreferences?: NotificationPreferences | null;
 };
 
 export type UserProfileAndSettingsRow = {
@@ -66,6 +71,7 @@ export type UserProfileAndSettingsRow = {
   allow_friend_requests: boolean;
   google_sync_enabled?: boolean | null;
   google_sync_export_plans?: boolean | null;
+  notification_preferences?: NotificationPreferences | null;
 };
 
 const profileImagesBucket = getProfileImagesBucket();
@@ -133,6 +139,24 @@ export async function upsertUserProfileAndSettingsRpc(
   }
 
   return row as UserProfileAndSettingsRow;
+}
+
+export async function fetchNotificationPreferences(): Promise<NotificationPreferences> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_notification_preferences_get");
+  if (error) throw error;
+  return mergeWithDefaults((data ?? {}) as Partial<NotificationPreferences>);
+}
+
+export async function upsertNotificationPreferences(
+  prefs: NotificationPreferences
+): Promise<NotificationPreferences> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_notification_preferences_upsert", {
+    p_preferences: prefs,
+  });
+  if (error) throw error;
+  return mergeWithDefaults((data ?? {}) as Partial<NotificationPreferences>);
 }
 
 export async function uploadProfileImageToSupabaseStorage(params: {

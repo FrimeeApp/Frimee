@@ -9,6 +9,7 @@ import {
   Pencil, User, Shield, Calendar, Bell, Moon, Sun, Globe, Clock,
   Mail, MessageSquare, LogOut, Trash2, KeyRound, Eye, EyeOff, ChevronLeft,
 } from "lucide-react";
+import { NotificationSettingsSection } from "@/components/notifications/NotificationSettingsSection";
 import { App } from "@capacitor/app";
 import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
 import { useAuth } from "@/providers/AuthProvider";
@@ -631,18 +632,6 @@ export default function SettingsPage() {
 
             <SettingsSection title="Notificaciones">
               <SettingsRow
-                icon={<BellIcon />}
-                label="Push"
-                description="Alertas en el dispositivo."
-                right={
-                  <Switch
-                    checked={form.notifyPush}
-                    disabled={disableEditing}
-                    onChange={(next) => setForm((prev) => ({ ...prev, notifyPush: next }))}
-                  />
-                }
-              />
-              <SettingsRow
                 icon={<MailIcon />}
                 label="Email"
                 description="Resúmenes y actividad por correo."
@@ -666,6 +655,13 @@ export default function SettingsPage() {
                   />
                 }
               />
+            </SettingsSection>
+
+            <SettingsSection title="Notificaciones push">
+              <p className="mb-3 text-[13px] leading-snug text-muted">
+                Elige qué tipos de alertas recibes en tu dispositivo. Los ajustes se guardan automáticamente.
+              </p>
+              <NotificationSettingsSection disabled={disableEditing} />
             </SettingsSection>
 
             <SettingsSection title="Privacidad">
