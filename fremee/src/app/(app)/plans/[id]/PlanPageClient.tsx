@@ -2413,6 +2413,7 @@ export default function PlanDetailPage() {
             mode="edit"
             initialValues={initialValues}
             onCreate={async (payload) => {
+              if (!user) return;
               const planId = Number(id);
               let coverUrl = payload.coverImageUrl;
 
