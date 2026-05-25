@@ -31,3 +31,4 @@
 - [x] **Logging de errores (Sentry)** — `@sentry/nextjs` instalado, configs client/server/edge, `instrumentation.ts`. Requiere añadir `NEXT_PUBLIC_SENTRY_DSN` al `.env`
 - [x] **Metadata SEO por página** — template `%s · Frimee` en root layout, og:image por defecto, título propio en feed/mensajes/wallet/calendario/gastos/ajustes/vuelos/planes/perfil
 - [x] **Feedback en páginas (parcial)** — sistema de toasts (`ToastProvider` + `useToast`) en layout; likes, comentarios, inicio de chat y creación de grupo muestran error visible
+- [ ] **Cambio de prueba para PR** — línea de control añadida sin impacto en la app
