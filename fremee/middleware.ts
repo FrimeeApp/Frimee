@@ -3,6 +3,13 @@ import { createMiddlewareClient } from "@/services/supabase/middleware";
 
 export async function middleware(request: NextRequest) {
   const { supabase, response } = createMiddlewareClient(request);
+  const hostname = request.headers.get("host")?.split(":")[0]?.toLowerCase();
+  const blockedHosts = ["frimee.es", "www.frimee.es"];
+
+  if (blockedHosts.includes(hostname ?? "")) {
+    return new Response(null, { status: 403, statusText: "Forbidden" });
+  }
+
   const pathname = request.nextUrl.pathname;
   const code = request.nextUrl.searchParams.get("code");
   const error = request.nextUrl.searchParams.get("error");
