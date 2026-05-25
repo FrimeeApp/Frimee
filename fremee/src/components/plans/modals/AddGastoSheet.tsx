@@ -16,6 +16,7 @@ import { todayISO, limitDecimals, adjustNumericString } from "@/lib/form-helpers
 import { buildInternalApiUrl } from "@/config/external";
 import { Avatar } from "@/components/ui/Avatar";
 import { FIELD_LINE_CLS } from "@/lib/styles";
+import { DatePickerField } from "@/components/ui/DatePickerField";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
 import { CloseX } from "@/components/ui/CloseX";
 import { ModalFeedback, type ModalFeedbackState } from "@/components/ui/ModalFeedback";
@@ -361,9 +362,9 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
 
   return (
     <>
-      <div data-closing={isClosing ? "true" : "false"} className="app-modal-overlay fixed inset-0 z-40" />
+      <div data-closing={isClosing ? "true" : "false"} className="app-modal-overlay fixed inset-0 z-[1030]" />
       <div
-        className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-[var(--space-4)]"
+        className="fixed inset-0 z-[1040] flex items-center justify-center p-0 md:p-[var(--space-4)]"
         onClick={(e) => { if (e.target !== e.currentTarget) return; if (window.matchMedia("(min-width: 768px)").matches) requestDismiss(); }}
       >
         <div
@@ -481,7 +482,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                   <div>
                     <p className="mb-[var(--space-2)] text-[13px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Fecha</p>
                     <div className={fieldLineCls}>
-                      <input type="date" value={fechaGasto} onChange={(e) => setFechaGasto(e.target.value)} className="w-full bg-transparent text-body text-app outline-none" />
+                      <DatePickerField value={fechaGasto} onChange={setFechaGasto} />
                     </div>
                   </div>
                 </div>
