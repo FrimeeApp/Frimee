@@ -105,9 +105,67 @@ export default function WaitlistSection({
   const [status, setStatus] = useState<FormStatus>("idle");
   const [feedback, setFeedback] = useState("");
   const [emailHasError, setEmailHasError] = useState(false);
+  const [privacyModalOpen, setPrivacyModalOpen] = useState(false);
+  const [privacyModalClosing, setPrivacyModalClosing] = useState(false);
   const canvasHostRef = useRef<HTMLDivElement>(null);
   const emailInputRef = useRef<HTMLInputElement>(null);
   const honeypotInputRef = useRef<HTMLInputElement>(null);
+  const privacyCloseTimeoutRef = useRef<number | null>(null);
+  const isStandaloneSuccess = standalone && status === "success";
+  const canSubmit = email.trim().length > 0 && status !== "loading";
+
+  function openPrivacyModal() {
+    if (privacyCloseTimeoutRef.current) {
+      window.clearTimeout(privacyCloseTimeoutRef.current);
+      privacyCloseTimeoutRef.current = null;
+    }
+
+    setPrivacyModalClosing(false);
+    setPrivacyModalOpen(true);
+  }
+
+  function closePrivacyModal() {
+    if (privacyModalClosing) {
+      return;
+    }
+
+    setPrivacyModalClosing(true);
+    privacyCloseTimeoutRef.current = window.setTimeout(() => {
+      setPrivacyModalOpen(false);
+      setPrivacyModalClosing(false);
+      privacyCloseTimeoutRef.current = null;
+    }, 180);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (privacyCloseTimeoutRef.current) {
+        window.clearTimeout(privacyCloseTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!privacyModalOpen) {
+      return;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        closePrivacyModal();
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [privacyModalOpen]);
 
   useEffect(() => {
     if (!showModel) {
@@ -298,15 +356,21 @@ export default function WaitlistSection({
   const shellClassName = standalone
     ? "w-full"
     : "v3-waitlist-shell";
-  const innerClassName = standalone
-    ? "mx-auto grid h-dvh w-full max-w-6xl grid-cols-1 content-start gap-12 px-5 pb-4 pt-[clamp(4.25rem,15dvh,7.5rem)] md:content-center md:gap-14 md:px-8 md:py-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)] lg:items-center lg:gap-14 lg:px-12"
+  const innerClassName = isStandaloneSuccess
+    ? "mx-auto flex min-h-dvh w-full max-w-6xl items-center justify-center px-5 py-20 md:px-8"
+    : standalone
+    ? "mx-auto grid min-h-dvh w-full max-w-3xl grid-cols-1 content-start gap-8 px-5 pb-24 pt-[clamp(4.25rem,14dvh,7rem)] md:content-center md:gap-10 md:px-8 md:pb-24 md:pt-8"
     : "mx-auto w-[min(100%-2rem,72rem)] py-20 md:py-28";
-  const gridClassName = standalone
+  const gridClassName = isStandaloneSuccess
+    ? "w-full"
+    : standalone
     ? "grid grid-cols-1 gap-5"
     : showModel
       ? "mt-10 grid grid-cols-1 gap-5 md:mt-12 md:grid-cols-2 md:items-center"
       : "mt-10 grid grid-cols-1 gap-5 md:mt-12";
-  const articleClassName = standalone
+  const articleClassName = isStandaloneSuccess
+    ? "mx-auto w-full max-w-[34rem] p-0"
+    : standalone
     ? "w-full p-0 md:max-w-[34rem] md:p-0"
     : showModel
       ? "md:p-8"
@@ -322,22 +386,22 @@ export default function WaitlistSection({
       ) : null}
       <div className={shellClassName}>
         <div className={innerClassName}>
-          {standalone ? (
+          {standalone && status !== "success" ? (
             <div className="flex flex-col justify-center self-stretch">
-              <div className="mx-auto w-full max-w-[28rem] text-center lg:mx-0 lg:max-w-[32rem] lg:text-left">
-                <h2 className="v3-ac text-balance text-[clamp(2.15rem,9.6vw,3.2rem)] font-bold leading-[0.9] tracking-[-0.035em] text-[#17151f] dark:text-white md:text-[clamp(3.3rem,7vw,5.8rem)] md:leading-[0.88] md:tracking-[-0.045em]">
+              <div className="mx-auto w-full max-w-[34rem] text-center">
+                <h2 className="v3-ac text-balance text-[clamp(2rem,8.7vw,3.05rem)] font-bold leading-[0.94] tracking-[-0.035em] text-[#17151f] dark:text-white md:text-[clamp(3rem,5.4vw,4.55rem)] md:leading-[0.9] md:tracking-[-0.045em]">
                   <span className="block whitespace-nowrap">
-                    Prueba{" "}
+                    Únete a la
+                  </span>
+                  <span className="block whitespace-nowrap">
+                    waitlist de{" "}
                     <span className="font-display text-[0.92em] font-semibold italic tracking-[-0.04em] text-[#17151f]/90 dark:text-white/92">
                       Frimee
                     </span>
                   </span>
-                  <span className="block whitespace-nowrap">
-                    antes que nadie
-                  </span>
                 </h2>
-                <p className="mx-auto mt-5 hidden max-w-[28rem] text-pretty text-[15px] leading-6 text-[#17151f]/66 dark:text-white/66 md:block lg:mx-0 lg:text-[17px] lg:leading-7">
-                  Organiza viajes, gastos, fotos y decisiones del grupo en un solo sitio. Apuntate y te avisaremos cuando abramos acceso.
+                <p className="mx-auto mt-4 hidden max-w-[30rem] text-pretty text-base leading-6 text-[#17151f]/66 dark:text-white/66 md:block lg:leading-7">
+                  Organiza viajes, gastos, fotos y decisiones del grupo en un solo sitio y sé de los primeros en probarla.
                 </p>
               </div>
             </div>
@@ -349,57 +413,51 @@ export default function WaitlistSection({
             </div>
           )}
 
-          <div className={`${gridClassName} mx-auto w-full max-w-[32rem] lg:mx-0`}>
+          <div className={`${gridClassName} mx-auto w-full max-w-[32rem]`}>
             <article className={articleClassName}>
               {status === "success" ? (
                 <div
                   className={`${standalone ? "p-0 text-center" : "text-center"}`}
                   role="status"
                 >
-                  <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-[#298e7d]/10 text-[#227a6c] dark:bg-[#43e7d2]/10 dark:text-[#7ef3e4]">
-                    <svg
-                      aria-hidden="true"
-                      className="h-5 w-5"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth={2.2}
-                      viewBox="0 0 24 24"
+                  <div className={`${standalone ? "v3-waitlist-success" : ""}`}>
+                    <div className={`${standalone ? "v3-waitlist-success-icon h-16 w-16 md:h-20 md:w-20" : "h-11 w-11"} mx-auto flex items-center justify-center rounded-full bg-[#298e7d]/10 text-[#227a6c] dark:bg-[#43e7d2]/10 dark:text-[#7ef3e4]`}>
+                      <svg
+                        aria-hidden="true"
+                        className={`${standalone ? "h-8 w-8 md:h-10 md:w-10" : "h-5 w-5"}`}
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth={2.2}
+                        viewBox="0 0 24 24"
+                      >
+                        <path d="M20 6 9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </div>
+                    <h3 className={`${standalone ? "mt-6 text-2xl md:text-3xl" : "mt-4 text-xl"} font-semibold tracking-[-0.02em] text-[#17151f] dark:text-white`}>
+                      {waitlistSuccessTitle}
+                    </h3>
+                    <p className="mx-auto mt-2 max-w-[22rem] text-base leading-6 text-[#17151f]/62 dark:text-white/62">
+                      {feedback || waitlistSuccessMessage}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStatus("idle");
+                        setFeedback("");
+                        setEmailHasError(false);
+                        requestAnimationFrame(() => {
+                          emailInputRef.current?.focus();
+                        });
+                      }}
+                      className="mt-5 inline-flex h-11 items-center justify-center rounded-lg bg-[#17151f] px-5 text-base font-medium text-white transition-colors hover:bg-[#17151f]/92 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/20 focus-visible:ring-offset-2 focus-visible:ring-offset-[#f7f8f7] dark:bg-white dark:text-black dark:hover:bg-white/92 dark:focus-visible:ring-white/20 dark:focus-visible:ring-offset-[#17171d]"
                     >
-                      <path d="M20 6 9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
+                      Apuntar otro email
+                    </button>
                   </div>
-                  <h3 className="mt-4 text-xl font-semibold tracking-[-0.02em] text-[#17151f] dark:text-white">
-                    {waitlistSuccessTitle}
-                  </h3>
-                  <p className="mx-auto mt-2 max-w-[22rem] text-sm leading-6 text-[#17151f]/62 dark:text-white/62">
-                    {feedback || waitlistSuccessMessage}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setStatus("idle");
-                      setFeedback("");
-                      setEmailHasError(false);
-                      requestAnimationFrame(() => {
-                        emailInputRef.current?.focus();
-                      });
-                    }}
-                    className="mt-5 inline-flex h-11 items-center justify-center rounded-lg bg-[#17151f] px-5 text-sm font-medium text-white transition-colors hover:bg-[#17151f]/92 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/20 focus-visible:ring-offset-2 focus-visible:ring-offset-[#f7f8f7] dark:bg-white dark:text-black dark:hover:bg-white/92 dark:focus-visible:ring-white/20 dark:focus-visible:ring-offset-[#17171d]"
-                  >
-                    Apuntar otro email
-                  </button>
                 </div>
               ) : (
                 <>
-                  <p className={`${standalone ? "text-[11px] tracking-[0.2em] text-[#17151f] dark:text-white md:text-[13px] md:tracking-[0.22em]" : "text-base tracking-[0.14em] text-[color:var(--v3-purple)]"} font-semibold uppercase`}>
-                    Únete a la waitlist
-                  </p>
-                  {standalone && (
-                    <div className="mt-3 hidden max-w-[28rem] text-sm leading-6 text-[#17151f]/62 dark:text-white/62 md:block">
-                      Deja tu email y entra de los primeros en probar la experiencia completa de Frimee.
-                    </div>
-                  )}
-                  <form className={`${standalone ? "mt-3 space-y-2.5 md:mt-6 md:space-y-3.5" : "mt-6 space-y-3"}`} onSubmit={onSubmit} noValidate>
+                  <form className={`${standalone ? "space-y-2.5 md:space-y-3.5" : "mt-6 space-y-3"}`} onSubmit={onSubmit} noValidate>
                     <div aria-hidden="true" className="pointer-events-none absolute -left-[9999px] top-auto h-px w-px overflow-hidden">
                       <label htmlFor="waitlist-website">Website</label>
                       <input
@@ -414,69 +472,69 @@ export default function WaitlistSection({
                     <label htmlFor="waitlist-email" className="sr-only">
                       Email
                     </label>
-                    <input
-                      id="waitlist-email"
-                      ref={emailInputRef}
-                      type="email"
-                      value={email}
-                      disabled={status === "loading"}
-                      onChange={(event) => {
-                        setEmail(sanitizeEmailInput(event.target.value));
-                        if (emailHasError) {
-                          setEmailHasError(false);
-                        }
-                        if (status !== "idle") {
-                          setStatus("idle");
-                          setFeedback("");
-                        }
-                      }}
-                      maxLength={MAX_EMAIL_LENGTH}
-                      placeholder="tu@email.com"
-                      required
-                      aria-invalid={emailHasError}
-                      aria-describedby={feedback ? "waitlist-feedback" : undefined}
-                      className={`${standalone ? "h-12 rounded-lg bg-white/45 px-4 text-[#17151f] placeholder:text-[#17151f]/38 dark:bg-white/[0.03] dark:text-white dark:placeholder:text-white/38 md:h-14" : "h-12 rounded-xl bg-transparent px-4 text-[color:var(--v3-heading)] placeholder:text-[color:var(--v3-sub)]"} ${emailHasError ? "border-red-500/80 focus:border-red-500 focus:ring-2 focus:ring-red-500/15 dark:border-red-400/80 dark:focus:border-red-400 dark:focus:ring-red-400/20" : standalone ? "border-black/10 focus:border-black/30 dark:border-white/10 dark:focus:border-white/30" : "border-[var(--v3-border)] focus:border-[var(--v3-heading)]"} w-full border text-base outline-none ring-0 disabled:cursor-not-allowed disabled:opacity-60`}
-                    />
-                    <button
-                      type="submit"
-                      disabled={status === "loading"}
-                      className={`${standalone ? "h-12 rounded-lg bg-[#17151f] text-white hover:bg-[#17151f]/92 focus-visible:ring-black/20 focus-visible:ring-offset-[#f7f8f7] dark:bg-white dark:text-black dark:hover:bg-white/92 dark:focus-visible:ring-white/20 dark:focus-visible:ring-offset-[#17171d] md:h-14" : "h-12 rounded-[var(--radius-button)] bg-black text-white hover:opacity-90 focus-visible:ring-black/30 dark:bg-white dark:text-black dark:focus-visible:ring-white/35"} group inline-flex w-full items-center justify-center gap-2 overflow-hidden px-5 text-base font-medium transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70`}
+                    <div
+                      className={`${standalone ? "min-h-14 rounded-xl bg-white/45 p-1.5 dark:bg-white/[0.03] md:min-h-16" : "min-h-14 rounded-[var(--radius-button)] bg-transparent p-1.5"} ${emailHasError ? "border-red-500/80 focus-within:border-red-500 focus-within:ring-2 focus-within:ring-red-500/15 dark:border-red-400/80 dark:focus-within:border-red-400 dark:focus-within:ring-red-400/20" : standalone ? "border-black/10 focus-within:border-black/30 dark:border-white/10 dark:focus-within:border-white/30" : "border-[var(--v3-border)] focus-within:border-[var(--v3-heading)]"} flex w-full items-center gap-2 border transition-colors`}
                     >
-                      <span>{status === "loading" ? "Enviando..." : "Solicitar acceso anticipado"}</span>
-                      <span className="w-0 opacity-0 transition-all duration-200 group-hover:w-4 group-hover:opacity-100">
-                        <svg
-                          aria-hidden="true"
-                          className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth={2}
-                          viewBox="0 0 24 24"
-                        >
-                          <path d="M14 5l7 7m0 0l-7 7m7-7H3" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      </span>
-                    </button>
+                      <input
+                        id="waitlist-email"
+                        ref={emailInputRef}
+                        type="email"
+                        value={email}
+                        disabled={status === "loading"}
+                        onChange={(event) => {
+                          setEmail(sanitizeEmailInput(event.target.value));
+                          if (emailHasError) {
+                            setEmailHasError(false);
+                          }
+                          if (status !== "idle") {
+                            setStatus("idle");
+                            setFeedback("");
+                          }
+                        }}
+                        maxLength={MAX_EMAIL_LENGTH}
+                        placeholder="tu@email.com"
+                        required
+                        aria-invalid={emailHasError}
+                        aria-describedby={feedback ? "waitlist-feedback" : undefined}
+                        className={`${standalone ? "text-[#17151f] placeholder:text-[#17151f]/38 dark:text-white dark:placeholder:text-white/38" : "text-[color:var(--v3-heading)] placeholder:text-[color:var(--v3-sub)]"} min-w-0 flex-1 bg-transparent px-2 text-base outline-none ring-0 disabled:cursor-not-allowed disabled:opacity-60 sm:px-3`}
+                      />
+                      <button
+                        type="submit"
+                        disabled={!canSubmit}
+                        className={`${standalone ? "bg-[#17151f] text-white hover:bg-[#17151f]/92 focus-visible:ring-black/20 dark:bg-white dark:text-black dark:hover:bg-white/92 dark:focus-visible:ring-white/20" : "bg-black text-white hover:opacity-90 focus-visible:ring-black/30 dark:bg-white dark:text-black dark:focus-visible:ring-white/35"} inline-flex h-11 shrink-0 items-center justify-center rounded-lg px-3 text-base font-medium transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-35 sm:px-5 md:h-12`}
+                      >
+                        {status === "loading" ? "Enviando..." : "Unirse"}
+                      </button>
+                    </div>
                   </form>
 
                   {feedback ? (
                     <p
                       id="waitlist-feedback"
-                      className="mt-4 text-sm font-medium text-red-500 dark:text-red-400 md:text-[15px]"
+                      className="mt-4 text-base font-medium text-red-500 dark:text-red-400"
                       role="status"
                     >
                       {feedback}
                     </p>
                   ) : null}
 
-                  <p className={`${standalone ? "mt-3 text-xs leading-5 text-[#17151f]/58 dark:text-white/58 md:mt-5 md:text-sm md:leading-6" : "mt-5 text-base leading-6 text-black/70 dark:text-white/70"}`}>
-                    Al unirte aceptas recibir novedades de Frimee y nuestra{" "}
+                  <p className={`${standalone ? "absolute bottom-5 left-1/2 z-10 w-[min(100%-2rem,34rem)] -translate-x-1/2 text-center text-base leading-6 text-[#17151f]/58 dark:text-white/58 md:bottom-6" : "mt-5 text-base leading-6 text-black/70 dark:text-white/70"}`}>
+                    Al unirte aceptas recibir novedades sobre el acceso a Frimee y nuestra{" "}
                     <a
                       href="/politica-de-privacidad"
+                      onClick={(event) => {
+                        if (!standalone) {
+                          return;
+                        }
+
+                        event.preventDefault();
+                        openPrivacyModal();
+                      }}
                       className={`${standalone ? "font-semibold text-[#17151f] underline decoration-[#17151f]/50 underline-offset-4 dark:text-white dark:decoration-white/50" : "font-semibold text-black underline decoration-black/70 underline-offset-4 dark:text-white dark:decoration-white/70"}`}
                     >
-                      Politica de Privacidad
+                      Política de Privacidad
                     </a>
-                    . Puedes darte de baja cuando quieras.
+                    .
                   </p>
                 </>
               )}
@@ -492,6 +550,42 @@ export default function WaitlistSection({
           </div>
         </div>
       </div>
+      {privacyModalOpen ? (
+        <div
+          className={`${privacyModalClosing ? "v3-privacy-modal-overlay-out" : "v3-privacy-modal-overlay-in"} fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-6`}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="privacy-modal-title"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              closePrivacyModal();
+            }
+          }}
+        >
+          <div className={`${privacyModalClosing ? "v3-privacy-modal-panel-out" : "v3-privacy-modal-panel-in"} flex h-[min(82dvh,720px)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-black/10 bg-[#f7f8f7] shadow-2xl dark:border-white/10 dark:bg-[#17171d]`}>
+            <div className="flex shrink-0 items-center justify-between gap-4 border-b border-black/10 px-5 py-4 dark:border-white/10">
+              <h2 id="privacy-modal-title" className="text-lg font-semibold tracking-[-0.02em] text-[#17151f] dark:text-white">
+                Política de Privacidad de Frimee
+              </h2>
+              <button
+                type="button"
+                onClick={closePrivacyModal}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full text-[#17151f]/70 transition-colors hover:bg-black/5 hover:text-[#17151f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/20 dark:text-white/70 dark:hover:bg-white/10 dark:hover:text-white dark:focus-visible:ring-white/25"
+                aria-label="Cerrar política de privacidad"
+              >
+                <svg aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path d="M6 6l12 12M18 6 6 18" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+            </div>
+            <iframe
+              src="/politica-de-privacidad?modal=1"
+              title="Política de Privacidad de Frimee"
+              className="min-h-0 flex-1 bg-white dark:bg-[#17171d]"
+            />
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
