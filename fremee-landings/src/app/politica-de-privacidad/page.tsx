@@ -1,13 +1,28 @@
 import React from "react";
 
-export default function PoliticaDePrivacidadPage() {
-  return (
-    <main className="min-h-screen bg-[var(--v3-section-alt)] px-4 py-20 text-[var(--v3-heading)] sm:px-6 lg:px-8">
-      <div className="mx-auto w-full max-w-4xl rounded-3xl border border-[var(--v3-border)] bg-[var(--v3-section-bg)] p-6 shadow-[0_16px_48px_rgba(28,28,34,0.08)] sm:p-10">
-        <h1 className="text-3xl font-extrabold leading-tight sm:text-4xl">Política de Privacidad de Frimee</h1>
-        <p className="mt-4 text-base font-medium text-[var(--v3-sub)]">Última actualización: 01/05/2026</p>
+type PoliticaDePrivacidadPageProps = {
+  searchParams?: Promise<{
+    modal?: string;
+  }>;
+};
 
-        <div className="mt-8 space-y-6 text-base leading-7 text-[var(--v3-body)]">
+export default async function PoliticaDePrivacidadPage({
+  searchParams,
+}: PoliticaDePrivacidadPageProps) {
+  const params = await searchParams;
+  const isModal = params?.modal === "1";
+
+  return (
+    <main className={`${isModal ? "min-h-screen bg-transparent px-5 py-5" : "min-h-screen bg-[var(--v3-section-alt)] px-4 py-20 sm:px-6 lg:px-8"} text-[var(--v3-heading)]`}>
+      <div className={isModal ? "mx-auto w-full max-w-4xl" : "mx-auto w-full max-w-4xl rounded-3xl border border-[var(--v3-border)] bg-[var(--v3-section-bg)] p-6 shadow-[0_16px_48px_rgba(28,28,34,0.08)] sm:p-10"}>
+        {!isModal ? (
+          <>
+            <h1 className="text-3xl font-extrabold leading-tight sm:text-4xl">Política de Privacidad de Frimee</h1>
+            <p className="mt-4 text-base font-medium text-[var(--v3-sub)]">Última actualización: 01/05/2026</p>
+          </>
+        ) : null}
+
+        <div className={`${isModal ? "mt-0" : "mt-8"} space-y-6 text-base leading-7 text-[var(--v3-body)]`}>
           <p>
             Esta Política de Privacidad regula el tratamiento de los datos personales de los usuarios de Frimee,
             aplicación web disponible en frimee.es, destinada a facilitar la organización y planificación de viajes,
