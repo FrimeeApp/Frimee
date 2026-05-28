@@ -400,7 +400,7 @@ export default function WaitlistSection({
                     </span>
                   </span>
                 </h2>
-                <p className="mx-auto mt-4 hidden max-w-[30rem] text-pretty text-base leading-6 text-[#17151f]/66 dark:text-white/66 md:block lg:leading-7">
+                <p className="mx-auto mt-4 hidden max-w-[30rem] text-pretty text-lg leading-7 text-[#17151f]/66 dark:text-white/66 md:block">
                   Organiza viajes, gastos, fotos y decisiones del grupo en un solo sitio y sé de los primeros en probarla.
                 </p>
               </div>
@@ -501,9 +501,21 @@ export default function WaitlistSection({
                       <button
                         type="submit"
                         disabled={!canSubmit}
-                        className={`${standalone ? "bg-[#17151f] text-white hover:bg-[#17151f]/92 focus-visible:ring-black/20 dark:bg-white dark:text-black dark:hover:bg-white/92 dark:focus-visible:ring-white/20" : "bg-black text-white hover:opacity-90 focus-visible:ring-black/30 dark:bg-white dark:text-black dark:focus-visible:ring-white/35"} inline-flex h-11 shrink-0 items-center justify-center rounded-lg px-3 text-base font-medium transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-35 sm:px-5 md:h-12`}
+                        className={`${standalone ? "bg-[#17151f] text-white hover:bg-[#17151f]/92 focus-visible:ring-black/20 dark:bg-white dark:text-black dark:hover:bg-white/92 dark:focus-visible:ring-white/20" : "bg-black text-white hover:opacity-90 focus-visible:ring-black/30 dark:bg-white dark:text-black dark:focus-visible:ring-white/35"} ${canSubmit ? "group" : ""} inline-flex h-11 shrink-0 items-center justify-center gap-1.5 overflow-hidden rounded-lg px-3 text-base font-medium transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-35 sm:gap-2 sm:px-5 md:h-12`}
                       >
-                        {status === "loading" ? "Enviando..." : "Unirse"}
+                        <span>{status === "loading" ? "Enviando..." : "Unirse"}</span>
+                        <span className="hidden w-0 opacity-0 transition-all duration-200 group-hover:w-4 group-hover:opacity-100 sm:inline-flex">
+                          <svg
+                            aria-hidden="true"
+                            className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                            viewBox="0 0 24 24"
+                          >
+                            <path d="M14 5l7 7m0 0l-7 7m7-7H3" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        </span>
                       </button>
                     </div>
                   </form>
@@ -518,7 +530,7 @@ export default function WaitlistSection({
                     </p>
                   ) : null}
 
-                  <p className={`${standalone ? "absolute bottom-5 left-1/2 z-10 w-[min(100%-2rem,34rem)] -translate-x-1/2 text-center text-base leading-6 text-[#17151f]/58 dark:text-white/58 md:bottom-6" : "mt-5 text-base leading-6 text-black/70 dark:text-white/70"}`}>
+                  <p className={`${standalone ? "absolute bottom-5 left-1/2 z-10 w-[min(100%-2rem,34rem)] -translate-x-1/2 text-center text-sm leading-5 text-[#17151f]/52 dark:text-white/52 md:bottom-6" : "mt-5 text-sm leading-5 text-black/60 dark:text-white/60"}`}>
                     Al unirte aceptas recibir novedades sobre el acceso a Frimee y nuestra{" "}
                     <a
                       href="/politica-de-privacidad"
