@@ -1,7 +1,9 @@
 "use client";
 
-import { formatMoney, formatLongDate } from "@/lib/formatters";
+import { ArrowDownLeft, ArrowRight, ArrowUpRight, CheckCircle2, Clock3, Share2, XCircle, type LucideIcon } from "lucide-react";
+import { formatMoney, formatLongDateTime } from "@/lib/formatters";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
+import { Avatar } from "@/components/ui/Avatar";
 import { CloseX } from "@/components/ui/CloseX";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -25,14 +27,38 @@ export type ExpenseItem = {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const formatAmount = formatMoney;
-const formatDetailDate = formatLongDate;
+const formatDetailDate = formatLongDateTime;
 
 export function getExpenseStatusMeta(item: ExpenseItem) {
+  if (item.direction === "incoming" && item.estado === "CONFIRMADA") {
+    return {
+      text: "Pago recibido",
+      toneClass: "border-[var(--success)]/25 bg-[var(--success)]/10 text-[var(--success)]",
+      inlineTextClass: "text-[var(--success,#15803d)]",
+      iconClass: "bg-[var(--success)]/10 text-[var(--success)]",
+      Icon: ArrowDownLeft,
+      description: "Operación confirmada correctamente.",
+    };
+  }
+
+  if (item.direction === "outgoing" && item.estado === "CONFIRMADA") {
+    return {
+      text: "Pago realizado",
+      toneClass: "border-[var(--success)]/25 bg-[var(--success)]/10 text-[var(--success)]",
+      inlineTextClass: "text-[var(--success,#15803d)]",
+      iconClass: "bg-[var(--success)]/10 text-[var(--success)]",
+      Icon: ArrowUpRight,
+      description: "Operación confirmada correctamente.",
+    };
+  }
+
   if (item.direction === "incoming" && item.estado === "EN_REVISION") {
     return {
       text: "Por confirmar",
       toneClass: "border-[var(--info)]/30 bg-[var(--info)]/10 text-[var(--info)]",
       inlineTextClass: "text-[var(--info,#2563eb)]",
+      iconClass: "bg-[var(--info)]/10 text-[var(--info)]",
+      Icon: Clock3,
       description: "Has recibido un pago y debes validarlo.",
     };
   }
@@ -42,6 +68,8 @@ export function getExpenseStatusMeta(item: ExpenseItem) {
       text: "Confirmación pendiente",
       toneClass: "border-[var(--warning)]/30 bg-[var(--warning)]/10 text-[var(--warning)]",
       inlineTextClass: "text-[var(--warning,#d97706)]",
+      iconClass: "bg-[var(--warning)]/10 text-[var(--warning)]",
+      Icon: Clock3,
       description: "Ya has pagado y estás esperando confirmación.",
     };
   }
@@ -51,6 +79,8 @@ export function getExpenseStatusMeta(item: ExpenseItem) {
       text: "Te deben",
       toneClass: "border-[var(--success)]/30 bg-[var(--success)]/10 text-[var(--success)]",
       inlineTextClass: "text-[var(--success,#15803d)]",
+      iconClass: "bg-[var(--success)]/10 text-[var(--success)]",
+      Icon: ArrowDownLeft,
       description: "Todavía no has recibido este pago.",
     };
   }
@@ -60,6 +90,8 @@ export function getExpenseStatusMeta(item: ExpenseItem) {
       text: "Debes",
       toneClass: "border-[var(--warning)]/30 bg-[var(--warning)]/10 text-[var(--warning)]",
       inlineTextClass: "text-[var(--warning,#d97706)]",
+      iconClass: "bg-[var(--warning)]/10 text-[var(--warning)]",
+      Icon: ArrowUpRight,
       description: "Todavía no has completado este pago.",
     };
   }
@@ -69,6 +101,8 @@ export function getExpenseStatusMeta(item: ExpenseItem) {
       text: "Confirmado",
       toneClass: "border-[var(--success)]/25 bg-[var(--success)]/10 text-[var(--success)]",
       inlineTextClass: "text-[var(--success,#15803d)]",
+      iconClass: "bg-[var(--success)]/10 text-[var(--success)]",
+      Icon: CheckCircle2,
       description: "Operación confirmada correctamente.",
     };
   }
@@ -77,19 +111,65 @@ export function getExpenseStatusMeta(item: ExpenseItem) {
     text: "Anulada",
     toneClass: "border-app bg-surface text-muted",
     inlineTextClass: "text-muted",
+    iconClass: "bg-surface text-muted",
+    Icon: XCircle,
     description: "Operación anulada.",
   };
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-function DetailCard({ label, value }: { label: string; value: string }) {
+function ConceptRow({ value }: { value: string }) {
   return (
-    <div className="py-[var(--space-2)]">
-      <p className="text-caption font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
-        {label}
-      </p>
+    <div className="w-full text-left">
+      <p className="text-caption text-muted">Concepto</p>
       <p className="mt-[4px] text-body-sm font-[var(--fw-semibold)] text-app">{value}</p>
+    </div>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="w-full text-left">
+      <p className="text-caption text-muted">{label}</p>
+      <p className="mt-[4px] text-body-sm font-[var(--fw-semibold)] text-app">{value}</p>
+    </div>
+  );
+}
+
+function PlanRow({ value, onClick }: { value: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex w-full items-start justify-between gap-[var(--space-4)] text-left transition-opacity hover:opacity-70"
+    >
+      <span className="min-w-0">
+        <span className="block text-caption text-muted">Plan</span>
+        <span className="mt-[4px] block truncate text-body-sm font-[var(--fw-semibold)] text-app">
+          {value}
+        </span>
+      </span>
+      <ArrowRight className="mt-[18px] size-4 shrink-0 text-muted" strokeWidth={1.9} aria-hidden />
+    </button>
+  );
+}
+
+function MovementIcon({ Icon, className }: { Icon: LucideIcon; className: string }) {
+  return (
+    <div className={`flex size-12 items-center justify-center rounded-full ${className}`}>
+      <Icon className="size-5" strokeWidth={1.9} aria-hidden />
+    </div>
+  );
+}
+
+function CounterpartyLine({ name, image }: { name: string; image: string | null }) {
+  return (
+    <div className="mt-[var(--space-3)] flex max-w-full items-center justify-center gap-[var(--space-2)]">
+      <Avatar name={name} src={image} px={24} topMargin="" />
+      <p className="min-w-0 truncate text-body-sm font-[var(--fw-semibold)] leading-tight text-app">
+        {name}
+      </p>
     </div>
   );
 }
@@ -119,39 +199,55 @@ export function ExpenseDetailModal({
   if (!item) return null;
 
   const incoming = item.direction === "incoming";
-  const otherPartyLabel = incoming ? item.counterparty : `${profileName} (Tú)`;
+  const otherPartyLabel = item.counterparty || profileName || "Usuario";
   const statusMeta = getExpenseStatusMeta(item);
+  const StatusIcon = statusMeta.Icon;
   const requiresValidation = incoming && item.estado === "EN_REVISION";
+  const isResolved = item.estado === "CONFIRMADA";
+  const signedAmount = `${incoming ? "+" : "-"}${formatAmount(item.amount)}`;
+  const concept = item.concept?.trim() || item.planName;
+  const pendingMessage = incoming ? "Todavía te deben" : "Todavía debes";
+
+  const handleShare = async () => {
+    const text = `${statusMeta.text}: ${signedAmount} con ${otherPartyLabel} · ${concept}`;
+    if (typeof navigator !== "undefined" && "share" in navigator) {
+      try {
+        await navigator.share({ title: "Detalle del pago", text });
+        return;
+      } catch {
+        return;
+      }
+    }
+
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      await navigator.clipboard.writeText(text);
+    }
+  };
 
   return (
     <div
       data-closing={isClosing ? "true" : "false"}
-      className="app-modal-overlay fixed inset-0 z-[var(--z-modal)] flex items-center justify-center px-[var(--space-4)] py-[var(--space-6)]"
+      className="app-modal-overlay fixed inset-0 z-[var(--z-modal)] flex items-end justify-center px-0 md:items-center md:px-[var(--space-4)] md:py-[var(--space-6)]"
       onClick={requestClose}
     >
       <div
-        className="app-modal-panel w-full max-w-[520px] rounded-[18px] border border-app bg-app shadow-elev-4"
+        data-closing={isClosing ? "true" : "false"}
+        className="app-modal-panel app-mobile-sheet-panel flex h-[70dvh] w-full flex-col overflow-hidden rounded-t-[28px] bg-[var(--bg)] shadow-elev-4 md:h-auto md:max-w-[540px] md:rounded-[24px]"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex items-start justify-between gap-[var(--space-4)] border-b border-app px-[var(--space-5)] py-[var(--space-4)]">
-          <div className="min-w-0">
-            <p className="text-caption font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
-              {item.planName}
-            </p>
-            <h2 className="mt-[6px] text-[var(--font-h3)] font-[var(--fw-bold)] leading-[1.15] text-app">
-              {incoming
-                ? item.estado === "CONFIRMADA"
-                  ? "Pago recibido"
-                  : item.estado === "EN_REVISION"
-                  ? "Pago por confirmar"
-                  : "Pago pendiente"
-                : item.estado === "CONFIRMADA"
-                  ? "Pago realizado"
-                  : item.estado === "EN_REVISION"
-                  ? "Pago enviado"
-                  : "Pago pendiente"}
-            </h2>
-          </div>
+        <div className="flex justify-center pt-[8px]" aria-hidden="true">
+          <div className="h-[4px] w-10 rounded-full bg-[var(--border)]" />
+        </div>
+
+        <div className="flex shrink-0 items-center justify-between px-[var(--space-5)] pb-[var(--space-2)] pt-[var(--space-2)]">
+          <button
+            type="button"
+            onClick={handleShare}
+            className="flex size-9 items-center justify-center rounded-full text-muted transition-colors hover:bg-surface hover:text-app"
+            aria-label="Compartir detalle"
+          >
+            <Share2 className="size-[18px]" strokeWidth={1.8} aria-hidden />
+          </button>
           <button
             type="button"
             onClick={requestClose}
@@ -162,41 +258,43 @@ export function ExpenseDetailModal({
           </button>
         </div>
 
-        <div className="space-y-[var(--space-4)] px-[var(--space-5)] py-[var(--space-5)]">
-          <div className="flex items-start justify-between gap-[var(--space-4)]">
-            <div>
-              <p className="text-caption font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
-                Importe
-              </p>
-              <p className="mt-[6px] text-[32px] font-[var(--fw-bold)] leading-none text-app">
-                {incoming ? "+" : "-"}{formatAmount(item.amount)}
-              </p>
-            </div>
-            <span className={`inline-flex rounded-full border px-[var(--space-3)] py-[6px] text-body-sm font-[var(--fw-semibold)] ${statusMeta.toneClass}`}>
-              {statusMeta.text}
-            </span>
-          </div>
-
-          <p className="text-body-sm text-muted">
-            {statusMeta.description}
+        <div className="flex min-h-0 flex-1 flex-col items-center px-[var(--space-6)] pb-[var(--space-4)] text-center">
+          <MovementIcon Icon={StatusIcon} className={statusMeta.iconClass} />
+          <CounterpartyLine name={otherPartyLabel} image={item.counterpartyImage} />
+          {!isResolved && (
+            <p className="mt-[var(--space-2)] text-caption text-muted">
+              {pendingMessage}
+            </p>
+          )}
+          <p className={`mt-[var(--space-2)] text-[26px] font-[var(--fw-bold)] leading-none text-app ${isResolved ? "" : "opacity-55"}`}>
+            {signedAmount}
           </p>
+          {isResolved && (
+            <>
+              <p className="mt-[var(--space-2)] text-caption text-muted">
+                {formatDetailDate(item.date)}
+              </p>
+              <p className="mt-[6px] text-caption font-[var(--fw-semibold)] text-muted">
+                {statusMeta.text}
+              </p>
+            </>
+          )}
 
-          <div className="grid grid-cols-1 gap-[var(--space-3)] sm:grid-cols-2">
-            <DetailCard label="Persona" value={otherPartyLabel} />
-            <DetailCard label="Fecha" value={formatDetailDate(item.date)} />
-            <DetailCard label="Plan" value={item.planName} />
-            <DetailCard label="Concepto" value={item.concept?.trim() || "Sin concepto"} />
+          <div className="w-full space-y-[var(--space-4)] pt-[var(--space-8)] pb-[calc(var(--space-10)+env(safe-area-inset-bottom))]">
+            <ConceptRow value={concept} />
+            {!isResolved && <DetailRow label="Creado" value={formatDetailDate(item.date)} />}
+            <PlanRow value={item.planName} onClick={() => onOpenPlan(item.planId)} />
           </div>
         </div>
 
-        <div className="flex flex-col gap-[var(--space-2)] border-t border-app px-[var(--space-5)] py-[var(--space-4)]">
-          {requiresValidation && (
+        {requiresValidation && (
+          <div className="flex shrink-0 flex-col gap-[var(--space-2)] border-t border-app px-[var(--space-5)] pb-[calc(var(--space-4)+env(safe-area-inset-bottom))] pt-[var(--space-4)] md:pb-[var(--space-4)]">
             <div className="flex gap-[var(--space-2)]">
               <button
                 type="button"
                 disabled={actingId === item.id}
                 onClick={() => onReject(item)}
-                className="flex-1 rounded-full border border-app py-[12px] text-body-sm font-[var(--fw-semibold)] text-app transition-colors hover:bg-surface disabled:opacity-50"
+                className="flex-1 rounded-[14px] border border-app py-[12px] text-body-sm font-[var(--fw-semibold)] text-app transition-colors hover:bg-surface disabled:opacity-50"
               >
                 No recibido
               </button>
@@ -204,21 +302,13 @@ export function ExpenseDetailModal({
                 type="button"
                 disabled={actingId === item.id}
                 onClick={() => onConfirm(item)}
-                className="flex-1 rounded-full bg-[var(--success)] py-[12px] text-body-sm font-[var(--fw-semibold)] text-white transition-opacity hover:opacity-85 disabled:opacity-50"
+                className="flex-1 rounded-[14px] bg-[var(--success)] py-[12px] text-body-sm font-[var(--fw-semibold)] text-white transition-opacity hover:opacity-85 disabled:opacity-50"
               >
                 {actingId === item.id ? "Confirmando..." : "Confirmar pago"}
               </button>
             </div>
-          )}
-
-          <button
-            type="button"
-            onClick={() => onOpenPlan(item.planId)}
-            className="w-full rounded-full bg-[var(--text-primary)] py-[12px] text-body-sm font-[var(--fw-semibold)] text-contrast-token transition-opacity hover:opacity-85"
-          >
-            Ir al plan
-          </button>
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -42,6 +42,30 @@
   }
 }
 
+@keyframes app-mobile-sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes app-mobile-sheet-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+}
+
 @layer components {
   .app-modal-overlay {
     background-color: rgb(0 0 0 / 0.55);
@@ -61,11 +85,25 @@
     animation: app-modal-panel-out 140ms var(--ease-standard) both;
   }
 
+  @media (max-width: 767px) {
+    .app-mobile-sheet-panel {
+      animation: app-mobile-sheet-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+
+    .app-modal-overlay[data-closing="true"] .app-mobile-sheet-panel,
+    .app-mobile-sheet-panel[data-closing="true"] {
+      animation: app-mobile-sheet-out 180ms var(--ease-standard) both;
+    }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .app-modal-overlay,
     .app-modal-panel,
+    .app-mobile-sheet-panel,
     .app-modal-overlay[data-closing="true"],
     .app-modal-panel[data-closing="true"],
+    .app-mobile-sheet-panel[data-closing="true"],
+    .app-modal-overlay[data-closing="true"] .app-mobile-sheet-panel,
     .app-modal-overlay[data-closing="true"] .app-modal-panel {
       animation: none;
     }
