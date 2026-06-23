@@ -2,6 +2,10 @@ import { NextResponse, type NextRequest } from "next/server";
 
 export function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
+  const host = request.headers.get("host") ?? "";
+  const isLocal = host.startsWith("localhost") || host.startsWith("127.0.0.1");
+
+  if (isLocal) return NextResponse.next();
 
   if (pathname === "/") {
     const url = request.nextUrl.clone();
