@@ -4,7 +4,7 @@ import Image from "next/image";
 import type { GastoRow } from "@/services/api/endpoints/gastos.endpoint";
 import { formatMoney, formatLongDateTime, getInitial } from "@/lib/formatters";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
-import { CloseX } from "@/components/ui/CloseX";
+import { CloseButton } from "@/components/ui/IconButton";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -87,14 +87,7 @@ export function PlanGastoDetailModal({
               {gasto.titulo}
             </h2>
           </div>
-          <button
-            type="button"
-            onClick={requestClose}
-            className="flex size-9 items-center justify-center rounded-full text-muted transition-colors hover:bg-surface"
-            aria-label="Cerrar detalle"
-          >
-            <CloseX />
-          </button>
+          <CloseButton onClick={requestClose} label="Cerrar detalle" />
         </div>
 
         <div className="space-y-[var(--space-5)] px-[var(--space-5)] py-[var(--space-5)]">

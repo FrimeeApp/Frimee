@@ -12,23 +12,25 @@ import { createPlan, listUserRelatedPlans } from "@/services/api/repositories/pl
 import type { FeedPlanItemDto } from "@/services/api/dtos/plan.dto";
 import { countNotificacionesNoLeidas, insertNotificacion } from "@/services/api/repositories/notifications.repository";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
-import { searchUsers, type PublicUserProfileDto } from "@/services/api/repositories/users.repository";
 import NotificationsPanel from "@/components/notifications/NotificationsPanel";
+import UserSearchSurface from "@/components/search/UserSearchSurface";
 import { Home, Map, CreditCard, Send, Plus, Search, Bell } from "lucide-react";
-import { CloseX } from "@/components/ui/CloseX";
+import { CloseButton } from "@/components/ui/IconButton";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
+import { DEFAULT_PLAN_COVER_IMAGE } from "@/config/app";
+import { formatDateRange } from "@/lib/formatters";
 type IconProps = {
   className?: string;
+  strokeWidth?: number;
 };
 
-const HomeIcon = ({ className }: IconProps = {}) => <Home className={className} aria-hidden />;
-const PlansIcon = ({ className }: IconProps = {}) => <Map className={className} aria-hidden />;
-const CardIcon = ({ className }: IconProps = {}) => <CreditCard className={className} aria-hidden />;
-const SendIcon = ({ className }: IconProps = {}) => <Send className={className} aria-hidden />;
-const PlusIcon = ({ className }: IconProps = {}) => <Plus className={className} aria-hidden />;
-const SearchIcon = ({ className }: IconProps = {}) => <Search className={className} aria-hidden />;
-const CloseIcon = ({ className }: IconProps = {}) => <CloseX className={className} />;
-const BellIcon = ({ className }: IconProps = {}) => <Bell className={className} aria-hidden />;
+const HomeIcon = ({ className, strokeWidth }: IconProps = {}) => <Home className={className} strokeWidth={strokeWidth} aria-hidden />;
+const PlansIcon = ({ className, strokeWidth }: IconProps = {}) => <Map className={className} strokeWidth={strokeWidth} aria-hidden />;
+const CardIcon = ({ className, strokeWidth }: IconProps = {}) => <CreditCard className={className} strokeWidth={strokeWidth} aria-hidden />;
+const SendIcon = ({ className, strokeWidth }: IconProps = {}) => <Send className={className} strokeWidth={strokeWidth} aria-hidden />;
+const PlusIcon = ({ className, strokeWidth }: IconProps = {}) => <Plus className={className} strokeWidth={strokeWidth} aria-hidden />;
+const SearchIcon = ({ className, strokeWidth }: IconProps = {}) => <Search className={className} strokeWidth={strokeWidth} aria-hidden />;
+const BellIcon = ({ className, strokeWidth }: IconProps = {}) => <Bell className={className} strokeWidth={strokeWidth} aria-hidden />;
 
 const items = [
   { key: "home", label: "Inicio", icon: HomeIcon, href: "/feed" },
@@ -36,7 +38,8 @@ const items = [
   { key: "cards", label: "Mis gastos", icon: CardIcon, href: "/mis-gastos" },
   { key: "send", label: "Mensajes", icon: SendIcon, href: "/messages" },
 ];
-const mobileItems = [items[0], items[2], items[1], items[3]];
+const mobileItems = [items[1], items[2], items[3]];
+const ACTIVE_NAV_ICON_STROKE = 2.4;
 
 type AppSidebarProps = {
   onCreatePlan?: () => void;
@@ -90,21 +93,31 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
   const [desktopCreateMenuOpen, setDesktopCreateMenuOpen] = useState(false);
   const [expensePickerOpen, setExpensePickerOpen] = useState(false);
   const [selectedExpensePlanId, setSelectedExpensePlanId] = useState<number | null>(null);
-  const { isClosing: expensePickerClosing, requestClose: closeExpensePicker } = useModalCloseAnimation(() => setExpensePickerOpen(false), expensePickerOpen);
+  const { isClosing: expensePickerClosing, requestClose: closeExpensePicker } = useModalCloseAnimation(
+    () => setExpensePickerOpen(false),
+    expensePickerOpen,
+    { closeAnimationMs: 240, lockScroll: false }
+  );
   const [expensePlans, setExpensePlans] = useState<FeedPlanItemDto[]>([]);
   const [expensePlansLoading, setExpensePlansLoading] = useState(false);
   const [notifPanelOpen, setNotifPanelOpen] = useState(false);
   const [searchPopoverOpen, setSearchPopoverOpen] = useState(false);
-  const [searchValue, setSearchValue] = useState("");
-  const [searchResults, setSearchResults] = useState<PublicUserProfileDto[]>([]);
-  const [searchLoading, setSearchLoading] = useState(false);
   const [unreadNotifs, setUnreadNotifs] = useState(0);
-  const searchInputRef = useRef<HTMLInputElement>(null);
   const searchPanelRef = useRef<HTMLDivElement>(null);
   const mobileFabRef = useRef<HTMLDivElement>(null);
   const desktopCreateRef = useRef<HTMLDivElement>(null);
+  const expenseCreatedRef = useRef(false);
 
   const { user, profile } = useAuth();
+
+  useEffect(() => {
+    if (!expensePickerOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [expensePickerOpen]);
 
   const expanded = hovered;
   const loggedUserProfileImage = profile?.profile_image ?? null;
@@ -112,6 +125,12 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
 
   useEffect(() => {
     void countNotificacionesNoLeidas().then(setUnreadNotifs).catch(() => setUnreadNotifs(0));
+  }, []);
+
+  useEffect(() => {
+    const handleNotificationsRead = () => setUnreadNotifs(0);
+    window.addEventListener("frimee:notifications-read", handleNotificationsRead);
+    return () => window.removeEventListener("frimee:notifications-read", handleNotificationsRead);
   }, []);
 
   useEffect(() => {
@@ -186,12 +205,6 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
 
   useEffect(() => {
     if (!searchPopoverOpen) return;
-    const frame = window.requestAnimationFrame(() => searchInputRef.current?.focus());
-    return () => window.cancelAnimationFrame(frame);
-  }, [searchPopoverOpen]);
-
-  useEffect(() => {
-    if (!searchPopoverOpen) return;
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") setSearchPopoverOpen(false);
     };
@@ -209,46 +222,6 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [searchPopoverOpen]);
-
-  useEffect(() => {
-    const trimmedQuery = searchValue.trim();
-
-    if (!searchPopoverOpen || trimmedQuery.length < 2) {
-      setSearchResults([]);
-      setSearchLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-    setSearchLoading(true);
-
-    const timeoutId = window.setTimeout(async () => {
-      try {
-        const results = await searchUsers({
-          query: trimmedQuery,
-          limit: 6,
-          excludeUserId: user?.id ?? undefined,
-        });
-
-        if (!cancelled) {
-          setSearchResults(results);
-        }
-      } catch {
-        if (!cancelled) {
-          setSearchResults([]);
-        }
-      } finally {
-        if (!cancelled) {
-          setSearchLoading(false);
-        }
-      }
-    }, 250);
-
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timeoutId);
-    };
-  }, [searchPopoverOpen, searchValue, user?.id]);
 
   const openProfile = () => {
     if (!user?.id) {
@@ -302,11 +275,12 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
   };
 
   const openExpenseForPlan = (planId: number) => {
-    setExpensePickerOpen(false);
+    expenseCreatedRef.current = false;
     setSelectedExpensePlanId(planId);
   };
 
   const handleExpenseCreated = () => {
+    expenseCreatedRef.current = true;
     const planId = selectedExpensePlanId;
     if (planId != null) {
       window.dispatchEvent(new CustomEvent("frimee:gasto-created", { detail: { planId } }));
@@ -381,11 +355,11 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
     active?: boolean;
     badge?: string | number | null;
   }) => {
-    const cls = `flex h-[24px] items-center transition-opacity duration-150 hover:opacity-70 ${active ? "text-[var(--primary)]" : "text-app"}`;
+    const cls = `flex h-[24px] items-center transition-opacity duration-150 hover:opacity-70 ${active ? "text-app" : "text-muted"}`;
     const content = (
       <>
         <div className="relative flex w-[102px] shrink-0 items-center justify-center">
-          {icon({ className: "size-[26px]" })}
+          {icon({ className: "size-[26px]", strokeWidth: active ? ACTIVE_NAV_ICON_STROKE : undefined })}
           {badge ? (
             <span className="absolute top-0 right-[38px] flex size-[16px] items-center justify-center rounded-full bg-blue-500 text-[9px] font-[var(--fw-semibold)] leading-none text-white">
               {badge}
@@ -408,45 +382,69 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
   };
 
   const searchActive = searchPopoverOpen || isActive("/search");
+  const notificationsActive = notifPanelOpen || isActive("/notifications");
+  const profileActive = pathname.startsWith("/profile");
+  const notificationBadge = unreadNotifs > 0 ? (unreadNotifs > 9 ? "9+" : unreadNotifs) : null;
   const mobileNavStyle: MobileNavStyle = { "--mobile-nav-base-height": "clamp(56px, 8dvh, 64px)" };
 
   return (
     <>
       {/* Mobile bottom nav */}
-      <nav
-        style={mobileNavStyle}
-        className={`fixed inset-x-0 bottom-0 z-sticky flex h-[calc(var(--mobile-nav-base-height)+env(safe-area-inset-bottom))] items-center justify-around border-t border-strong bg-app px-[clamp(var(--space-4),5vw,var(--space-5))] pb-safe transition-transform duration-[var(--duration-slow)] [transition-timing-function:var(--ease-decelerate)] md:hidden ${
-          hideMobileNav || modalOpen ? "translate-y-full" : "translate-y-0"
-        }`}
-      >
-        {mobileItems.map((item) => (
-          <Link
-            key={item.key}
-            href={item.href}
-            aria-label={item.label}
-            className={`${isActive(item.href) ? "text-[var(--primary)]" : "text-app"} transition-opacity duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] active:opacity-[var(--disabled-opacity)]`}
-          >
-            <item.icon className="size-[clamp(25px,6.4vw,28px)]" />
-          </Link>
-        ))}
-        <button
-          type="button"
-          aria-label="Perfil"
-          onClick={openProfile}
-          className={`${pathname.startsWith("/profile") ? "text-[var(--primary)]" : "text-app"} flex size-[clamp(34px,8vw,38px)] items-center justify-center transition-opacity duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] active:opacity-[var(--disabled-opacity)]`}
+      {!hideMobileNav && (
+        <nav
+          style={mobileNavStyle}
+          className={`fixed inset-x-0 bottom-0 z-sticky flex h-[calc(var(--mobile-nav-base-height)+env(safe-area-inset-bottom))] items-center justify-around border-t border-strong bg-app px-[clamp(var(--space-4),5vw,var(--space-5))] pb-safe transition-transform duration-[var(--duration-slow)] [transition-timing-function:var(--ease-decelerate)] md:hidden ${
+            modalOpen ? "translate-y-full" : "translate-y-0"
+          }`}
         >
-          {loggedUserProfileImage ? (
-            <span className="block size-[clamp(31px,7.4vw,34px)] overflow-hidden rounded-full border border-strong">
-              <Image src={loggedUserProfileImage} alt="Foto de perfil" width={34} height={34} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
-            </span>
-          ) : (
-            <span className="flex size-[clamp(31px,7.4vw,34px)] items-center justify-center rounded-full border border-strong bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">
-              {loggedUserInitial}
-            </span>
-          )}
-        </button>
+          {mobileItems.map((item) => (
+            <Link
+              key={item.key}
+              href={item.href}
+              aria-label={item.label}
+              className={`${isActive(item.href) ? "text-app" : "text-muted"} transition-opacity duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] active:opacity-[var(--disabled-opacity)]`}
+            >
+              <item.icon className="size-[clamp(25px,6.4vw,28px)]" strokeWidth={isActive(item.href) ? ACTIVE_NAV_ICON_STROKE : undefined} />
+            </Link>
+          ))}
+          <Link
+            href="/search"
+            aria-label="Buscar"
+            className={`${searchActive ? "text-app" : "text-muted"} flex size-[clamp(34px,8vw,38px)] items-center justify-center transition-opacity duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] active:opacity-[var(--disabled-opacity)]`}
+          >
+            <SearchIcon className="size-[clamp(25px,6.4vw,28px)]" strokeWidth={searchActive ? ACTIVE_NAV_ICON_STROKE : undefined} />
+          </Link>
+          <Link
+            href="/notifications"
+            aria-label="Notificaciones"
+            className={`${notificationsActive ? "text-app" : "text-muted"} relative flex size-[clamp(34px,8vw,38px)] items-center justify-center transition-opacity duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] active:opacity-[var(--disabled-opacity)]`}
+          >
+            <BellIcon className="size-[clamp(25px,6.4vw,28px)]" strokeWidth={notificationsActive ? ACTIVE_NAV_ICON_STROKE : undefined} />
+            {notificationBadge ? (
+              <span className="absolute right-[2px] top-[2px] flex size-[16px] items-center justify-center rounded-full bg-blue-500 text-[9px] font-[var(--fw-semibold)] leading-none text-white">
+                {notificationBadge}
+              </span>
+            ) : null}
+          </Link>
+          <button
+            type="button"
+            aria-label="Perfil"
+            onClick={openProfile}
+            className={`${profileActive ? "text-app" : "text-muted"} flex size-[clamp(34px,8vw,38px)] items-center justify-center transition-opacity duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] active:opacity-[var(--disabled-opacity)]`}
+          >
+            {loggedUserProfileImage ? (
+              <span className={`block size-[clamp(31px,7.4vw,34px)] overflow-hidden rounded-full ${profileActive ? "border-[1.5px] border-[var(--text-primary)]" : "border border-strong"}`}>
+                <Image src={loggedUserProfileImage} alt="Foto de perfil" width={34} height={34} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
+              </span>
+            ) : (
+              <span className={`flex size-[clamp(31px,7.4vw,34px)] items-center justify-center rounded-full bg-surface-inset text-body-sm font-[var(--fw-semibold)] ${profileActive ? "border-[1.5px] border-[var(--text-primary)] text-app" : "border border-strong text-muted"}`}>
+                {loggedUserInitial}
+              </span>
+            )}
+          </button>
 
-      </nav>
+        </nav>
+      )}
 
       {!hideMobileNav && !modalOpen && (
         <div
@@ -513,52 +511,72 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
       {expensePickerOpen && (
         <div
           data-closing={expensePickerClosing ? "true" : "false"}
-          className="app-modal-overlay fixed inset-0 z-[1200] flex items-end justify-center px-safe pb-safe md:items-center md:p-4"
-          onClick={closeExpensePicker}
+          className="app-modal-overlay app-mobile-sheet-overlay fixed inset-0 z-[1200] flex items-end justify-center px-0 md:items-center md:p-4"
+          onPointerDown={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (event.target === event.currentTarget) closeExpensePicker();
+          }}
           role="presentation"
         >
           <div
-            className="app-modal-panel max-h-[72dvh] w-full overflow-hidden rounded-t-[22px] border border-app bg-app p-4 shadow-elev-4 md:max-h-[min(620px,82dvh)] md:max-w-[430px] md:rounded-[20px] md:p-5"
+            data-closing={expensePickerClosing ? "true" : "false"}
+            className="app-expense-detail-panel app-mobile-sheet-panel flex h-[70dvh] w-full flex-col overflow-hidden rounded-t-[28px] bg-[var(--bg)] shadow-elev-4 md:h-auto md:max-h-[min(620px,82dvh)] md:max-w-[540px] md:rounded-[24px]"
+            onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
             aria-label="Seleccionar plan para crear gasto"
           >
-            <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted/30" />
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <h2 className="text-[18px] font-[var(--fw-semibold)] text-app">Crear gasto</h2>
-                <p className="mt-1 text-body-sm text-muted">Elige el plan al que pertenece.</p>
-              </div>
-              <button type="button" onClick={closeExpensePicker} className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted hover:bg-surface" aria-label="Cerrar">
-                <CloseIcon className="size-5" />
-              </button>
+            <div className="flex justify-center pt-[8px]" aria-hidden="true">
+              <div className="h-[4px] w-10 rounded-full bg-[var(--border)]" />
             </div>
+
+            <div className="flex shrink-0 items-center justify-end px-[var(--space-5)] pb-[var(--space-2)] pt-[var(--space-2)]">
+              <CloseButton onClick={closeExpensePicker} iconClassName="size-5" />
+            </div>
+
+            <div className="shrink-0 px-[var(--space-6)] pb-[var(--space-5)]">
+              <h2 className="text-[20px] font-[var(--fw-semibold)] leading-tight text-app">Crear gasto</h2>
+              <p className="mt-[var(--space-1)] text-body-sm text-muted">Elige el plan al que pertenece.</p>
+            </div>
+
             {expensePlansLoading ? (
-              <p className="py-8 text-center text-body-sm text-muted">Cargando planes...</p>
+              <p className="px-[var(--space-6)] py-8 text-center text-body-sm text-muted">Cargando planes...</p>
             ) : expensePlans.length > 0 ? (
-              <div className="max-h-[45dvh] space-y-2 overflow-y-auto pb-2 md:max-h-[420px]">
+              <div className="min-h-0 flex-1 overflow-y-auto px-[var(--space-6)] pb-[calc(var(--space-8)+env(safe-area-inset-bottom))] md:max-h-[420px]">
                 {expensePlans.map((plan) => (
                   <button
                     key={plan.id}
                     type="button"
                     onClick={() => openExpenseForPlan(plan.id)}
-                    className="flex w-full items-center gap-3 rounded-[14px] border border-app bg-surface px-3 py-3 text-left transition-colors hover:bg-surface-2 active:bg-surface-2"
+                    className="flex w-full items-stretch gap-3 text-left transition-colors hover:bg-surface-inset/50"
                   >
-                    <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary-token/12 text-primary-token">
-                      <CardIcon className="size-5" />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-body-sm font-[var(--fw-semibold)] text-app">{plan.title}</span>
-                      <span className="block truncate text-caption text-muted">{plan.locationName}</span>
+                    <span
+                      className="my-[var(--space-2)] size-[68px] shrink-0 self-start rounded-[8px] bg-cover bg-center bg-no-repeat"
+                      style={{ backgroundImage: `url(${plan.coverImage ?? DEFAULT_PLAN_COVER_IMAGE.mobile})` }}
+                      role="img"
+                      aria-label={plan.title}
+                    />
+                    <span className="flex min-w-0 flex-1 items-start gap-2 py-[var(--space-2)]">
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-body-sm font-[var(--fw-semibold)] text-app">{plan.title}</span>
+                        <span className="mt-[2px] block text-caption text-muted">{formatDateRange(plan.startsAt, plan.endsAt)}</span>
+                        {plan.locationName && (
+                          <span className="mt-[2px] block truncate text-caption text-tertiary">{plan.locationName}</span>
+                        )}
+                      </span>
+                      <svg viewBox="0 0 24 24" fill="none" className="size-[15px] shrink-0 self-center text-muted" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M9 18l6-6-6-6" />
+                      </svg>
                     </span>
                   </button>
                 ))}
               </div>
             ) : (
-              <div className="pb-2">
+              <div className="px-[var(--space-6)] pb-[calc(var(--space-8)+env(safe-area-inset-bottom))]">
                 <p className="py-6 text-center text-body-sm text-muted">No tienes planes activos para añadir un gasto.</p>
-                <button type="button" onClick={openCreatePlan} className="flex h-11 w-full items-center justify-center rounded-full bg-primary-token text-body-sm font-[var(--fw-semibold)] text-[var(--contrast)]">
+                <button type="button" onClick={openCreatePlan} className="flex h-11 w-full items-center justify-center rounded-[14px] bg-primary-token text-body-sm font-[var(--fw-semibold)] text-[var(--contrast)]">
                   Crear plan
                 </button>
               </div>
@@ -571,7 +589,15 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
         <AddGastoSheet
           planId={selectedExpensePlanId}
           userId={user.id}
-          onClose={() => setSelectedExpensePlanId(null)}
+          planName={expensePlans.find((plan) => plan.id === selectedExpensePlanId)?.title}
+          onClose={() => {
+            setSelectedExpensePlanId(null);
+            if (expenseCreatedRef.current) {
+              expenseCreatedRef.current = false;
+              setExpensePickerOpen(false);
+              return;
+            }
+          }}
           onCreated={handleExpenseCreated}
         />
       )}
@@ -609,10 +635,10 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
                 setNotifPanelOpen(false);
                 setSearchPopoverOpen(true);
               }}
-              className={`flex h-[24px] items-center transition-opacity duration-150 hover:opacity-70 ${searchActive ? "text-[var(--primary)]" : "text-app"}`}
+              className={`flex h-[24px] items-center transition-opacity duration-150 hover:opacity-70 ${searchActive ? "text-app" : "text-muted"}`}
             >
               <div className="relative flex w-[102px] shrink-0 items-center justify-center">
-                <SearchIcon className="size-[26px]" />
+                <SearchIcon className="size-[26px]" strokeWidth={searchActive ? ACTIVE_NAV_ICON_STROKE : undefined} />
               </div>
               {expanded && (
                 <span className={`-ml-[14px] whitespace-nowrap pr-[var(--space-4)] text-body ${searchActive ? "font-[var(--fw-semibold)]" : "font-[var(--fw-medium)]"}`}>
@@ -637,7 +663,8 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
                 setSearchPopoverOpen(false);
                 setNotifPanelOpen(true);
               },
-              badge: unreadNotifs > 0 ? (unreadNotifs > 9 ? "9+" : unreadNotifs) : null,
+              active: notifPanelOpen,
+              badge: notificationBadge,
             })}
           </nav>
 
@@ -651,7 +678,7 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
               className={`flex h-[32px] items-center rounded-[8px] text-app transition-colors duration-150 hover:bg-surface ${desktopCreateMenuOpen ? "bg-surface" : ""}`}
             >
               <div className="flex w-[102px] shrink-0 items-center justify-center">
-                <PlusIcon className="size-[26px]" />
+                <PlusIcon className="size-[26px]" strokeWidth={desktopCreateMenuOpen ? ACTIVE_NAV_ICON_STROKE : undefined} />
               </div>
               {expanded && <span className="-ml-[14px] whitespace-nowrap pr-[var(--space-4)] text-body font-[var(--fw-medium)]">Crear</span>}
             </button>
@@ -682,15 +709,15 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
             type="button"
             aria-label="Perfil"
             onClick={openProfile}
-            className={`mt-[var(--space-8)] flex h-[32px] items-center rounded-[8px] transition-colors duration-150 hover:bg-surface ${pathname.startsWith("/profile") ? "text-[var(--primary)]" : "text-app"}`}
+            className={`mt-[var(--space-8)] flex h-[32px] items-center rounded-[8px] transition-colors duration-150 hover:bg-surface ${profileActive ? "text-app" : "text-muted"}`}
           >
             <div className="flex w-[102px] shrink-0 items-center justify-center">
               {loggedUserProfileImage ? (
-                <span className="block size-[28px] overflow-hidden rounded-full border border-strong">
+                <span className={`block size-[28px] overflow-hidden rounded-full ${profileActive ? "border-[1.5px] border-[var(--text-primary)]" : "border border-strong"}`}>
                   <Image src={loggedUserProfileImage} alt="Foto de perfil" width={28} height={28} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
                 </span>
               ) : (
-                <span className="flex size-[28px] items-center justify-center rounded-full border border-strong bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">
+                <span className={`flex size-[28px] items-center justify-center rounded-full bg-surface-inset text-body-sm font-[var(--fw-semibold)] ${profileActive ? "border-[1.5px] border-[var(--text-primary)] text-app" : "border border-strong text-muted"}`}>
                   {loggedUserInitial}
                 </span>
               )}
@@ -722,83 +749,23 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
           searchPopoverOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <div className="px-5 pb-3 pt-5">
-          <div className="flex h-[44px] items-center gap-[10px] rounded-full border border-app bg-[var(--search-field-bg)] px-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-            <SearchIcon className="size-[18px] shrink-0 text-muted" />
-            <input
-              ref={searchInputRef}
-              type="search"
-              value={searchValue}
-              onChange={(e) => setSearchValue(e.target.value)}
-              placeholder="Buscar usuarios"
-              className="min-w-0 flex-1 border-none bg-transparent text-body text-app shadow-none outline-none ring-0 focus:border-none focus:shadow-none focus:outline-none focus:ring-0 placeholder:text-muted [&::-webkit-search-cancel-button]:hidden"
-            />
-            {searchValue ? (
-              <button
-                type="button"
-                aria-label="Limpiar búsqueda"
-                onClick={() => setSearchValue("")}
-                className="shrink-0 text-muted transition-opacity hover:opacity-70"
-              >
-                <CloseIcon className="size-[18px]" />
-              </button>
-            ) : (
-              <button
-                type="button"
+        <div className="flex min-h-0 flex-1 flex-col px-5 pb-4 pt-5">
+          <UserSearchSurface
+            excludeUserId={user?.id}
+            limit={6}
+            autoFocus={searchPopoverOpen}
+            resultsClassName="mt-3 -mx-5 flex-1 overflow-y-auto overscroll-contain"
+            onResultClick={() => setSearchPopoverOpen(false)}
+            emptyAction={(
+              <CloseButton
                 onClick={() => setSearchPopoverOpen(false)}
-                aria-label="Cerrar"
-                className="shrink-0 text-muted transition-colors hover:text-app"
-              >
-                <CloseIcon className="size-[16px]" />
-              </button>
+                iconClassName="size-[16px]"
+                className="-mr-2"
+              />
             )}
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto overscroll-contain">
-          {searchValue.trim().length < 2 ? (
-            <div className="flex flex-col items-center justify-center gap-3 px-6 py-20 text-center">
-              <SearchIcon className="size-12 opacity-20" />
-              <p className="text-body-sm text-muted">Escribe al menos 2 letras para buscar usuarios.</p>
-            </div>
-          ) : searchLoading ? (
-            <div className="flex justify-center py-12">
-              <div className="size-5 animate-spin rounded-full border-2 border-current border-t-transparent opacity-40" />
-            </div>
-          ) : searchResults.length === 0 ? (
-            <div className="flex flex-col items-center justify-center gap-3 px-6 py-20 text-center">
-              <SearchIcon className="size-12 opacity-20" />
-              <p className="text-body-sm text-muted">No se han encontrado usuarios.</p>
-            </div>
-          ) : (
-            <div className="py-2">
-              {searchResults.map((result) => (
-                <Link
-                  key={result.id}
-                  href={`/profile/${result.id}`}
-                  onClick={() => setSearchPopoverOpen(false)}
-                  className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-[var(--surface)]"
-                >
-                  <SearchUserAvatar name={result.nombre} image={result.profile_image} />
-                  <span className="min-w-0 truncate text-body-sm font-[var(--fw-semibold)] text-app">{result.nombre}</span>
-                </Link>
-              ))}
-            </div>
-          )}
+          />
         </div>
       </div>
     </>
-  );
-}
-
-function SearchUserAvatar({ name, image }: { name: string; image: string | null }) {
-  if (image) {
-    return <Image src={image} alt={name} width={36} height={36} className="size-9 shrink-0 rounded-full object-cover" unoptimized referrerPolicy="no-referrer" />;
-  }
-
-  return (
-    <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-surface text-body-sm font-[var(--fw-semibold)] text-app">
-      {(name.trim()[0] || "U").toUpperCase()}
-    </div>
   );
 }

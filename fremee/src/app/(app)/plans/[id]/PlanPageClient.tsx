@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Maximize2, X, ChevronLeft, ChevronDown, UserPlus, Share2, Pencil, MapPin, Calendar, ArrowRight, Plus, ExternalLink, Upload, Check, FileText, Download, QrCode } from "lucide-react";
+import { Maximize2, ChevronLeft, ChevronDown, UserPlus, Share2, Pencil, MapPin, Calendar, ArrowRight, Plus, ExternalLink, Upload, Check, FileText, Download, QrCode } from "lucide-react";
 import { useAuth } from "@/providers/AuthProvider";
 import { useCallContext } from "@/providers/CallProvider";
 import { ChatConversation, PhoneCallIcon, VideoCallIcon } from "@/components/chat/ChatConversation";
@@ -33,12 +33,71 @@ import { PlanDetailSkeleton } from "./_components/PlanDetailSkeleton";
 import { AddSubplanSheet, TRANSPORT_MAP, TRANSPORT_LLEGADA, type AddSheetProps } from "./_components/AddSubplanSheet";
 import { isoDateOnly, groupByDay, normalizeDateKey, summarizeRecipients, getOccupiedIntervals, timeToMin, mergeIntervals, type Interval } from "./_components/plan-utils";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
-import { CloseX } from "@/components/ui/CloseX";
+import { CloseButton } from "@/components/ui/IconButton";
+import { Tabs } from "@/components/ui/Tabs";
 const ChevronDownIcon = ChevronDown;
+
+const PLAN_ROUTE_TRANSITION_MS = 260;
+const PLAN_SWIPE_EDGE_PX = 32;
+const PLAN_SWIPE_TRIGGER_PX = 88;
 
 // ── local icon aliases (used throughout this file) ──────────────────────────
 
 type Tab = "itinerario" | "gastos" | "chat" | "fotos";
+
+type PlanDetailCacheEntry = {
+  userId: string;
+  planId: number;
+  plan: PlanByIdRow | null;
+  isAdmin: boolean;
+  membershipChecked: boolean;
+  planChat: ChatListItem | null;
+  subplanes: SubplanRow[];
+  gastos: GastoRow[];
+  balances: BalanceRow[];
+  cachedAt: number;
+};
+
+const PLAN_DETAIL_CACHE_LIMIT = 8;
+const planDetailCache = new Map<string, PlanDetailCacheEntry>();
+
+function getPlanDetailCache(userId: string | undefined, planId: number) {
+  if (!userId || !planId) return null;
+  return planDetailCache.get(`${userId}:${planId}`) ?? null;
+}
+
+function updatePlanDetailCache(
+  userId: string | undefined,
+  planId: number,
+  patch: Partial<Omit<PlanDetailCacheEntry, "userId" | "planId" | "cachedAt">>,
+) {
+  if (!userId || !planId) return;
+
+  const key = `${userId}:${planId}`;
+  const previous = planDetailCache.get(key);
+  const next: PlanDetailCacheEntry = {
+    userId,
+    planId,
+    plan: previous?.plan ?? null,
+    isAdmin: previous?.isAdmin ?? false,
+    membershipChecked: previous?.membershipChecked ?? false,
+    planChat: previous?.planChat ?? null,
+    subplanes: previous?.subplanes ?? [],
+    gastos: previous?.gastos ?? [],
+    balances: previous?.balances ?? [],
+    ...patch,
+    cachedAt: Date.now(),
+  };
+
+  planDetailCache.delete(key);
+  planDetailCache.set(key, next);
+
+  while (planDetailCache.size > PLAN_DETAIL_CACHE_LIMIT) {
+    const oldestKey = planDetailCache.keys().next().value;
+    if (!oldestKey) break;
+    planDetailCache.delete(oldestKey);
+  }
+}
 
 const BackIcon = ({ className = "size-icon" }: { className?: string }) => <ChevronLeft className={className} aria-hidden />;
 const InviteIcon = ({ className = "size-icon" }: { className?: string }) => <UserPlus className={className} aria-hidden />;
@@ -118,7 +177,7 @@ function InvoiceDebtorList({ debtors, currency, formatMoney }: { debtors: Invoic
 
 /* ───────────── page ───────────── */
 
-export default function PlanDetailPage() {
+export default function PlanDetailPage({ presentation = "page" }: { presentation?: "page" | "overlay" } = {}) {
   const { loading, user } = useAuth();
   const { startCall, joinCall, callState } = useCallContext();
   const reloadCallMessagesRef = useRef<(() => void) | null>(null);
@@ -126,6 +185,9 @@ export default function PlanDetailPage() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { id: paramId } = useParams<{ id: string }>();
+  const isOverlayPresentation = presentation === "overlay";
+  const initialPlanId = Number(paramId);
+  const initialCache = getPlanDetailCache(user?.id, initialPlanId);
   // In Capacitor static export we navigate to /plans/static?id=18.
   // Read the real id from query params and store it in state so effects re-run.
   const [id, setId] = useState<string>(paramId);
@@ -138,18 +200,21 @@ export default function PlanDetailPage() {
     }
   }, [paramId]);
   const [activeTab, setActiveTab] = useState<Tab>("itinerario");
-  const [plan, setPlan] = useState<PlanByIdRow | null>(null);
+  const [plan, setPlan] = useState<PlanByIdRow | null>(initialCache?.plan ?? null);
   const isPast = plan ? new Date(plan.fin_at) < new Date() : false;
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(initialCache?.isAdmin ?? false);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [membershipChecked, setMembershipChecked] = useState(false);
-  const [planChat, setPlanChat] = useState<ChatListItem | null>(null);
-  const [planLoading, setPlanLoading] = useState(true);
-  const [subplanes, setSubplanes] = useState<SubplanRow[]>([]);
+  const [membershipChecked, setMembershipChecked] = useState(initialCache?.membershipChecked ?? false);
+  const [planChat, setPlanChat] = useState<ChatListItem | null>(initialCache?.planChat ?? null);
+  const [planLoading, setPlanLoading] = useState(!initialCache?.plan);
+  const [subplanes, setSubplanes] = useState<SubplanRow[]>(initialCache?.subplanes ?? []);
   const [selectedMapDay, setSelectedMapDay] = useState<string | null>(null);
   const [showMapFullscreen, setShowMapFullscreen] = useState(false);
-  const [collapsedDays, setCollapsedDays] = useState<Set<string>>(new Set());
-  const collapsedDaysInitializedRef = useRef(false);
+  const [collapsedDays, setCollapsedDays] = useState<Set<string>>(
+    () => new Set((initialCache?.subplanes?.length ? groupByDay(initialCache.subplanes) : []).map(([dateKey]) => dateKey)),
+  );
+  const collapsedDaysInitializedRef = useRef(!!initialCache?.subplanes?.length);
+  const [collapsedDaysReady, setCollapsedDaysReady] = useState(!!initialCache?.subplanes?.length);
   const [showAddSheet, setShowAddSheet] = useState(false);
   const [addSheetInitialTitulo, setAddSheetInitialTitulo] = useState<string | undefined>();
   const [addSheetInitialDate, setAddSheetInitialDate] = useState<string | undefined>();
@@ -160,10 +225,10 @@ export default function PlanDetailPage() {
   const [fabPhotoUploading, setFabPhotoUploading] = useState(false);
   const fabPhotoInputRef = useRef<HTMLInputElement>(null);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
-  const [gastos, setGastos] = useState<GastoRow[]>([]);
+  const [gastos, setGastos] = useState<GastoRow[]>(initialCache?.gastos ?? []);
   const [selectedGastoId, setSelectedGastoId] = useState<number | null>(null);
   const [gastosLimit, setGastosLimit] = useState(5);
-  const [balances, setBalances] = useState<BalanceRow[]>([]);
+  const [balances, setBalances] = useState<BalanceRow[]>(initialCache?.balances ?? []);
   const [expandedDebtors, setExpandedDebtors] = useState<Set<string>>(new Set());
   const [pagarDeuda, setPagarDeuda] = useState<BalanceRow | null>(null);
   const [comprobanteFile, setComprobanteFile] = useState<File | null>(null);
@@ -178,6 +243,144 @@ export default function PlanDetailPage() {
     setComprobanteFile(null);
     setComprobantePreview(null);
   }, !!pagarDeuda);
+  const [routeEntered, setRouteEntered] = useState(false);
+  const [routeClosing, setRouteClosing] = useState(false);
+  const [routeDragOffset, setRouteDragOffset] = useState(0);
+  const [routeDragging, setRouteDragging] = useState(false);
+  const routeCloseTimeoutRef = useRef<number | null>(null);
+  const routeDragStartRef = useRef<{ x: number; y: number; active: boolean } | null>(null);
+
+  useEffect(() => {
+    const frameId = window.requestAnimationFrame(() => setRouteEntered(true));
+    return () => window.cancelAnimationFrame(frameId);
+  }, []);
+
+  useEffect(() => {
+    if (!isOverlayPresentation) return;
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverscroll = document.documentElement.style.overscrollBehavior;
+
+    document.body.setAttribute("data-plan-detail-open", "true");
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overscrollBehavior = "none";
+
+    return () => {
+      document.body.removeAttribute("data-plan-detail-open");
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overscrollBehavior = previousHtmlOverscroll;
+    };
+  }, [isOverlayPresentation]);
+
+  useEffect(() => {
+    const planId = Number(id);
+    const cached = getPlanDetailCache(user?.id, planId);
+    if (!cached) {
+      if (planId && plan?.id !== planId) {
+        setPlan(null);
+        setIsAdmin(false);
+        setMembershipChecked(false);
+        setPlanChat(null);
+        setPlanLoading(true);
+        setSubplanes([]);
+        setGastos([]);
+        setBalances([]);
+        setCollapsedDays(new Set());
+        collapsedDaysInitializedRef.current = false;
+        setCollapsedDaysReady(false);
+      }
+      return;
+    }
+
+    setPlan(cached.plan);
+    setIsAdmin(cached.isAdmin);
+    setMembershipChecked(cached.membershipChecked);
+    setPlanChat(cached.planChat);
+    setPlanLoading(false);
+    if (cached.subplanes.length) {
+      setCollapsedDays(new Set(groupByDay(cached.subplanes).map(([dateKey]) => dateKey)));
+      collapsedDaysInitializedRef.current = true;
+      setCollapsedDaysReady(true);
+    } else {
+      setCollapsedDaysReady(true);
+    }
+    setSubplanes(cached.subplanes);
+    setGastos(cached.gastos);
+    setBalances(cached.balances);
+  }, [id, plan?.id, user?.id]);
+
+  useEffect(() => {
+    return () => {
+      if (routeCloseTimeoutRef.current !== null) {
+        window.clearTimeout(routeCloseTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const closePlanRoute = (mode: "back" | "calendar" = "back") => {
+    if (routeClosing) return;
+    setRouteClosing(true);
+    setRouteDragging(false);
+    setRouteDragOffset(0);
+
+    if (routeCloseTimeoutRef.current !== null) {
+      window.clearTimeout(routeCloseTimeoutRef.current);
+    }
+
+    routeCloseTimeoutRef.current = window.setTimeout(() => {
+      if (mode === "calendar") router.push("/calendar");
+      else router.back();
+    }, PLAN_ROUTE_TRANSITION_MS);
+  };
+
+  const handleRoutePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType !== "touch") return;
+    if (typeof window === "undefined" || window.innerWidth >= 768) return;
+    if (event.clientX > PLAN_SWIPE_EDGE_PX) return;
+    routeDragStartRef.current = { x: event.clientX, y: event.clientY, active: true };
+    setRouteDragging(true);
+  };
+
+  const handleRoutePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const start = routeDragStartRef.current;
+    if (!start?.active) return;
+
+    const deltaX = Math.max(0, event.clientX - start.x);
+    const deltaY = Math.abs(event.clientY - start.y);
+    if (deltaX < 8 && deltaY > 12) {
+      routeDragStartRef.current = null;
+      setRouteDragging(false);
+      setRouteDragOffset(0);
+      return;
+    }
+
+    event.preventDefault();
+    setRouteDragOffset(Math.min(deltaX, window.innerWidth));
+  };
+
+  const handleRoutePointerEnd = () => {
+    const shouldClose = routeDragOffset >= PLAN_SWIPE_TRIGGER_PX;
+    routeDragStartRef.current = null;
+    setRouteDragging(false);
+
+    if (shouldClose) {
+      closePlanRoute("back");
+      return;
+    }
+
+    setRouteDragOffset(0);
+  };
+
+  const routeTransform = routeClosing
+    ? "translate3d(100%,0,0)"
+    : routeDragging && routeDragOffset > 0
+      ? `translate3d(${routeDragOffset}px,0,0)`
+      : routeEntered
+        ? "none"
+        : "translate3d(100%,0,0)";
+  const routeTransition = routeDragging
+    ? "none"
+    : `transform ${PLAN_ROUTE_TRANSITION_MS}ms var(--ease-standard)`;
+  const routeIsMoving = !routeEntered || routeClosing || routeDragging;
 
   const openPhotoUpload = () => {
     setMobileCreateOpen(false);
@@ -456,15 +659,17 @@ export default function PlanDetailPage() {
       const sorted = [...prev, s].sort((a, b) => a.inicio_at.localeCompare(b.inicio_at));
       const newIdx = sorted.findIndex(x => x.id === s.id);
       const next = sorted[newIdx + 1];
+      let nextSubplanes = sorted;
       // The subplan immediately after (same day) has a stale polyline — its origin changed.
       if (next && isoDateOnly(next.inicio_at) === isoDateOnly(s.inicio_at) && next.ruta_polyline) {
         // Clear in DB (fire-and-forget, outside render cycle)
         void updateSubplanViaje(next.id, "", "", "");
-        return sorted.map(x =>
+        nextSubplanes = sorted.map(x =>
           x.id === next.id ? { ...x, ruta_polyline: null, duracion_viaje: null, distancia_viaje: null } : x
         );
       }
-      return sorted;
+      updatePlanDetailCache(user?.id, Number(id), { subplanes: nextSubplanes });
+      return nextSubplanes;
     });
   };
 
@@ -501,11 +706,13 @@ export default function PlanDetailPage() {
 
       clearRouteCache(affectedIds);
 
-      return sorted.map((item) =>
+      const nextSubplanes = sorted.map((item) =>
         affectedIds.includes(item.id)
           ? { ...item, ruta_polyline: null, duracion_viaje: null, distancia_viaje: null }
           : item
       );
+      updatePlanDetailCache(user?.id, Number(id), { subplanes: nextSubplanes });
+      return nextSubplanes;
     });
   };
 
@@ -518,11 +725,26 @@ export default function PlanDetailPage() {
     });
   };
 
-  useEffect(() => {
-    if (collapsedDaysInitializedRef.current || routeDayGroups.length === 0) return;
-    setCollapsedDays(new Set(routeDayGroups.map(([dateKey]) => dateKey)));
-    collapsedDaysInitializedRef.current = true;
-  }, [routeDayGroups]);
+  const applyLoadedSubplanes = useCallback((rows: SubplanRow[]) => {
+    updatePlanDetailCache(user?.id, Number(id), { subplanes: rows });
+    const dayKeys = groupByDay(rows).map(([dateKey]) => dateKey);
+
+    if (!collapsedDaysInitializedRef.current) {
+      setCollapsedDays(new Set(dayKeys));
+      collapsedDaysInitializedRef.current = true;
+    } else {
+      setCollapsedDays((prev) => {
+        const next = new Set(prev);
+        dayKeys.forEach((dateKey) => {
+          if (!next.has(dateKey)) next.add(dateKey);
+        });
+        return next;
+      });
+    }
+
+    setCollapsedDaysReady(true);
+    setSubplanes(rows);
+  }, [id, user?.id]);
 
   // Auto-select today if within plan range, else first day with subplanes
   useEffect(() => {
@@ -538,49 +760,69 @@ export default function PlanDetailPage() {
   }, [subplanes]);
 
   const handleViajeComputed = (subplanId: number, duracion: string, distancia: string, polyline: string) => {
-    setSubplanes((prev) => prev.map((s) =>
-      s.id === subplanId ? { ...s, duracion_viaje: duracion, distancia_viaje: distancia, ruta_polyline: polyline } : s
-    ));
+    setSubplanes((prev) => {
+      const nextSubplanes = prev.map((s) =>
+        s.id === subplanId ? { ...s, duracion_viaje: duracion, distancia_viaje: distancia, ruta_polyline: polyline } : s
+      );
+      updatePlanDetailCache(user?.id, Number(id), { subplanes: nextSubplanes });
+      return nextSubplanes;
+    });
     updateSubplanViaje(subplanId, duracion, distancia, polyline).catch(() => {});
   };
 
   const handleTransporteChange = async (subplanId: number, transporte: string | null) => {
     // Clear cached route so DayRouteMap recalculates with the new travel mode
-    setSubplanes((prev) => prev.map((s) =>
-      s.id === subplanId
-        ? { ...s, transporte_llegada: transporte, ruta_polyline: null, duracion_viaje: null, distancia_viaje: null }
-        : s
-    ));
+    setSubplanes((prev) => {
+      const nextSubplanes = prev.map((s) =>
+        s.id === subplanId
+          ? { ...s, transporte_llegada: transporte, ruta_polyline: null, duracion_viaje: null, distancia_viaje: null }
+          : s
+      );
+      updatePlanDetailCache(user?.id, Number(id), { subplanes: nextSubplanes });
+      return nextSubplanes;
+    });
     setEditingTransporteId(null);
     try { await updateSubplanTransporte(subplanId, transporte); }
-    catch { setSubplanes((prev) => prev.map((s) => s.id === subplanId ? { ...s, transporte_llegada: null } : s)); }
+    catch {
+      setSubplanes((prev) => {
+        const nextSubplanes = prev.map((s) => s.id === subplanId ? { ...s, transporte_llegada: null } : s);
+        updatePlanDetailCache(user?.id, Number(id), { subplanes: nextSubplanes });
+        return nextSubplanes;
+      });
+    }
   };
 
   useEffect(() => {
     if (id === "static") return; // still resolving real id from query params
     const planId = Number(id);
     if (!planId) { setPlanLoading(false); return; }
-    setPlanLoading(true);
+    if (!getPlanDetailCache(user?.id, planId)?.plan) {
+      setPlanLoading(true);
+    }
     fetchPlansByIds({ planIds: [planId] })
-      .then((rows) => setPlan(rows[0] ?? null))
+      .then((rows) => {
+        const nextPlan = rows[0] ?? null;
+        setPlan(nextPlan);
+        updatePlanDetailCache(user?.id, planId, { plan: nextPlan });
+      })
       .catch(console.error)
       .finally(() => setPlanLoading(false));
-  }, [id]);
+  }, [id, user?.id]);
 
   useEffect(() => {
     const planId = Number(id);
     if (!planId) return;
-    fetchSubplanes(planId).then(setSubplanes).catch(console.error);
+    fetchSubplanes(planId).then(applyLoadedSubplanes).catch(console.error);
 
     const supabase = createBrowserSupabaseClient();
     const channel = supabase
       .channel(`subplan-changes-${planId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "subplan", filter: `plan_id=eq.${planId}` }, () => {
-        fetchSubplanes(planId).then(setSubplanes).catch(console.error);
+        fetchSubplanes(planId).then(applyLoadedSubplanes).catch(console.error);
       })
       .subscribe();
     return () => { void supabase.removeChannel(channel); };
-  }, [id]);
+  }, [id, applyLoadedSubplanes]);
 
   useEffect(() => {
     const planId = Number(id);
@@ -589,6 +831,7 @@ export default function PlanDetailPage() {
       if (rol === null) { router.push("/calendar"); return; }
       setIsAdmin(rol === "ADMIN");
       setMembershipChecked(true);
+      updatePlanDetailCache(user.id, planId, { isAdmin: rol === "ADMIN", membershipChecked: true });
     }).catch(() => router.push("/calendar"));
 
   }, [id, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -601,12 +844,18 @@ export default function PlanDetailPage() {
     const channel = supabase
       .channel(`chat-members-${planChat.chat_id}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_miembro", filter: `chat_id=eq.${planChat.chat_id}` }, () => {
-        void fetchPlanChatItem(planId).then(setPlanChat);
+        void fetchPlanChatItem(planId).then((chat) => {
+          setPlanChat(chat);
+          updatePlanDetailCache(user.id, planId, { planChat: chat });
+        });
       })
       .on("postgres_changes", { event: "DELETE", schema: "public", table: "chat_miembro", filter: `chat_id=eq.${planChat.chat_id}` }, () => {
         void fetchPlanUserRol(planId, user.id).then((rol) => {
           if (rol === null) { router.push("/calendar"); return; }
-          void fetchPlanChatItem(planId).then(setPlanChat);
+          void fetchPlanChatItem(planId).then((chat) => {
+            setPlanChat(chat);
+            updatePlanDetailCache(user.id, planId, { planChat: chat });
+          });
         });
       })
       .subscribe();
@@ -630,19 +879,28 @@ export default function PlanDetailPage() {
   useEffect(() => {
     const planId = Number(id);
     if (!planId || !user?.id) return;
-    fetchPlanChatItem(planId).then(setPlanChat).catch(console.error);
+    fetchPlanChatItem(planId).then((chat) => {
+      setPlanChat(chat);
+      updatePlanDetailCache(user.id, planId, { planChat: chat });
+    }).catch(console.error);
   }, [id, user?.id]);
 
   const loadGastos = () => {
     const planId = Number(id);
     if (!planId) return;
-    listGastosForPlanEndpoint(planId).then(setGastos).catch(console.error);
+    listGastosForPlanEndpoint(planId).then((rows) => {
+      setGastos(rows);
+      updatePlanDetailCache(user?.id, planId, { gastos: rows });
+    }).catch(console.error);
   };
 
   const loadBalances = () => {
     const planId = Number(id);
     if (!planId) return;
-    getBalancesForPlanEndpoint(planId).then(setBalances).catch(console.error);
+    getBalancesForPlanEndpoint(planId).then((rows) => {
+      setBalances(rows);
+      updatePlanDetailCache(user?.id, planId, { balances: rows });
+    }).catch(console.error);
   };
 
   useEffect(() => { loadGastos(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -662,10 +920,6 @@ export default function PlanDetailPage() {
     setMobileCreateOpen(false);
   }, [activeTab, showAddSheet, showAddGastoSheet]);
   useEffect(() => {
-    collapsedDaysInitializedRef.current = false;
-    setCollapsedDays(new Set());
-  }, [id]);
-  useEffect(() => {
     if (selectedGastoId && !gastos.some((gasto) => gasto.id === selectedGastoId)) {
       setSelectedGastoId(null);
     }
@@ -684,15 +938,38 @@ export default function PlanDetailPage() {
     setShowAddGastoSheet(true);
   };
 
-  if (loading || planLoading || !membershipChecked) return <PlanDetailSkeleton />;
+  const routeMotionProps = {
+    style: { transform: routeTransform, transition: routeTransition, touchAction: "pan-y" },
+    onPointerDown: handleRoutePointerDown,
+    onPointerMove: handleRoutePointerMove,
+    onPointerUp: handleRoutePointerEnd,
+    onPointerCancel: handleRoutePointerEnd,
+  };
+  const routeContainerClass = isOverlayPresentation
+    ? activeTab === "chat"
+      ? "fixed inset-0 z-[1200] h-dvh overflow-hidden"
+      : "fixed inset-0 z-[1200] overflow-y-auto overscroll-contain scrollbar-overlay-subtle"
+    : activeTab === "chat"
+      ? "relative z-[1] h-dvh overflow-hidden"
+      : "relative z-[1] min-h-dvh";
+  const routeLoadingClass = isOverlayPresentation
+    ? "fixed inset-0 z-[1200] overflow-y-auto overscroll-contain scrollbar-overlay-subtle"
+    : "relative z-[1]";
+  const isDayCollapsed = (dateKey: string) => !collapsedDaysReady || collapsedDays.has(dateKey);
+
+  if (loading || planLoading || !membershipChecked) return (
+    <div className={`${routeLoadingClass} will-change-transform`} {...routeMotionProps}>
+      <PlanDetailSkeleton />
+    </div>
+  );
   if (!plan) return (
-    <div className="flex min-h-dvh items-center justify-center text-muted">
+    <div className={`${routeLoadingClass} flex min-h-dvh items-center justify-center bg-app text-muted will-change-transform`} {...routeMotionProps}>
       Plan no encontrado.
     </div>
   );
 
   return (
-    <div className={`${activeTab === "chat" ? "h-dvh overflow-hidden" : "min-h-dvh"} bg-app text-app`}>
+    <div className={`${routeContainerClass} bg-app text-app ${routeIsMoving ? "will-change-transform" : ""}`} {...routeMotionProps}>
       <div className={`relative w-full ${activeTab === "chat" ? "h-dvh overflow-hidden" : "min-h-dvh"}`}>
         <AppSidebar hideMobileNav={true} />
         <main className={`${activeTab === "chat" ? "h-dvh overflow-hidden" : "pb-[max(var(--space-6),env(safe-area-inset-bottom))]"} md:py-0 md:pl-[102px]`}>
@@ -713,6 +990,7 @@ export default function PlanDetailPage() {
                 alt={plan.titulo}
                 fill
                 sizes="100vw"
+                priority
                 className="absolute inset-0 h-full w-full object-cover"
                 unoptimized
               />
@@ -728,7 +1006,7 @@ export default function PlanDetailPage() {
 
             {/* Back button */}
             <button
-              onClick={() => router.back()}
+              onClick={() => closePlanRoute("back")}
               className="absolute left-[var(--page-margin-x)] top-[calc(env(safe-area-inset-top)+var(--space-4))] z-20 flex h-9 w-9 items-center justify-center rounded-full border border-app bg-surface text-app shadow-elev-3 transition-colors hover:bg-surface-2 md:top-[var(--space-6)]"
             >
               <BackIcon className="size-[20px]" />
@@ -797,28 +1075,22 @@ export default function PlanDetailPage() {
           </div>
 
           {/* ─── Tabs ─── */}
-          <div className="border-b border-app px-[var(--page-margin-x)]">
+          <div className="px-[var(--page-margin-x)]">
             <div className="flex items-center justify-between">
-              <div className="flex gap-[var(--space-8)]">
-                {(["itinerario", "gastos", "fotos", "chat"] as Tab[]).map((tab) => (
-                  <button
-                    key={tab}
-                    onClick={() => setActiveTab(tab)}
-                    className={`relative py-[var(--space-3)] text-body-sm font-[var(--fw-medium)] capitalize transition-colors ${
-                      activeTab === tab
-                        ? "text-app"
-                        : "text-muted hover:text-app"
-                    }`}
-                  >
-                    {tab === "fotos" ? "Álbum" : tab.charAt(0).toUpperCase() + tab.slice(1)}
-                    {activeTab === tab && (
-                      <span className="absolute inset-x-0 bottom-0 h-[2px] rounded-full bg-primary-token" />
-                    )}
-                  </button>
-                ))}
-              </div>
+              <Tabs
+                tabs={[
+                  { value: "itinerario", label: "Itinerario" },
+                  { value: "gastos", label: "Gastos" },
+                  { value: "fotos", label: "Álbum" },
+                  { value: "chat", label: "Chat" },
+                ]}
+                value={activeTab}
+                onChange={(value) => setActiveTab(value as Tab)}
+                className="flex-1 pb-[var(--space-3)] pt-[var(--space-3)] text-body-sm"
+                fontWeight="var(--fw-semibold)"
+              />
               {activeTab === "chat" && planChat && (
-                <div className="hidden items-center gap-[var(--space-1)] pb-[2px] md:flex">
+                <div className="hidden items-center gap-[var(--space-1)] pb-[2px] pl-[var(--space-4)] md:flex">
                   <button
                     type="button"
                     onClick={() => {
@@ -886,10 +1158,15 @@ export default function PlanDetailPage() {
                     setShowAddSheet(true);
                     setActiveTab("itinerario");
                   }}
-                  onLeave={() => router.push("/calendar")}
+                  onLeave={() => closePlanRoute("calendar")}
                   onMembersChanged={() => {
                     const planId = Number(id);
-                    if (planId) void fetchPlanChatItem(planId).then(setPlanChat);
+                    if (planId) {
+                      void fetchPlanChatItem(planId).then((chat) => {
+                        setPlanChat(chat);
+                        updatePlanDetailCache(user?.id, planId, { planChat: chat });
+                      });
+                    }
                   }}
                 />
               ) : (
@@ -943,9 +1220,9 @@ export default function PlanDetailPage() {
                   ) : (
                     <>
                       {groupByDay(subplanes).map(([dateKey, items]) => (
-                        <div key={dateKey} className={collapsedDays.has(dateKey) ? "mb-[var(--space-4)]" : "mb-[var(--space-6)]"}>
+                        <div key={dateKey} className={isDayCollapsed(dateKey) ? "mb-[var(--space-4)]" : "mb-[var(--space-6)]"}>
                           {/* Day header */}
-                          <div className={`-mx-[var(--page-margin-x)] border-b border-app px-[var(--page-margin-x)] md:mx-0 md:px-0 ${collapsedDays.has(dateKey) ? "pb-[var(--space-4)]" : "mb-[var(--space-5)] pb-[var(--space-4)]"}`}>
+                          <div className={`-mx-[var(--page-margin-x)] border-b border-app px-[var(--page-margin-x)] md:mx-0 md:px-0 ${isDayCollapsed(dateKey) ? "pb-[var(--space-4)]" : "mb-[var(--space-5)] pb-[var(--space-4)]"}`}>
                             {(() => {
                               const dayHeader = fmtDayHeader(items[0].inicio_at).toLocaleLowerCase("es-ES");
                               const dayExpense = dayExpenseTotals.get(dateKey);
@@ -958,11 +1235,11 @@ export default function PlanDetailPage() {
                                   type="button"
                                   onClick={() => toggleCollapsedDay(dateKey)}
                                   className="flex w-full min-w-0 items-start gap-[6px] text-left transition-colors hover:text-primary-token"
-                                  aria-expanded={!collapsedDays.has(dateKey)}
-                                  aria-label={collapsedDays.has(dateKey) ? `Desplegar ${dayHeader}` : `Plegar ${dayHeader}`}
+                                  aria-expanded={!isDayCollapsed(dateKey)}
+                                  aria-label={isDayCollapsed(dateKey) ? `Desplegar ${dayHeader}` : `Plegar ${dayHeader}`}
                                 >
                                   <span className="mt-[2px] inline-flex h-[20px] w-[20px] shrink-0 items-center justify-center text-muted">
-                                    <ChevronDownIcon className={`size-[15px] transition-transform ${collapsedDays.has(dateKey) ? "-rotate-90" : "rotate-0"}`} />
+                                    <ChevronDownIcon className={`size-[15px] transition-transform ${isDayCollapsed(dateKey) ? "-rotate-90" : "rotate-0"}`} />
                                   </span>
                                   <span className="min-w-0">
                                     <span
@@ -986,7 +1263,7 @@ export default function PlanDetailPage() {
                           {/* Timeline */}
                           <div
                             className={`grid overflow-hidden transition-[grid-template-rows,opacity,margin] duration-300 ease-out ${
-                              collapsedDays.has(dateKey)
+                              isDayCollapsed(dateKey)
                                 ? "mt-0 grid-rows-[0fr] opacity-0"
                                 : "mt-[var(--space-1)] grid-rows-[1fr] opacity-100"
                             }`}
@@ -1742,14 +2019,12 @@ export default function PlanDetailPage() {
               )}
             </div>
             <div className="absolute right-[max(var(--space-3),env(safe-area-inset-right))] top-[calc(env(safe-area-inset-top)+var(--space-3))] z-10 flex items-center gap-[var(--space-2)]">
-              <button
-                type="button"
+              <CloseButton
                 onClick={() => setShowMapFullscreen(false)}
-                className="flex h-[38px] w-[38px] items-center justify-center rounded-full border border-white/12 bg-black/58 text-white shadow-[0_8px_20px_rgba(0,0,0,0.34)] backdrop-blur-sm transition-colors hover:bg-black/66"
-                aria-label="Cerrar mapa"
-              >
-                <CloseX />
-              </button>
+                label="Cerrar mapa"
+                tone="light"
+                className="border border-white/12 bg-black/58 shadow-[0_8px_20px_rgba(0,0,0,0.34)] backdrop-blur-sm hover:bg-black/66"
+              />
             </div>
             {routeDayGroups.length > 1 && (
               <div className="absolute inset-x-[var(--page-margin-x)] bottom-[calc(env(safe-area-inset-bottom)+var(--space-4))] z-10 flex flex-wrap justify-center gap-[var(--space-2)]">
@@ -1777,7 +2052,7 @@ export default function PlanDetailPage() {
       {activeTab !== "chat" && !showAddSheet && !showAddGastoSheet && (
         activeTab === "itinerario" || activeTab === "gastos" || activeTab === "fotos"
       ) && (!isPast || membershipChecked || isAdmin) && (membershipChecked || isAdmin || activeTab === "gastos") && (
-        <div className="pointer-events-none fixed bottom-[calc(var(--space-6)+env(safe-area-inset-bottom))] right-[var(--page-margin-x)] z-[65] md:hidden">
+        <div className="pointer-events-none fixed bottom-[calc(env(safe-area-inset-bottom)+16px)] right-[calc(env(safe-area-inset-right)+16px)] z-[65] md:hidden">
           <div className={`absolute bottom-[calc(100%+12px)] right-0 flex flex-col items-end gap-2 transition-all duration-200 ease-out ${mobileCreateOpen ? "pointer-events-auto translate-y-0 opacity-100" : "pointer-events-none translate-y-2 opacity-0"}`}>
             {!isPast && isAdmin && (
               <button
@@ -1898,9 +2173,7 @@ export default function PlanDetailPage() {
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-app">
               <p className="text-body font-[var(--fw-semibold)]">Invitar al plan</p>
-              <button type="button" onClick={closeInviteModal} className="text-muted transition-opacity hover:opacity-70">
-                <CloseX />
-              </button>
+              <CloseButton onClick={closeInviteModal} />
             </div>
 
             {/* Friends list */}
@@ -2338,9 +2611,7 @@ export default function PlanDetailPage() {
                   <Download className="size-[15px]" aria-hidden />
                   Descargar PDF
                 </button>
-                <button type="button" onClick={closeInvoiceModal} className="text-muted transition-opacity hover:opacity-70">
-                  <CloseX />
-                </button>
+                <CloseButton onClick={closeInvoiceModal} />
               </div>
             </div>
 
@@ -2434,7 +2705,10 @@ export default function PlanDetailPage() {
                 fotoPortada: coverUrl,
               });
               const updated = await fetchPlansByIds({ planIds: [planId] });
-              if (updated[0]) setPlan(updated[0]);
+              if (updated[0]) {
+                setPlan(updated[0]);
+                updatePlanDetailCache(user.id, planId, { plan: updated[0] });
+              }
               setShowEditModal(false);
             }}
           />
@@ -2459,9 +2733,7 @@ export default function PlanDetailPage() {
                   a <span className="font-[var(--fw-semibold)] text-app">{pagarDeuda.to_nombre ?? "Usuario"}</span>
                 </p>
               </div>
-              <button type="button" onClick={closePaymentModal} className="text-muted hover:text-app">
-                <CloseX />
-              </button>
+              <CloseButton onClick={closePaymentModal} />
             </div>
 
             <div>
@@ -2469,13 +2741,13 @@ export default function PlanDetailPage() {
               {comprobantePreview ? (
                 <div className="relative rounded-xl overflow-hidden border border-app">
                   <img src={comprobantePreview} alt="Comprobante" className="w-full max-h-48 object-cover" />
-                  <button
-                    type="button"
+                  <CloseButton
                     onClick={() => { setComprobanteFile(null); setComprobantePreview(null); }}
-                    className="absolute top-2 right-2 rounded-full bg-black/60 p-1 text-white hover:bg-black/80"
-                  >
-                    <X className="size-[14px]" aria-hidden />
-                  </button>
+                    label="Quitar comprobante"
+                    tone="light"
+                    iconClassName="size-4"
+                    className="absolute right-2 top-2 bg-black/60 hover:bg-black/80"
+                  />
                 </div>
               ) : (
                 <label className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border border-dashed border-app bg-surface-2 px-4 py-5 text-center hover:bg-surface-3 transition-colors">

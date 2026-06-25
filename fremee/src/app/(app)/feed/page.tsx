@@ -46,7 +46,7 @@ import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import AudioPlayer from "@/components/common/AudioPlayer";
 import { STORAGE_KEYS, STORAGE_TTLS } from "@/config/storage";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
-import { CloseX } from "@/components/ui/CloseX";
+import { CloseButton, IconButton } from "@/components/ui/IconButton";
 import { SearchInput } from "@/components/ui/SearchInput";
 
 const EMOJI_LIST = [
@@ -497,16 +497,11 @@ export default function FeedPage() {
               >
                 {/* Search bar at the top */}
                 <div className="flex items-center gap-2 pb-[var(--space-4)] pl-[max(var(--space-2),env(safe-area-inset-left))] pr-[max(var(--space-4),env(safe-area-inset-right))] pt-[calc(env(safe-area-inset-top)+var(--space-4))]">
-                  <button
-                    type="button"
-                    onClick={closeMobileSearch}
-                    aria-label="Cerrar búsqueda"
-                    className="flex h-[40px] w-[36px] shrink-0 items-center justify-center text-app transition-opacity hover:opacity-70"
-                  >
+                  <IconButton onClick={closeMobileSearch} tone="app" aria-label="Cerrar búsqueda">
                     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[20px]">
                       <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
-                  </button>
+                  </IconButton>
                   <SearchInput
                     ref={mobileSearchInputRef}
                     value={mobileSearchValue}
@@ -597,16 +592,12 @@ export default function FeedPage() {
                                 )}
                                 <span className="min-w-0 truncate text-body font-[var(--fw-semibold)] text-app">{u.nombre}</span>
                               </Link>
-                              <button
-                                type="button"
-                                aria-label="Eliminar reciente"
+                              <CloseButton
+                                label="Eliminar reciente"
                                 onClick={() => { removeRecent(u.id); setRecentProfiles((prev) => prev.filter((r) => r.id !== u.id)); }}
-                                className="shrink-0 p-1 text-muted transition-opacity hover:opacity-70"
-                              >
-                                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[16px]">
-                                  <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                                </svg>
-                              </button>
+                                iconClassName="size-[16px]"
+                                className="-mr-3"
+                              />
                             </div>
                           ))}
                         </div>
@@ -2524,9 +2515,7 @@ function FeedCard({
                     )}
                   </div>
                 </div>
-                <button type="button" onClick={closeCommentsModal} aria-label="Cerrar comentarios" className="text-muted transition-opacity hover:opacity-70">
-                  <CloseIcon />
-                </button>
+                <CloseButton onClick={closeCommentsModal} label="Cerrar comentarios" iconClassName="size-5" />
               </div>
 
               <div className="scrollbar-thin flex-1 overflow-y-auto overscroll-contain px-[22px] py-[22px]">
@@ -2767,8 +2756,4 @@ function SmileyIcon() {
       <path d="M8.5 14.5C9.2 16 10.5 17 12 17C13.5 17 14.8 16 15.5 14.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
     </svg>
   );
-}
-
-function CloseIcon() {
-  return <CloseX className="size-5" />;
 }

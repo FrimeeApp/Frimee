@@ -9,9 +9,10 @@ import { fetchActiveFriends, type PublicUserProfileRow } from "@/services/api/en
 import { listChats, type ChatListItem } from "@/services/api/repositories/chat.repository";
 import { FIELD_LINE_CLS } from "@/lib/styles";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
-import { CloseX } from "@/components/ui/CloseX";
+import { CloseButton, IconButton } from "@/components/ui/IconButton";
 import { ModalFeedback, type ModalFeedbackState } from "@/components/ui/ModalFeedback";
 import { DiscardChangesDialog } from "@/components/ui/DiscardChangesDialog";
+import { Tabs } from "@/components/ui/Tabs";
 
 export type CreatePlanPayload = {
   title: string;
@@ -564,30 +565,16 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
         {/* ── Top nav ── */}
         <div className="flex shrink-0 items-center justify-between px-[var(--space-5)] py-[var(--space-3)]">
           {step > 1 ? (
-            <button
-              type="button"
-              onClick={handleBack}
-              disabled={saving}
-              className="flex size-9 items-center justify-center rounded-full text-app transition-colors hover:bg-surface disabled:opacity-50"
-              aria-label="Volver"
-            >
+            <IconButton onClick={handleBack} disabled={saving} tone="app" aria-label="Volver">
               <svg viewBox="0 0 24 24" fill="none" className="size-[18px]">
                 <path d="M15 19l-7-7 7-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-            </button>
+            </IconButton>
           ) : (
-            <div className="size-9" aria-hidden="true" />
+            <div className="size-11" aria-hidden="true" />
           )}
           <span className="text-caption font-[var(--fw-medium)] text-muted">{step} de {TOTAL_STEPS}</span>
-          <button
-            type="button"
-            onClick={requestDismiss}
-            disabled={saving}
-            className="flex size-9 items-center justify-center rounded-full text-app transition-colors hover:bg-surface disabled:opacity-50"
-            aria-label="Cerrar"
-          >
-            <CloseX />
-          </button>
+          <CloseButton onClick={requestDismiss} disabled={saving} tone="app" />
         </div>
 
         {/* ── Content ── */}
@@ -760,32 +747,32 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
               >
                 <div className="overflow-hidden">
                   {/* ── Tabs ── */}
-                  <div className="mb-[var(--space-3)] flex gap-[2px] rounded-[12px] bg-[var(--surface-2)] p-[3px]">
-                    {(["friends", "groups"] as const).map((tab) => (
-                      <button
-                        key={tab}
-                        type="button"
-                        onClick={() => setInviteTab(tab)}
-                        className={`flex-1 rounded-[9px] py-[6px] text-caption font-[var(--fw-semibold)] transition-colors ${
-                          inviteTab === tab
-                            ? "bg-[var(--bg)] text-app shadow-elev-1"
-                            : "text-muted hover:text-app"
-                        }`}
-                      >
-                        {tab === "friends" ? "Amigos" : "Grupos"}
-                        {tab === "friends" && invitedFriendIds.size > 0 && (
-                          <span className="ml-[5px] inline-flex size-[16px] items-center justify-center rounded-full bg-[var(--text-primary)] text-[14px] text-contrast-token">
+                  <Tabs
+                    tabs={[
+                      {
+                        value: "friends",
+                        label: "Amigos",
+                        badge: invitedFriendIds.size > 0 ? (
+                          <span className="inline-flex size-[16px] items-center justify-center rounded-full bg-[var(--text-primary)] text-[14px] text-contrast-token">
                             {invitedFriendIds.size}
                           </span>
-                        )}
-                        {tab === "groups" && selectedGroupIds.size > 0 && (
-                          <span className="ml-[5px] inline-flex size-[16px] items-center justify-center rounded-full bg-[var(--text-primary)] text-[14px] text-contrast-token">
+                        ) : undefined,
+                      },
+                      {
+                        value: "groups",
+                        label: "Grupos",
+                        badge: selectedGroupIds.size > 0 ? (
+                          <span className="inline-flex size-[16px] items-center justify-center rounded-full bg-[var(--text-primary)] text-[14px] text-contrast-token">
                             {selectedGroupIds.size}
                           </span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
+                        ) : undefined,
+                      },
+                    ]}
+                    value={inviteTab}
+                    onChange={(tab) => setInviteTab(tab as "friends" | "groups")}
+                    className="mb-[var(--space-3)] text-body-sm"
+                    fontWeight="var(--fw-semibold)"
+                  />
 
                   {/* ── Friends list ── */}
                   {inviteTab === "friends" && (
