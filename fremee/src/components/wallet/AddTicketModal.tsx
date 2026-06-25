@@ -13,10 +13,10 @@ import { TicketTypeIcon } from "@/app/(app)/wallet/page";
 import type { TicketOcrResult } from "@/app/api/tickets/ocr/route";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { buildInternalApiUrl } from "@/config/external";
-import { Upload, Loader2, Check, FileText, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { Upload, Loader2, Check, FileText, ChevronLeft, ChevronRight } from "lucide-react";
 import { FIELD_LINE_CLS } from "@/lib/styles";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
-import { CloseX } from "@/components/ui/CloseX";
+import { CloseButton, IconButton } from "@/components/ui/IconButton";
 import { ModalFeedback, type ModalFeedbackState } from "@/components/ui/ModalFeedback";
 import { DiscardChangesDialog } from "@/components/ui/DiscardChangesDialog";
 
@@ -407,21 +407,15 @@ export default function AddTicketModal({
 
         {/* Top nav */}
         <div className="flex shrink-0 items-center justify-between px-[var(--space-5)] py-[var(--space-3)]">
-          <button
-            type="button"
-            onClick={step === 1 ? requestDismiss : handleBack}
-            disabled={saving}
-            className="flex size-9 items-center justify-center rounded-full text-app transition-colors hover:bg-surface disabled:opacity-50"
-            aria-label={step === 1 ? "Cerrar" : "Volver"}
-          >
-            {step === 1 ? (
-              <CloseX />
-            ) : (
+          {step === 1 ? (
+            <CloseButton onClick={requestDismiss} disabled={saving} tone="app" />
+          ) : (
+            <IconButton onClick={handleBack} disabled={saving} tone="app" aria-label="Volver">
               <ChevronLeft className="size-[18px]" aria-hidden />
-            )}
-          </button>
+            </IconButton>
+          )}
           <span className="text-caption font-[var(--fw-medium)] text-muted">{step} de {TOTAL_STEPS}</span>
-          <div className="size-9" aria-hidden="true" />
+          <div className="size-11" aria-hidden="true" />
         </div>
 
         {/* Content */}
@@ -800,13 +794,13 @@ function UploadStep({
             // eslint-disable-next-line @next/next/no-img-element
             <img src={previewUrl} alt="Vista previa" className="h-[200px] w-full object-cover" />
           ) : null}
-          <button
-            type="button"
+          <CloseButton
             onClick={onClear}
-            className="absolute right-3 top-3 flex size-8 items-center justify-center rounded-full bg-black/50 text-white transition-colors hover:bg-black/70"
-          >
-            <X className="size-4" aria-hidden />
-          </button>
+            label="Quitar archivo"
+            tone="light"
+            iconClassName="size-4"
+            className="absolute right-2 top-2 bg-black/50 hover:bg-black/70"
+          />
         </div>
       )}
 

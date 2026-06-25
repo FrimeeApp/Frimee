@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import AppSidebar from "@/components/common/AppSidebar";
 import LoadingScreen from "@/components/common/LoadingScreen";
@@ -19,12 +19,14 @@ import { Tabs } from "@/components/ui/Tabs";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { DEFAULT_PLAN_COVER_IMAGE } from "@/config/app";
 import { STORAGE_KEYS } from "@/config/storage";
-import { ES_MONTHS_SHORT, ES_WEEK_DAYS_MIN } from "@/lib/date-labels";
-import { formatDateRange, formatTimeRange, formatDayHeading } from "@/lib/formatters";
-import { CloseX } from "@/components/ui/CloseX";
+import { ES_MONTHS_SHORT } from "@/lib/date-labels";
+import { formatDateRange, formatTimeRange } from "@/lib/formatters";
+import { CloseButton, IconButton } from "@/components/ui/IconButton";
 
 type PlanTab = "active" | "done";
-type CalendarViewMode = "month" | "day" | "year";
+type CalendarViewMode = "month" | "week" | "day" | "year";
+
+let calendarPlansCache: { userId: string; plans: FeedPlanItemDto[] } | null = null;
 
 type CalendarCell = {
   key: string;
@@ -49,8 +51,83 @@ type WeekPlanSegment = {
 };
 
 const MONTHS_SHORT = ES_MONTHS_SHORT;
-const WEEK_DAYS = ES_WEEK_DAYS_MIN;
+const WEEK_DAYS = ["lu", "ma", "mi", "ju", "vi", "sá", "do"] as const;
+const WEEK_DAYS_MONDAY_SHORT = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"] as const;
 const MOBILE_CALENDAR_OPEN_KEY = STORAGE_KEYS.mobileCalendarOpen;
+const CALENDAR_DAY_SELECTED_CLASS = "bg-[color-mix(in_srgb,var(--primary)_72%,black_28%)] font-[var(--fw-semibold)] text-white";
+const CALENDAR_DAY_TODAY_CLASS = "border border-[color-mix(in_srgb,var(--primary)_42%,var(--border)_58%)] bg-[color-mix(in_srgb,var(--primary)_24%,var(--surface)_76%)] font-[var(--fw-semibold)] text-app";
+const CLICK_MOTION_CLASS = "transition-transform duration-150 ease-out active:translate-y-[1px] active:scale-[0.98]";
+const CALENDAR_DAY_BUTTON_CLASS = "transition-[color,background-color,border-color,transform] duration-150 ease-out active:translate-y-[1px] active:scale-[0.94]";
+const CALENDAR_PLAN_PILL_BASE_CLASS = "cursor-pointer overflow-hidden rounded-full border border-[color-mix(in_srgb,var(--primary)_24%,var(--border)_76%)] bg-[color-mix(in_srgb,var(--primary)_22%,var(--surface)_78%)] font-[var(--fw-semibold)] text-app transition-[opacity,transform] duration-150 ease-out hover:opacity-80 active:translate-y-[1px] active:scale-[0.98]";
+const CALENDAR_PLAN_PILL_COMPACT_CLASS = "h-[22px] px-1.5 text-[14px] leading-[22px]";
+const FINISHED_PLAN_IMAGE_CLASS = "grayscale-[45%] opacity-80 saturate-[0.75]";
+const FINISHED_PLAN_TITLE_CLASS = "text-muted";
+const ACTIVE_PLAN_TITLE_CLASS = "text-app";
+
+function cx(...classes: Array<string | false | null | undefined>) {
+  return classes.filter(Boolean).join(" ");
+}
+
+function PlanPinButton({
+  pinned,
+  onToggle,
+  className,
+  compact = false,
+}: {
+  pinned: boolean;
+  onToggle: (event: MouseEvent<HTMLButtonElement>) => void;
+  className?: string;
+  compact?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-label={pinned ? "Desanclar" : "Anclar"}
+      className={cx(
+        "z-10 flex items-center justify-center rounded-full bg-transparent transition-[opacity,transform] duration-150 ease-out hover:opacity-75 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-color)]",
+        compact ? "size-11" : "size-8",
+        !pinned && "opacity-95",
+        className
+      )}
+    >
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        className={compact ? "size-[22px]" : "size-5"}
+        aria-hidden="true"
+      >
+        <path
+          d="M8 4.5h8M10 4.5v4l-3 3v1h10v-1l-3-3v-4M12 12.5v7"
+          stroke="currentColor"
+          strokeWidth={pinned ? "2.55" : "2.2"}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </button>
+  );
+}
+
+function getCalendarDayStateClass({
+  isSelected,
+  isToday,
+  currentMonthClass = "text-app",
+  otherMonthClass = "text-muted/40",
+  hoverClass = "hover:bg-surface-2",
+  isCurrentMonth = true,
+}: {
+  isSelected: boolean;
+  isToday: boolean;
+  currentMonthClass?: string;
+  otherMonthClass?: string;
+  hoverClass?: string;
+  isCurrentMonth?: boolean;
+}) {
+  if (isSelected) return CALENDAR_DAY_SELECTED_CLASS;
+  if (isToday) return CALENDAR_DAY_TODAY_CLASS;
+  return `${isCurrentMonth ? currentMonthClass : otherMonthClass} ${hoverClass}`;
+}
 
 export default function CalendarPage() {
   return (
@@ -75,10 +152,10 @@ function CalendarPageInner() {
     router.push(isCapacitor ? `/plans/static?id=${id}` : `/plans/${id}`);
   };
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !calendarPlansCache);
 
   const [syncingGoogle, setSyncingGoogle] = useState(false);
-  const [plans, setPlans] = useState<FeedPlanItemDto[]>([]);
+  const [plans, setPlans] = useState<FeedPlanItemDto[]>(() => calendarPlansCache?.plans ?? []);
   const [tab, setTab] = useState<PlanTab>("active");
   const [planSearch, setPlanSearch] = useState("");
   const [monthDate, setMonthDate] = useState(() => startOfMonth(new Date()));
@@ -110,6 +187,33 @@ function CalendarPageInner() {
   }, [createFromQuery]);
 
   useEffect(() => {
+    if (!calendarModalOpen || typeof window === "undefined") return;
+
+    const scrollY = window.scrollY;
+    const { body, documentElement } = document;
+    const previousBodyOverflow = body.style.overflow;
+    const previousBodyPosition = body.style.position;
+    const previousBodyTop = body.style.top;
+    const previousBodyWidth = body.style.width;
+    const previousHtmlOverscroll = documentElement.style.overscrollBehavior;
+
+    body.style.overflow = "hidden";
+    body.style.position = "fixed";
+    body.style.top = `-${scrollY}px`;
+    body.style.width = "100%";
+    documentElement.style.overscrollBehavior = "none";
+
+    return () => {
+      body.style.overflow = previousBodyOverflow;
+      body.style.position = previousBodyPosition;
+      body.style.top = previousBodyTop;
+      body.style.width = previousBodyWidth;
+      documentElement.style.overscrollBehavior = previousHtmlOverscroll;
+      window.scrollTo(0, scrollY);
+    };
+  }, [calendarModalOpen]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
     const isMobile = window.innerWidth < 768;
     if (!isMobile) {
@@ -123,6 +227,20 @@ function CalendarPageInner() {
     } catch {
       setCalendarOpen(false);
     }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mediaQuery = window.matchMedia("(max-width: 767px)");
+    const syncMobileViewMode = () => {
+      if (mediaQuery.matches) {
+        setViewMode((current) => (current === "week" ? "month" : current));
+      }
+    };
+
+    syncMobileViewMode();
+    mediaQuery.addEventListener("change", syncMobileViewMode);
+    return () => mediaQuery.removeEventListener("change", syncMobileViewMode);
   }, []);
 
   useEffect(() => {
@@ -257,7 +375,18 @@ function CalendarPageInner() {
       setPlans([]);
       setLoading(false);
       hasLoadedOnceRef.current = false;
+      calendarPlansCache = null;
       return;
+    }
+
+    if (calendarPlansCache?.userId === user.id) {
+      setPlans(calendarPlansCache.plans);
+      setLoading(false);
+      hasLoadedOnceRef.current = true;
+    } else if (calendarPlansCache) {
+      calendarPlansCache = null;
+      setPlans([]);
+      hasLoadedOnceRef.current = false;
     }
 
     let cancelled = false;
@@ -271,6 +400,7 @@ function CalendarPageInner() {
 
         if (cancelled) return;
         setPlans(plansResult);
+        calendarPlansCache = { userId: user.id, plans: plansResult };
         hasLoadedOnceRef.current = true;
       } catch (loadError) {
         if (cancelled) return;
@@ -430,8 +560,7 @@ function CalendarPageInner() {
 
   const stripWeeks = useMemo(() => {
     const today = startOfDay(new Date());
-    const dayOfWeek = today.getDay();
-    const weekStart = addDays(today, -dayOfWeek + stripWeekOffset);
+    const weekStart = addDays(startOfWeek(today), stripWeekOffset);
     return [0, 1].map((weekOffset) =>
       Array.from({ length: 7 }, (_, i) => {
         const date = addDays(weekStart, weekOffset * 7 + i);
@@ -442,11 +571,8 @@ function CalendarPageInner() {
 
   const stripRangeLabel = useMemo(() => {
     const first = stripWeeks[0]?.[0]?.date;
-    const last = stripWeeks[1]?.[6]?.date;
-    if (!first || !last) return "";
-    const firstLabel = first.toLocaleDateString("es-ES", { day: "numeric", month: "short" });
-    const lastLabel = last.toLocaleDateString("es-ES", { day: "numeric", month: "short" });
-    return `${firstLabel} - ${lastLabel}`;
+    if (!first) return "";
+    return formatMonthYearHeading(first);
   }, [stripWeeks]);
 
   const stripCalendarWeeks = useMemo((): CalendarWeek[] =>
@@ -459,6 +585,8 @@ function CalendarPageInner() {
   );
 
   if (authLoading) return <LoadingScreen />;
+
+  const showingFinishedPlans = tab === "done";
 
   return (
     <div className="min-h-dvh bg-app text-app">
@@ -488,13 +616,15 @@ function CalendarPageInner() {
             />
 
             {/* Buscador */}
-            <div className="mb-[var(--space-5)]">
-              <SearchInput
-                value={planSearch}
-                onChange={setPlanSearch}
-                placeholder="Buscar"
-                className="h-[40px] w-full md:max-w-[260px]"
-              />
+            <div className="mb-[var(--space-5)] grid grid-cols-1 gap-[var(--space-5)] md:grid-cols-[minmax(0,1fr)_300px] md:gap-[var(--space-8)]">
+              <div className="md:grid md:grid-cols-2 md:gap-x-[var(--space-5)]">
+                <SearchInput
+                  value={planSearch}
+                  onChange={setPlanSearch}
+                  placeholder="Buscar"
+                  className="h-[40px] w-full"
+                />
+              </div>
             </div>
 
             <div className="grid grid-cols-1 gap-[var(--space-5)] md:grid-cols-[minmax(0,1fr)_300px] md:gap-[var(--space-8)]">
@@ -514,7 +644,7 @@ function CalendarPageInner() {
                           <path d="M15 19L8 12L15 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                         </svg>
                       </button>
-                      <span className="min-w-[96px] text-center text-[11px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
+                      <span className="whitespace-nowrap text-center text-[15px] font-[var(--fw-semibold)] leading-tight text-app">
                         {stripRangeLabel}
                       </span>
                       <button
@@ -541,7 +671,7 @@ function CalendarPageInner() {
                   </div>
                   <div className="grid grid-cols-7 mb-[var(--space-1)]">
                     {WEEK_DAYS.map((d) => (
-                      <div key={d} className="text-center text-[10px] font-[var(--fw-semibold)] uppercase tracking-[0.06em] text-muted">
+                      <div key={d} className="text-center text-[10px] font-[var(--fw-semibold)] tracking-[0.04em] text-muted">
                         {d}
                       </div>
                     ))}
@@ -556,14 +686,17 @@ function CalendarPageInner() {
                             <button
                               key={cell.key}
                               type="button"
-                              onClick={() => { setSelectedDay(startOfDay(cell.date)); setCalendarModalOpen(true); }}
-                              className={`flex h-8 w-8 items-center justify-center justify-self-center rounded-full text-[13px] transition-colors ${
-                                isSelected
-                                  ? "bg-[color-mix(in_srgb,var(--primary)_72%,black_28%)] font-[var(--fw-semibold)] text-white"
-                                  : isToday
-                                    ? "border border-[color-mix(in_srgb,var(--primary)_42%,var(--border)_58%)] bg-[color-mix(in_srgb,var(--primary)_24%,var(--surface)_76%)] font-[var(--fw-semibold)] text-app"
-                                    : `${cell.isCurrentMonth ? "text-app" : "text-muted/40"} hover:bg-surface-2`
-                              }`}
+                              onClick={() => {
+                                setSelectedDay(startOfDay(cell.date));
+                                setMonthDate(startOfMonth(cell.date));
+                                setViewMode("day");
+                                setCalendarModalOpen(true);
+                              }}
+                              className={cx(
+                                "flex h-8 w-8 items-center justify-center justify-self-center rounded-full text-[13px]",
+                                CALENDAR_DAY_BUTTON_CLASS,
+                                getCalendarDayStateClass({ isSelected, isToday, isCurrentMonth: cell.isCurrentMonth })
+                              )}
                             >
                               {cell.day}
                             </button>
@@ -575,17 +708,26 @@ function CalendarPageInner() {
                           const lane = stripWeekSegments[wi]?.lanes[laneIndex] ?? [];
                           return (
                             <div key={`strip-${wi}-lane-${laneIndex}`} className="grid grid-cols-7 gap-x-1">
-                              {lane.length ? lane.map((segment) => (
-                                <div
-                                  key={segment.key}
-                                  className="h-[22px] cursor-pointer rounded-full border border-[color-mix(in_srgb,var(--primary)_24%,var(--border)_76%)] bg-[color-mix(in_srgb,var(--primary)_22%,var(--surface)_78%)] px-1.5 text-[14px] font-[var(--fw-semibold)] leading-[22px] text-app transition-opacity hover:opacity-80"
-                                  style={{ gridColumn: `${segment.startCol + 1} / ${segment.endCol + 2}` }}
-                                  title={segment.title}
-                                  onClick={() => { setSelectedDay(startOfDay(new Date(segment.planId))); setCalendarModalOpen(true); }}
-                                >
-                                  <span className="block truncate">{segment.title}</span>
-                                </div>
-                              )) : <div className="h-[22px]" aria-hidden="true" />}
+                              {lane.length ? lane.map((segment) => {
+                                const segmentPlan = filteredPlans.find((plan) => plan.id === segment.planId);
+                                const targetDate = startOfDay(segmentPlan ? new Date(segmentPlan.startsAt) : selectedDayValue);
+                                return (
+                                  <div
+                                    key={segment.key}
+                                    className={cx(CALENDAR_PLAN_PILL_BASE_CLASS, CALENDAR_PLAN_PILL_COMPACT_CLASS)}
+                                    style={{ gridColumn: `${segment.startCol + 1} / ${segment.endCol + 2}` }}
+                                    title={segment.title}
+                                    onClick={() => {
+                                      setSelectedDay(targetDate);
+                                      setMonthDate(startOfMonth(targetDate));
+                                      setViewMode("day");
+                                      setCalendarModalOpen(true);
+                                    }}
+                                  >
+                                    <span className="block truncate">{segment.title}</span>
+                                  </div>
+                                );
+                              }) : <div className="h-[22px]" aria-hidden="true" />}
                             </div>
                           );
                         })}
@@ -604,25 +746,27 @@ function CalendarPageInner() {
               {!loading && (
                 <aside className="hidden md:flex md:col-start-2 md:row-start-1 flex-col md:sticky md:top-[var(--space-6)] md:self-start">
                   {/* Switcher + nav */}
-                  <div className="mb-[var(--space-3)] flex flex-col gap-[var(--space-2)]">
+                  <div className="mb-[var(--space-3)] flex flex-col items-center gap-[var(--space-2)]">
                     <ViewSwitcher viewMode={viewMode} setViewMode={setViewMode} />
-                    <div className="flex items-center justify-between">
+                    <div className="flex w-full items-center justify-between">
                       <button type="button" aria-label="Anterior"
                         onClick={() => {
                           if (viewMode === "year") setMonthDate(new Date(yearValue - 1, monthDate.getMonth(), 1));
                           else if (viewMode === "month") setMonthDate(addMonths(monthDate, -1));
+                          else if (viewMode === "week") { const d = addDays(selectedDayValue, -7); setSelectedDay(d); setMonthDate(startOfMonth(d)); }
                           else { const d = addDays(selectedDayValue, -1); setSelectedDay(d); setMonthDate(startOfMonth(d)); }
                         }}
                         className="flex size-8 items-center justify-center text-muted transition-colors hover:text-app">
                         <svg viewBox="0 0 24 24" fill="none" className="size-[14px]"><path d="M15 19L8 12L15 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
                       </button>
-                      <span className="text-body-sm font-[var(--fw-semibold)] text-app">
-                        {viewMode === "year" ? String(yearValue) : viewMode === "month" ? monthLabel : formatDayHeading(selectedDayValue)}
+                      <span className="whitespace-nowrap text-left text-[22px] font-[var(--fw-semibold)] leading-tight text-app">
+                        {viewMode === "year" ? String(yearValue) : viewMode === "month" ? monthLabel : viewMode === "week" ? formatMonthYearHeading(selectedDayValue) : selectedDayValue.toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" })}
                       </span>
                       <button type="button" aria-label="Siguiente"
                         onClick={() => {
                           if (viewMode === "year") setMonthDate(new Date(yearValue + 1, monthDate.getMonth(), 1));
                           else if (viewMode === "month") setMonthDate(addMonths(monthDate, 1));
+                          else if (viewMode === "week") { const d = addDays(selectedDayValue, 7); setSelectedDay(d); setMonthDate(startOfMonth(d)); }
                           else { const d = addDays(selectedDayValue, 1); setSelectedDay(d); setMonthDate(startOfMonth(d)); }
                         }}
                         className="flex size-8 items-center justify-center text-muted transition-colors hover:text-app">
@@ -633,32 +777,29 @@ function CalendarPageInner() {
 
                   {viewMode === "year" ? (
                     /* ── Sidebar: vista año ── */
-                    <div className="grid grid-cols-3 gap-[var(--space-2)]">
-                      {Array.from({ length: 12 }).map((_, i) => {
-                        const monthStart = new Date(yearValue, i, 1);
-                        const monthEnd = new Date(yearValue, i + 1, 0, 23, 59, 59);
-                        const plansInMonth = filteredPlans.filter((p) =>
-                          rangesOverlap(new Date(p.startsAt), new Date(p.endsAt), monthStart, monthEnd)
-                        );
-                        const isCurrentMonth = i === startOfDay(new Date()).getMonth() && yearValue === startOfDay(new Date()).getFullYear();
-                        return (
-                          <button key={i} type="button"
-                            onClick={() => { setMonthDate(monthStart); setViewMode("month"); }}
-                            className={`flex flex-col items-center rounded-[8px] py-[var(--space-2)] transition-colors ${isCurrentMonth ? "bg-surface-2" : "hover:bg-surface-inset"}`}>
-                            <span className={`text-[12px] font-[var(--fw-medium)] ${isCurrentMonth ? "text-app" : "text-muted"}`}>{MONTHS_SHORT[i]}</span>
-                            {plansInMonth.length > 0 && (
-                              <span className="mt-[2px] text-[10px] text-[var(--primary)]">{plansInMonth.length}</span>
-                            )}
-                          </button>
-                        );
-                      })}
+                    <div className="grid grid-cols-3 grid-rows-4 gap-x-[var(--space-3)] gap-y-[var(--space-5)]">
+                      {Array.from({ length: 12 }).map((_, i) => (
+                        <YearMonthMini
+                          key={i}
+                          year={yearValue}
+                          monthIndex={i}
+                          today={startOfDay(new Date())}
+                          selectedDay={selectedDayValue}
+                          compact
+                          onSelectDay={(day) => {
+                            setSelectedDay(startOfDay(day));
+                            setMonthDate(startOfMonth(day));
+                            setViewMode("day");
+                          }}
+                        />
+                      ))}
                     </div>
                   ) : viewMode === "month" ? (
                     /* ── Sidebar: vista mes ── */
                     <>
                       <div className="grid grid-cols-7 gap-x-1 gap-y-2 border-b border-app pb-3 text-center">
                         {WEEK_DAYS.map((weekDay) => (
-                          <div key={weekDay} className="text-[11px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">{weekDay}</div>
+                          <div key={weekDay} className="text-[11px] font-[var(--fw-semibold)] tracking-[0.04em] text-muted">{weekDay}</div>
                         ))}
                       </div>
                       <div className="mt-3">
@@ -671,7 +812,17 @@ function CalendarPageInner() {
                                 return (
                                   <button type="button" key={cell.key}
                                     onClick={() => { setSelectedDay(startOfDay(cell.date)); setMonthDate(startOfMonth(cell.date)); setViewMode("day"); }}
-                                    className={`flex h-7 w-7 items-center justify-center justify-self-center rounded-full text-[13px] transition-colors ${cell.isCurrentMonth ? "text-app" : "text-tertiary"} ${isSelected ? "bg-[color-mix(in_srgb,var(--primary)_72%,black_28%)] font-[var(--fw-semibold)] text-white shadow-sm" : isCellToday ? "border border-[color-mix(in_srgb,var(--primary)_42%,var(--border)_58%)] bg-[color-mix(in_srgb,var(--primary)_24%,var(--surface)_76%)] font-[var(--fw-semibold)] text-app" : "hover:bg-surface-inset"}`}
+                                    className={cx(
+                                      "flex h-7 w-7 items-center justify-center justify-self-center rounded-full text-[13px]",
+                                      CALENDAR_DAY_BUTTON_CLASS,
+                                      getCalendarDayStateClass({
+                                        isSelected,
+                                        isToday: isCellToday,
+                                        isCurrentMonth: cell.isCurrentMonth,
+                                        otherMonthClass: "text-tertiary",
+                                        hoverClass: "hover:bg-surface-inset",
+                                      })
+                                    )}
                                   >{cell.day}</button>
                                 );
                               })}
@@ -683,7 +834,7 @@ function CalendarPageInner() {
                                   <div key={`${week.key}-lane-${laneIndex}`} className="grid grid-cols-7 gap-x-1">
                                     {lane.length ? lane.map((segment) => (
                                       <div key={segment.key}
-                                        className="h-[22px] cursor-pointer overflow-hidden rounded-full bg-[var(--primary)]/20 px-1.5 text-[14px] font-[var(--fw-semibold)] leading-[22px] text-app transition-opacity hover:opacity-80"
+                                        className={cx(CALENDAR_PLAN_PILL_BASE_CLASS, CALENDAR_PLAN_PILL_COMPACT_CLASS)}
                                         style={{ gridColumn: `${segment.startCol + 1} / ${segment.endCol + 2}` }}
                                         title={segment.title} onClick={() => navigateToPlan(segment.planId)}>
                                         <span className="block truncate">{segment.title}</span>
@@ -708,24 +859,34 @@ function CalendarPageInner() {
                           onClick={() => { setSelectedDay(startOfDay(new Date())); setMonthDate(startOfMonth(new Date())); }}
                           className="mb-[var(--space-3)] self-start text-caption text-[var(--primary)]">Hoy</button>
                       )}
-                      <h3 className="mb-[var(--space-3)] text-[var(--font-h3)] font-[var(--fw-semibold)] leading-[1.2] text-app">{formatDayHeading(selectedDayValue)}</h3>
                       {allDayPlans.length > 0 && (
-                        <div className="mb-[var(--space-3)] flex flex-col border-b border-app">
-                          {allDayPlans.map((plan, i) => (
-                            <button key={`sidebar-allday-${plan.id}`} type="button"
-                              onClick={() => navigateToPlan(plan.id)}
-                              className={`flex items-center gap-2 py-[var(--space-2)] text-left transition-colors hover:bg-surface-inset/50 ${i < allDayPlans.length - 1 ? "border-b border-app" : ""}`}>
-                              <div className="size-[6px] shrink-0 rounded-full bg-[var(--primary)]/60" />
-                              <span className="truncate text-[13px] font-[var(--fw-medium)] text-app">{plan.title}</span>
-                            </button>
-                          ))}
+                        <div className="mb-[var(--space-3)] grid grid-cols-[40px_minmax(0,1fr)] border-b border-app pb-[var(--space-2)]">
+                          <div className="pr-2 pt-[3px] text-right text-[10px] font-[var(--fw-semibold)] leading-tight text-muted">
+                            todo<br />el día
+                          </div>
+                          <div className="space-y-[4px]">
+                            {allDayPlans.map((plan) => (
+                              <button
+                                key={`sidebar-allday-${plan.id}`}
+                                type="button"
+                                onClick={() => navigateToPlan(plan.id)}
+                                className={cx(CALENDAR_PLAN_PILL_BASE_CLASS, CALENDAR_PLAN_PILL_COMPACT_CLASS, "block w-full text-left")}
+                              >
+                                <span className="block truncate">{plan.title}</span>
+                              </button>
+                            ))}
+                          </div>
                         </div>
                       )}
                       <div className="scrollbar-thin max-h-[420px] overflow-y-auto pr-1">
                         <div className="relative">
                           {Array.from({ length: 24 }).map((_, hour) => (
                             <div key={`sidebar-hour-${hour}`} className="grid h-16 grid-cols-[40px_minmax(0,1fr)]">
-                              <div className="pr-2 pt-1 text-right text-[11px] text-muted">{String(hour).padStart(2, "0")}:00</div>
+                              <div className="relative">
+                                <span className="absolute right-2 top-0 -translate-y-1/2 text-right text-[11px] leading-none text-muted">
+                                  {String(hour).padStart(2, "0")}:00
+                                </span>
+                              </div>
                               <div className="border-t border-app/40" />
                             </div>
                           ))}
@@ -736,7 +897,7 @@ function CalendarPageInner() {
                               const duration = Math.max(endMinutes - startMinutes, 30);
                               return (
                                 <div key={`sidebar-plan-${plan.id}`}
-                                  className="pointer-events-auto absolute left-1 right-1 cursor-pointer overflow-hidden rounded-[8px] bg-[var(--primary)]/15 px-2 py-1 text-app transition-opacity hover:opacity-90"
+                                  className="pointer-events-auto absolute left-1 right-1 cursor-pointer overflow-hidden rounded-[8px] bg-[var(--primary)]/15 px-2 py-1 text-app transition-[opacity,transform] duration-150 ease-out hover:opacity-90 active:translate-y-[1px] active:scale-[0.98]"
                                   style={{ top: `${(startMinutes / 60) * 64}px`, height: `${Math.max((duration / 60) * 64, 24)}px` }}
                                   onClick={() => navigateToPlan(plan.id)}>
                                   <p className="truncate text-[12px] font-[var(--fw-semibold)]">{plan.title}</p>
@@ -768,23 +929,38 @@ function CalendarPageInner() {
                         return (
                           <article
                             key={`plan-mobile-${plan.id}`}
-                            className="flex cursor-pointer items-stretch gap-3 transition-colors hover:bg-surface-inset/50"
+                            className={cx("flex cursor-pointer items-stretch gap-3 hover:bg-surface-inset/50", CLICK_MOTION_CLASS)}
                             onClick={() => navigateToPlan(plan.id)}
                           >
                             <div
-                              className="size-[68px] shrink-0 self-start rounded-[8px] bg-cover bg-center bg-no-repeat my-[var(--space-2)]"
+                              className={cx(
+                                "size-[84px] shrink-0 self-start rounded-[8px] bg-cover bg-center bg-no-repeat my-[var(--space-2)] transition-[filter,opacity]",
+                                showingFinishedPlans && FINISHED_PLAN_IMAGE_CLASS
+                              )}
                               style={{ backgroundImage: `url(${plan.coverImage ?? DEFAULT_PLAN_COVER_IMAGE.mobile})` }}
                               role="img"
                               aria-label={plan.title}
                             />
                             <div className="flex min-w-0 flex-1 items-start gap-2 py-[var(--space-2)]">
                               <div className="min-w-0 flex-1">
-                                <p className="truncate text-body-sm font-[var(--fw-semibold)] text-app">{plan.title}</p>
-                                <p className="mt-[2px] text-caption text-muted">{formatDateRange(plan.startsAt, plan.endsAt)}</p>
+                                <p className={cx(
+                                  "truncate text-body-sm font-[var(--fw-semibold)]",
+                                  showingFinishedPlans ? FINISHED_PLAN_TITLE_CLASS : ACTIVE_PLAN_TITLE_CLASS
+                                )}>{plan.title}</p>
+                                <p className={cx("mt-[2px] text-caption", showingFinishedPlans ? "text-tertiary" : "text-muted")}>{formatDateRange(plan.startsAt, plan.endsAt)}</p>
                               </div>
-                              <svg viewBox="0 0 24 24" fill="none" className="size-[15px] shrink-0 self-center text-muted" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                <path d="M9 18l6-6-6-6" />
-                              </svg>
+                              <div className={cx("flex shrink-0 items-center gap-0 self-center", showingFinishedPlans ? "text-tertiary" : "text-muted")}>
+                                <PlanPinButton
+                                  pinned={pinnedPlanIds.includes(plan.id)}
+                                  onToggle={(e) => { e.stopPropagation(); togglePin(plan.id); }}
+                                  compact
+                                />
+                                <span className="flex size-11 shrink-0 items-center justify-center" aria-hidden="true">
+                                  <svg viewBox="0 0 24 24" fill="none" className="size-[22px]" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M9 18l6-6-6-6" />
+                                  </svg>
+                                </span>
+                              </div>
                             </div>
                           </article>
                         );
@@ -797,30 +973,31 @@ function CalendarPageInner() {
                         return (
                           <article
                             key={`plan-desktop-${plan.id}`}
-                            className="group cursor-pointer"
+                            className={cx("group cursor-pointer", CLICK_MOTION_CLASS)}
                             onClick={() => navigateToPlan(plan.id)}
                           >
                             <div
-                              className="relative h-[160px] w-full overflow-hidden rounded-[10px] bg-cover bg-center bg-no-repeat transition-opacity group-hover:opacity-95"
+                              className={cx(
+                                "relative h-[160px] w-full overflow-hidden rounded-[10px] bg-cover bg-center bg-no-repeat transition-[filter,opacity] group-hover:opacity-95",
+                                showingFinishedPlans && FINISHED_PLAN_IMAGE_CLASS
+                              )}
                               style={{ backgroundImage: `url(${plan.coverImage ?? DEFAULT_PLAN_COVER_IMAGE.desktop})` }}
                               role="img"
                               aria-label={plan.title}
                             >
                               <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
-                              <button
-                                type="button"
-                                onClick={(e) => { e.stopPropagation(); togglePin(plan.id); }}
-                                aria-label={pinnedPlanIds.includes(plan.id) ? "Desanclar" : "Anclar"}
-                                className={`absolute left-3 top-3 flex h-7 w-7 items-center justify-center rounded-full shadow-sm transition-opacity ${pinnedPlanIds.includes(plan.id) ? "bg-[color-mix(in_srgb,var(--primary)_18%,var(--surface)_82%)] text-app" : "bg-surface/80 text-app"}`}
-                              >
-                                <svg viewBox="0 0 24 24" fill="none" className="size-4" aria-hidden="true">
-                                  <path d="M8 4.5h8M10 4.5v4l-3 3v1h10v-1l-3-3v-4M12 12.5v7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                                </svg>
-                              </button>
+                              <PlanPinButton
+                                pinned={pinnedPlanIds.includes(plan.id)}
+                                onToggle={(e) => { e.stopPropagation(); togglePin(plan.id); }}
+                                className="absolute right-1 top-1 text-app"
+                              />
                             </div>
                             <div className="pt-[var(--space-3)]">
-                              <p className="truncate text-[17px] font-[var(--fw-semibold)] leading-[1.2] text-app">{plan.title}</p>
-                              <p className="mt-[3px] text-caption text-muted">{formatDateRange(plan.startsAt, plan.endsAt)}</p>
+                              <p className={cx(
+                                "truncate text-[17px] font-[var(--fw-semibold)] leading-[1.2]",
+                                showingFinishedPlans ? FINISHED_PLAN_TITLE_CLASS : ACTIVE_PLAN_TITLE_CLASS
+                              )}>{plan.title}</p>
+                              <p className={cx("mt-[3px] text-caption", showingFinishedPlans ? "text-tertiary" : "text-muted")}>{formatDateRange(plan.startsAt, plan.endsAt)}</p>
                               <p className="mt-[2px] truncate text-caption text-tertiary">
                                 {plan.creator.id === user?.id ? "Creado por ti" : `De ${plan.creator.name}`}
                               </p>
@@ -850,9 +1027,9 @@ function CalendarPageInner() {
           weekSegments={weekSegments}
           allDayPlans={allDayPlans}
           timedDayPlans={timedDayPlans}
+          filteredPlans={filteredPlans}
           monthLabel={monthLabel}
           yearValue={yearValue}
-          filteredPlans={filteredPlans}
           navigateToPlan={navigateToPlan}
           onClose={() => setCalendarModalOpen(false)}
         />
@@ -882,20 +1059,93 @@ function PlanListSkeleton() {
 
 function ViewSwitcher({ viewMode, setViewMode }: { viewMode: CalendarViewMode; setViewMode: (m: CalendarViewMode) => void }) {
   return (
-    <div className="flex items-center rounded-full border border-app bg-surface-inset p-[3px]">
-      {(["year", "month", "day"] as const).map((mode) => (
+    <div className="grid w-max grid-cols-3 items-center rounded-full border border-app bg-surface-inset p-[3px] md:grid-cols-4">
+      {(["year", "month", "week", "day"] as const).map((mode) => (
         <button
           key={mode}
           type="button"
           onClick={() => setViewMode(mode)}
-          className={`rounded-full px-[10px] py-[5px] text-[12px] font-[var(--fw-medium)] transition-colors ${
+          className={`flex h-[30px] min-w-[46px] items-center justify-center rounded-full px-2 text-center text-[12px] font-[var(--fw-medium)] transition-colors md:min-w-[56px] ${mode === "week" ? "hidden md:flex md:min-w-[66px]" : ""} ${
             viewMode === mode ? "bg-app text-app shadow-sm" : "text-muted hover:text-app"
           }`}
         >
-          {mode === "year" ? "Año" : mode === "month" ? "Mes" : "Día"}
+          {mode === "year" ? "Año" : mode === "month" ? "Mes" : mode === "week" ? "Semana" : "Día"}
         </button>
       ))}
     </div>
+  );
+}
+
+function YearMonthMini({
+  year,
+  monthIndex,
+  today,
+  selectedDay,
+  compact = false,
+  fit = false,
+  onSelectDay,
+}: {
+  year: number;
+  monthIndex: number;
+  today: Date;
+  selectedDay: Date;
+  compact?: boolean;
+  fit?: boolean;
+  onSelectDay: (day: Date) => void;
+}) {
+  const monthDate = new Date(year, monthIndex, 1);
+  const monthName = compact || fit
+    ? MONTHS_SHORT[monthIndex]
+    : new Intl.DateTimeFormat("es-ES", { month: "short" }).format(monthDate).replace(".", "");
+  const cells = buildYearMonthCells(year, monthIndex);
+  const titleClass = compact
+    ? "mb-[6px] text-[12px]"
+    : fit
+      ? "mb-[clamp(5px,1vh,9px)] text-[clamp(16px,2.55vh,27px)] md:text-[30px]"
+      : "mb-[var(--space-4)] text-[22px]";
+  const gridClass = compact
+    ? "gap-x-[1px] gap-y-[2px]"
+    : fit
+      ? "gap-x-[clamp(3px,0.9vw,6px)] gap-y-[clamp(2px,0.65vh,7px)]"
+      : "mt-[var(--space-3)] gap-y-[7px]";
+  const dayClass = compact
+    ? "size-[13px] text-[8px]"
+    : fit
+      ? "size-[clamp(14px,2vh,22px)] text-[clamp(7px,1.05vh,14px)] font-[var(--fw-medium)]"
+      : "size-8 text-[14px]";
+
+  return (
+    <section className={fit ? "min-h-0" : undefined}>
+      <h3 className={`${titleClass} text-left font-[var(--fw-semibold)] capitalize leading-none text-app`}>
+        {monthName}
+      </h3>
+      <div className={`${gridClass} grid grid-cols-7 text-center`}>
+        {cells.map((cell) => {
+          const isToday = toDayKey(cell.date) === toDayKey(today);
+          const isSelected = toDayKey(cell.date) === toDayKey(selectedDay);
+
+          if (!cell.isCurrentMonth) {
+            return <span key={cell.key} aria-hidden="true" className={dayClass} />;
+          }
+
+          return (
+            <button
+              key={cell.key}
+              type="button"
+              onClick={() => onSelectDay(cell.date)}
+              className={cx(
+                "flex items-center justify-center justify-self-center rounded-full transition-colors",
+                CALENDAR_DAY_BUTTON_CLASS,
+                dayClass,
+                getCalendarDayStateClass({ isSelected, isToday })
+              )}
+            >
+              {cell.day}
+            </button>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -910,9 +1160,9 @@ function FullCalendarModal({
   weekSegments,
   allDayPlans,
   timedDayPlans,
+  filteredPlans,
   monthLabel,
   yearValue,
-  filteredPlans,
   navigateToPlan,
   onClose,
 }: {
@@ -926,176 +1176,285 @@ function FullCalendarModal({
   weekSegments: { lanes: WeekPlanSegment[][]; hiddenCount: number }[];
   allDayPlans: FeedPlanItemDto[];
   timedDayPlans: FeedPlanItemDto[];
+  filteredPlans: FeedPlanItemDto[];
   monthLabel: string;
   yearValue: number;
-  filteredPlans: FeedPlanItemDto[];
   navigateToPlan: (id: number) => void;
   onClose: () => void;
 }) {
   const today = startOfDay(new Date());
-  const isToday = toDayKey(selectedDayValue) === toDayKey(today);
 
   // Navigation label and handlers per view
   const navLabel = viewMode === "year"
     ? String(yearValue)
     : viewMode === "month"
       ? monthLabel
-      : selectedDayValue.toLocaleDateString("es-ES", { day: "numeric", month: "short" });
+      : viewMode === "week"
+        ? formatMonthYearHeading(selectedDayValue)
+        : selectedDayValue.toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" });
+  const navLabelClass = "whitespace-nowrap text-left text-[22px] font-[var(--fw-semibold)] leading-tight text-app";
+
+  const weekDays = Array.from({ length: 7 }, (_, index) => addDays(startOfWeek(selectedDayValue), index));
+  const weekStart = startOfDay(weekDays[0]);
+  const weekEnd = endOfDay(weekDays[6]);
+  const weekAllDayPlans = filteredPlans
+    .filter((plan) => plan.allDay && rangesOverlap(new Date(plan.startsAt), new Date(plan.endsAt), weekStart, weekEnd))
+    .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
+  const weekTimedEntries = weekDays.flatMap((day, dayIndex) =>
+    filteredPlans
+      .filter((plan) => !plan.allDay && rangesOverlap(new Date(plan.startsAt), new Date(plan.endsAt), startOfDay(day), endOfDay(day)))
+      .map((plan) => ({ plan, day, dayIndex }))
+  );
 
   const handlePrev = () => {
     if (viewMode === "year") setMonthDate(new Date(yearValue - 1, monthDate.getMonth(), 1));
     else if (viewMode === "month") setMonthDate(addMonths(monthDate, -1));
+    else if (viewMode === "week") { const d = addDays(selectedDayValue, -7); setSelectedDay(d); setMonthDate(startOfMonth(d)); }
     else { const d = addDays(selectedDayValue, -1); setSelectedDay(d); setMonthDate(startOfMonth(d)); }
   };
   const handleNext = () => {
     if (viewMode === "year") setMonthDate(new Date(yearValue + 1, monthDate.getMonth(), 1));
     else if (viewMode === "month") setMonthDate(addMonths(monthDate, 1));
+    else if (viewMode === "week") { const d = addDays(selectedDayValue, 7); setSelectedDay(d); setMonthDate(startOfMonth(d)); }
     else { const d = addDays(selectedDayValue, 1); setSelectedDay(d); setMonthDate(startOfMonth(d)); }
   };
 
   return (
     <div className="fixed inset-0 z-[var(--z-modal)] flex flex-col bg-app" role="dialog" aria-modal="true">
       {/* Cabecera */}
-      <div className="flex items-center gap-[var(--space-3)] border-b border-app px-[var(--space-4)] pb-[var(--space-3)] pt-[calc(var(--space-3)+env(safe-area-inset-top))]">
-        {/* Navegación izquierda */}
-        <div className="flex min-w-0 flex-1 items-center gap-1">
-          <button type="button" onClick={handlePrev} aria-label="Anterior" className="flex size-8 items-center justify-center text-muted transition-colors hover:text-app">
-            <svg viewBox="0 0 24 24" fill="none" className="size-[15px]"><path d="M15 19L8 12L15 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-          </button>
-          <span className="min-w-[60px] text-center text-body-sm font-[var(--fw-semibold)] text-app">{navLabel}</span>
-          <button type="button" onClick={handleNext} aria-label="Siguiente" className="flex size-8 items-center justify-center text-muted transition-colors hover:text-app">
-            <svg viewBox="0 0 24 24" fill="none" className="size-[15px]"><path d="M9 5L16 12L9 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-          </button>
+      <div className="border-b border-app px-[var(--space-4)] pb-[var(--space-3)] pt-[calc(var(--space-3)+env(safe-area-inset-top))]">
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-[var(--space-3)]">
+          <div aria-hidden="true" />
+          <ViewSwitcher viewMode={viewMode} setViewMode={setViewMode} />
+          <div className="flex justify-end">
+            <CloseButton onClick={onClose} />
+          </div>
         </div>
-        {/* Switcher central */}
-        <ViewSwitcher viewMode={viewMode} setViewMode={setViewMode} />
-        {/* Cerrar */}
-        <div className="flex min-w-0 flex-1 justify-end">
-          <button type="button" onClick={onClose} aria-label="Cerrar" className="flex size-9 items-center justify-center rounded-full text-muted transition-colors hover:bg-surface-2">
-            <CloseX />
-          </button>
+        <div className="mt-[var(--space-2)] flex items-center justify-start gap-2">
+          <IconButton onClick={handlePrev} aria-label="Anterior">
+            <svg viewBox="0 0 24 24" fill="none" className="size-[15px]"><path d="M15 19L8 12L15 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          </IconButton>
+          <span className={navLabelClass}>{navLabel}</span>
+          <IconButton onClick={handleNext} aria-label="Siguiente">
+            <svg viewBox="0 0 24 24" fill="none" className="size-[15px]"><path d="M9 5L16 12L9 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          </IconButton>
         </div>
       </div>
 
       {/* Contenido */}
-      <div className="flex-1 overflow-y-auto px-[var(--space-4)] pb-[calc(var(--space-6)+env(safe-area-inset-bottom))]">
+      <div className={viewMode === "year"
+        ? "flex-1 overflow-hidden px-[var(--space-4)] pb-[calc(var(--space-4)+env(safe-area-inset-bottom))]"
+        : viewMode === "month"
+          ? "flex-1 overflow-hidden px-[var(--space-3)] pb-[calc(var(--space-3)+env(safe-area-inset-bottom))] sm:px-[var(--space-4)]"
+        : viewMode === "week"
+          ? "flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-[var(--space-3)] pb-[calc(var(--space-6)+env(safe-area-inset-bottom))] sm:px-[var(--space-4)]"
+          : "flex-1 overflow-y-auto overscroll-contain px-[var(--space-4)] pb-[calc(var(--space-6)+env(safe-area-inset-bottom))]"
+      }>
         {viewMode === "year" ? (
           /* ── Vista año ── */
-          <div className="grid grid-cols-3 gap-[var(--space-3)] pt-[var(--space-4)]">
-            {Array.from({ length: 12 }).map((_, i) => {
-              const monthStart = new Date(yearValue, i, 1);
-              const monthEnd = new Date(yearValue, i + 1, 0, 23, 59, 59);
-              const plansInMonth = filteredPlans.filter((p) =>
-                rangesOverlap(new Date(p.startsAt), new Date(p.endsAt), monthStart, monthEnd)
-              );
-              const isCurrentMonth = i === today.getMonth() && yearValue === today.getFullYear();
-              return (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={() => { setMonthDate(monthStart); setViewMode("month"); }}
-                  className={`flex flex-col items-center rounded-[10px] py-[var(--space-3)] transition-colors ${
-                    isCurrentMonth ? "bg-surface-2" : "hover:bg-surface-inset"
-                  }`}
-                >
-                  <span className={`text-[13px] font-[var(--fw-medium)] ${isCurrentMonth ? "text-app" : "text-muted"}`}>{MONTHS_SHORT[i]}</span>
-                  {plansInMonth.length > 0 && (
-                    <span className="mt-[3px] text-[10px] text-[var(--primary)]">{plansInMonth.length}</span>
-                  )}
-                </button>
-              );
-            })}
+          <div className="grid h-full grid-cols-3 grid-rows-4 gap-x-[clamp(8px,3vw,34px)] gap-y-[clamp(14px,3vh,28px)] pt-[clamp(10px,1.8vh,18px)]">
+            {Array.from({ length: 12 }).map((_, i) => (
+              <YearMonthMini
+                key={i}
+                year={yearValue}
+                monthIndex={i}
+                today={today}
+                selectedDay={selectedDayValue}
+                fit
+                onSelectDay={(day) => {
+                  setSelectedDay(startOfDay(day));
+                  setMonthDate(startOfMonth(day));
+                  setViewMode("day");
+                }}
+              />
+            ))}
           </div>
         ) : viewMode === "month" ? (
           /* ── Vista mes ── */
-          <>
-            <div className="grid grid-cols-7 gap-x-1 gap-y-2 border-b border-app pb-3 pt-3 text-center">
+          <div className="flex h-full min-h-0 flex-col">
+            <div className="sticky top-0 z-20 grid shrink-0 grid-cols-7 gap-x-1 gap-y-2 border-b border-app bg-app pb-[clamp(6px,1vh,12px)] pt-[clamp(6px,1vh,12px)] text-center">
               {WEEK_DAYS.map((d) => (
-                <div key={d} className="text-[13px] font-[var(--fw-semibold)] uppercase tracking-[0.06em] text-muted">{d}</div>
+                <div key={d} className="text-[12px] font-[var(--fw-semibold)] tracking-[0.02em] text-muted sm:text-[13px]">{d}</div>
               ))}
             </div>
-            <div className="mt-3">
+            <div
+              className="mt-[clamp(4px,0.8vh,12px)] grid min-h-0 flex-1"
+              style={{ gridTemplateRows: `repeat(${calendarWeeks.length}, minmax(0, 1fr))` }}
+            >
               {calendarWeeks.map((week, weekIndex) => (
-                <div key={week.key} className={`relative px-1.5 py-3 ${weekIndex === 0 ? "" : "border-t border-app"}`}>
-                  <div className="grid grid-cols-7 gap-x-1">
+                <div key={week.key} className={`relative flex min-h-0 flex-col px-1 py-[clamp(2px,0.55vh,8px)] ${weekIndex === 0 ? "" : "border-t border-app"}`}>
+                  <div className="grid shrink-0 grid-cols-7 gap-x-1">
                     {week.days.map((cell) => {
                       const isCellToday = toDayKey(cell.date) === toDayKey(today);
                       const isSelected = toDayKey(cell.date) === toDayKey(selectedDayValue);
                       return (
                         <button type="button" key={cell.key}
                           onClick={() => { setSelectedDay(startOfDay(cell.date)); setMonthDate(startOfMonth(cell.date)); setViewMode("day"); }}
-                          className={`flex h-9 w-9 items-center justify-center justify-self-center rounded-full text-[15px] transition-colors ${cell.isCurrentMonth ? "text-app" : "text-muted/40"} ${isSelected ? "bg-[color-mix(in_srgb,var(--primary)_72%,black_28%)] font-[var(--fw-semibold)] text-white shadow-sm" : isCellToday ? "border border-[color-mix(in_srgb,var(--primary)_42%,var(--border)_58%)] bg-[color-mix(in_srgb,var(--primary)_24%,var(--surface)_76%)] font-[var(--fw-semibold)] text-app" : "hover:bg-surface-2"}`}
+                          className={cx(
+                            "flex size-[clamp(24px,4.3vh,36px)] items-center justify-center justify-self-center rounded-full text-[clamp(12px,1.9vh,15px)]",
+                            CALENDAR_DAY_BUTTON_CLASS,
+                            getCalendarDayStateClass({
+                              isSelected,
+                              isToday: isCellToday,
+                              isCurrentMonth: cell.isCurrentMonth,
+                            })
+                          )}
                         >{cell.day}</button>
                       );
                     })}
                   </div>
-                  <div className="mt-2 space-y-1">
+                  <div className="mt-[clamp(2px,0.45vh,8px)] min-h-0 space-y-[clamp(2px,0.35vh,4px)] overflow-hidden">
                     {[0, 1].map((laneIndex) => {
                       const lane = weekSegments[weekIndex]?.lanes[laneIndex] ?? [];
                       return (
                         <div key={`${week.key}-lane-${laneIndex}`} className="grid grid-cols-7 gap-x-1">
                           {lane.length ? lane.map((segment) => (
                             <div key={segment.key}
-                              className="h-[24px] cursor-pointer overflow-hidden rounded-full bg-[var(--primary)]/20 px-2 text-[14px] font-[var(--fw-semibold)] leading-[24px] text-app transition-opacity hover:opacity-80"
+                              className={cx(CALENDAR_PLAN_PILL_BASE_CLASS, CALENDAR_PLAN_PILL_COMPACT_CLASS)}
                               style={{ gridColumn: `${segment.startCol + 1} / ${segment.endCol + 2}` }}
                               title={segment.title}
                               onClick={() => { navigateToPlan(segment.planId); onClose(); }}>
                               <span className="block truncate">{segment.title}</span>
                             </div>
-                          )) : <div className="h-[24px]" aria-hidden="true" />}
+                          )) : <div className="h-[clamp(13px,2.15vh,22px)]" aria-hidden="true" />}
                         </div>
                       );
                     })}
                   </div>
                   {weekSegments[weekIndex]?.hiddenCount ? (
-                    <p className="pointer-events-none absolute bottom-1 right-2 text-[9px] leading-none text-muted">+{weekSegments[weekIndex].hiddenCount}</p>
+                    <p className="pointer-events-none absolute bottom-[2px] right-1 text-[9px] leading-none text-muted">+{weekSegments[weekIndex].hiddenCount}</p>
                   ) : null}
                 </div>
               ))}
             </div>
-          </>
+          </div>
+        ) : viewMode === "week" ? (
+          /* ── Vista semana ── */
+          <div className="flex w-full min-w-0 flex-col pt-[var(--space-2)]">
+            <div className="sticky top-0 z-20 bg-app">
+              <div className="grid grid-cols-[40px_repeat(7,minmax(0,1fr))] border-b border-app text-center sm:grid-cols-[48px_repeat(7,minmax(0,1fr))]">
+                <div aria-hidden="true" />
+                {weekDays.map((day, index) => {
+                  const isCurrentDay = toDayKey(day) === toDayKey(today);
+                  return (
+                    <div
+                      key={toDayKey(day)}
+                      className="flex min-w-0 flex-col items-center justify-center gap-[3px] px-[1px] pb-[var(--space-2)] pt-[var(--space-2)] text-app sm:flex-row sm:gap-[6px] sm:px-1"
+                    >
+                      <span className={`${isCurrentDay ? "font-[var(--fw-semibold)] text-app" : "font-[var(--fw-regular)] text-muted"} text-[11px] leading-none sm:text-[15px]`}>
+                        {WEEK_DAYS_MONDAY_SHORT[index]}
+                      </span>
+                      <span className={`flex size-6 items-center justify-center rounded-full text-[13px] sm:size-7 sm:text-[15px] ${
+                        isCurrentDay
+                          ? "border border-[color-mix(in_srgb,var(--primary)_42%,var(--border)_58%)] bg-[color-mix(in_srgb,var(--primary)_24%,var(--surface)_76%)] font-[var(--fw-semibold)] text-app"
+                          : "font-[var(--fw-regular)] text-app"
+                      }`}>
+                        {day.getDate()}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="grid min-h-[42px] grid-cols-[40px_repeat(7,minmax(0,1fr))] border-b border-app sm:grid-cols-[48px_repeat(7,minmax(0,1fr))]">
+                <div className="flex items-start justify-end pr-[5px] pt-[9px] text-right text-[9px] font-[var(--fw-semibold)] leading-tight text-muted sm:pr-[8px] sm:text-[11px]">
+                  todo<br className="sm:hidden" /> el día
+                </div>
+                {weekDays.map((day) => {
+                  const dayPlans = weekAllDayPlans.filter((plan) =>
+                    rangesOverlap(new Date(plan.startsAt), new Date(plan.endsAt), startOfDay(day), endOfDay(day))
+                  );
+                  return (
+                    <div key={`week-all-day-${toDayKey(day)}`} className="min-h-[42px] border-l border-app px-[2px] py-[4px]">
+                      <div className="space-y-[3px]">
+                        {dayPlans.slice(0, 2).map((plan) => (
+                          <button
+                            key={`week-all-day-${toDayKey(day)}-${plan.id}`}
+                            type="button"
+                            onClick={() => { navigateToPlan(plan.id); onClose(); }}
+                            className="block h-[17px] w-full truncate rounded-[5px] bg-[var(--primary)]/15 px-[4px] text-left text-[9px] font-[var(--fw-semibold)] leading-[17px] text-app sm:text-[10px]"
+                          >
+                            {plan.title}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="relative">
+              {Array.from({ length: 24 }).map((_, hour) => (
+                <div key={`week-hour-${hour}`} className="grid h-[64px] grid-cols-[40px_repeat(7,minmax(0,1fr))] sm:grid-cols-[48px_repeat(7,minmax(0,1fr))]">
+                  <div className="relative">
+                    <span className="absolute right-[5px] top-0 -translate-y-1/2 text-right text-[10px] font-[var(--fw-semibold)] leading-none text-muted sm:right-[8px] sm:text-[12px]">
+                      {hour}:00
+                    </span>
+                  </div>
+                  {weekDays.map((day) => (
+                    <div key={`${toDayKey(day)}-${hour}`} className="border-l border-t border-app/40" />
+                  ))}
+                </div>
+              ))}
+              <div className="pointer-events-none absolute inset-y-0 left-[40px] right-0 sm:left-[48px]">
+                {weekTimedEntries.map(({ plan, day, dayIndex }) => {
+                  const startMinutes = getMinutesWithinDay(plan.startsAt, day);
+                  const endMinutes = getMinutesWithinDay(plan.endsAt, day, true);
+                  const duration = Math.max(endMinutes - startMinutes, 30);
+                  return (
+                    <div
+                      key={`week-timed-${plan.id}-${toDayKey(day)}`}
+                      className="pointer-events-auto absolute cursor-pointer overflow-hidden rounded-[7px] bg-[var(--primary)]/15 px-[4px] py-1 text-app transition-[opacity,transform] duration-150 ease-out hover:opacity-90 active:translate-y-[1px] active:scale-[0.98] sm:px-2 sm:py-1.5"
+                      style={{
+                        top: `${(startMinutes / 60) * 64}px`,
+                        left: `calc(${dayIndex} * (100% / 7) + 1px)`,
+                        width: "calc((100% / 7) - 2px)",
+                        height: `${Math.max((duration / 60) * 64, 24)}px`,
+                      }}
+                      onClick={() => { navigateToPlan(plan.id); onClose(); }}
+                    >
+                      <p className="truncate text-[9px] font-[var(--fw-semibold)] leading-tight sm:text-[11px]">{plan.title}</p>
+                      <p className="mt-0.5 hidden truncate text-[10px] text-muted sm:block">
+                        {formatTimeRange(clampDateTimeToDay(plan.startsAt, day).toISOString(), clampDateTimeToDay(plan.endsAt, day, true).toISOString())}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
         ) : (
           /* ── Vista día ── */
-          <div className="flex flex-col">
-            {/* Cabecera día */}
-            <div className="flex items-center justify-between py-[var(--space-4)]">
-              <button type="button" aria-label="Día anterior"
-                onClick={() => { const d = addDays(selectedDayValue, -1); setSelectedDay(d); setMonthDate(startOfMonth(d)); }}
-                className="flex size-9 items-center justify-center text-muted transition-colors hover:text-app">
-                <svg viewBox="0 0 24 24" fill="none" className="size-[16px]"><path d="M15 19L8 12L15 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-              </button>
-              <div className="flex flex-col items-center">
-                <p className="text-body-sm font-[var(--fw-semibold)] text-app">{formatDayHeading(selectedDayValue)}</p>
-                {!isToday && (
-                  <button type="button"
-                    onClick={() => { setSelectedDay(today); setMonthDate(startOfMonth(today)); }}
-                    className="mt-[2px] text-caption text-[var(--primary)]">Hoy</button>
-                )}
-              </div>
-              <button type="button" aria-label="Día siguiente"
-                onClick={() => { const d = addDays(selectedDayValue, 1); setSelectedDay(d); setMonthDate(startOfMonth(d)); }}
-                className="flex size-9 items-center justify-center text-muted transition-colors hover:text-app">
-                <svg viewBox="0 0 24 24" fill="none" className="size-[16px]"><path d="M9 5L16 12L9 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-              </button>
-            </div>
+          <div className="flex flex-col pt-[var(--space-3)]">
             {/* All-day plans */}
             {allDayPlans.length > 0 && (
-              <div className="mb-[var(--space-3)] flex flex-col border-b border-app">
-                {allDayPlans.map((plan, i) => (
-                  <button key={`modal-allday-${plan.id}`} type="button"
-                    onClick={() => { navigateToPlan(plan.id); onClose(); }}
-                    className={`flex items-center gap-2 py-[var(--space-3)] text-left transition-colors hover:bg-surface-inset/50 ${i < allDayPlans.length - 1 ? "border-b border-app" : ""}`}>
-                    <div className="size-2 shrink-0 rounded-full bg-[var(--primary)]/60" />
-                    <span className="truncate text-body-sm font-[var(--fw-medium)] text-app">{plan.title}</span>
-                  </button>
-                ))}
+              <div className="mb-[var(--space-3)] grid grid-cols-[44px_minmax(0,1fr)] border-b border-app pb-[var(--space-2)]">
+                <div className="pr-2 pt-[3px] text-right text-[11px] font-[var(--fw-semibold)] leading-tight text-muted">
+                  todo<br />el día
+                </div>
+                <div className="space-y-[4px]">
+                  {allDayPlans.map((plan) => (
+                    <button
+                      key={`modal-allday-${plan.id}`}
+                      type="button"
+                      onClick={() => { navigateToPlan(plan.id); onClose(); }}
+                      className={cx(CALENDAR_PLAN_PILL_BASE_CLASS, CALENDAR_PLAN_PILL_COMPACT_CLASS, "block w-full text-left")}
+                    >
+                      <span className="block truncate">{plan.title}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
             {/* 24h timeline */}
             <div className="relative">
               {Array.from({ length: 24 }).map((_, hour) => (
                 <div key={`modal-hour-${hour}`} className="grid h-16 grid-cols-[44px_minmax(0,1fr)]">
-                  <div className="pr-2 pt-1 text-right text-[12px] text-muted">{String(hour).padStart(2, "0")}:00</div>
+                  <div className="relative">
+                    <span className="absolute right-2 top-0 -translate-y-1/2 text-right text-[12px] leading-none text-muted">
+                      {String(hour).padStart(2, "0")}:00
+                    </span>
+                  </div>
                   <div className="border-t border-app/40" />
                 </div>
               ))}
@@ -1106,7 +1465,7 @@ function FullCalendarModal({
                   const duration = Math.max(endMinutes - startMinutes, 30);
                   return (
                     <div key={`modal-timed-${plan.id}`}
-                      className="pointer-events-auto absolute left-2 right-2 cursor-pointer overflow-hidden rounded-[10px] bg-[var(--primary)]/15 px-3 py-2 text-app transition-opacity hover:opacity-90"
+                      className="pointer-events-auto absolute left-2 right-2 cursor-pointer overflow-hidden rounded-[10px] bg-[var(--primary)]/15 px-3 py-2 text-app transition-[opacity,transform] duration-150 ease-out hover:opacity-90 active:translate-y-[1px] active:scale-[0.98]"
                       style={{ top: `${(startMinutes / 60) * 64}px`, height: `${Math.max((duration / 60) * 64, 24)}px` }}
                       onClick={() => { navigateToPlan(plan.id); onClose(); }}>
                       <p className="truncate text-[13px] font-[var(--fw-semibold)]">{plan.title}</p>
@@ -1139,6 +1498,17 @@ function startOfMonth(date: Date) {
 
 function endOfMonth(date: Date) {
   return new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
+}
+
+function startOfWeek(date: Date) {
+  const current = startOfDay(date);
+  const mondayFirstOffset = (current.getDay() + 6) % 7;
+  return addDays(current, -mondayFirstOffset);
+}
+
+function formatMonthYearHeading(date: Date) {
+  const label = date.toLocaleDateString("es-ES", { month: "long", year: "numeric" });
+  return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
 function dateInputToIso(dateInput: string, hour = 12) {
@@ -1189,12 +1559,12 @@ function clampDateTimeToDay(iso: string, day: Date, clampToEnd = false) {
 function buildCalendarCells(monthDate: Date): CalendarCell[] {
   const firstDay = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
   const daysInMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0).getDate();
-  const firstWeekday = firstDay.getDay();
+  const mondayFirstOffset = (firstDay.getDay() + 6) % 7;
 
   const cells: CalendarCell[] = [];
 
-  for (let idx = firstWeekday - 1; idx >= 0; idx -= 1) {
-    const date = new Date(monthDate.getFullYear(), monthDate.getMonth(), -idx);
+  for (let offset = mondayFirstOffset; offset > 0; offset -= 1) {
+    const date = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1 - offset);
     cells.push({
       key: `prev-${toDayKey(date)}`,
       date,
@@ -1217,12 +1587,51 @@ function buildCalendarCells(monthDate: Date): CalendarCell[] {
     const nextDate = new Date(
       monthDate.getFullYear(),
       monthDate.getMonth(),
-      daysInMonth + (cells.length - (firstWeekday + daysInMonth)) + 1,
+      daysInMonth + (cells.length - (mondayFirstOffset + daysInMonth)) + 1,
     );
     cells.push({
       key: `next-${toDayKey(nextDate)}-${cells.length}`,
       date: nextDate,
       day: nextDate.getDate(),
+      isCurrentMonth: false,
+    });
+  }
+
+  return cells;
+}
+
+function buildYearMonthCells(year: number, monthIndex: number): CalendarCell[] {
+  const firstDay = new Date(year, monthIndex, 1);
+  const mondayFirstOffset = (firstDay.getDay() + 6) % 7;
+  const cells: CalendarCell[] = [];
+
+  for (let offset = mondayFirstOffset; offset > 0; offset -= 1) {
+    const date = new Date(year, monthIndex, 1 - offset);
+    cells.push({
+      key: `year-prev-${toDayKey(date)}`,
+      date,
+      day: date.getDate(),
+      isCurrentMonth: false,
+    });
+  }
+
+  const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    const date = new Date(year, monthIndex, day);
+    cells.push({
+      key: `year-curr-${toDayKey(date)}`,
+      date,
+      day,
+      isCurrentMonth: true,
+    });
+  }
+
+  while (cells.length < 42) {
+    const date = new Date(year, monthIndex, daysInMonth + (cells.length - (mondayFirstOffset + daysInMonth)) + 1);
+    cells.push({
+      key: `year-next-${toDayKey(date)}-${cells.length}`,
+      date,
+      day: date.getDate(),
       isCurrentMonth: false,
     });
   }

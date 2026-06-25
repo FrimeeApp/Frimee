@@ -15,7 +15,7 @@ import LocationAutocomplete, { type Coords } from "@/components/plans/LocationAu
 import { FIELD_LINE_CLS } from "@/lib/styles";
 import { isoDateOnly, timeToMin, getOccupiedIntervals } from "./plan-utils";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
-import { CloseX } from "@/components/ui/CloseX";
+import { CloseButton, IconButton } from "@/components/ui/IconButton";
 import { ModalFeedback, type ModalFeedbackState } from "@/components/ui/ModalFeedback";
 import { DiscardChangesDialog } from "@/components/ui/DiscardChangesDialog";
 
@@ -554,28 +554,14 @@ export function AddSubplanSheet({
           {/* Top nav */}
           <div className="flex shrink-0 items-center justify-between px-[var(--space-5)] py-[var(--space-3)]">
             {wizardStep > 1 ? (
-              <button
-                type="button"
-                onClick={() => setWizardStep((s) => s - 1)}
-                disabled={isSaving}
-                className="flex size-9 items-center justify-center rounded-full text-app transition-colors hover:bg-surface disabled:opacity-50"
-                aria-label="Volver"
-              >
+              <IconButton onClick={() => setWizardStep((s) => s - 1)} disabled={isSaving} tone="app" aria-label="Volver">
                 <ChevronLeft className="size-[18px]" aria-hidden />
-              </button>
+              </IconButton>
             ) : (
-              <div className="size-9" aria-hidden="true" />
+              <div className="size-11" aria-hidden="true" />
             )}
             <span className="text-caption font-[var(--fw-medium)] text-muted">{wizardStep} de {TOTAL_STEPS}</span>
-            <button
-              type="button"
-              onClick={requestDismiss}
-              disabled={isSaving}
-              className="flex size-9 items-center justify-center rounded-full text-app transition-colors hover:bg-surface disabled:opacity-50"
-              aria-label="Cerrar"
-            >
-              <CloseX />
-            </button>
+            <CloseButton onClick={requestDismiss} disabled={isSaving} tone="app" />
           </div>
 
           {/* Content */}

@@ -5,8 +5,8 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/providers/AuthProvider";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
-import { ChevronLeft, X, Bell } from "lucide-react";
-import { CloseX } from "@/components/ui/CloseX";
+import { X, Bell } from "lucide-react";
+import { CloseButton, IconButton } from "@/components/ui/IconButton";
 import {
   listNotificaciones,
   marcarNotificacionesLeidas,
@@ -91,7 +91,7 @@ function timeAgo(iso: string): string {
   return new Date(iso).toLocaleDateString("es-ES", { day: "numeric", month: "short" });
 }
 
-function groupByPeriod(notifs: NotificacionDto[]): { label: string; items: NotificacionDto[] }[] {
+export function groupByPeriod(notifs: NotificacionDto[]): { label: string; items: NotificacionDto[] }[] {
   const now = Date.now();
   const DAY = 86_400_000;
   const groups: Record<string, NotificacionDto[]> = { Hoy: [], "Esta semana": [], "Este mes": [], Anteriores: [] };
@@ -121,7 +121,7 @@ function Avatar({ src, name }: { src: string | null; name: string | null }) {
 
 // ─── NotifItem ───────────────────────────────────────────────────────────────
 
-function NotificationsSkeleton() {
+export function NotificationsSkeleton() {
   return (
     <div className="flex flex-col gap-[var(--space-4)] px-[var(--space-4)] py-[var(--space-3)]" aria-label="Cargando notificaciones" role="status">
       {[1, 2, 3].map((i) => (
@@ -134,7 +134,7 @@ function NotificationsSkeleton() {
   );
 }
 
-function NotifItem({
+export function NotifItem({
   n,
   onAction,
   onPlanAccepted,
@@ -228,15 +228,13 @@ function NotifItem({
               >
                 Aceptar
               </button>
-              <button
-                type="button"
+              <IconButton
                 disabled={acting}
                 onClick={() => void (isFriendRequest ? handleFriend(false) : handlePlanInvite(false))}
                 aria-label="Rechazar"
-                className="flex size-8 items-center justify-center rounded-full text-muted transition-colors hover:text-app disabled:opacity-50"
               >
                 <X className="size-5" aria-hidden />
-              </button>
+              </IconButton>
             </div>
           )}
         </div>
@@ -254,14 +252,25 @@ type Props = {
   desktopPosition?: "left" | "right";
 }
 
-export default function NotificationsPanel({ open, onClose, onRead, desktopPosition = "right" }: Props) {
+type NotificationsFeedProps = {
+  active: boolean;
+  onRead?: () => void;
+  onPlanAccepted?: (planId: string) => void;
+  className?: string;
+};
+
+export function NotificationsFeed({
+  active,
+  onRead,
+  onPlanAccepted,
+  className = "flex-1 overflow-y-auto overscroll-contain",
+}: NotificationsFeedProps) {
   const { user } = useAuth();
   const router = useRouter();
   const [notifs, setNotifs] = useState<NotificacionDto[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(active);
   const [cursor, setCursor] = useState<number | undefined>();
   const [hasMore, setHasMore] = useState(true);
-  const panelRef = useRef<HTMLDivElement>(null);
   const markedRef = useRef(false);
 
   const load = useCallback(async (cur?: number) => {
@@ -276,9 +285,8 @@ export default function NotificationsPanel({ open, onClose, onRead, desktopPosit
     }
   }, [user]);
 
-  // Load when panel opens
   useEffect(() => {
-    if (!open || !user) return;
+    if (!active || !user) return;
     markedRef.current = false;
     const run = async () => {
       setLoading(true);
@@ -289,25 +297,23 @@ export default function NotificationsPanel({ open, onClose, onRead, desktopPosit
       }
     };
     void run();
-  }, [open, user, load]);
+  }, [active, user, load]);
 
-  // Mark as read after brief delay
   useEffect(() => {
-    if (!open) return;
+    if (!active) return;
     const t = setTimeout(() => {
       if (markedRef.current) return;
       markedRef.current = true;
       marcarNotificacionesLeidas()
         .then(() => {
           setNotifs((prev) => prev.map((n) => ({ ...n, leida: true })));
-          onRead();
+          onRead?.();
         })
         .catch((e) => console.error("[NotificationsPanel] marcar leidas error:", e));
     }, 1200);
     return () => clearTimeout(t);
-  }, [open, onRead]);
+  }, [active, onRead]);
 
-  // Realtime: reload on INSERT or DELETE
   useEffect(() => {
     if (!user?.id) return;
     const supabase = createBrowserSupabaseClient();
@@ -326,6 +332,70 @@ export default function NotificationsPanel({ open, onClose, onRead, desktopPosit
       .subscribe();
     return () => { void supabase.removeChannel(channel); };
   }, [user?.id, load]);
+
+  const groups = groupByPeriod(notifs);
+  const handlePlanAccepted = onPlanAccepted ?? ((planId: string) => router.push(`/plans/${planId}`));
+
+  return (
+    <div className={className}>
+      {loading ? (
+        <NotificationsSkeleton />
+      ) : notifs.length === 0 ? (
+        <div className="flex flex-col items-center justify-center gap-3 py-20 px-6 text-center">
+          <Bell className="size-12 opacity-20" aria-hidden />
+          <p className="text-body-sm text-muted">No tienes notificaciones aún</p>
+        </div>
+      ) : (
+        <>
+          {groups.map(({ label, items }) => (
+            <div key={label}>
+              <p className="px-5 pt-5 pb-2 text-body-sm font-[var(--fw-semibold)]">{label}</p>
+              <ul>
+                {items.map((n) => (
+                  <NotifItem
+                    key={n.id}
+                    n={n}
+                    onAction={(id) =>
+                      setNotifs((prev) => prev.filter((x) => x.id !== id))
+                    }
+                    onPlanAccepted={handlePlanAccepted}
+                  />
+                ))}
+              </ul>
+            </div>
+          ))}
+
+          {hasMore && (
+            <div className="flex justify-center py-4">
+              <button
+                onClick={() => void load(cursor)}
+                className="text-body-sm text-muted hover:text-app transition-colors"
+              >
+                Cargar más
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+export default function NotificationsPanel({ open, onClose, onRead, desktopPosition = "right" }: Props) {
+  const router = useRouter();
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const mediaQuery = window.matchMedia("(min-width: 768px)");
+    const handleChange = () => {
+      if (!mediaQuery.matches) onClose();
+    };
+
+    handleChange();
+    mediaQuery.addEventListener("change", handleChange);
+    return () => mediaQuery.removeEventListener("change", handleChange);
+  }, [open, onClose]);
 
   // Close on outside click
   useEffect(() => {
@@ -347,8 +417,6 @@ export default function NotificationsPanel({ open, onClose, onRead, desktopPosit
     return () => document.removeEventListener("keydown", handler);
   }, [open, onClose]);
 
-  const groups = groupByPeriod(notifs);
-
   return (
     <>
       {/* Backdrop — only on desktop */}
@@ -360,13 +428,14 @@ export default function NotificationsPanel({ open, onClose, onRead, desktopPosit
         aria-hidden="true"
       />
 
-      {/* Panel — fullscreen on mobile, slide-in on desktop */}
+      {/* Panel — desktop only; mobile uses /notifications as a real screen. */}
       <div
         ref={panelRef}
         role="dialog"
         aria-label="Notificaciones"
-        className={`fixed inset-0 flex h-dvh w-full flex-col bg-[var(--bg)] pb-safe transition-transform duration-300 [transition-timing-function:var(--ease-standard)] md:inset-auto md:top-0 md:max-w-[408px] md:shadow-elev-3 md:pb-0 ${
-          open ? "translate-x-0" : "translate-x-full"
+        aria-hidden={!open}
+        className={`fixed inset-0 hidden h-dvh w-full flex-col bg-[var(--bg)] pb-safe transition-transform duration-300 [transition-timing-function:var(--ease-standard)] md:inset-auto md:top-0 md:flex md:max-w-[408px] md:shadow-elev-3 md:pb-0 ${
+          open ? "pointer-events-auto translate-x-0" : "pointer-events-none translate-x-full"
         } ${
           desktopPosition === "left"
             ? `md:left-0 md:border-r md:border-[var(--border)] ${open ? "md:translate-x-0" : "md:-translate-x-full"}`
@@ -376,70 +445,18 @@ export default function NotificationsPanel({ open, onClose, onRead, desktopPosit
       >
         {/* Header */}
         <div className="flex items-center gap-[var(--space-3)] border-b border-[var(--border)] px-[var(--space-4)] pb-[var(--space-3)] pt-[max(var(--space-2),env(safe-area-inset-top))] md:py-[var(--space-3)]">
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Volver"
-            className="flex size-[36px] items-center justify-center rounded-full transition-colors hover:bg-surface md:hidden"
-          >
-            <ChevronLeft className="size-[18px]" aria-hidden />
-          </button>
           <h1 className="flex-1 text-[var(--font-h2)] font-[var(--fw-regular)] leading-[1.15] text-app">Notificaciones</h1>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Cerrar"
-            className="hidden text-muted hover:text-app transition-colors md:block"
-          >
-            <CloseX />
-          </button>
+          <CloseButton onClick={onClose} className="hidden md:inline-flex" />
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto overscroll-contain">
-          {loading ? (
-            <NotificationsSkeleton />
-          ) : notifs.length === 0 ? (
-            <div className="flex flex-col items-center justify-center gap-3 py-20 px-6 text-center">
-              <Bell className="size-12 opacity-20" aria-hidden />
-              <p className="text-body-sm text-muted">No tienes notificaciones aún</p>
-            </div>
-          ) : (
-            <>
-              {groups.map(({ label, items }) => (
-                <div key={label}>
-                  <p className="px-5 pt-5 pb-2 text-body-sm font-[var(--fw-semibold)]">{label}</p>
-                  <ul>
-                    {items.map((n) => (
-                      <NotifItem
-                        key={n.id}
-                        n={n}
-                        onAction={(id) =>
-                          setNotifs((prev) => prev.filter((x) => x.id !== id))
-                        }
-                        onPlanAccepted={(planId) => {
-                          onClose();
-                          router.push(`/plans/${planId}`);
-                        }}
-                      />
-                    ))}
-                  </ul>
-                </div>
-              ))}
-
-              {hasMore && (
-                <div className="flex justify-center py-4">
-                  <button
-                    onClick={() => void load(cursor)}
-                    className="text-body-sm text-muted hover:text-app transition-colors"
-                  >
-                    Cargar más
-                  </button>
-                </div>
-              )}
-            </>
-          )}
-        </div>
+        <NotificationsFeed
+          active={open}
+          onRead={onRead}
+          onPlanAccepted={(planId) => {
+            onClose();
+            router.push(`/plans/${planId}`);
+          }}
+        />
       </div>
     </>
   );

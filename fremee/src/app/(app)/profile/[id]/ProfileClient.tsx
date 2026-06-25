@@ -18,6 +18,7 @@ import {
 import type { FeedPlanItemDto } from "@/services/api/dtos/plan.dto";
 import { Settings, Plane, Wallet, Camera, Check, Pencil, LayoutGrid, Bookmark } from "lucide-react";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
+import { Tabs } from "@/components/ui/Tabs";
 
 type ProfileData = {
   id: string;
@@ -445,41 +446,25 @@ export default function ProfilePage() {
             </div>
 
             {/* Tabs */}
-            <div className="mt-[var(--space-6)]">
-              <div className="relative flex">
-                <button
-                  type="button"
-                  onClick={() => handleTabChange("planes")}
-                  aria-label="Planes"
-                  className={`flex-1 flex items-center justify-center py-[var(--space-3)] transition-colors duration-200 ${
-                    activeTab === "planes" ? "text-app" : "text-muted hover:text-app"
-                  }`}
-                >
-                  <LayoutGrid className="size-[20px]" aria-hidden />
-                </button>
-                {isOwnProfile && (
-                  <button
-                    type="button"
-                    onClick={() => handleTabChange("guardados")}
-                    aria-label="Guardados"
-                    className={`flex-1 flex items-center justify-center py-[var(--space-3)] transition-colors duration-200 ${
-                      activeTab === "guardados" ? "text-app" : "text-muted hover:text-app"
-                    }`}
-                  >
-                    <Bookmark className="size-[20px]" aria-hidden />
-                  </button>
-                )}
-                <span
-                  className="absolute bottom-0 h-[2px] w-[28px] rounded-full bg-[var(--text-primary)] transition-all duration-300 ease-[var(--ease-standard)]"
-                  style={{
-                    left: activeTab === "planes"
-                      ? isOwnProfile ? "calc(25% - 14px)" : "calc(50% - 14px)"
-                      : "calc(75% - 14px)",
-                  }}
-                />
-              </div>
-              <div className="border-b border-app" />
-            </div>
+            <Tabs
+              tabs={[
+                {
+                  value: "planes",
+                  label: <LayoutGrid className="size-[20px]" fill={activeTab === "planes" ? "currentColor" : "none"} aria-hidden />,
+                  ariaLabel: "Planes",
+                },
+                ...(isOwnProfile ? [{
+                  value: "guardados",
+                  label: <Bookmark className="size-[20px]" fill={activeTab === "guardados" ? "currentColor" : "none"} aria-hidden />,
+                  ariaLabel: "Guardados",
+                }] : []),
+              ]}
+              value={activeTab}
+              onChange={(tab) => handleTabChange(tab as "planes" | "guardados")}
+              className="mt-[var(--space-6)] gap-0 pb-0"
+              buttonClassName="flex-1 justify-center py-[var(--space-3)]"
+              indicatorWidth={28}
+            />
 
             {/* Grid */}
             <div className="mt-[var(--space-5)]">
