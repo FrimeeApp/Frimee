@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { CloseX } from "@/components/ui/CloseX";
+import { CloseButton, IconButton } from "@/components/ui/IconButton";
 
 type ImageLightboxProps = {
   url: string;
@@ -85,9 +85,7 @@ export function ImageLightbox({ url, imageUrls, onClose }: ImageLightboxProps) {
         className="flex shrink-0 items-center justify-end px-3 pb-3 pt-[max(12px,calc(env(safe-area-inset-top)+12px))]"
         onClick={(e) => e.stopPropagation()}
       >
-        <button type="button" onClick={onClose} className="rounded-full p-2 text-white hover:bg-white/10">
-          <CloseX className="size-6" />
-        </button>
+        <CloseButton onClick={onClose} tone="light" iconClassName="size-6" />
       </div>
 
       <div
@@ -97,15 +95,15 @@ export function ImageLightbox({ url, imageUrls, onClose }: ImageLightboxProps) {
         onTouchEnd={handleTouchEnd}
       >
         {hasPrev && (
-          <button type="button" onClick={goPrev} className="absolute left-3 z-10 rounded-full bg-white/10 p-2 text-white hover:bg-white/20">
+          <IconButton onClick={goPrev} tone="light" aria-label="Imagen anterior" className="absolute left-3 z-10 bg-white/10 hover:bg-white/20">
             <ChevronLeft className="size-6" aria-hidden />
-          </button>
+          </IconButton>
         )}
         <Image src={current} alt="Imagen" width={1600} height={1200} className="max-h-full max-w-full object-contain" unoptimized referrerPolicy="no-referrer" />
         {hasNext && (
-          <button type="button" onClick={goNext} className="absolute right-3 z-10 rounded-full bg-white/10 p-2 text-white hover:bg-white/20">
+          <IconButton onClick={goNext} tone="light" aria-label="Imagen siguiente" className="absolute right-3 z-10 bg-white/10 hover:bg-white/20">
             <ChevronRight className="size-6" aria-hidden />
-          </button>
+          </IconButton>
         )}
       </div>
 

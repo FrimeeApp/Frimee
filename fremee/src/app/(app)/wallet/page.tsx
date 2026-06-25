@@ -6,7 +6,7 @@ import AppSidebar from "@/components/common/AppSidebar";
 import AddTicketModal from "@/components/wallet/AddTicketModal";
 import { PlusIcon } from "@/components/icons";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { CloseX } from "@/components/ui/CloseX";
+import { CloseButton } from "@/components/ui/IconButton";
 import {
   listTicketsEndpoint,
   getTicketSourceSignedUrl,
@@ -415,13 +415,7 @@ function TicketSourceViewer({ ticket, onClose }: { ticket: PlanTicket; onClose: 
             <p className="text-caption text-white/60">{ticket.booking_code}</p>
           )}
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="flex size-9 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
-        >
-          <CloseX />
-        </button>
+        <CloseButton onClick={onClose} label="Cerrar ticket" tone="light" className="bg-white/10 hover:bg-white/20" />
       </div>
 
       {/* Content */}

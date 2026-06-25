@@ -25,7 +25,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
-import { CloseX } from "@/components/ui/CloseX";
+import { CloseButton, IconButton } from "@/components/ui/IconButton";
 import { ModalFeedback } from "@/components/ui/ModalFeedback";
 import { DiscardChangesDialog } from "@/components/ui/DiscardChangesDialog";
 
@@ -66,7 +66,6 @@ function buildExpensesSnapshot(gastos: GastoRow[]): ExpensesSnapshot {
 
 // ── Icons ──────────────────────────────────────────────────────────────────────
 
-const CloseIcon = () => <CloseX />;
 const CheckIcon = () => <CheckCircle className="size-[52px]" aria-hidden />;
 const CheckSmall = () => <Check className="size-4" aria-hidden />;
 const MapPinSmall = () => <MapPin className="size-3.5 shrink-0" aria-hidden />;
@@ -397,9 +396,7 @@ export default function PublishPlanModal({ plan, onClose }: Props) {
           <>
             <div className="flex items-center justify-between px-5 pt-5 pb-3">
               <span className="text-[15px] font-[700] text-app tracking-[-0.01em]">Publicar en el feed</span>
-              <button onClick={requestDismiss} className="flex items-center justify-center size-8 rounded-full text-muted hover:text-app hover:bg-app-hover transition-colors">
-                <CloseIcon />
-              </button>
+              <CloseButton onClick={requestDismiss} />
             </div>
 
             {/* Plan preview card */}
@@ -463,17 +460,12 @@ export default function PublishPlanModal({ plan, onClose }: Props) {
           <>
             <div className="flex items-center justify-between px-5 pt-5 pb-1">
               <div className="flex items-center gap-3">
-                <button
-                  onClick={() => setStep("compose")}
-                  className="flex items-center justify-center size-8 rounded-full text-muted hover:text-app hover:bg-app-hover transition-colors"
-                >
+                <IconButton onClick={() => setStep("compose")} aria-label="Volver">
                   <ChevronLeftLucide className="size-4" aria-hidden />
-                </button>
+                </IconButton>
                 <span className="text-[15px] font-[700] text-app tracking-[-0.01em]">¿Qué quieres mostrar?</span>
               </div>
-              <button onClick={requestDismiss} className="flex items-center justify-center size-8 rounded-full text-muted hover:text-app hover:bg-app-hover transition-colors">
-                <CloseIcon />
-              </button>
+              <CloseButton onClick={requestDismiss} />
             </div>
 
             <p className="px-5 pb-3 text-[13px] text-muted">Elige el resumen que tendra sentido para quien vea tu plan en el feed.</p>

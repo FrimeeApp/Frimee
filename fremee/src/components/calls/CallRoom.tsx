@@ -90,7 +90,7 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
       return;
     }
 
-    const el = track.attach() as HTMLMediaElement;
+    const el = track.attach();
     el.autoplay = true;
     if (el instanceof HTMLVideoElement) {
       el.playsInline = true;
@@ -395,7 +395,7 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
         </div>
         <div className="flex items-center gap-2">
           {focusedId && (
-            <button onClick={() => setFocusedId(null)} className="text-sm text-white/60 flex items-center gap-1">
+            <button onClick={() => setFocusedId(null)} className="flex min-h-11 items-center gap-1 rounded-full px-2 text-sm text-white/60 transition-colors hover:bg-white/10 hover:text-white">
               <ChevronLeft className="size-4" aria-hidden />
               Todos
             </button>

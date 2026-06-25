@@ -53,10 +53,21 @@ function unlockDocumentScroll(lockId: symbol) {
   window.scrollTo(0, lockedScrollY);
 }
 
-export function useModalCloseAnimation(onClose: () => void, isOpen = true) {
+type ModalCloseAnimationOptions = {
+  closeAnimationMs?: number;
+  lockScroll?: boolean;
+};
+
+export function useModalCloseAnimation(
+  onClose: () => void,
+  isOpen = true,
+  options: ModalCloseAnimationOptions = {}
+) {
   const [isClosing, setIsClosing] = useState(false);
   const closeTimeoutRef = useRef<number | null>(null);
   const scrollLockIdRef = useRef<symbol>(Symbol("modal-scroll-lock"));
+  const closeAnimationMs = options.closeAnimationMs ?? MODAL_CLOSE_ANIMATION_MS;
+  const shouldLockScroll = options.lockScroll ?? true;
 
   const requestClose = useCallback(() => {
     if (isClosing) return;
@@ -65,15 +76,15 @@ export function useModalCloseAnimation(onClose: () => void, isOpen = true) {
       closeTimeoutRef.current = null;
       setIsClosing(false);
       onClose();
-    }, MODAL_CLOSE_ANIMATION_MS);
-  }, [isClosing, onClose]);
+    }, closeAnimationMs);
+  }, [closeAnimationMs, isClosing, onClose]);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || !shouldLockScroll) return;
     const lockId = scrollLockIdRef.current;
     lockDocumentScroll(lockId);
     return () => unlockDocumentScroll(lockId);
-  }, [isOpen]);
+  }, [isOpen, shouldLockScroll]);
 
   useEffect(() => {
     return () => {

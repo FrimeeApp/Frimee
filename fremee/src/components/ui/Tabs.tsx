@@ -1,11 +1,12 @@
 "use client";
 
-import { useRef, useEffect, useState, useCallback } from "react";
+import { useRef, useEffect, useState, useCallback, type ReactNode } from "react";
 
 export type TabDef = {
   value: string;
-  label: string;
-  badge?: React.ReactNode;
+  label: ReactNode;
+  ariaLabel?: string;
+  badge?: ReactNode;
 }
 
 type TabsProps = {
@@ -13,10 +14,13 @@ type TabsProps = {
   value: string;
   onChange: (value: string) => void;
   className?: string;
+  buttonClassName?: string;
+  indicatorClassName?: string;
+  indicatorWidth?: number;
   fontWeight?: string;
 }
 
-export function Tabs({ tabs, value, onChange, className = "", fontWeight }: TabsProps) {
+export function Tabs({ tabs, value, onChange, className = "", buttonClassName = "", indicatorClassName = "", indicatorWidth, fontWeight }: TabsProps) {
   const rowRef = useRef<HTMLDivElement | null>(null);
   const buttonRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
   const [indicator, setIndicator] = useState({ left: 0, width: 0, ready: false });
@@ -27,8 +31,10 @@ export function Tabs({ tabs, value, onChange, className = "", fontWeight }: Tabs
     if (!row || !target) return;
     const rowRect = row.getBoundingClientRect();
     const tabRect = target.getBoundingClientRect();
-    setIndicator({ left: tabRect.left - rowRect.left, width: tabRect.width, ready: true });
-  }, [value]);
+    const width = indicatorWidth ?? tabRect.width;
+    const left = tabRect.left - rowRect.left + (tabRect.width - width) / 2;
+    setIndicator({ left, width, ready: true });
+  }, [indicatorWidth, value]);
 
   useEffect(() => {
     measure();
@@ -50,7 +56,8 @@ export function Tabs({ tabs, value, onChange, className = "", fontWeight }: Tabs
             else buttonRefs.current.delete(tab.value);
           }}
           onClick={() => onChange(tab.value)}
-          className={`flex items-center gap-[var(--space-1)] transition-colors duration-[220ms] ${
+          aria-label={tab.ariaLabel}
+          className={`flex items-center gap-[var(--space-1)] transition-colors duration-[220ms] ${buttonClassName} ${
             value === tab.value ? "text-app" : "hover:text-app"
           }`}
           style={fontWeight ? { fontWeight } : undefined}
@@ -60,7 +67,7 @@ export function Tabs({ tabs, value, onChange, className = "", fontWeight }: Tabs
         </button>
       ))}
       <span
-        className={`pointer-events-none absolute bottom-0 h-[1.5px] bg-[var(--text-primary)] transition-[left,width,opacity] duration-[220ms] [transition-timing-function:var(--ease-standard)] ${
+        className={`pointer-events-none absolute bottom-0 h-[1.5px] bg-[var(--text-primary)] transition-[left,width,opacity] duration-[220ms] [transition-timing-function:var(--ease-standard)] ${indicatorClassName} ${
           indicator.ready ? "opacity-100" : "opacity-0"
         }`}
         style={{ left: indicator.left, width: indicator.width }}
