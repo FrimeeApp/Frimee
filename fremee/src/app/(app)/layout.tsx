@@ -3,7 +3,7 @@ import { AuthGuard } from "@/components/auth/AuthGuard";
 import { CallProvider } from "@/providers/CallProvider";
 import { PushProvider } from "@/providers/PushProvider";
 
-export default function AppLayout({ children }: { children: ReactNode }) {
+export default function AppLayout({ children, modal }: { children: ReactNode; modal: ReactNode }) {
   return (
     <AuthGuard>
       <PushProvider>
@@ -15,6 +15,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
               style={{ height: "env(safe-area-inset-top)" }}
             />
             {children}
+            {modal}
           </div>
         </CallProvider>
       </PushProvider>

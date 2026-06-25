@@ -8,6 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Avatar } from "@/components/ui/Avatar";
 import { ExpenseDetailModal, type ExpenseItem } from "@/components/plans/modals/ExpenseDetailModal";
 import { Tabs } from "@/components/ui/Tabs";
+import { CountBadge } from "@/components/ui/CountBadge";
 import { formatMoney, formatShortDate } from "@/lib/formatters";
 import { useAuth } from "@/providers/AuthProvider";
 import {
@@ -33,7 +34,6 @@ function isNativePlatform() {
   };
   return Boolean(platformWindow.Capacitor?.isNativePlatform?.());
 }
-
 
 export default function MisGastosPage() {
   const { loading } = useAuth();
@@ -172,16 +172,7 @@ function MisGastosContent() {
     [items]
   );
 
-  // Badge: deudas propias sin pagar + pagos entrantes esperando que confirmes
-  const actionRequiredCount = useMemo(
-    () =>
-      pendingItems.filter(
-        (i) =>
-          (i.direction === "outgoing" && i.estado === "PENDIENTE") ||
-          (i.direction === "incoming" && i.estado === "EN_REVISION")
-      ).length,
-    [pendingItems]
-  );
+  const unresolvedCount = pendingItems.length;
 
   useEffect(() => {
     if (selectedExpenseId && !items.some((item) => item.id === selectedExpenseId)) {
@@ -234,7 +225,7 @@ function MisGastosContent() {
               Mis gastos
             </h1>
             {(kpis.owedToYou > 0 || kpis.youOwe > 0) && (
-              <p className="mt-[var(--space-2)] mb-[var(--space-8)] text-caption text-muted">
+              <p className="mt-[var(--space-2)] mb-[var(--space-8)] text-[16px] text-muted">
                 {kpis.owedToYou > 0 && (
                   <>Te deben <span className="font-[var(--fw-medium)] text-app opacity-60">{formatAmount(kpis.owedToYou)}</span></>
                 )}
@@ -255,10 +246,8 @@ function MisGastosContent() {
                 {
                   value: "action",
                   label: "Por resolver",
-                  badge: actionRequiredCount > 0 ? (
-                    <span className="inline-flex size-[18px] items-center justify-center rounded-full bg-[var(--warning)] text-[11px] font-[var(--fw-semibold)] text-white">
-                      {actionRequiredCount}
-                    </span>
+                  badge: unresolvedCount > 0 ? (
+                    <CountBadge count={unresolvedCount} ariaLabel={`${unresolvedCount} por resolver`} className="self-center" />
                   ) : undefined,
                 },
               ]}
@@ -381,7 +370,7 @@ function MisGastosContent() {
                           ) : (
                             <div className="flex items-center gap-[var(--space-3)]">
                               <p
-                                className="text-body-sm font-[var(--fw-semibold)] text-app"
+                                className={`text-body-sm font-[var(--fw-semibold)] text-app ${activeTab === "action" ? "opacity-55" : ""}`}
                               >
                                 {incoming ? "+" : "-"}{formatAmount(item.amount)}
                               </p>

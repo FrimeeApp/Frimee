@@ -18,6 +18,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { FIELD_LINE_CLS } from "@/lib/styles";
 import { DatePickerField } from "@/components/ui/DatePickerField";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
+import { CloseButton, IconButton } from "@/components/ui/IconButton";
 import { CloseX } from "@/components/ui/CloseX";
 import { ModalFeedback, type ModalFeedbackState } from "@/components/ui/ModalFeedback";
 import { DiscardChangesDialog } from "@/components/ui/DiscardChangesDialog";
@@ -58,13 +59,14 @@ type ItemAsignacion = OcrItem & { asignados: Record<string, boolean> };
 type Props = {
   planId: number;
   userId: string;
+  planName?: string;
   onClose: () => void;
   onCreated: () => void;
 };
 
 // ── component ─────────────────────────────────────────────────────────────────
 
-export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Props) {
+export default function AddGastoSheet({ planId, userId, planName, onClose, onCreated }: Props) {
   const { isClosing, requestClose } = useModalCloseAnimation(onClose);
   const [step, setStep] = useState(1);
 
@@ -350,7 +352,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
         <div className="fixed inset-0 z-[9998]" onClick={closeDropdown} />
         <div className="fixed z-[9999] max-h-56 overflow-y-auto rounded-xl border border-app bg-[var(--surface)] shadow-elev-3" style={{ top, bottom, left, width }}>
           {dropdownItems.map(item => (
-            <button key={item.key} type="button" onClick={item.onClick} className={`flex w-full items-center px-4 py-2.5 text-left text-body-sm transition-colors hover:bg-surface-2 ${item.active ? "text-[var(--primary,#298e7d)] font-[var(--fw-semibold)]" : "text-app"}`}>
+            <button key={item.key} type="button" onClick={item.onClick} className={`flex w-full items-center px-4 py-2.5 text-left text-body-sm transition-colors hover:bg-surface-2 ${item.active ? "text-app font-[var(--fw-semibold)]" : "text-muted"}`}>
               {item.label}
             </button>
           ))}
@@ -362,9 +364,9 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
 
   return (
     <>
-      <div data-closing={isClosing ? "true" : "false"} className="app-modal-overlay fixed inset-0 z-[1030]" />
+      <div data-closing={isClosing ? "true" : "false"} className="app-modal-overlay fixed inset-0 z-[1300]" />
       <div
-        className="fixed inset-0 z-[1040] flex items-center justify-center p-0 md:p-[var(--space-4)]"
+        className="fixed inset-0 z-[1310] flex items-center justify-center p-0 md:p-[var(--space-4)]"
         onClick={(e) => { if (e.target !== e.currentTarget) return; if (window.matchMedia("(min-width: 768px)").matches) requestDismiss(); }}
       >
         <div
@@ -387,18 +389,20 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
           {/* Top nav */}
           <div className="flex shrink-0 items-center justify-between px-[var(--space-5)] py-[var(--space-3)]">
             {step > 1 ? (
-              <button
-                type="button"
-                onClick={() => setStep(s => s - 1)}
-                className="flex size-9 items-center justify-center rounded-full text-app transition-colors hover:bg-surface"
-                aria-label="Volver"
-              >
+              <IconButton onClick={() => setStep(s => s - 1)} tone="app" aria-label="Volver">
                 <svg viewBox="0 0 24 24" fill="none" className="size-[18px]"><path d="M15 19l-7-7 7-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
-              </button>
+              </IconButton>
             ) : (
-              <div className="size-9" aria-hidden="true" />
+              <div className="size-11" aria-hidden="true" />
             )}
-            <span className="text-caption font-[var(--fw-medium)] text-muted">{step} de {TOTAL_STEPS}</span>
+            <span className="min-w-0 text-center">
+              <span className="block text-caption font-[var(--fw-medium)] text-muted">{step} de {TOTAL_STEPS}</span>
+              {planName && (
+                <span className="mt-[2px] block max-w-[200px] truncate text-[16px] font-[var(--fw-semibold)] text-app">
+                  {planName}
+                </span>
+              )}
+            </span>
             {/* OCR button — only on step 1 */}
             {false ? (
               <div>
@@ -415,14 +419,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                 </button>
               </div>
             ) : (
-              <button
-                type="button"
-                onClick={requestDismiss}
-                className="flex size-9 items-center justify-center rounded-full text-app transition-colors hover:bg-surface"
-                aria-label="Cerrar"
-              >
-                <CloseX />
-              </button>
+              <CloseButton onClick={requestDismiss} tone="app" />
             )}
           </div>
 
@@ -581,7 +578,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                           </div>
                           <div className="max-h-48 overflow-y-auto">
                             {filtered.map(m => (
-                              <button key={m.user_id} type="button" onClick={() => { setPagadoPor(m.user_id); setPagadorOpen(false); }} className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-surface-2 ${pagadoPor === m.user_id ? "text-primary-token font-[var(--fw-semibold)]" : "text-app"}`}>
+                              <button key={m.user_id} type="button" onClick={() => { setPagadoPor(m.user_id); setPagadorOpen(false); }} className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-surface-2 ${pagadoPor === m.user_id ? "text-app font-[var(--fw-semibold)]" : "text-muted"}`}>
                                 <Avatar src={m.foto} name={m.nombre ?? "?"} px={24} topMargin="" />
                                 <span className="text-body-sm">{m.nombre ?? m.user_id.slice(0, 8)}</span>
                               </button>
@@ -612,7 +609,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                             setPorcentajes(base);
                           }
                         }}
-                        className={`rounded-[14px] border px-[var(--space-3)] py-[var(--space-3)] text-left text-body-sm transition-colors ${metodo === m.value ? "border-primary-token bg-primary-token/10 text-primary-token" : "border-app bg-app text-app hover:bg-surface"}`}
+                        className={`rounded-[14px] border px-[var(--space-3)] py-[var(--space-3)] text-left text-body-sm transition-colors ${metodo === m.value ? "border-[var(--text-primary)] bg-[var(--surface-2)] text-app font-[var(--fw-semibold)]" : "border-app bg-app text-muted hover:bg-surface hover:text-app"}`}
                       >
                         <span className="block font-[var(--fw-semibold)]">{m.label}</span>
                       </button>
@@ -635,7 +632,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                         <span>{seleccionados.size === miembros.length ? "Deseleccionar todos" : "Seleccionar todos"}</span>
                         <span className="text-muted font-normal">{seleccionados.size}/{miembros.length}</span>
                       </button>
-                      <button type="button" onClick={() => setParticipantesExpanded(v => !v)} className="flex size-9 shrink-0 items-center justify-center text-muted hover:text-app transition-colors border-l border-[var(--surface-inset)]">
+                      <button type="button" onClick={() => setParticipantesExpanded(v => !v)} className="flex size-11 shrink-0 items-center justify-center text-muted hover:text-app transition-colors border-l border-[var(--surface-inset)]">
                         {participantesExpanded ? <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg> : <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>}
                       </button>
                     </div>
@@ -646,11 +643,11 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                           const checked = seleccionados.has(m.user_id);
                           const part = checked && seleccionados.size > 0 ? totalNum / seleccionados.size : 0;
                           return (
-                            <button key={m.user_id} type="button" onClick={() => setSeleccionados((prev) => { const next = new Set(prev); if (next.has(m.user_id)) next.delete(m.user_id); else next.add(m.user_id); return next; })} className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors ${checked ? "bg-primary-token/5" : "hover:bg-[var(--surface-inset)]"}`}>
-                              <div className={`flex size-4 shrink-0 items-center justify-center rounded border ${checked ? "border-primary-token bg-primary-token" : "border-app"}`}>{checked && <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}</div>
+                            <button key={m.user_id} type="button" onClick={() => setSeleccionados((prev) => { const next = new Set(prev); if (next.has(m.user_id)) next.delete(m.user_id); else next.add(m.user_id); return next; })} className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-[var(--surface-inset)]">
+                              <div className={`flex size-4 shrink-0 items-center justify-center rounded border ${checked ? "border-[var(--text-primary)] bg-[var(--text-primary)]" : "border-app"}`}>{checked && <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="var(--bg)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}</div>
                               <Avatar src={m.foto} name={m.nombre ?? "?"} px={24} topMargin="" />
                               <span className={`min-w-0 flex-1 truncate text-body-sm ${checked ? "text-app font-[var(--fw-medium)]" : "text-muted"}`}>{m.nombre ?? m.user_id.slice(0, 8)}</span>
-                              {checked && totalNum > 0 && <span className="shrink-0 text-caption text-primary-token font-[var(--fw-semibold)]">{part.toFixed(2)} {moneda}</span>}
+                              {checked && totalNum > 0 && <span className="shrink-0 text-caption text-app font-[var(--fw-semibold)]">{part.toFixed(2)} {moneda}</span>}
                             </button>
                           );
                         })}
@@ -666,9 +663,9 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                   return (
                     <div className="rounded-xl border border-app overflow-hidden">
                       <div className="flex items-center bg-[var(--surface-2)]">
-                        <button type="button" onClick={() => { const pct = parseFloat((100 / miembros.length).toFixed(2)); const base: Record<string, string> = {}; miembros.forEach((m, i) => { base[m.user_id] = i === miembros.length - 1 ? String(parseFloat((100 - pct * (miembros.length - 1)).toFixed(2))) : String(pct); }); setPorcentajes(base); }} className="flex-1 px-3 py-2.5 text-left text-body-sm text-muted hover:text-primary-token transition-colors">Igualar</button>
+                        <button type="button" onClick={() => { const pct = parseFloat((100 / miembros.length).toFixed(2)); const base: Record<string, string> = {}; miembros.forEach((m, i) => { base[m.user_id] = i === miembros.length - 1 ? String(parseFloat((100 - pct * (miembros.length - 1)).toFixed(2))) : String(pct); }); setPorcentajes(base); }} className="flex-1 px-3 py-2.5 text-left text-body-sm text-muted hover:text-app transition-colors">Igualar</button>
                         <span className={`px-3 text-body-sm font-[var(--fw-semibold)] ${isOk ? "text-[var(--success,#15803d)]" : sum > 100 ? "text-[var(--error,#dc2626)]" : "text-muted"}`}>{sum.toFixed(1)}% / 100%</span>
-                        <button type="button" onClick={() => setParticipantesExpanded(v => !v)} className="flex size-9 shrink-0 items-center justify-center text-muted hover:text-app transition-colors border-l border-[var(--surface-inset)]">
+                        <button type="button" onClick={() => setParticipantesExpanded(v => !v)} className="flex size-11 shrink-0 items-center justify-center text-muted hover:text-app transition-colors border-l border-[var(--surface-inset)]">
                           {participantesExpanded ? <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg> : <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>}
                         </button>
                       </div>
@@ -687,12 +684,12 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                                   } else {
                                     setPorcentajes(prev => { const next = { ...prev, [m.user_id]: "0" }; const participating = miembros.filter(mb => next[mb.user_id] !== undefined); const pctEach = parseFloat((100 / participating.length).toFixed(2)); participating.forEach((mb, i) => { next[mb.user_id] = i === participating.length - 1 ? String(parseFloat((100 - pctEach * (participating.length - 1)).toFixed(2))) : String(pctEach); }); return next; });
                                   }
-                                }} className={`flex size-4 shrink-0 items-center justify-center rounded border ${checked ? "border-primary-token bg-primary-token" : "border-app"}`}>
-                                  {checked && <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                                }} className={`flex size-4 shrink-0 items-center justify-center rounded border ${checked ? "border-[var(--text-primary)] bg-[var(--text-primary)]" : "border-app"}`}>
+                                  {checked && <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="var(--bg)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                                 </button>
                                 <Avatar src={m.foto} name={m.nombre ?? "?"} px={24} topMargin="" />
                                 <span className="min-w-0 flex-1 truncate text-body-sm text-app">{m.nombre ?? m.user_id.slice(0, 8)}</span>
-                                {pct > 0 && totalNum > 0 && <span className="shrink-0 text-caption text-primary-token font-[var(--fw-semibold)]">{amount.toFixed(2)} {moneda}</span>}
+                                {pct > 0 && totalNum > 0 && <span className="shrink-0 text-caption text-app font-[var(--fw-semibold)]">{amount.toFixed(2)} {moneda}</span>}
                                 <div className="flex shrink-0 items-center gap-1">
                                   <input type="number" min="0" max="100" step="1" value={porcentajes[m.user_id] ?? ""} onChange={(e) => setPorcentajes((prev) => ({ ...prev, [m.user_id]: e.target.value }))} placeholder="0" inputMode="numeric" className="w-10 bg-transparent text-right text-body-sm text-app outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
                                   <span className="text-caption text-muted">%</span>
@@ -717,7 +714,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                       <div className="flex items-center bg-[var(--surface-2)]">
                         <span className="flex-1 px-3 py-2.5 text-body-sm text-muted">{activeCount} participante{activeCount !== 1 ? "s" : ""}</span>
                         <span className={`px-3 text-body-sm font-[var(--fw-semibold)] ${isOk && sum > 0 ? "text-[var(--success,#15803d)]" : sum > totalNum && totalNum > 0 ? "text-[var(--error,#dc2626)]" : "text-muted"}`}>{sum.toFixed(2)}{totalNum > 0 ? ` / ${totalNum.toFixed(2)}` : ""} {moneda}</span>
-                        <button type="button" onClick={() => setParticipantesExpanded(v => !v)} className="flex size-9 shrink-0 items-center justify-center text-muted hover:text-app transition-colors border-l border-[var(--surface-inset)]">
+                        <button type="button" onClick={() => setParticipantesExpanded(v => !v)} className="flex size-11 shrink-0 items-center justify-center text-muted hover:text-app transition-colors border-l border-[var(--surface-inset)]">
                           {participantesExpanded ? <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg> : <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>}
                         </button>
                       </div>
@@ -769,7 +766,13 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                           <div key={idx} className="rounded-[16px] border border-app px-[var(--space-3)] py-[var(--space-3)] space-y-[var(--space-3)]">
                             <div className="flex items-center gap-[var(--space-2)]">
                               <input value={item.nombre} onChange={(e) => updateItem(idx, { nombre: e.target.value })} placeholder="Nombre del ítem" className="min-w-0 flex-1 bg-transparent text-body-sm font-[var(--fw-medium)] text-app outline-none" />
-                              <button type="button" onClick={() => removeItem(idx)} className="text-muted hover:text-[var(--error)]"><svg viewBox="0 0 24 24" fill="none" className="size-4" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" /></svg></button>
+                              <IconButton
+                                onClick={() => removeItem(idx)}
+                                aria-label="Eliminar ítem"
+                                className="-mr-3 text-muted hover:text-[var(--error)]"
+                              >
+                                <CloseX />
+                              </IconButton>
                             </div>
                             <div className="flex flex-wrap items-center gap-[var(--space-3)] text-caption text-muted">
                               <div className="flex items-center gap-1.5">
@@ -795,7 +798,7 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                                 </button>
                               ))}
                               <div className="relative">
-                                <button ref={el => { itemPopoverBtnRefs.current[idx] = el; }} type="button" onClick={() => openItemPopover(idx)} className="flex size-[26px] items-center justify-center rounded-full border border-dashed border-app text-muted hover:border-primary-token hover:text-primary-token transition-colors">
+                                <button ref={el => { itemPopoverBtnRefs.current[idx] = el; }} type="button" onClick={() => openItemPopover(idx)} className="flex size-[26px] items-center justify-center rounded-full border border-dashed border-app text-muted hover:border-[var(--text-primary)] hover:text-app transition-colors">
                                   <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
                                 </button>
                                 {itemPopoverIdx === idx && itemPopoverStyle && (() => {
@@ -808,14 +811,14 @@ export default function AddGastoSheet({ planId, userId, onClose, onCreated }: Pr
                                           <div className="flex h-9 min-w-0 flex-1 items-center rounded-full border border-app bg-[var(--search-field-bg)] px-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
                                             <input autoFocus value={itemPopoverSearch} onChange={e => setItemPopoverSearch(e.target.value)} placeholder="Buscar..." className="min-w-0 flex-1 bg-transparent text-body-sm text-app outline-none placeholder:text-muted" />
                                           </div>
-                                          <button type="button" onClick={() => { const patch: Record<string, boolean> = {}; miembros.forEach(m => { patch[m.user_id] = !allChecked; }); updateItem(idx, { asignados: patch }); }} className="shrink-0 text-caption text-muted hover:text-primary-token transition-colors">{allChecked ? "Ninguno" : "Todos"}</button>
+                                          <button type="button" onClick={() => { const patch: Record<string, boolean> = {}; miembros.forEach(m => { patch[m.user_id] = !allChecked; }); updateItem(idx, { asignados: patch }); }} className="shrink-0 text-caption text-muted hover:text-app transition-colors">{allChecked ? "Ninguno" : "Todos"}</button>
                                         </div>
                                         <div className="max-h-[200px] overflow-y-auto divide-y divide-[var(--surface-2)]">
                                           {miembros.filter(m => !itemPopoverSearch || (m.nombre ?? "").toLowerCase().includes(itemPopoverSearch.toLowerCase())).map(m => {
                                             const checked = !!item.asignados[m.user_id];
                                             return (
                                               <button key={m.user_id} type="button" onClick={() => toggleItemUser(idx, m.user_id)} className="flex w-full items-center gap-2.5 px-3 py-2 text-left hover:bg-[var(--surface-2)] transition-colors">
-                                                <div className={`flex size-4 shrink-0 items-center justify-center rounded border ${checked ? "border-primary-token bg-primary-token" : "border-app"}`}>{checked && <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}</div>
+                                                <div className={`flex size-4 shrink-0 items-center justify-center rounded border ${checked ? "border-[var(--text-primary)] bg-[var(--text-primary)]" : "border-app"}`}>{checked && <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="var(--bg)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}</div>
                                                 <Avatar src={m.foto} name={m.nombre ?? "?"} px={20} topMargin="" />
                                                 <span className="min-w-0 flex-1 truncate text-body-sm text-app">{m.nombre ?? m.user_id.slice(0, 8)}</span>
                                               </button>

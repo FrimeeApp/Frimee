@@ -2,7 +2,7 @@
 
 import NextImage from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CloseX } from "@/components/ui/CloseX";
+import { CloseButton } from "@/components/ui/IconButton";
 
 type CameraModalProps = {
   onCapture: (file: File) => void;
@@ -104,9 +104,11 @@ export function CameraModal({ onCapture, onClose }: CameraModalProps) {
   return (
     <div className="fixed inset-0 z-[100] flex flex-col bg-black">
       {/* Cerrar */}
-      <button type="button" onClick={onClose} className="absolute right-[16px] top-[16px] z-10 flex size-[36px] items-center justify-center rounded-full bg-black/40 text-white">
-        <CloseX />
-      </button>
+      <CloseButton
+        onClick={onClose}
+        tone="light"
+        className="absolute right-[16px] top-[16px] z-10 bg-black/40 hover:bg-black/60"
+      />
 
       {error ? (
         <div className="flex flex-1 items-center justify-center">

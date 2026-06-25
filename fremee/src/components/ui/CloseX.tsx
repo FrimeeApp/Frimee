@@ -5,5 +5,5 @@ type CloseXProps = {
 };
 
 export function CloseX({ className = "size-[18px]" }: CloseXProps) {
-  return <X className={`${className} text-muted`} strokeWidth={1.8} aria-hidden />;
+  return <X className={className} strokeWidth={1.8} aria-hidden />;
 }

@@ -56,12 +56,10 @@
 
 @keyframes app-mobile-sheet-out {
   from {
-    opacity: 1;
     transform: translateY(0);
   }
 
   to {
-    opacity: 0;
     transform: translateY(100%);
   }
 }
@@ -76,6 +74,14 @@
     animation: app-modal-overlay-out 140ms var(--ease-standard) both;
   }
 
+  .app-mobile-sheet-overlay[data-closing="true"] {
+    animation: app-modal-overlay-out 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .app-mobile-sheet-overlay {
+    animation: app-modal-overlay-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
   .app-modal-panel {
     animation: app-modal-panel-in 180ms var(--ease-standard) both;
   }
@@ -85,6 +91,17 @@
     animation: app-modal-panel-out 140ms var(--ease-standard) both;
   }
 
+  @media (min-width: 768px) {
+    .app-expense-detail-panel {
+      animation: app-modal-panel-in 180ms var(--ease-standard) both;
+    }
+
+    .app-expense-detail-panel[data-closing="true"],
+    .app-modal-overlay[data-closing="true"] .app-expense-detail-panel {
+      animation: app-modal-panel-out 180ms var(--ease-standard) both;
+    }
+  }
+
   @media (max-width: 767px) {
     .app-mobile-sheet-panel {
       animation: app-mobile-sheet-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -92,7 +109,7 @@
 
     .app-modal-overlay[data-closing="true"] .app-mobile-sheet-panel,
     .app-mobile-sheet-panel[data-closing="true"] {
-      animation: app-mobile-sheet-out 180ms var(--ease-standard) both;
+      animation: app-mobile-sheet-out 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
     }
   }
 

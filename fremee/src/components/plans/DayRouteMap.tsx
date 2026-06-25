@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Capacitor } from "@capacitor/core";
 import type { SubplanRow } from "@/services/api/endpoints/subplanes.endpoint";
 import { TIPOS_TRANSPORTE } from "@/services/api/endpoints/subplanes.endpoint";
@@ -41,8 +41,9 @@ function isNativePlatform() {
 
 function mapTravelMode(travelMode?: string): google.maps.TravelMode {
   switch (travelMode) {
+    case undefined:
     case "APIE":
-      return google.maps.TravelMode.WALKING;
+      return travelMode === "APIE" ? google.maps.TravelMode.WALKING : google.maps.TravelMode.DRIVING;
     case "BUS":
     case "METRO":
     case "TREN":
@@ -200,6 +201,37 @@ function decodePath(encoded: string): Coord[] {
   return points;
 }
 
+const geocodeCache = new Map<string, Promise<Coord | null>>();
+const renderedRouteMapKeys = new Set<string>();
+const renderedFallbackMapKeys = new Set<string>();
+const MAP_RENDER_CACHE_LIMIT = 24;
+
+function rememberRenderedMap(cache: Set<string>, key: string) {
+  if (!key) return;
+  cache.delete(key);
+  cache.add(key);
+  while (cache.size > MAP_RENDER_CACHE_LIMIT) {
+    const oldestKey = cache.values().next().value;
+    if (!oldestKey) break;
+    cache.delete(oldestKey);
+  }
+}
+
+function geocodeCached(address: string): Promise<Coord | null> {
+  const key = address.trim().toLowerCase();
+  if (!key) return Promise.resolve(null);
+
+  const cached = geocodeCache.get(key);
+  if (cached) return cached;
+
+  const request = geocode(address).catch((error) => {
+    geocodeCache.delete(key);
+    throw error;
+  });
+  geocodeCache.set(key, request);
+  return request;
+}
+
 const darkMapStyles = [
   { featureType: "all", elementType: "labels.text", stylers: [{ color: "#878787" }] },
   { featureType: "all", elementType: "labels.text.stroke", stylers: [{ visibility: "off" }] },
@@ -225,9 +257,13 @@ export default function DayRouteMap({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const daySubplanes = subplanes
-    .filter((s) => isoDateOnly(s.inicio_at) === selectedDate && s.ubicacion_nombre)
-    .sort((a, b) => a.inicio_at.localeCompare(b.inicio_at));
+  const daySubplanes = useMemo(
+    () =>
+      subplanes
+        .filter((s) => isoDateOnly(s.inicio_at) === selectedDate && s.ubicacion_nombre)
+        .sort((a, b) => a.inicio_at.localeCompare(b.inicio_at)),
+    [selectedDate, subplanes],
+  );
 
   type Point = {
     name: string;
@@ -237,29 +273,62 @@ export default function DayRouteMap({
     coords?: Coord | null;
   };
 
-  const points: Point[] = [];
-  daySubplanes.forEach((s, i) => {
-    points.push({
-      name: s.ubicacion_nombre,
-      label: s.titulo,
-      subplanIdx: i,
-      coords: s.ubicacion_lat != null && s.ubicacion_lng != null ? { lat: s.ubicacion_lat, lng: s.ubicacion_lng } : null,
-    });
-    if (TIPOS_TRANSPORTE.includes(s.tipo) && s.ubicacion_fin_nombre) {
-      points.push({
-        name: s.ubicacion_fin_nombre,
-        label: `Destino: ${s.titulo}`,
+  const points: Point[] = useMemo(() => {
+    const nextPoints: Point[] = [];
+    daySubplanes.forEach((s, i) => {
+      nextPoints.push({
+        name: s.ubicacion_nombre,
+        label: s.titulo,
         subplanIdx: i,
-        isDestination: true,
-        coords: s.ubicacion_fin_lat != null && s.ubicacion_fin_lng != null ? { lat: s.ubicacion_fin_lat, lng: s.ubicacion_fin_lng } : null,
+        coords: s.ubicacion_lat != null && s.ubicacion_lng != null ? { lat: s.ubicacion_lat, lng: s.ubicacion_lng } : null,
       });
-    }
-  });
+      if (TIPOS_TRANSPORTE.includes(s.tipo) && s.ubicacion_fin_nombre) {
+        nextPoints.push({
+          name: s.ubicacion_fin_nombre,
+          label: `Destino: ${s.titulo}`,
+          subplanIdx: i,
+          isDestination: true,
+          coords: s.ubicacion_fin_lat != null && s.ubicacion_fin_lng != null ? { lat: s.ubicacion_fin_lat, lng: s.ubicacion_fin_lng } : null,
+        });
+      }
+    });
+    return nextPoints;
+  }, [daySubplanes]);
+
+  const mapRenderKey = useMemo(() => {
+    const pointKey = points
+      .map((point) => [
+        point.name,
+        point.label,
+        point.coords?.lat ?? "",
+        point.coords?.lng ?? "",
+        point.isDestination ? "dest" : "origin",
+      ].join(":"))
+      .join(";");
+    const routeKey = daySubplanes
+      .map((subplan) => [
+        subplan.id,
+        subplan.transporte_llegada ?? "",
+        subplan.ruta_polyline ?? "",
+        subplan.ubicacion_lat ?? "",
+        subplan.ubicacion_lng ?? "",
+        subplan.ubicacion_fin_lat ?? "",
+        subplan.ubicacion_fin_lng ?? "",
+      ].join(":"))
+      .join(";");
+
+    return `${selectedDate}|${ubicacionNombre ?? ""}|${pointKey}|${routeKey}`;
+  }, [daySubplanes, points, selectedDate, ubicacionNombre]);
+
+  const mapAlreadyRendered = points.length < 2
+    ? renderedFallbackMapKeys.has(mapRenderKey)
+    : renderedRouteMapKeys.has(mapRenderKey);
 
   const renderFallbackMap = useCallback(async () => {
     if (!ubicacionNombre || !fallbackMapRef.current) return;
     const gen = ++renderGenRef.current;
-    setLoading(true);
+    const alreadyRendered = renderedFallbackMapKeys.has(mapRenderKey);
+    setLoading(!alreadyRendered);
     setError(null);
 
     try {
@@ -278,14 +347,14 @@ export default function DayRouteMap({
         gestureHandling: "cooperative",
       });
 
-      const coord = await geocode(ubicacionNombre);
+      const coord = await geocodeCached(ubicacionNombre);
       if (gen !== renderGenRef.current || !fallbackMapRef.current) return;
       if (!coord) return;
 
       map.setCenter(coord);
       map.setZoom(points.length > 0 ? 11 : 5);
 
-      const resolvedCoords = await Promise.all(points.map((p) => p.coords ? Promise.resolve(p.coords) : geocode(p.name)));
+      const resolvedCoords = await Promise.all(points.map((p) => p.coords ? Promise.resolve(p.coords) : geocodeCached(p.name)));
       if (gen !== renderGenRef.current || !fallbackMapRef.current) return;
 
       resolvedCoords.forEach((c, i) => {
@@ -303,6 +372,7 @@ export default function DayRouteMap({
         map.setCenter(resolvedCoords[0]);
         map.setZoom(13);
       }
+      rememberRenderedMap(renderedFallbackMapKeys, mapRenderKey);
     } catch (error) {
       logDayRouteMap("Error renderizando mapa fallback", {
         error,
@@ -314,12 +384,13 @@ export default function DayRouteMap({
       if (gen === renderGenRef.current) setLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDate, subplanes, ubicacionNombre]);
+  }, [mapRenderKey, selectedDate, subplanes, ubicacionNombre]);
 
   const renderMap = useCallback(async () => {
     if (points.length < 2 || !mapRef.current) return;
     const gen = ++renderGenRef.current;
-    setLoading(true);
+    const alreadyRendered = renderedRouteMapKeys.has(mapRenderKey);
+    setLoading(!alreadyRendered);
     setError(null);
 
     try {
@@ -338,7 +409,7 @@ export default function DayRouteMap({
       });
 
       const bounds = new google.maps.LatLngBounds();
-      const coords = await Promise.all(points.map((p) => p.coords ? Promise.resolve(p.coords) : geocode(p.name)));
+      const coords = await Promise.all(points.map((p) => p.coords ? Promise.resolve(p.coords) : geocodeCached(p.name)));
       if (gen !== renderGenRef.current || !mapRef.current) return;
 
       coords.forEach((coord, i) => {
@@ -467,6 +538,7 @@ export default function DayRouteMap({
       }
 
       map.fitBounds(bounds, 48);
+      rememberRenderedMap(renderedRouteMapKeys, mapRenderKey);
     } catch (error) {
       logDayRouteMap("Error renderizando mapa diario", {
         error,
@@ -479,7 +551,7 @@ export default function DayRouteMap({
       if (gen === renderGenRef.current) setLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDate, subplanes]);
+  }, [mapRenderKey, selectedDate, subplanes]);
 
   useEffect(() => {
     if (points.length < 2) renderFallbackMap();
@@ -491,7 +563,7 @@ export default function DayRouteMap({
       <div className={`overflow-hidden ${containerClassName ?? "rounded-[12px] border border-app"}`} style={containerClassName ? undefined : { clipPath: "inset(0 round 12px)" }}>
         <div className={`relative w-full bg-surface-inset ${heightClassName}`}>
           <div ref={fallbackMapRef} className="absolute inset-0" />
-          {loading && (
+          {loading && !mapAlreadyRendered && (
             <div className="absolute inset-0 flex items-center justify-center bg-surface-inset text-body-sm text-muted">
               Cargando mapa...
             </div>
@@ -510,7 +582,7 @@ export default function DayRouteMap({
     <div className={`overflow-hidden ${containerClassName ?? "rounded-[12px] border border-app"}`} style={containerClassName ? undefined : { clipPath: "inset(0 round 12px)" }}>
       <div className={`relative w-full bg-surface-inset ${heightClassName}`}>
         <div ref={mapRef} className="absolute inset-0" />
-        {loading && (
+        {loading && !mapAlreadyRendered && (
           <div className="absolute inset-0 flex items-center justify-center bg-surface-inset text-body-sm text-muted">
             Calculando ruta...
           </div>
