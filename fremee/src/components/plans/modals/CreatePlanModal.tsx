@@ -678,7 +678,7 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
                     {
                       value: "PÚBLICO" as const,
                       label: "Público",
-                      description: "Visible en el feed para todos",
+                      description: "Visible para todos",
                       Icon: Globe,
                     },
                     {

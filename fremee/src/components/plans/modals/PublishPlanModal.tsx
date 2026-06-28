@@ -28,6 +28,7 @@ import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
 import { CloseButton, IconButton } from "@/components/ui/IconButton";
 import { ModalFeedback } from "@/components/ui/ModalFeedback";
 import { DiscardChangesDialog } from "@/components/ui/DiscardChangesDialog";
+import { APP_HOME_PATH, FEED_ENABLED } from "@/config/app";
 
 type Props = {
   plan: PlanByIdRow;
@@ -240,7 +241,7 @@ export default function PublishPlanModal({ plan, onClose }: Props) {
         setFotos(photos);
         setGastos(gsts);
         setMiembros(mbs);
-        // Default to a curated visual summary instead of flooding the feed with every photo.
+        // Default to a curated visual summary instead of flooding the publication with every photo.
         setSelectedPhotoIds(new Set(photos.slice(0, DEFAULT_PHOTO_LIMIT).map((f) => f.id)));
       })
       .catch((e) => console.error("[PublishPlanModal] data load error:", e))
@@ -293,6 +294,11 @@ export default function PublishPlanModal({ plan, onClose }: Props) {
 
   async function handlePublish() {
     if (!user || !profile) return;
+    if (!FEED_ENABLED) {
+      setError("El feed está desactivado temporalmente.");
+      return;
+    }
+
     setPublishing(true);
     setError(null);
     try {
@@ -395,7 +401,7 @@ export default function PublishPlanModal({ plan, onClose }: Props) {
         {step === "compose" && (
           <>
             <div className="flex items-center justify-between px-5 pt-5 pb-3">
-              <span className="text-[15px] font-[700] text-app tracking-[-0.01em]">Publicar en el feed</span>
+              <span className="text-[15px] font-[700] text-app tracking-[-0.01em]">Publicar plan</span>
               <CloseButton onClick={requestDismiss} />
             </div>
 
@@ -468,7 +474,7 @@ export default function PublishPlanModal({ plan, onClose }: Props) {
               <CloseButton onClick={requestDismiss} />
             </div>
 
-            <p className="px-5 pb-3 text-[13px] text-muted">Elige el resumen que tendra sentido para quien vea tu plan en el feed.</p>
+            <p className="px-5 pb-3 text-[13px] text-muted">Elige el resumen que tendra sentido para quien vea tu plan.</p>
 
             {dataLoading ? (
               <div className="flex items-center justify-center py-10 text-muted">
@@ -499,7 +505,7 @@ export default function PublishPlanModal({ plan, onClose }: Props) {
                 </div>
 
                 <div className="rounded-[14px] border border-app bg-[var(--surface-raised)] px-3.5 py-3">
-                  <p className="text-[12px] font-[700] uppercase tracking-[0.08em] text-muted">Vista del feed</p>
+                  <p className="text-[12px] font-[700] uppercase tracking-[0.08em] text-muted">Vista previa</p>
                   <p className="mt-1 text-[14px] font-[700] leading-snug text-app">{plan.titulo}</p>
                   <p className="mt-1 text-[13px] leading-snug text-muted">
                     {visibleSummary.length > 0
@@ -637,13 +643,13 @@ export default function PublishPlanModal({ plan, onClose }: Props) {
             </div>
             <div className="text-center">
               <p className="text-[18px] font-[800] text-app tracking-[-0.02em]">¡Plan publicado!</p>
-              <p className="mt-1 text-[14px] text-muted">Ya aparece en el feed para todos.</p>
+              <p className="mt-1 text-[14px] text-muted">La publicación se ha guardado correctamente.</p>
             </div>
             <button
-              onClick={() => router.push("/feed")}
+              onClick={() => router.push(APP_HOME_PATH)}
               className="mt-2 h-10 px-6 rounded-full bg-primary-token text-white text-[14px] font-[700] transition-opacity hover:opacity-90"
             >
-              Ver en el feed
+              Ir a mis planes
             </button>
           </div>
         )}

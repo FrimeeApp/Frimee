@@ -5,6 +5,11 @@ import { db } from "@/services/firebase/firestore";
 type PublishPostResult = { ok: true; post_id: string; alreadyPublished: boolean };
 
 export async function publishPostRoute(payload: PublishPostPayload): Promise<PublishPostResult> {
+  void payload;
+  throw new Error("El feed está desactivado temporalmente.");
+}
+
+export async function publishPostRouteEnabled(payload: PublishPostPayload): Promise<PublishPostResult> {
   const postId = `plan_${payload.plan.id}`;
   const postRef = doc(db, "posts", postId);
 

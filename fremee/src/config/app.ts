@@ -1,5 +1,7 @@
 export const APP_NAME = "Frimee";
 export const APP_DESCRIPTION = "Organiza planes, viajes y grupos";
+export const APP_HOME_PATH = "/calendar";
+export const FEED_ENABLED = false;
 
 export const APP_ICON_PATHS = {
   primary: "/logo_app_frimee.png",

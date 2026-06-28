@@ -60,6 +60,11 @@ export type FeedPostEntry = {
 };
 
 export async function listPublishedPostPlanIdsRoute(params: { limit: number }): Promise<FeedPostEntry[]> {
+  void params;
+  return [];
+}
+
+export async function listPublishedPostPlanIdsRouteEnabled(params: { limit: number }): Promise<FeedPostEntry[]> {
   const postsRef = collection(db, "posts");
   const q = query(
     postsRef,

@@ -539,7 +539,7 @@ export default function ProfilePage() {
                 ¿Dejar de seguir a {profileData.nombre}?
               </p>
               <p className="mt-2 text-center text-body-sm text-muted">
-                Dejarás de ver sus publicaciones en tu feed.
+                Dejarás de ver sus publicaciones.
               </p>
               <div className="mt-5 flex gap-3">
                 <button

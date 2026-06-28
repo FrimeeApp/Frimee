@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createMiddlewareClient } from "@/services/supabase/middleware";
+import { APP_HOME_PATH, FEED_ENABLED } from "@/config/app";
 
 export async function middleware(request: NextRequest) {
   const { supabase, response } = createMiddlewareClient(request);
@@ -22,6 +23,15 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  if (
+    !FEED_ENABLED &&
+    (pathname === "/feed" || pathname.startsWith("/feed/") || pathname === "/plan" || pathname.startsWith("/plan/"))
+  ) {
+    const url = request.nextUrl.clone();
+    url.pathname = APP_HOME_PATH;
+    return NextResponse.redirect(url);
+  }
+
   // Esto fuerza refresh de sesión si hace falta (rotación tokens)
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -30,10 +40,10 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith("/register") ||
     pathname.startsWith("/forgot");
 
-  // Si está logueado y entra en login/register -> llévalo al feed
+  // Si está logueado y entra en login/register -> llévalo a la pantalla principal
   if (isAuthRoute && user) {
     const url = request.nextUrl.clone();
-    url.pathname = "/feed";
+    url.pathname = APP_HOME_PATH;
     return NextResponse.redirect(url);
   }
 

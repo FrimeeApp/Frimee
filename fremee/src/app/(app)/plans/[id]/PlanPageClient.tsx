@@ -27,8 +27,10 @@ import { PlanGastoDetailModal } from "@/components/plans/modals/PlanGastoDetailM
 import { uploadPlanAlbumFile, uploadPlanCoverFile } from "@/services/firebase/upload";
 import { addPlanFoto } from "@/services/api/repositories/plan-fotos.repository";
 import { formatMoney, formatExpenseDateTime, getInitial, formatDateRange, fmtTime, fmtDayHeader } from "@/lib/formatters";
+import { formatCompactRouteDistance, formatCompactRouteDuration } from "@/lib/route-formatters";
 import { FIELD_LINE_CLS } from "@/lib/styles";
 import { buildGoogleMapsDirectionsUrl, buildWazeDirectionsUrl } from "@/config/external";
+import { FEED_ENABLED } from "@/config/app";
 import { PlanDetailSkeleton } from "./_components/PlanDetailSkeleton";
 import { AddSubplanSheet, TRANSPORT_MAP, TRANSPORT_LLEGADA, type AddSheetProps } from "./_components/AddSubplanSheet";
 import { isoDateOnly, groupByDay, normalizeDateKey, summarizeRecipients, getOccupiedIntervals, timeToMin, mergeIntervals, type Interval } from "./_components/plan-utils";
@@ -1007,9 +1009,9 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
             {/* Back button */}
             <button
               onClick={() => closePlanRoute("back")}
-              className="absolute left-[var(--page-margin-x)] top-[calc(env(safe-area-inset-top)+var(--space-4))] z-20 flex h-9 w-9 items-center justify-center rounded-full border border-app bg-surface text-app shadow-elev-3 transition-colors hover:bg-surface-2 md:top-[var(--space-6)]"
+              className="mobile-safe-action-top absolute left-[var(--page-margin-x)] z-20 flex size-11 items-center justify-center rounded-full border border-transparent bg-transparent text-white shadow-none transition-colors hover:bg-white/10 md:top-[var(--space-6)] md:size-9 md:border-app md:bg-surface md:text-app md:shadow-elev-3 md:hover:bg-surface-2"
             >
-              <BackIcon className="size-[20px]" />
+              <BackIcon className="size-[22px] md:size-[20px]" />
             </button>
 
             {!isPast && isAdmin && (
@@ -1017,13 +1019,13 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
                 type="button"
                 aria-label="Editar plan"
                 onClick={() => setShowEditModal(true)}
-                className="absolute right-[var(--page-margin-x)] top-[calc(env(safe-area-inset-top)+var(--space-4))] flex h-9 w-9 items-center justify-center rounded-full border border-app bg-surface text-app shadow-elev-3 transition-colors hover:bg-surface-2 md:top-[var(--space-6)]"
+                className="mobile-safe-action-top absolute right-[var(--page-margin-x)] flex size-11 items-center justify-center rounded-full border border-transparent bg-transparent text-white shadow-none transition-colors hover:bg-white/10 md:top-[var(--space-6)] md:size-9 md:border-app md:bg-surface md:text-app md:shadow-elev-3 md:hover:bg-surface-2"
               >
-                <EditIcon className="size-[18px]" />
+                <EditIcon className="size-[21px] md:size-[18px]" />
               </button>
             )}
             {isPast && (
-              <span className="absolute right-[var(--page-margin-x)] top-[calc(env(safe-area-inset-top)+var(--space-4))] rounded-full border border-white/30 bg-black/30 px-3 py-[6px] text-[13px] font-[600] text-white/90 backdrop-blur-sm md:top-[var(--space-6)]">
+              <span className="mobile-safe-action-top absolute right-[var(--page-margin-x)] rounded-full border border-white/30 bg-black/30 px-3 py-[6px] text-[13px] font-[600] text-white/90 backdrop-blur-sm md:top-[var(--space-6)]">
                 Finalizado
               </span>
             )}
@@ -1051,7 +1053,7 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
 
               {/* Action buttons */}
               <div className="absolute bottom-[var(--space-4)] right-[var(--page-margin-x)] flex gap-[var(--space-2)]">
-                {isAdmin && (
+                {FEED_ENABLED && isAdmin && (
                   <button
                     onClick={() => setShowPublishModal(true)}
                     className="flex h-9 items-center gap-1.5 rounded-full border border-app bg-surface px-3.5 text-[14px] font-[600] text-app shadow-elev-3 transition-colors hover:bg-surface-2"
@@ -1065,9 +1067,9 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
                     type="button"
                     aria-label="Agregar amigos"
                     onClick={() => void openInviteModal()}
-                    className="flex h-9 w-9 items-center justify-center rounded-full border border-app bg-surface text-app shadow-elev-3 transition-colors hover:bg-surface-2"
+                    className="flex size-11 items-center justify-center rounded-full border border-transparent bg-transparent text-white shadow-none transition-colors hover:bg-white/10 md:size-9 md:border-app md:bg-surface md:text-app md:shadow-elev-3 md:hover:bg-surface-2"
                   >
-                    <InviteIcon className="size-[18px]" />
+                    <InviteIcon className="size-[21px] md:size-[18px]" />
                   </button>
                 )}
               </div>
@@ -1192,7 +1194,7 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
 
             {activeTab === "itinerario" && (
               <div
-                className="flex flex-col gap-[var(--space-8)] lg:flex-row lg:gap-[var(--space-12)]"
+                className="flex flex-col gap-[var(--space-5)] sm:gap-[var(--space-6)] lg:flex-row lg:gap-[var(--space-12)]"
                 style={{ fontFamily: "var(--font-inter), sans-serif" }}
               >
 
@@ -1220,7 +1222,7 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
                   ) : (
                     <>
                       {groupByDay(subplanes).map(([dateKey, items]) => (
-                        <div key={dateKey} className={isDayCollapsed(dateKey) ? "mb-[var(--space-4)]" : "mb-[var(--space-6)]"}>
+                        <div key={dateKey} className={`${isDayCollapsed(dateKey) ? "mb-[var(--space-4)]" : "mb-[var(--space-6)]"} last:mb-0`}>
                           {/* Day header */}
                           <div className={`-mx-[var(--page-margin-x)] border-b border-app px-[var(--page-margin-x)] md:mx-0 md:px-0 ${isDayCollapsed(dateKey) ? "pb-[var(--space-4)]" : "mb-[var(--space-5)] pb-[var(--space-4)]"}`}>
                             {(() => {
@@ -1406,9 +1408,9 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
                                                 {hasTravelMeta && (
                                                   <>
                                                     <span className="hidden text-muted opacity-40 md:inline">·</span>
-                                                    {nextItem?.duracion_viaje && <span>{nextItem.duracion_viaje}</span>}
+                                                    {nextItem?.duracion_viaje && <span>{formatCompactRouteDuration(nextItem.duracion_viaje)}</span>}
                                                     {nextItem.distancia_viaje && (
-                                                      <span className="text-caption text-muted">{nextItem.distancia_viaje}</span>
+                                                      <span className="text-caption text-muted">{formatCompactRouteDistance(nextItem.distancia_viaje)}</span>
                                                     )}
                                                   </>
                                                 )}
@@ -1422,9 +1424,9 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
                                                 {hasTravelMeta && (
                                                   <>
                                                     <span className="hidden text-muted opacity-40 md:inline">·</span>
-                                                    {nextItem?.duracion_viaje && <span>{nextItem.duracion_viaje}</span>}
+                                                    {nextItem?.duracion_viaje && <span>{formatCompactRouteDuration(nextItem.duracion_viaje)}</span>}
                                                     {nextItem.distancia_viaje && (
-                                                      <span className="text-caption text-muted">{nextItem.distancia_viaje}</span>
+                                                      <span className="text-caption text-muted">{formatCompactRouteDistance(nextItem.distancia_viaje)}</span>
                                                     )}
                                                   </>
                                                 )}
@@ -2059,12 +2061,12 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
                 type="button"
                 onClick={openCreateSubplan}
                 aria-label="Crear subplan"
-                className="pointer-events-auto flex items-center gap-[var(--space-2)]"
+                className="pointer-events-auto flex min-h-12 min-w-[150px] max-w-[calc(100vw-32px)] items-center justify-between gap-2.5 rounded-full border border-app bg-app py-[7px] pl-5 pr-4 text-app shadow-[0_0_0_1px_rgba(0,0,0,0.10),0_2px_6px_rgba(0,0,0,0.12)]"
               >
-                <span className="rounded-full border border-app bg-app px-[var(--space-3)] py-[7px] text-caption font-[var(--fw-semibold)] text-app shadow-elev-2">
+                <span className="whitespace-nowrap text-caption font-[var(--fw-semibold)]">
                   Crear subplan
                 </span>
-                <span className="flex size-14 items-center justify-center rounded-full border border-app bg-surface text-app shadow-elev-3">
+                <span className="flex size-7 shrink-0 items-center justify-center">
                   <CalendarSmallIcon className="size-6" />
                 </span>
               </button>
@@ -2074,12 +2076,12 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
                 type="button"
                 onClick={openCreateGasto}
                 aria-label="Crear gasto"
-                className="pointer-events-auto flex items-center gap-[var(--space-2)]"
+                className="pointer-events-auto flex min-h-12 min-w-[150px] max-w-[calc(100vw-32px)] items-center justify-between gap-2.5 rounded-full border border-app bg-app py-[7px] pl-5 pr-4 text-app shadow-[0_0_0_1px_rgba(0,0,0,0.10),0_2px_6px_rgba(0,0,0,0.12)]"
               >
-                <span className="rounded-full border border-app bg-app px-[var(--space-3)] py-[7px] text-caption font-[var(--fw-semibold)] text-app shadow-elev-2">
+                <span className="whitespace-nowrap text-caption font-[var(--fw-semibold)]">
                   Crear gasto
                 </span>
-                <span className="flex size-14 items-center justify-center rounded-full border border-app bg-surface text-app shadow-elev-3">
+                <span className="flex size-7 shrink-0 items-center justify-center">
                   <FileText className="size-6" aria-hidden />
                 </span>
               </button>
@@ -2090,12 +2092,12 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
                 onClick={openPhotoUpload}
                 aria-label="Subir foto"
                 disabled={fabPhotoUploading}
-                className="pointer-events-auto flex items-center gap-[var(--space-2)]"
+                className="pointer-events-auto flex min-h-12 min-w-[150px] max-w-[calc(100vw-32px)] items-center justify-between gap-2.5 rounded-full border border-app bg-app py-[7px] pl-5 pr-4 text-app shadow-[0_0_0_1px_rgba(0,0,0,0.10),0_2px_6px_rgba(0,0,0,0.12)] disabled:opacity-60"
               >
-                <span className="rounded-full border border-app bg-app px-[var(--space-3)] py-[7px] text-caption font-[var(--fw-semibold)] text-app shadow-elev-2">
+                <span className="whitespace-nowrap text-caption font-[var(--fw-semibold)]">
                   {fabPhotoUploading ? "Subiendo..." : "Subir foto"}
                 </span>
-                <span className="flex size-14 items-center justify-center rounded-full border border-app bg-surface text-app shadow-elev-3">
+                <span className="flex size-7 shrink-0 items-center justify-center">
                   {fabPhotoUploading ? <span className="size-5 animate-spin rounded-full border-2 border-current border-t-transparent opacity-60" /> : <Upload className="size-6" aria-hidden />}
                 </span>
               </button>
@@ -2114,7 +2116,7 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
             aria-label={mobileCreateOpen ? "Cerrar crear" : "Crear"}
             aria-expanded={mobileCreateOpen}
             onClick={() => setMobileCreateOpen((open) => !open)}
-            className="pointer-events-auto flex size-14 items-center justify-center rounded-full bg-primary-token text-contrast-token shadow-[0_16px_32px_rgba(0,0,0,0.24)] transition-transform duration-200 active:scale-95"
+            className="pointer-events-auto flex size-14 items-center justify-center rounded-full bg-primary-token text-contrast-token shadow-[0_0_0_1px_rgba(0,0,0,0.12),0_2px_6px_rgba(0,0,0,0.14)] transition-transform duration-200 active:scale-95"
           >
             <PlusIcon className={`size-7 transition-transform duration-200 ${mobileCreateOpen ? "rotate-45" : "rotate-0"}`} />
           </button>
