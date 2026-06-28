@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import LoadingScreen from "@/components/common/LoadingScreen";
+import { APP_HOME_PATH } from "@/config/app";
 
 export default function AuthCallbackPage() {
   const router = useRouter();
@@ -37,7 +38,7 @@ export default function AuthCallbackPage() {
             data: { session },
           } = await supabase.auth.getSession();
           if (session) {
-            router.replace("/feed");
+            router.replace(APP_HOME_PATH);
             return;
           }
           router.replace("/login");
@@ -65,7 +66,7 @@ export default function AuthCallbackPage() {
           userId: session?.user?.id ?? null,
         });
 
-        router.replace("/feed");
+        router.replace(APP_HOME_PATH);
       } catch (e) {
         console.error("Auth callback exception:", e);
         router.replace("/login");

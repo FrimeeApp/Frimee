@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/Input";
 import { EyeIcon } from "@/components/icons";
 import { useRouter, useSearchParams } from "next/navigation";
 import LoadingScreen from "@/components/common/LoadingScreen";
+import { APP_HOME_PATH } from "@/config/app";
 
 export default function LoginPage() {
   return (
@@ -32,7 +33,8 @@ function hasCachedSession(): boolean {
 function LoginPageInner() {
   const [showPassword, setShowPassword] = useState(false);
   const searchParams = useSearchParams();
-  const redirectTo = searchParams.get("redirect") ?? "/feed";
+  const requestedRedirectTo = searchParams.get("redirect");
+  const redirectTo = requestedRedirectTo?.startsWith("/feed") ? APP_HOME_PATH : requestedRedirectTo ?? APP_HOME_PATH;
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -222,4 +224,3 @@ function LoginPageInner() {
     </div>
   );
 }
-

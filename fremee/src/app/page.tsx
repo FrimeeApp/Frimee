@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { APP_HOME_PATH } from "@/config/app";
 
 // En Capacitor (exportación estática), todas las rutas aterrizan en "/" con el
 // path real codificado en la URL. Este helper extrae el destino correcto.
@@ -47,7 +48,7 @@ export default function RootPage() {
 
     // 3. App nativa (iOS / Android vía Capacitor)
     if (isNativeApp()) {
-      router.replace("/feed");
+      router.replace(APP_HOME_PATH);
       return;
     }
 

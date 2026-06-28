@@ -4,7 +4,7 @@ import { Browser } from "@capacitor/browser";
 import { App } from "@capacitor/app";
 import { Capacitor } from "@capacitor/core";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
-import { APP_AUTH_CALLBACK_PATH, APP_AUTH_CALLBACK_URI, APP_DEEP_LINK_SCHEME } from "@/config/app";
+import { APP_AUTH_CALLBACK_PATH, APP_AUTH_CALLBACK_URI, APP_DEEP_LINK_SCHEME, APP_HOME_PATH } from "@/config/app";
 import { GOOGLE_CALENDAR_SCOPE } from "@/config/external";
 
 /**
@@ -98,7 +98,7 @@ export async function signInWithGoogleCapacitor() {
       console.debug("[google] exchangeCodeForSession success");
 
       // 4) Navegar dentro de tu app
-      window.location.replace("/feed");
+      window.location.replace(APP_HOME_PATH);
     } catch (e) {
       console.error("[google] OAuth error:", e);
       // Fallback: vete a login si algo falla

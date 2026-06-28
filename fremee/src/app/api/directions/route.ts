@@ -4,6 +4,7 @@ import { getGoogleMapsServerKey } from "@/config/env";
 import { createSupabaseServerClient, createSupabaseServiceClient } from "@/services/supabase/server";
 import { sanitizeLatLng } from "@/lib/sanitize";
 import { checkRateLimit, rateLimitedResponse } from "@/lib/rate-limit";
+import { formatCompactRouteDistance, formatCompactRouteDuration } from "@/lib/route-formatters";
 
 const client = new Client({});
 
@@ -107,7 +108,10 @@ export async function POST(req: NextRequest) {
         if (cached) {
           return NextResponse.json({
             polyline: cached.polyline,
-            legs: [{ distance: cached.distance, duration: cached.duration }],
+            legs: [{
+              distance: formatCompactRouteDistance(cached.distance),
+              duration: formatCompactRouteDuration(cached.duration),
+            }],
             cached: true,
           });
         }
@@ -139,8 +143,8 @@ export async function POST(req: NextRequest) {
     const route    = response.data.routes[0];
     const polyline = route.overview_polyline.points;
     const legs     = route.legs.map((leg) => ({
-      distance: leg.distance?.text,
-      duration: leg.duration?.text,
+      distance: formatCompactRouteDistance(leg.distance?.text),
+      duration: formatCompactRouteDuration(leg.duration?.text),
       start:    leg.start_address,
       end:      leg.end_address,
     }));

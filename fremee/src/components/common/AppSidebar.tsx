@@ -14,7 +14,7 @@ import { countNotificacionesNoLeidas, insertNotificacion } from "@/services/api/
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import NotificationsPanel from "@/components/notifications/NotificationsPanel";
 import UserSearchSurface from "@/components/search/UserSearchSurface";
-import { Home, Map, CreditCard, Send, Plus, Search, Bell } from "lucide-react";
+import { Map, CreditCard, Send, Plus, Search, Bell } from "lucide-react";
 import { CloseButton } from "@/components/ui/IconButton";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
 import { DEFAULT_PLAN_COVER_IMAGE } from "@/config/app";
@@ -22,24 +22,28 @@ import { formatDateRange } from "@/lib/formatters";
 type IconProps = {
   className?: string;
   strokeWidth?: number;
+  active?: boolean;
 };
 
-const HomeIcon = ({ className, strokeWidth }: IconProps = {}) => <Home className={className} strokeWidth={strokeWidth} aria-hidden />;
-const PlansIcon = ({ className, strokeWidth }: IconProps = {}) => <Map className={className} strokeWidth={strokeWidth} aria-hidden />;
-const CardIcon = ({ className, strokeWidth }: IconProps = {}) => <CreditCard className={className} strokeWidth={strokeWidth} aria-hidden />;
-const SendIcon = ({ className, strokeWidth }: IconProps = {}) => <Send className={className} strokeWidth={strokeWidth} aria-hidden />;
+const activeFillProps = (active?: boolean) => ({
+  fill: active ? "currentColor" : "none",
+  fillOpacity: active ? 0.16 : undefined,
+});
+
+const PlansIcon = ({ className, strokeWidth, active }: IconProps = {}) => <Map className={className} strokeWidth={strokeWidth} {...activeFillProps(active)} aria-hidden />;
+const CardIcon = ({ className, strokeWidth, active }: IconProps = {}) => <CreditCard className={className} strokeWidth={strokeWidth} {...activeFillProps(active)} aria-hidden />;
+const SendIcon = ({ className, strokeWidth, active }: IconProps = {}) => <Send className={className} strokeWidth={strokeWidth} {...activeFillProps(active)} aria-hidden />;
 const PlusIcon = ({ className, strokeWidth }: IconProps = {}) => <Plus className={className} strokeWidth={strokeWidth} aria-hidden />;
-const SearchIcon = ({ className, strokeWidth }: IconProps = {}) => <Search className={className} strokeWidth={strokeWidth} aria-hidden />;
-const BellIcon = ({ className, strokeWidth }: IconProps = {}) => <Bell className={className} strokeWidth={strokeWidth} aria-hidden />;
+const SearchIcon = ({ className, strokeWidth, active }: IconProps = {}) => <Search className={className} strokeWidth={strokeWidth} {...activeFillProps(active)} aria-hidden />;
+const BellIcon = ({ className, strokeWidth, active }: IconProps = {}) => <Bell className={className} strokeWidth={strokeWidth} {...activeFillProps(active)} aria-hidden />;
 
 const items = [
-  { key: "home", label: "Inicio", icon: HomeIcon, href: "/feed" },
   { key: "calendar", label: "Mis planes", icon: PlansIcon, href: "/calendar" },
   { key: "cards", label: "Mis gastos", icon: CardIcon, href: "/mis-gastos" },
   { key: "send", label: "Mensajes", icon: SendIcon, href: "/messages" },
 ];
-const mobileItems = [items[1], items[2], items[3]];
-const ACTIVE_NAV_ICON_STROKE = 2.4;
+const mobileItems = items;
+const NAV_ICON_STROKE = 2;
 
 type AppSidebarProps = {
   onCreatePlan?: () => void;
@@ -355,18 +359,18 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
     active?: boolean;
     badge?: string | number | null;
   }) => {
-    const cls = `flex h-[24px] items-center transition-opacity duration-150 hover:opacity-70 ${active ? "text-app" : "text-muted"}`;
+    const cls = "flex h-[24px] items-center text-app transition-opacity duration-150 hover:opacity-70";
     const content = (
       <>
         <div className="relative flex w-[102px] shrink-0 items-center justify-center">
-          {icon({ className: "size-[26px]", strokeWidth: active ? ACTIVE_NAV_ICON_STROKE : undefined })}
+          {icon({ className: "size-[26px]", strokeWidth: NAV_ICON_STROKE, active })}
           {badge ? (
             <span className="absolute top-0 right-[38px] flex size-[16px] items-center justify-center rounded-full bg-blue-500 text-[9px] font-[var(--fw-semibold)] leading-none text-white">
               {badge}
             </span>
           ) : null}
         </div>
-        {expanded && <span className={`-ml-[14px] whitespace-nowrap pr-[var(--space-4)] text-body ${active ? "font-[var(--fw-semibold)]" : "font-[var(--fw-medium)]"}`}>{label}</span>}
+        {expanded && <span className="-ml-[14px] whitespace-nowrap pr-[var(--space-4)] text-body font-[var(--fw-medium)]">{label}</span>}
       </>
     );
 
@@ -385,6 +389,7 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
   const notificationsActive = notifPanelOpen || isActive("/notifications");
   const profileActive = pathname.startsWith("/profile");
   const notificationBadge = unreadNotifs > 0 ? (unreadNotifs > 9 ? "9+" : unreadNotifs) : null;
+  const showMobileNotificationsButton = !hideMobileNav && !modalOpen && !searchActive && !profileActive && !notificationsActive;
   const mobileNavStyle: MobileNavStyle = { "--mobile-nav-base-height": "clamp(56px, 8dvh, 64px)" };
 
   return (
@@ -402,48 +407,51 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
               key={item.key}
               href={item.href}
               aria-label={item.label}
-              className={`${isActive(item.href) ? "text-app" : "text-muted"} transition-opacity duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] active:opacity-[var(--disabled-opacity)]`}
+              className="text-app transition-opacity duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] active:opacity-[var(--disabled-opacity)]"
             >
-              <item.icon className="size-[clamp(25px,6.4vw,28px)]" strokeWidth={isActive(item.href) ? ACTIVE_NAV_ICON_STROKE : undefined} />
+              <item.icon className="size-[clamp(25px,6.4vw,28px)]" strokeWidth={NAV_ICON_STROKE} active={isActive(item.href)} />
             </Link>
           ))}
           <Link
             href="/search"
             aria-label="Buscar"
-            className={`${searchActive ? "text-app" : "text-muted"} flex size-[clamp(34px,8vw,38px)] items-center justify-center transition-opacity duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] active:opacity-[var(--disabled-opacity)]`}
+            className="flex size-[clamp(34px,8vw,38px)] items-center justify-center text-app transition-opacity duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] active:opacity-[var(--disabled-opacity)]"
           >
-            <SearchIcon className="size-[clamp(25px,6.4vw,28px)]" strokeWidth={searchActive ? ACTIVE_NAV_ICON_STROKE : undefined} />
-          </Link>
-          <Link
-            href="/notifications"
-            aria-label="Notificaciones"
-            className={`${notificationsActive ? "text-app" : "text-muted"} relative flex size-[clamp(34px,8vw,38px)] items-center justify-center transition-opacity duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] active:opacity-[var(--disabled-opacity)]`}
-          >
-            <BellIcon className="size-[clamp(25px,6.4vw,28px)]" strokeWidth={notificationsActive ? ACTIVE_NAV_ICON_STROKE : undefined} />
-            {notificationBadge ? (
-              <span className="absolute right-[2px] top-[2px] flex size-[16px] items-center justify-center rounded-full bg-blue-500 text-[9px] font-[var(--fw-semibold)] leading-none text-white">
-                {notificationBadge}
-              </span>
-            ) : null}
+            <SearchIcon className="size-[clamp(25px,6.4vw,28px)]" strokeWidth={NAV_ICON_STROKE} active={searchActive} />
           </Link>
           <button
             type="button"
             aria-label="Perfil"
             onClick={openProfile}
-            className={`${profileActive ? "text-app" : "text-muted"} flex size-[clamp(34px,8vw,38px)] items-center justify-center transition-opacity duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] active:opacity-[var(--disabled-opacity)]`}
+            className="flex size-[clamp(34px,8vw,38px)] items-center justify-center text-app transition-opacity duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] active:opacity-[var(--disabled-opacity)]"
           >
             {loggedUserProfileImage ? (
-              <span className={`block size-[clamp(31px,7.4vw,34px)] overflow-hidden rounded-full ${profileActive ? "border-[1.5px] border-[var(--text-primary)]" : "border border-strong"}`}>
+              <span className="block size-[clamp(31px,7.4vw,34px)] overflow-hidden rounded-full border border-strong">
                 <Image src={loggedUserProfileImage} alt="Foto de perfil" width={34} height={34} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
               </span>
             ) : (
-              <span className={`flex size-[clamp(31px,7.4vw,34px)] items-center justify-center rounded-full bg-surface-inset text-body-sm font-[var(--fw-semibold)] ${profileActive ? "border-[1.5px] border-[var(--text-primary)] text-app" : "border border-strong text-muted"}`}>
+              <span className="flex size-[clamp(31px,7.4vw,34px)] items-center justify-center rounded-full border border-strong bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">
                 {loggedUserInitial}
               </span>
             )}
           </button>
 
         </nav>
+      )}
+
+      {showMobileNotificationsButton && (
+        <Link
+          href="/notifications"
+          aria-label="Notificaciones"
+          className="mobile-title-action-top fixed right-[max(var(--page-margin-x),env(safe-area-inset-right))] z-[85] flex size-11 items-center justify-center text-app transition-opacity duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] active:opacity-[var(--disabled-opacity)] md:hidden"
+        >
+          <BellIcon className="size-[clamp(25px,6.4vw,28px)]" strokeWidth={NAV_ICON_STROKE} active={notificationsActive} />
+          {notificationBadge ? (
+            <span className="absolute right-[2px] top-[2px] flex size-[16px] items-center justify-center rounded-full bg-blue-500 text-[9px] font-[var(--fw-semibold)] leading-none text-white">
+              {notificationBadge}
+            </span>
+          ) : null}
+        </Link>
       )}
 
       {!hideMobileNav && !modalOpen && (
@@ -457,12 +465,12 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
               type="button"
               onClick={openCreatePlan}
               aria-label="Crear plan"
-              className="pointer-events-auto flex items-center gap-[var(--space-2)]"
+              className="pointer-events-auto flex min-h-12 min-w-[150px] max-w-[calc(100vw-32px)] items-center justify-between gap-2.5 rounded-full border border-app bg-app py-[7px] pl-5 pr-4 text-app shadow-[0_0_0_1px_rgba(0,0,0,0.10),0_2px_6px_rgba(0,0,0,0.12)]"
             >
-              <span className="whitespace-nowrap rounded-full border border-app bg-app px-[var(--space-3)] py-[9px] text-caption font-[var(--fw-semibold)] leading-none text-app shadow-elev-2">
+              <span className="whitespace-nowrap text-caption font-[var(--fw-semibold)] leading-none">
                 Crear plan
               </span>
-              <span className="flex size-12 shrink-0 items-center justify-center rounded-full border border-app bg-surface text-app shadow-elev-3">
+              <span className="flex size-7 shrink-0 items-center justify-center">
                 <PlansIcon className="size-5" />
               </span>
             </button>
@@ -470,12 +478,12 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
               type="button"
               onClick={() => void openCreateExpense()}
               aria-label="Crear gasto"
-              className="pointer-events-auto flex items-center gap-[var(--space-2)]"
+              className="pointer-events-auto flex min-h-12 min-w-[150px] max-w-[calc(100vw-32px)] items-center justify-between gap-2.5 rounded-full border border-app bg-app py-[7px] pl-5 pr-4 text-app shadow-[0_0_0_1px_rgba(0,0,0,0.10),0_2px_6px_rgba(0,0,0,0.12)]"
             >
-              <span className="whitespace-nowrap rounded-full border border-app bg-app px-[var(--space-3)] py-[9px] text-caption font-[var(--fw-semibold)] leading-none text-app shadow-elev-2">
+              <span className="whitespace-nowrap text-caption font-[var(--fw-semibold)] leading-none">
                 Crear gasto
               </span>
-              <span className="flex size-12 shrink-0 items-center justify-center rounded-full border border-app bg-surface text-app shadow-elev-3">
+              <span className="flex size-7 shrink-0 items-center justify-center">
                 <CardIcon className="size-5" />
               </span>
             </button>
@@ -484,12 +492,12 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
                 type="button"
                 onClick={openCreateConversation}
                 aria-label="Crear conversación"
-                className="pointer-events-auto flex items-center gap-[var(--space-2)]"
+                className="pointer-events-auto flex min-h-12 min-w-[150px] max-w-[calc(100vw-32px)] items-center justify-between gap-2.5 rounded-full border border-app bg-app py-[7px] pl-5 pr-4 text-app shadow-[0_0_0_1px_rgba(0,0,0,0.10),0_2px_6px_rgba(0,0,0,0.12)]"
               >
-                <span className="whitespace-nowrap rounded-full border border-app bg-app px-[var(--space-3)] py-[9px] text-caption font-[var(--fw-semibold)] leading-none text-app shadow-elev-2">
+                <span className="whitespace-nowrap text-caption font-[var(--fw-semibold)] leading-none">
                   Crear conversación
                 </span>
-                <span className="flex size-12 shrink-0 items-center justify-center rounded-full border border-app bg-surface text-app shadow-elev-3">
+                <span className="flex size-7 shrink-0 items-center justify-center">
                   <SendIcon className="size-5" />
                 </span>
               </button>
@@ -501,7 +509,7 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
             aria-label={mobileFabOpen ? "Cerrar crear" : "Crear"}
             aria-expanded={mobileFabOpen}
             onClick={() => setMobileFabOpen((open) => !open)}
-            className="pointer-events-auto flex size-14 items-center justify-center rounded-full bg-primary-token text-[var(--contrast)] shadow-[0_16px_32px_rgba(0,0,0,0.24)] transition-transform duration-200 active:scale-95"
+            className="pointer-events-auto flex size-14 items-center justify-center rounded-full bg-primary-token text-[var(--contrast)] shadow-[0_0_0_1px_rgba(0,0,0,0.12),0_2px_6px_rgba(0,0,0,0.14)] transition-transform duration-200 active:scale-95"
           >
             <PlusIcon className={`size-7 transition-transform duration-200 ${mobileFabOpen ? "rotate-45" : "rotate-0"}`} />
           </button>
@@ -635,13 +643,13 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
                 setNotifPanelOpen(false);
                 setSearchPopoverOpen(true);
               }}
-              className={`flex h-[24px] items-center transition-opacity duration-150 hover:opacity-70 ${searchActive ? "text-app" : "text-muted"}`}
+              className="flex h-[24px] items-center text-app transition-opacity duration-150 hover:opacity-70"
             >
               <div className="relative flex w-[102px] shrink-0 items-center justify-center">
-                <SearchIcon className="size-[26px]" strokeWidth={searchActive ? ACTIVE_NAV_ICON_STROKE : undefined} />
+                <SearchIcon className="size-[26px]" strokeWidth={NAV_ICON_STROKE} active={searchActive} />
               </div>
               {expanded && (
-                <span className={`-ml-[14px] whitespace-nowrap pr-[var(--space-4)] text-body ${searchActive ? "font-[var(--fw-semibold)]" : "font-[var(--fw-medium)]"}`}>
+                <span className="-ml-[14px] whitespace-nowrap pr-[var(--space-4)] text-body font-[var(--fw-medium)]">
                   Buscar
                 </span>
               )}
@@ -678,7 +686,7 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
               className={`flex h-[32px] items-center rounded-[8px] text-app transition-colors duration-150 hover:bg-surface ${desktopCreateMenuOpen ? "bg-surface" : ""}`}
             >
               <div className="flex w-[102px] shrink-0 items-center justify-center">
-                <PlusIcon className="size-[26px]" strokeWidth={desktopCreateMenuOpen ? ACTIVE_NAV_ICON_STROKE : undefined} />
+                <PlusIcon className="size-[26px]" strokeWidth={NAV_ICON_STROKE} />
               </div>
               {expanded && <span className="-ml-[14px] whitespace-nowrap pr-[var(--space-4)] text-body font-[var(--fw-medium)]">Crear</span>}
             </button>
@@ -709,15 +717,15 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
             type="button"
             aria-label="Perfil"
             onClick={openProfile}
-            className={`mt-[var(--space-8)] flex h-[32px] items-center rounded-[8px] transition-colors duration-150 hover:bg-surface ${profileActive ? "text-app" : "text-muted"}`}
+            className="mt-[var(--space-8)] flex h-[32px] items-center rounded-[8px] text-app transition-colors duration-150 hover:bg-surface"
           >
             <div className="flex w-[102px] shrink-0 items-center justify-center">
               {loggedUserProfileImage ? (
-                <span className={`block size-[28px] overflow-hidden rounded-full ${profileActive ? "border-[1.5px] border-[var(--text-primary)]" : "border border-strong"}`}>
+                <span className="block size-[28px] overflow-hidden rounded-full border border-strong">
                   <Image src={loggedUserProfileImage} alt="Foto de perfil" width={28} height={28} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
                 </span>
               ) : (
-                <span className={`flex size-[28px] items-center justify-center rounded-full bg-surface-inset text-body-sm font-[var(--fw-semibold)] ${profileActive ? "border-[1.5px] border-[var(--text-primary)] text-app" : "border border-strong text-muted"}`}>
+                <span className="flex size-[28px] items-center justify-center rounded-full border border-strong bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">
                   {loggedUserInitial}
                 </span>
               )}

@@ -60,7 +60,7 @@ export default function JoinPageClient() {
         <p className="text-body text-muted">{error ?? "Enlace no válido."}</p>
         <button
           type="button"
-          onClick={() => router.replace("/feed")}
+          onClick={() => router.replace("/calendar")}
           className="rounded-full bg-[var(--text-primary)] px-6 py-2.5 text-body-sm font-[var(--fw-semibold)] text-contrast-token"
         >
           Ir al inicio

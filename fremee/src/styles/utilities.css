@@ -239,6 +239,22 @@
       padding-top: calc(env(safe-area-inset-top) + var(--space-4));
     }
 
+    .mobile-title-action-top {
+      top: calc(env(safe-area-inset-top) + clamp(0px, 1vw, 4px));
+    }
+
+    html[data-platform="web"] .mobile-title-action-top {
+      top: calc(env(safe-area-inset-top) + var(--space-4) + clamp(0px, 1vw, 4px));
+    }
+
+    .mobile-safe-action-top {
+      top: env(safe-area-inset-top);
+    }
+
+    html[data-platform="web"] .mobile-safe-action-top {
+      top: calc(env(safe-area-inset-top) + var(--space-4));
+    }
+
     /* Keep mobile copy readable: regular small text should not drop below 16px. */
     .text-sm,
     .text-body-sm,

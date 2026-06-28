@@ -305,12 +305,12 @@ export default function SettingsPage() {
 
   const navigate = () => {
     if (Capacitor.isNativePlatform()) {
-      const profileHref = user?.id ? `/profile/static?id=${user.id}` : "/feed";
+      const profileHref = user?.id ? `/profile/static?id=${user.id}` : "/calendar";
       router.push(profileHref);
     } else if (typeof window !== "undefined" && window.history.length > 1) {
       router.back();
     } else {
-      router.push(user?.id ? `/profile/${user.id}` : "/feed");
+      router.push(user?.id ? `/profile/${user.id}` : "/calendar");
     }
   };
 

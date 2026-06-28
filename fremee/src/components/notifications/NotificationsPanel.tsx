@@ -138,10 +138,12 @@ export function NotifItem({
   n,
   onAction,
   onPlanAccepted,
+  edgePadding = "default",
 }: {
   n: NotificacionDto;
   onAction: (id: number) => void;
   onPlanAccepted?: (planId: string) => void;
+  edgePadding?: "default" | "none";
 }) {
   const [acting, setActing] = useState(false);
   const isFriendRequest = n.tipo === "friend_request" && n.actor_id;
@@ -182,7 +184,7 @@ export function NotifItem({
 
   return (
     <li
-      className={`flex items-start gap-3 px-5 py-3 transition-colors ${
+      className={`flex items-start gap-3 py-3 transition-colors ${edgePadding === "none" ? "px-0" : "px-5"} ${
         !n.leida ? "bg-[var(--surface)]" : "hover:bg-[var(--surface)]"
       }`}
     >
@@ -257,6 +259,7 @@ type NotificationsFeedProps = {
   onRead?: () => void;
   onPlanAccepted?: (planId: string) => void;
   className?: string;
+  edgePadding?: "default" | "none";
 };
 
 export function NotificationsFeed({
@@ -264,6 +267,7 @@ export function NotificationsFeed({
   onRead,
   onPlanAccepted,
   className = "flex-1 overflow-y-auto overscroll-contain",
+  edgePadding = "default",
 }: NotificationsFeedProps) {
   const { user } = useAuth();
   const router = useRouter();
@@ -349,12 +353,13 @@ export function NotificationsFeed({
         <>
           {groups.map(({ label, items }) => (
             <div key={label}>
-              <p className="px-5 pt-5 pb-2 text-body-sm font-[var(--fw-semibold)]">{label}</p>
+              <p className={`${edgePadding === "none" ? "px-0" : "px-5"} pt-5 pb-2 text-body-sm font-[var(--fw-semibold)]`}>{label}</p>
               <ul>
                 {items.map((n) => (
                   <NotifItem
                     key={n.id}
                     n={n}
+                    edgePadding={edgePadding}
                     onAction={(id) =>
                       setNotifs((prev) => prev.filter((x) => x.id !== id))
                     }

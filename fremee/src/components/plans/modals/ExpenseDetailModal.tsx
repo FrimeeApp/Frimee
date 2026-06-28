@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowDownLeft, ArrowUpRight, CheckCircle2, Clock3, Share2, XCircle, type LucideIcon } from "lucide-react";
 import { formatMoney, formatLongDateTime } from "@/lib/formatters";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
 import { Avatar } from "@/components/ui/Avatar";
-import { CloseButton, IconButton } from "@/components/ui/IconButton";
+import { IconButton } from "@/components/ui/IconButton";
+import { DraggableBottomSheet } from "@/components/ui/DraggableBottomSheet";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -200,9 +201,32 @@ export function ExpenseDetailModal({
     closeAnimationMs: 240,
     lockScroll: false,
   });
+  const overlayResetTimeoutRef = useRef<number | null>(null);
+  const [overlayDragState, setOverlayDragState] = useState({
+    itemId: null as number | null,
+    progress: 0,
+    dragging: false,
+  });
+  const [overlayEntered, setOverlayEntered] = useState(false);
+
+  const requestDetailClose = () => {
+    requestClose();
+
+    if (overlayResetTimeoutRef.current !== null) {
+      window.clearTimeout(overlayResetTimeoutRef.current);
+    }
+
+    overlayResetTimeoutRef.current = window.setTimeout(() => {
+      overlayResetTimeoutRef.current = null;
+      setOverlayDragState({ itemId: null, progress: 0, dragging: false });
+      setOverlayEntered(false);
+    }, 260);
+  };
+
   useEffect(() => {
     if (!item) return;
 
+    const frameId = window.requestAnimationFrame(() => setOverlayEntered(true));
     const previousOverflow = document.body.style.overflow;
 
     document.body.setAttribute("data-expense-detail-open", "true");
@@ -211,8 +235,17 @@ export function ExpenseDetailModal({
     return () => {
       document.body.removeAttribute("data-expense-detail-open");
       document.body.style.overflow = previousOverflow;
+      window.cancelAnimationFrame(frameId);
     };
   }, [item]);
+
+  useEffect(() => {
+    return () => {
+      if (overlayResetTimeoutRef.current !== null) {
+        window.clearTimeout(overlayResetTimeoutRef.current);
+      }
+    };
+  }, []);
 
   if (!item) return null;
 
@@ -226,6 +259,13 @@ export function ExpenseDetailModal({
   const concept = item.concept?.trim() || item.planName;
   const pendingMessage = incoming ? "Todavía te deben" : "Todavía debes";
   const resolvedMessage = incoming ? "Te han pagado" : "Has pagado";
+  const overlayDragProgress = overlayDragState.itemId === item.id ? overlayDragState.progress : 0;
+  const overlayDragging = overlayDragState.itemId === item.id ? overlayDragState.dragging : false;
+  const overlayOpacity = isClosing
+    ? 0
+    : !overlayEntered
+      ? 0
+    : Math.max(0.12, 1 - overlayDragProgress * 1.25);
 
   const handleShare = async () => {
     const text = `${statusMeta.text}: ${signedAmount} con ${otherPartyLabel} · ${concept}`;
@@ -250,32 +290,48 @@ export function ExpenseDetailModal({
     <div
       data-closing={isClosing ? "true" : "false"}
       className="app-modal-overlay app-mobile-sheet-overlay fixed inset-0 z-[var(--z-modal)] flex items-end justify-center px-0 md:items-center md:px-[var(--space-4)] md:py-[var(--space-6)]"
+      style={{
+        animation: "none",
+        backgroundColor: "transparent",
+      }}
       onPointerDown={(event) => {
-        event.preventDefault();
         event.stopPropagation();
         if (event.target === event.currentTarget) {
-          requestClose();
+          requestDetailClose();
         }
       }}
     >
       <div
-        data-closing={isClosing ? "true" : "false"}
-        className="app-expense-detail-panel app-mobile-sheet-panel flex h-[70dvh] w-full flex-col overflow-hidden rounded-t-[28px] bg-[var(--bg)] shadow-elev-4 md:h-auto md:max-w-[540px] md:rounded-[24px]"
+        className="absolute inset-0 bg-black"
+        style={{
+          opacity: overlayOpacity * 0.55,
+          transition: overlayDragging ? "none" : "opacity 240ms cubic-bezier(0.22, 1, 0.36, 1)",
+        }}
+        onPointerDown={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          requestDetailClose();
+        }}
+        aria-hidden="true"
+      />
+      <DraggableBottomSheet
+        isClosing={isClosing}
+        onDismiss={requestDetailClose}
+        handleLabel="Arrastrar detalle del gasto"
+        onDragProgress={(progress, dragging) => {
+          setOverlayDragState({ itemId: item.id, progress, dragging });
+        }}
+        className="app-expense-detail-panel app-mobile-sheet-panel relative z-10 flex h-[70dvh] w-full flex-col overflow-hidden rounded-t-[28px] bg-[var(--bg)] shadow-elev-4 md:h-auto md:max-w-[540px] md:rounded-[24px]"
         onPointerDown={(event) => event.stopPropagation()}
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex justify-center pt-[8px]" aria-hidden="true">
-          <div className="h-[4px] w-10 rounded-full bg-[var(--border)]" />
-        </div>
-
-        <div className="flex shrink-0 items-center justify-between px-[var(--space-5)] pb-[var(--space-2)] pt-[var(--space-2)]">
+        <div className="absolute left-[var(--space-5)] top-[var(--space-5)] z-10">
           <IconButton onClick={handleShare} aria-label="Compartir detalle">
             <Share2 className="size-5" strokeWidth={1.8} aria-hidden />
           </IconButton>
-          <CloseButton onClick={requestClose} label="Cerrar detalle" iconClassName="size-5" />
         </div>
 
-        <div className="flex min-h-0 flex-1 flex-col items-center px-[var(--space-6)] pb-[var(--space-4)] text-center">
+        <div className="flex min-h-0 flex-1 flex-col items-center px-[var(--space-6)] pb-[var(--space-4)] pt-[var(--space-8)] text-center">
           <MovementIcon Icon={StatusIcon} className={statusMeta.iconClass} />
           <CounterpartyLine name={otherPartyLabel} image={item.counterpartyImage} />
           <p className="mt-[var(--space-2)] text-caption text-muted">
@@ -319,7 +375,7 @@ export function ExpenseDetailModal({
             </div>
           </div>
         )}
-      </div>
+      </DraggableBottomSheet>
     </div>
   );
 }

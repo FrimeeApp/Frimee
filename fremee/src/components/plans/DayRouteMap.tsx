@@ -7,6 +7,7 @@ import { TIPOS_TRANSPORTE } from "@/services/api/endpoints/subplanes.endpoint";
 import { loadGoogleMapsScript } from "@/lib/googleMaps";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { buildInternalApiUrl } from "@/config/external";
+import { formatCompactRouteDistance, formatCompactRouteDuration } from "@/lib/route-formatters";
 
 type Props = {
   subplanes: SubplanRow[];
@@ -518,8 +519,8 @@ export default function DayRouteMap({
             if (leg?.duration && destSubplan?.id && onViajeComputed) {
               onViajeComputed(
                 destSubplan.id,
-                leg.duration,
-                leg.distance ?? "",
+                formatCompactRouteDuration(leg.duration),
+                formatCompactRouteDistance(leg.distance),
                 data.polyline,
               );
             }
