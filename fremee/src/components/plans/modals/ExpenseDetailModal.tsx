@@ -318,6 +318,7 @@ export function ExpenseDetailModal({
         isClosing={isClosing}
         onDismiss={requestDetailClose}
         handleLabel="Arrastrar detalle del gasto"
+        handleClassName="md:hidden"
         onDragProgress={(progress, dragging) => {
           setOverlayDragState({ itemId: item.id, progress, dragging });
         }}

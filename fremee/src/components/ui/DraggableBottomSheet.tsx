@@ -21,6 +21,7 @@ type DraggableBottomSheetProps = {
   dragCloseThreshold?: number;
   dragVelocityThreshold?: number;
   handleLabel?: string;
+  handleClassName?: string;
   onDragProgress?: (progress: number, isDragging: boolean) => void;
   onPointerDown?: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onClick?: (event: ReactMouseEvent<HTMLDivElement>) => void;
@@ -75,6 +76,7 @@ export function DraggableBottomSheet({
   dragCloseThreshold = DEFAULT_CLOSE_THRESHOLD,
   dragVelocityThreshold = DEFAULT_VELOCITY_THRESHOLD,
   handleLabel = "Arrastrar panel",
+  handleClassName = "",
   onDragProgress,
   onPointerDown,
   onClick,
@@ -279,7 +281,7 @@ export function DraggableBottomSheet({
         }
       }}
     >
-      <div className="flex justify-center pt-[8px]">
+      <div className={`flex justify-center pt-[8px] ${handleClassName}`}>
         <button
           type="button"
           aria-label={handleLabel}

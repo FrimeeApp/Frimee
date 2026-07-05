@@ -68,6 +68,32 @@ function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
+function filterAndSortPlans({
+  plans,
+  query,
+  pinnedPlanIds,
+}: {
+  plans: FeedPlanItemDto[];
+  query: string;
+  pinnedPlanIds: number[];
+}) {
+  const normalizedQuery = query.trim().toLowerCase();
+  const basePlans = normalizedQuery
+    ? plans.filter((plan) => plan.title.toLowerCase().includes(normalizedQuery))
+    : plans;
+
+  return [...basePlans].sort((a, b) => {
+    const aPinned = pinnedPlanIds.includes(a.id);
+    const bPinned = pinnedPlanIds.includes(b.id);
+    if (aPinned && !bPinned) return -1;
+    if (!aPinned && bPinned) return 1;
+    if (aPinned && bPinned) {
+      return pinnedPlanIds.indexOf(a.id) - pinnedPlanIds.indexOf(b.id);
+    }
+    return 0;
+  });
+}
+
 function PlanPinButton({
   pinned,
   onToggle,
@@ -100,7 +126,7 @@ function PlanPinButton({
         <path
           d="M8 4.5h8M10 4.5v4l-3 3v1h10v-1l-3-3v-4M12 12.5v7"
           stroke="currentColor"
-          strokeWidth={pinned ? "2.55" : "2.2"}
+          strokeWidth="1.8"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
@@ -505,7 +531,7 @@ function CalendarPageInner() {
     return [...localPlans, ...plans];
   }, [localPlans, plans]);
 
-  const visiblePlans = useMemo(() => {
+  const tabPlans = useMemo(() => {
     const now = new Date();
     return mergedPlans.filter((plan) => {
       const endsAt = new Date(plan.endsAt);
@@ -513,38 +539,30 @@ function CalendarPageInner() {
     });
   }, [mergedPlans, tab]);
 
-  const filteredPlans = useMemo(() => {
-    const query = planSearch.trim().toLowerCase();
-    const basePlans = !query
-      ? visiblePlans
-      : visiblePlans.filter((plan) => plan.title.toLowerCase().includes(query));
+  const filteredPlans = useMemo(
+    () => filterAndSortPlans({ plans: tabPlans, query: planSearch, pinnedPlanIds }),
+    [tabPlans, planSearch, pinnedPlanIds],
+  );
 
-    return [...basePlans].sort((a, b) => {
-      const aPinned = pinnedPlanIds.includes(a.id);
-      const bPinned = pinnedPlanIds.includes(b.id);
-      if (aPinned && !bPinned) return -1;
-      if (!aPinned && bPinned) return 1;
-      if (aPinned && bPinned) {
-        return pinnedPlanIds.indexOf(a.id) - pinnedPlanIds.indexOf(b.id);
-      }
-      return 0;
-    });
-  }, [visiblePlans, planSearch, pinnedPlanIds]);
+  const calendarPlans = useMemo(
+    () => filterAndSortPlans({ plans: mergedPlans, query: planSearch, pinnedPlanIds }),
+    [mergedPlans, planSearch, pinnedPlanIds],
+  );
 
   const calendarCells = useMemo(() => buildCalendarCells(monthDate), [monthDate]);
   const calendarWeeks = useMemo(() => groupCalendarWeeks(calendarCells), [calendarCells]);
 
   const weekSegments = useMemo(
-    () => calendarWeeks.map((week) => buildWeekPlanRows(week, filteredPlans)),
-    [calendarWeeks, filteredPlans],
+    () => calendarWeeks.map((week) => buildWeekPlanRows(week, calendarPlans)),
+    [calendarWeeks, calendarPlans],
   );
   const selectedDayValue = useMemo(() => selectedDay ?? startOfDay(new Date()), [selectedDay]);
   const selectedDayPlans = useMemo(
     () =>
-      filteredPlans
+      calendarPlans
         .filter((plan) => rangesOverlap(new Date(plan.startsAt), new Date(plan.endsAt), startOfDay(selectedDayValue), endOfDay(selectedDayValue)))
         .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime()),
-    [filteredPlans, selectedDayValue],
+    [calendarPlans, selectedDayValue],
   );
   const timedDayPlans = useMemo(
     () => selectedDayPlans.filter((plan) => !plan.allDay),
@@ -580,8 +598,8 @@ function CalendarPageInner() {
   [stripWeeks]);
 
   const stripWeekSegments = useMemo(
-    () => stripCalendarWeeks.map((week) => buildWeekPlanRows(week, filteredPlans)),
-    [stripCalendarWeeks, filteredPlans]
+    () => stripCalendarWeeks.map((week) => buildWeekPlanRows(week, calendarPlans)),
+    [stripCalendarWeeks, calendarPlans]
   );
 
   if (authLoading) return <LoadingScreen />;
@@ -709,7 +727,7 @@ function CalendarPageInner() {
                           return (
                             <div key={`strip-${wi}-lane-${laneIndex}`} className="grid grid-cols-7 gap-x-1">
                               {lane.length ? lane.map((segment) => {
-                                const segmentPlan = filteredPlans.find((plan) => plan.id === segment.planId);
+                                const segmentPlan = calendarPlans.find((plan) => plan.id === segment.planId);
                                 const targetDate = startOfDay(segmentPlan ? new Date(segmentPlan.startsAt) : selectedDayValue);
                                 return (
                                   <div
@@ -934,7 +952,7 @@ function CalendarPageInner() {
                           >
                             <div
                               className={cx(
-                                "size-[84px] shrink-0 self-start rounded-[8px] bg-cover bg-center bg-no-repeat my-[var(--space-2)] transition-[filter,opacity]",
+                                "relative my-[var(--space-2)] size-[84px] shrink-0 self-start overflow-hidden rounded-[8px] bg-cover bg-center bg-no-repeat transition-[filter,opacity]",
                                 showingFinishedPlans && FINISHED_PLAN_IMAGE_CLASS
                               )}
                               style={{ backgroundImage: `url(${plan.coverImage ?? DEFAULT_PLAN_COVER_IMAGE.mobile})` }}
@@ -989,7 +1007,7 @@ function CalendarPageInner() {
                               <PlanPinButton
                                 pinned={pinnedPlanIds.includes(plan.id)}
                                 onToggle={(e) => { e.stopPropagation(); togglePin(plan.id); }}
-                                className="absolute right-1 top-1 text-app"
+                                className="absolute right-1 top-1 text-white hover:bg-white/10"
                               />
                             </div>
                             <div className="pt-[var(--space-3)]">
@@ -1027,7 +1045,7 @@ function CalendarPageInner() {
           weekSegments={weekSegments}
           allDayPlans={allDayPlans}
           timedDayPlans={timedDayPlans}
-          filteredPlans={filteredPlans}
+          filteredPlans={calendarPlans}
           monthLabel={monthLabel}
           yearValue={yearValue}
           navigateToPlan={navigateToPlan}

@@ -26,6 +26,11 @@ type ProfileData = {
   profile_image: string | null;
 };
 
+const PROFILE_ACTION_ICON_CLASS = "size-[clamp(25px,6.4vw,28px)]";
+const PROFILE_ACTION_ICON_STROKE = 2;
+const PROFILE_TAB_ICON_CLASS = "size-6";
+const PROFILE_TAB_ICON_STROKE = 2;
+
 export default function ProfilePage() {
   const { id: routeId } = useParams<{ id: string }>();
   const searchParams = useSearchParams();
@@ -281,25 +286,25 @@ export default function ProfilePage() {
                     type="button"
                     onClick={() => router.push("/wallet")}
                     aria-label="Cartera"
-                    className="flex items-center justify-center rounded-full p-2 text-app transition-opacity hover:opacity-70"
+                    className="flex size-11 items-center justify-center rounded-full text-app transition-opacity hover:opacity-70 active:opacity-[var(--disabled-opacity)]"
                   >
-                    <WalletIcon className="size-[20px]" />
+                    <WalletIcon className={PROFILE_ACTION_ICON_CLASS} strokeWidth={PROFILE_ACTION_ICON_STROKE} />
                   </button>
                   <button
                     type="button"
                     onClick={() => router.push("/flights")}
                     aria-label="Vuelos de amigos"
-                    className="flex items-center justify-center rounded-full p-2 text-app transition-opacity hover:opacity-70"
+                    className="flex size-11 items-center justify-center rounded-full text-app transition-opacity hover:opacity-70 active:opacity-[var(--disabled-opacity)]"
                   >
-                    <PlaneIcon className="size-[20px]" />
+                    <PlaneIcon className={PROFILE_ACTION_ICON_CLASS} strokeWidth={PROFILE_ACTION_ICON_STROKE} />
                   </button>
                   <button
                     type="button"
                     onClick={() => router.push("/settings")}
                     aria-label="Ajustes"
-                    className="flex items-center justify-center rounded-full p-2 text-app transition-opacity hover:opacity-70"
+                    className="flex size-11 items-center justify-center rounded-full text-app transition-opacity hover:opacity-70 active:opacity-[var(--disabled-opacity)]"
                   >
-                    <SettingsIcon className="size-[20px]" />
+                    <SettingsIcon className={PROFILE_ACTION_ICON_CLASS} strokeWidth={PROFILE_ACTION_ICON_STROKE} />
                   </button>
                 </div>
               </div>
@@ -450,19 +455,19 @@ export default function ProfilePage() {
               tabs={[
                 {
                   value: "planes",
-                  label: <LayoutGrid className="size-[20px]" fill={activeTab === "planes" ? "currentColor" : "none"} aria-hidden />,
+                  label: <LayoutGrid className={PROFILE_TAB_ICON_CLASS} strokeWidth={PROFILE_TAB_ICON_STROKE} fill={activeTab === "planes" ? "currentColor" : "none"} aria-hidden />,
                   ariaLabel: "Planes",
                 },
                 ...(isOwnProfile ? [{
                   value: "guardados",
-                  label: <Bookmark className="size-[20px]" fill={activeTab === "guardados" ? "currentColor" : "none"} aria-hidden />,
+                  label: <Bookmark className={PROFILE_TAB_ICON_CLASS} strokeWidth={PROFILE_TAB_ICON_STROKE} fill={activeTab === "guardados" ? "currentColor" : "none"} aria-hidden />,
                   ariaLabel: "Guardados",
                 }] : []),
               ]}
               value={activeTab}
               onChange={(tab) => handleTabChange(tab as "planes" | "guardados")}
               className="mt-[var(--space-6)] gap-0 pb-0"
-              buttonClassName="flex-1 justify-center py-[var(--space-3)]"
+              buttonClassName="min-h-11 flex-1 justify-center py-[var(--space-3)]"
               indicatorWidth={28}
             />
 
@@ -567,55 +572,66 @@ export default function ProfilePage() {
 
 function PlanGrid({ plans, onPlanClick }: { plans: FeedPlanItemDto[]; onPlanClick?: (id: number) => void }) {
   return (
-    <div className="columns-2 gap-[6px] sm:columns-3">
+    <div className="grid grid-cols-3 gap-[4px] sm:gap-[6px]">
       {plans.map((plan) => (
-        <div key={plan.id} className="mb-[6px] break-inside-avoid">
-          <div
-            className="group relative cursor-pointer overflow-hidden rounded-[6px]"
-            onClick={() => onPlanClick?.(plan.id)}
-          >
-            {plan.coverImage && (
-              <Image
-                src={plan.coverImage}
-                alt={plan.title}
-                width={760}
-                height={570}
-                className="w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                unoptimized
-              />
-            )}
-            {!plan.coverImage && (
-              <div className="aspect-[4/3] w-full bg-gradient-to-br from-[#1a2a4a] to-[#0d1a2e] flex items-center justify-center">
-                <svg viewBox="0 0 24 24" fill="none" className="size-10 text-white/20" aria-hidden>
-                  <path d="M22 16.5H2M5 19.5h14M12 3L4.5 13.5h15L12 3z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </div>
-            )}
-            {new Date(plan.endsAt) < new Date() && (
-              <div className="absolute right-2 top-2 rounded-full bg-black/50 px-2 py-[3px] text-[14px] font-[var(--fw-medium)] leading-tight text-white/90 backdrop-blur-sm">
-                Finalizado
-              </div>
-            )}
-            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-3 pb-3 pt-6">
-              <p className="text-body-sm font-[var(--fw-medium)] leading-tight text-white">
-                {plan.title}
-              </p>
-              {plan.locationName && (
-                <p className="mt-[2px] text-[14px] leading-tight text-white/70">
-                  {plan.locationName}
-                </p>
-              )}
+        <button
+          key={plan.id}
+          type="button"
+          className="group relative aspect-[4/3] w-full cursor-pointer overflow-hidden rounded-[6px] bg-surface text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-color)]"
+          onClick={() => onPlanClick?.(plan.id)}
+          aria-label={plan.title}
+        >
+          {plan.coverImage ? (
+            <Image
+              src={plan.coverImage}
+              alt=""
+              fill
+              sizes="(max-width: 767px) 33vw, 240px"
+              className="object-cover transition-transform duration-300 group-hover:scale-105"
+              unoptimized
+            />
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#1a2a4a] to-[#0d1a2e]">
+              <svg viewBox="0 0 24 24" fill="none" className="size-8 text-white/20 sm:size-10" aria-hidden>
+                <path d="M22 16.5H2M5 19.5h14M12 3L4.5 13.5h15L12 3z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
             </div>
+          )}
+          {new Date(plan.endsAt) < new Date() && (
+            <div className="absolute right-1.5 top-1.5 rounded-full bg-black/50 px-1.5 py-[2px] text-[10px] font-[var(--fw-medium)] leading-tight text-white/90 backdrop-blur-sm sm:right-2 sm:top-2 sm:px-2 sm:py-[3px] sm:text-[12px]">
+              Finalizado
+            </div>
+          )}
+          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-2 pb-2 pt-5 sm:px-3 sm:pb-3 sm:pt-6">
+            <p className="truncate text-[11px] font-[var(--fw-medium)] leading-tight text-white sm:text-body-sm">
+              {plan.title}
+            </p>
+            {plan.locationName && (
+              <p className="mt-[2px] truncate text-[10px] leading-tight text-white/70 sm:text-[13px]">
+                {plan.locationName}
+              </p>
+            )}
           </div>
-        </div>
+        </button>
       ))}
     </div>
   );
 }
 
-const SettingsIcon = ({ className = "size-icon" }: { className?: string }) => <Settings className={className} aria-hidden />;
-const PlaneIcon = ({ className = "size-icon" }: { className?: string }) => <Plane className={className} aria-hidden />;
-const WalletIcon = ({ className = "size-icon" }: { className?: string }) => <Wallet className={className} aria-hidden />;
+type ProfileActionIconProps = {
+  className?: string;
+  strokeWidth?: number;
+};
+
+const SettingsIcon = ({ className = "size-icon", strokeWidth }: ProfileActionIconProps) => (
+  <Settings className={className} strokeWidth={strokeWidth} aria-hidden />
+);
+const PlaneIcon = ({ className = "size-icon", strokeWidth }: ProfileActionIconProps) => (
+  <Plane className={className} strokeWidth={strokeWidth} aria-hidden />
+);
+const WalletIcon = ({ className = "size-icon", strokeWidth }: ProfileActionIconProps) => (
+  <Wallet className={className} strokeWidth={strokeWidth} aria-hidden />
+);
 
 function ProfileSkeleton() {
   return (
@@ -641,9 +657,9 @@ function ProfileSkeleton() {
         </div>
       </div>
 
-      <div className="mt-[var(--space-5)] grid w-full grid-cols-2 gap-[var(--space-3)] sm:grid-cols-3">
-        {[1, 2].map((i) => (
-          <div key={i} className="skeleton-shimmer aspect-[4/5] w-full rounded-card" />
+      <div className="mt-[var(--space-5)] grid w-full grid-cols-3 gap-[4px] sm:gap-[6px]">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="skeleton-shimmer aspect-[4/3] w-full rounded-[6px]" />
         ))}
       </div>
     </div>
