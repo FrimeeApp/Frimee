@@ -57,7 +57,7 @@ export function Tabs({ tabs, value, onChange, className = "", buttonClassName = 
           }}
           onClick={() => onChange(tab.value)}
           aria-label={tab.ariaLabel}
-          className={`flex items-center gap-[var(--space-1)] transition-colors duration-[220ms] ${buttonClassName} ${
+          className={`flex items-center gap-[var(--space-1)] rounded-[6px] transition-colors duration-[220ms] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-color)] ${buttonClassName} ${
             value === tab.value ? "text-app" : "hover:text-app"
           }`}
           style={fontWeight ? { fontWeight } : undefined}

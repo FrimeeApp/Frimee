@@ -15,6 +15,7 @@ import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import NotificationsPanel from "@/components/notifications/NotificationsPanel";
 import UserSearchSurface from "@/components/search/UserSearchSurface";
 import { Map, CreditCard, Send, Plus, Search, Bell } from "lucide-react";
+import { ActiveExpensesIcon, ActiveMessagesIcon, ActivePlansIcon, ActiveSearchIcon } from "@/components/common/active-nav-icons";
 import { CloseButton } from "@/components/ui/IconButton";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
 import { DEFAULT_PLAN_COVER_IMAGE } from "@/config/app";
@@ -25,17 +26,18 @@ type IconProps = {
   active?: boolean;
 };
 
-const activeFillProps = (active?: boolean) => ({
-  fill: active ? "currentColor" : "none",
-  fillOpacity: active ? 0.16 : undefined,
-});
-
-const PlansIcon = ({ className, strokeWidth, active }: IconProps = {}) => <Map className={className} strokeWidth={strokeWidth} {...activeFillProps(active)} aria-hidden />;
-const CardIcon = ({ className, strokeWidth, active }: IconProps = {}) => <CreditCard className={className} strokeWidth={strokeWidth} {...activeFillProps(active)} aria-hidden />;
-const SendIcon = ({ className, strokeWidth, active }: IconProps = {}) => <Send className={className} strokeWidth={strokeWidth} {...activeFillProps(active)} aria-hidden />;
+const PlansIcon = ({ className, strokeWidth, active }: IconProps = {}) =>
+  active ? <ActivePlansIcon className={className} /> : <Map className={className} strokeWidth={strokeWidth} aria-hidden />;
+const CardIcon = ({ className, strokeWidth, active }: IconProps = {}) =>
+  active ? <ActiveExpensesIcon className={className} /> : <CreditCard className={className} strokeWidth={strokeWidth} aria-hidden />;
+const SendIcon = ({ className, strokeWidth, active }: IconProps = {}) =>
+  active ? <ActiveMessagesIcon className={className} /> : <Send className={className} strokeWidth={strokeWidth} aria-hidden />;
 const PlusIcon = ({ className, strokeWidth }: IconProps = {}) => <Plus className={className} strokeWidth={strokeWidth} aria-hidden />;
-const SearchIcon = ({ className, strokeWidth, active }: IconProps = {}) => <Search className={className} strokeWidth={strokeWidth} {...activeFillProps(active)} aria-hidden />;
-const BellIcon = ({ className, strokeWidth, active }: IconProps = {}) => <Bell className={className} strokeWidth={strokeWidth} {...activeFillProps(active)} aria-hidden />;
+const SearchIcon = ({ className, strokeWidth, active }: IconProps = {}) =>
+  active ? <ActiveSearchIcon className={className} /> : <Search className={className} strokeWidth={strokeWidth} aria-hidden />;
+const BellIcon = ({ className, strokeWidth, active }: IconProps = {}) => (
+  <Bell className={className} strokeWidth={strokeWidth} fill={active ? "currentColor" : "none"} aria-hidden />
+);
 
 const items = [
   { key: "calendar", label: "Mis planes", icon: PlansIcon, href: "/calendar" },
@@ -426,11 +428,11 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
             className="flex size-[clamp(34px,8vw,38px)] items-center justify-center text-app transition-opacity duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] active:opacity-[var(--disabled-opacity)]"
           >
             {loggedUserProfileImage ? (
-              <span className="block size-[clamp(31px,7.4vw,34px)] overflow-hidden rounded-full border border-strong">
+              <span className={`block size-[clamp(31px,7.4vw,34px)] overflow-hidden rounded-full ${profileActive ? "border-2 border-current" : "border border-strong"}`}>
                 <Image src={loggedUserProfileImage} alt="Foto de perfil" width={34} height={34} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
               </span>
             ) : (
-              <span className="flex size-[clamp(31px,7.4vw,34px)] items-center justify-center rounded-full border border-strong bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">
+              <span className={`flex size-[clamp(31px,7.4vw,34px)] items-center justify-center rounded-full bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app ${profileActive ? "border-2 border-current" : "border border-strong"}`}>
                 {loggedUserInitial}
               </span>
             )}
@@ -721,11 +723,11 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
           >
             <div className="flex w-[102px] shrink-0 items-center justify-center">
               {loggedUserProfileImage ? (
-                <span className="block size-[28px] overflow-hidden rounded-full border border-strong">
+                <span className={`block size-[28px] overflow-hidden rounded-full ${profileActive ? "border-2 border-current" : "border border-strong"}`}>
                   <Image src={loggedUserProfileImage} alt="Foto de perfil" width={28} height={28} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
                 </span>
               ) : (
-                <span className="flex size-[28px] items-center justify-center rounded-full border border-strong bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">
+                <span className={`flex size-[28px] items-center justify-center rounded-full bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app ${profileActive ? "border-2 border-current" : "border border-strong"}`}>
                   {loggedUserInitial}
                 </span>
               )}
