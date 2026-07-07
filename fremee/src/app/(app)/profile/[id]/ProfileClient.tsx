@@ -104,9 +104,15 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (!id || authLoading) return;
+    let cancelled = false;
 
     const load = async () => {
       setLoading(true);
+      setProfileData(null);
+      setPlans([]);
+      setFollowerCount(0);
+      setFriendshipStatus("none");
+      setInitialFollowing(false);
       try {
         let profileResult: ProfileData | null;
 
@@ -120,36 +126,55 @@ export default function ProfilePage() {
           profileResult = await getPublicUserProfile(id);
         }
 
+        if (cancelled) return;
         setProfileData(profileResult);
         if (isOwnProfile && profileResult) setEditName(profileResult.nombre);
+        if (!profileResult) return;
 
         if (!isOwnProfile) {
-          const [friendStatuses, followStatuses] = await Promise.all([
+          const [friendStatusesResult, followStatusesResult] = await Promise.allSettled([
             getFriendshipStatuses([id]),
             getFollowStatuses([id]),
           ]);
-          const status = friendStatuses[id] ?? "none";
-          setFriendshipStatus(status);
-          if (followStatuses[id]) setInitialFollowing(true);
+          if (cancelled) return;
+          if (friendStatusesResult.status === "fulfilled") {
+            setFriendshipStatus(friendStatusesResult.value[id] ?? "none");
+          }
+          if (followStatusesResult.status === "fulfilled") {
+            setInitialFollowing(Boolean(followStatusesResult.value[id]));
+          }
         }
 
-        const [userPlans, count] = await Promise.all([
+        const [userPlansResult, followerCountResult] = await Promise.allSettled([
           listUserRelatedPlans({ userId: id, limit: 50 }),
           getFollowerCount(id),
         ]);
-        const publicPlans = userPlans.filter(
-          (p) => p.visibility === "PÚBLICO" || isOwnProfile
-        );
-        setPlans(publicPlans);
-        setFollowerCount(count);
+        if (cancelled) return;
+        if (userPlansResult.status === "fulfilled") {
+          const publicPlans = userPlansResult.value.filter(
+            (p) => p.visibility === "PÚBLICO" || isOwnProfile
+          );
+          setPlans(publicPlans);
+        }
+        if (followerCountResult.status === "fulfilled") {
+          setFollowerCount(followerCountResult.value);
+        }
       } catch (err) {
         console.error("[profile] Error loading profile:", err);
+        if (!cancelled) {
+          setProfileData(null);
+          setPlans([]);
+          setFollowerCount(0);
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
-    load();
+    void load();
+    return () => {
+      cancelled = true;
+    };
   }, [id, authLoading, isOwnProfile, myProfile]);
 
   const handleTabChange = async (tab: "planes" | "guardados") => {

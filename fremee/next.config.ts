@@ -9,6 +9,10 @@ const isCapacitorBuild = process.env.BUILD_TARGET === "capacitor";
 
 const isDockerBuild = process.env.BUILD_TARGET === "docker";
 
+const allowedDevOrigins = [process.env.CAP_ALLOWED_DEV_ORIGIN].filter(
+  (origin): origin is string => Boolean(origin)
+);
+
 const nextConfig: NextConfig = {
   ...(isCapacitorBuild && {
     output: "export",
@@ -22,6 +26,9 @@ const nextConfig: NextConfig = {
   },
   reactStrictMode: false,
   reactCompiler: true,
+  ...(allowedDevOrigins.length > 0 && {
+    allowedDevOrigins,
+  }),
   images: {
     remotePatterns: [
       {
@@ -48,8 +55,12 @@ export default withSentryConfig(nextConfig, {
   sourcemaps: {
     deleteSourcemapsAfterUpload: true,
   },
-  disableLogger: true,
-  // Don't instrument static Capacitor builds
-  autoInstrumentServerFunctions: !isCapacitorBuild,
-  autoInstrumentMiddleware: !isCapacitorBuild,
+  webpack: {
+    treeshake: {
+      removeDebugLogging: true,
+    },
+    // Don't instrument static Capacitor builds.
+    autoInstrumentServerFunctions: !isCapacitorBuild,
+    autoInstrumentMiddleware: !isCapacitorBuild,
+  },
 });
