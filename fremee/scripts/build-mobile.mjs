@@ -11,7 +11,7 @@
  * Vercel rewrites these; Capacitor's file server doesn't — so we create copies.
  */
 import { execSync } from "child_process";
-import { readFileSync, writeFileSync, rmSync, existsSync, readdirSync, cpSync, statSync } from "fs";
+import { readFileSync, writeFileSync, rmSync, existsSync, readdirSync, cpSync, statSync, mkdirSync, renameSync } from "fs";
 import { resolve, dirname, join } from "path";
 import { fileURLToPath } from "url";
 
@@ -31,14 +31,40 @@ export async function GET() {
 ];
 
 const originals = {};
+const disabledRouteMoves = [
+  {
+    from: "src/app/(app)/@modal/(.)notifications",
+    to: ".mobile-build-disabled/@modal/(.)notifications",
+  },
+  {
+    from: "src/app/(app)/@modal/(.)plans",
+    to: ".mobile-build-disabled/@modal/(.)plans",
+  },
+];
+const movedRoutes = [];
 
 function restore() {
   for (const [file, content] of Object.entries(originals)) {
     writeFileSync(resolve(root, file), content, "utf8");
   }
+  for (const { from, to } of movedRoutes.toReversed()) {
+    const fromAbs = resolve(root, from);
+    const toAbs = resolve(root, to);
+    if (!existsSync(fromAbs) && existsSync(toAbs)) {
+      mkdirSync(dirname(fromAbs), { recursive: true });
+      renameSync(toAbs, fromAbs);
+    }
+  }
   if (Object.keys(originals).length > 0) {
     console.log("✓ Restored patched files");
   }
+  if (movedRoutes.length > 0) {
+    console.log("✓ Restored disabled mobile routes");
+  }
+  for (const file of Object.keys(originals)) {
+    delete originals[file];
+  }
+  movedRoutes.length = 0;
 }
 
 process.on("exit", restore);
@@ -61,8 +87,21 @@ for (const { file, content } of PATCHES) {
   console.log(`→ Patched ${file}`);
 }
 
+for (const route of disabledRouteMoves) {
+  const fromAbs = resolve(root, route.from);
+  const toAbs = resolve(root, route.to);
+  if (!existsSync(fromAbs)) continue;
+  if (existsSync(toAbs)) {
+    throw new Error(`Cannot disable mobile route; temporary path already exists: ${route.to}`);
+  }
+  mkdirSync(dirname(toAbs), { recursive: true });
+  renameSync(fromAbs, toAbs);
+  movedRoutes.push(route);
+  console.log(`→ Disabled static-export incompatible route ${route.from}`);
+}
+
 try {
-  execSync("cross-env BUILD_TARGET=capacitor next build", { stdio: "inherit", cwd: root });
+  execSync("cross-env BUILD_TARGET=capacitor next build --webpack", { stdio: "inherit", cwd: root });
 } finally {
   restore();
 }
@@ -129,3 +168,5 @@ function fixRscBang(dir) {
 
 const fixed = fixRscBang(outDir);
 console.log(`✓ Copied ${fixed} RSC file(s) with "!" → "-" for Capacitor`);
+
+execSync("npx cap sync", { stdio: "inherit", cwd: root });

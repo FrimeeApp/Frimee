@@ -16,6 +16,7 @@ import {
   rejectPlanInvite,
   type NotificacionDto,
 } from "@/services/api/repositories/notifications.repository";
+import { createRealtimeTopic } from "@/lib/realtime";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -322,7 +323,7 @@ export function NotificationsFeed({
     if (!user?.id) return;
     const supabase = createBrowserSupabaseClient();
     const channel = supabase
-      .channel(`notif-panel-${user.id}`)
+      .channel(createRealtimeTopic("notif-panel", user.id))
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "notificaciones", filter: `user_id=eq.${user.id}` },

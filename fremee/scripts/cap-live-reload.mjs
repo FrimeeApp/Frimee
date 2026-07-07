@@ -18,7 +18,7 @@ function getLocalIp() {
 
 const platform = process.argv[2] ?? "ios";
 const port = process.env.PORT ?? "3000";
-const ip = process.env.CAP_LOCAL_IP ?? getLocalIp();
+const ip = process.env.CAP_LOCAL_IP ?? (platform === "ios" ? "localhost" : getLocalIp());
 
 if (!ip) {
   console.error("No local IPv4 address found. Set CAP_LOCAL_IP manually and retry.");

@@ -28,6 +28,7 @@ import { uploadPlanAlbumFile, uploadPlanCoverFile } from "@/services/firebase/up
 import { addPlanFoto } from "@/services/api/repositories/plan-fotos.repository";
 import { formatMoney, formatExpenseDateTime, getInitial, formatDateRange, fmtTime, fmtDayHeader } from "@/lib/formatters";
 import { formatCompactRouteDistance, formatCompactRouteDuration } from "@/lib/route-formatters";
+import { createRealtimeTopic } from "@/lib/realtime";
 import { FIELD_LINE_CLS } from "@/lib/styles";
 import { buildGoogleMapsDirectionsUrl, buildWazeDirectionsUrl } from "@/config/external";
 import { FEED_ENABLED } from "@/config/app";
@@ -818,7 +819,7 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
 
     const supabase = createBrowserSupabaseClient();
     const channel = supabase
-      .channel(`subplan-changes-${planId}`)
+      .channel(createRealtimeTopic("subplan-changes", planId))
       .on("postgres_changes", { event: "*", schema: "public", table: "subplan", filter: `plan_id=eq.${planId}` }, () => {
         fetchSubplanes(planId).then(applyLoadedSubplanes).catch(console.error);
       })
@@ -844,7 +845,7 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
     const planId = Number(id);
     const supabase = createBrowserSupabaseClient();
     const channel = supabase
-      .channel(`chat-members-${planChat.chat_id}`)
+      .channel(createRealtimeTopic("chat-members", planChat.chat_id))
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_miembro", filter: `chat_id=eq.${planChat.chat_id}` }, () => {
         void fetchPlanChatItem(planId).then((chat) => {
           setPlanChat(chat);

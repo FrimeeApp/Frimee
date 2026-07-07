@@ -9,7 +9,7 @@ import {
   TICKET_COLOR_VARIANTS,
   TICKET_TYPE_LABELS,
 } from "@/services/api/endpoints/wallet.endpoint";
-import { TicketTypeIcon } from "@/app/(app)/wallet/page";
+import { TicketTypeIcon } from "@/components/wallet/TicketTypeIcon";
 import type { TicketOcrResult } from "@/app/api/tickets/ocr/route";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { buildInternalApiUrl } from "@/config/external";

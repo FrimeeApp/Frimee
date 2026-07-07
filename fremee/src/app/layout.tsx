@@ -6,8 +6,22 @@ import NativeDeepLinks from "@/components/common/NativeDeepLinks";
 import NativeSystemUi from "@/components/common/NativeSystemUi";
 import { ToastProvider } from "@/components/ui/Toaster";
 import OfflineBanner from "@/components/common/OfflineBanner";
-import { APP_DESCRIPTION, APP_NAME } from "@/config/app";
+import { APP_DESCRIPTION, APP_NAME, DEFAULT_WEB_APP_URL } from "@/config/app";
 import { STORAGE_KEYS } from "@/config/storage";
+
+function resolveMetadataBase() {
+  const rawUrl =
+    process.env.NEXT_PUBLIC_WEB_APP_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : DEFAULT_WEB_APP_URL);
+
+  try {
+    return new URL(rawUrl.replace(/\/+$/, ""));
+  } catch {
+    return new URL(DEFAULT_WEB_APP_URL);
+  }
+}
 
 const inter = Inter({
   subsets: ["latin"],
@@ -24,16 +38,31 @@ const instrumentSerif = Instrument_Serif({
 });
 
 export const metadata: Metadata = {
+  metadataBase: resolveMetadataBase(),
   title: { default: APP_NAME, template: `%s · ${APP_NAME}` },
   description: APP_DESCRIPTION,
+  applicationName: APP_NAME,
+  alternates: {
+    canonical: "/",
+  },
   icons: {
     icon: [{ url: "/favicoon-frimee-black.svg", type: "image/svg+xml" }],
     apple: [{ url: "/logo-frimee.png", sizes: "180x180", type: "image/png" }],
     shortcut: ["/favicoon-frimee-black.svg"],
   },
   openGraph: {
+    title: APP_NAME,
+    description: APP_DESCRIPTION,
     siteName: APP_NAME,
+    type: "website",
+    locale: "es_ES",
     images: [{ url: "/logo-frimee.png", width: 512, height: 512 }],
+  },
+  twitter: {
+    card: "summary",
+    title: APP_NAME,
+    description: APP_DESCRIPTION,
+    images: ["/logo-frimee.png"],
   },
 };
 

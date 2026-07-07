@@ -120,7 +120,7 @@ export function AnimatedTestimonials({
                 {/* Quote */}
                 <div className="v3-testimonial-body">
                   <Quote size={32} className="v3-testimonial-quote-icon" />
-                  <p>"{t.content}"</p>
+                  <p>&ldquo;{t.content}&rdquo;</p>
                 </div>
 
                 <Separator />
