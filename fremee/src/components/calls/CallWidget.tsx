@@ -8,11 +8,12 @@ type Props = {
   participanteFoto?: string;
   duration: number;
   isActive: boolean;
+  statusLabel?: string;
   onExpand: () => void;
   onEnd: () => void;
 };
 
-export default function CallWidget({ participanteNombre, participanteFoto, duration, isActive, onExpand, onEnd }: Props) {
+export default function CallWidget({ participanteNombre, participanteFoto, duration, isActive, statusLabel, onExpand, onEnd }: Props) {
   const isNative = Capacitor.isNativePlatform();
   const formatDuration = (s: number) => {
     const m = Math.floor(s / 60).toString().padStart(2, "0");
@@ -43,7 +44,7 @@ export default function CallWidget({ participanteNombre, participanteFoto, durat
       >
         <span className="text-[14px] font-semibold text-white truncate max-w-[120px]">{participanteNombre}</span>
         <span className="text-[14px] text-white/50 mt-[2px]">
-          {isActive ? formatDuration(duration) : "Llamando..."}
+          {statusLabel ?? (isActive ? formatDuration(duration) : "Llamando...")}
         </span>
       </button>
 

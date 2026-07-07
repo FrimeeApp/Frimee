@@ -1,7 +1,7 @@
 "use client";
 
 import NextImage from "next/image";
-import { useEffect, useRef, useState, useCallback, Fragment } from "react";
+import { useEffect, useRef, useState, useCallback, Fragment, type ButtonHTMLAttributes } from "react";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import {
   listChats,
@@ -28,6 +28,7 @@ import {
 import { fetchActiveFriends, type PublicUserProfileRow } from "@/services/api/endpoints/users.endpoint";
 import { closePollEndpoint } from "@/services/api/endpoints/chat.endpoint";
 import { uploadPlanCoverFile, uploadAudioBlob, uploadAudioFile, uploadDocumentFile, uploadMediaFile } from "@/services/firebase/upload";
+import { createRealtimeTopic } from "@/lib/realtime";
 import AudioPlayer from "@/components/common/AudioPlayer";
 import { CameraModal } from "@/components/chat/CameraModal";
 import { PollCreatorModal } from "@/components/chat/PollCreatorModal";
@@ -47,6 +48,50 @@ import {
   File, Video, Music, BarChart2, Edit, ChevronLeft, Users,
   Phone, Check, Download, Plus, X,
 } from "lucide-react";
+
+const CHAT_ICON_BUTTON_BASE =
+  "inline-flex shrink-0 items-center justify-center rounded-full transition-[background-color,color,opacity,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-color)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg)] disabled:pointer-events-none disabled:opacity-40 active:scale-95";
+const CHAT_ICON_BUTTON_TONE = {
+  muted: "text-muted hover:bg-surface hover:text-app",
+  primary: "text-[var(--primary)] hover:bg-[var(--primary)]/10",
+  danger: "text-red-500 hover:bg-red-500/10",
+} as const;
+const CHAT_ICON_BUTTON_SIZE = {
+  sm: "size-9",
+  md: "size-10",
+} as const;
+
+type ChatIconButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "type"> & {
+  label: string;
+  size?: keyof typeof CHAT_ICON_BUTTON_SIZE;
+  tone?: keyof typeof CHAT_ICON_BUTTON_TONE;
+};
+
+function ChatIconButton({
+  label,
+  size = "md",
+  tone = "muted",
+  className,
+  children,
+  ...props
+}: ChatIconButtonProps) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      className={[
+        CHAT_ICON_BUTTON_BASE,
+        CHAT_ICON_BUTTON_SIZE[size],
+        CHAT_ICON_BUTTON_TONE[tone],
+        className,
+      ].filter(Boolean).join(" ")}
+      {...props}
+    >
+      {children}
+    </button>
+  );
+}
 
 function isSameDay(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
@@ -186,7 +231,7 @@ export function ChatConversation({
         }
       });
     // Realtime updates
-    const ch = sb.channel(`llamadas-grupo-${chat.chat_id}`)
+    const ch = sb.channel(createRealtimeTopic("llamadas-grupo", chat.chat_id))
       .on("postgres_changes", { event: "*", schema: "public", table: "llamadas", filter: `chat_id=eq.${chat.chat_id}` }, (payload) => {
         const row = payload.new as { id: number; room_name: string; tipo: "audio" | "video"; estado: string } | undefined;
         if (row?.estado === "ringing" || row?.estado === "active") {
@@ -1712,33 +1757,23 @@ export function ChatConversation({
               {chat.tipo === "GRUPO" && <p className="text-[14px] text-muted">{chat.miembros.length} miembros</p>}
             </div>
           </button>
-          <button type="button" onClick={() => onStartCall?.("audio")} className="flex size-[32px] shrink-0 items-center justify-center rounded-full text-muted transition-colors hover:bg-surface hover:text-app" aria-label="Llamada de voz">
-            <PhoneCallIcon className="size-[18px]" />
-          </button>
-          <button type="button" onClick={() => onStartCall?.("video")} className="flex size-[32px] shrink-0 items-center justify-center rounded-full text-muted transition-colors hover:bg-surface hover:text-app" aria-label="Llamada de vídeo">
-            <VideoCallIcon className="size-[18px]" />
-          </button>
+          <ChatIconButton label="Iniciar llamada de voz" onClick={() => onStartCall?.("audio")}>
+            <PhoneCallIcon className="size-[22px]" />
+          </ChatIconButton>
+          <ChatIconButton label="Iniciar videollamada" onClick={() => onStartCall?.("video")}>
+            <VideoCallIcon className="size-[23px]" />
+          </ChatIconButton>
         </div>
       )}
 
       {embedded && onStartCall && (
         <div className="flex items-center justify-end gap-1 px-[var(--space-3)] pt-2 md:hidden">
-          <button
-            type="button"
-            onClick={() => onStartCall("audio")}
-            className="flex size-[30px] items-center justify-center rounded-full text-muted transition-colors hover:bg-surface hover:text-app"
-            aria-label="Llamada de voz"
-          >
-            <PhoneCallIcon className="size-[16px]" />
-          </button>
-          <button
-            type="button"
-            onClick={() => onStartCall("video")}
-            className="flex size-[30px] items-center justify-center rounded-full text-muted transition-colors hover:bg-surface hover:text-app"
-            aria-label="Videollamada"
-          >
-            <VideoCallIcon className="size-[16px]" />
-          </button>
+          <ChatIconButton label="Iniciar llamada de voz" size="sm" onClick={() => onStartCall("audio")}>
+            <PhoneCallIcon className="size-[20px]" />
+          </ChatIconButton>
+          <ChatIconButton label="Iniciar videollamada" size="sm" onClick={() => onStartCall("video")}>
+            <VideoCallIcon className="size-[21px]" />
+          </ChatIconButton>
         </div>
       )}
 
@@ -2002,34 +2037,25 @@ export function ChatConversation({
                   {String(Math.floor(recordingSeconds / 60)).padStart(2, "0")}:{String(recordingSeconds % 60).padStart(2, "0")}
                 </span>
                 <span className="flex-1 px-1 text-body-sm text-muted">Grabando...</span>
-                <button
-                  type="button"
-                  onClick={handleCancelRecording}
-                  className="shrink-0 p-2 text-muted transition-colors hover:text-app"
-                  aria-label="Cancelar grabación"
-                >
+                <ChatIconButton label="Cancelar grabación" size="sm" tone="danger" onClick={handleCancelRecording}>
                   <X className="size-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSendRecording}
-                  className="shrink-0 p-2 text-[var(--primary)] transition-opacity hover:opacity-70"
-                  aria-label="Enviar nota de voz"
-                >
-                  <LucideSend className="size-4" />
-                </button>
+                </ChatIconButton>
+                <ChatIconButton label="Enviar nota de voz" size="sm" tone="primary" onClick={handleSendRecording}>
+                  <SendMsgIcon className="size-4" />
+                </ChatIconButton>
               </>
             ) : (
               <>
                 <div className="relative shrink-0" ref={emojiContainerRef}>
-                  <button
-                    type="button"
+                  <ChatIconButton
+                    label="Abrir selector de emojis"
+                    size="sm"
                     onClick={() => setShowEmojiPicker((v) => !v)}
-                    className="p-2 text-muted transition-colors hover:text-app"
-                    aria-label="Emoji"
+                    aria-expanded={showEmojiPicker}
+                    aria-haspopup="dialog"
                   >
-                    <Smile className="size-5" />
-                  </button>
+                    <EmojiIcon className="size-5" />
+                  </ChatIconButton>
                   {showEmojiPicker && (
                     <div className="absolute bottom-[calc(100%+8px)] left-0 z-50 max-w-[calc(100vw-32px)]">
                       <EmojiMartPicker
@@ -2054,29 +2080,30 @@ export function ChatConversation({
                   onChange={(e) => setText(e.target.value)}
                   onKeyDown={onKeyDown}
                   placeholder={editingMsg ? "Editar mensaje..." : "Escribe un mensaje..."}
+                  aria-label={editingMsg ? "Editar mensaje" : "Escribir mensaje"}
                   className="min-w-0 flex-1 bg-transparent py-[10px] text-body-sm text-app outline-none placeholder:text-muted"
                 />
                 {!text.trim() && (
                   <>
-                    <button
-                      type="button"
-                      onClick={() => void handleStartRecording()}
-                      className="shrink-0 p-2 text-muted transition-colors hover:text-app"
-                      aria-label="Nota de voz"
-                    >
-                      <Mic className="size-5" />
-                    </button>
+                    <ChatIconButton label="Grabar nota de voz" size="sm" onClick={() => void handleStartRecording()}>
+                      <MicIcon className="size-5" />
+                    </ChatIconButton>
                     <div className="relative shrink-0">
-                      <button
-                        type="button"
+                      <ChatIconButton
+                        label="Abrir opciones de adjuntar"
+                        size="sm"
                         onClick={() => setShowAttachMenu((v) => !v)}
-                        className="p-2 text-muted transition-colors hover:text-app"
-                        aria-label="Adjuntar"
+                        aria-expanded={showAttachMenu}
+                        aria-haspopup="menu"
                       >
-                        <Plus className="size-5" />
-                      </button>
+                        <AttachPlusIcon className="size-5" />
+                      </ChatIconButton>
                       {showAttachMenu && (
-                        <div className="absolute bottom-[44px] right-0 z-50 min-w-[180px] overflow-hidden rounded-[14px] border border-app bg-app shadow-[0_8px_32px_rgba(0,0,0,0.25)]">
+                        <div
+                          className="absolute bottom-[44px] right-0 z-50 min-w-[180px] overflow-hidden rounded-[14px] border border-app bg-app shadow-[0_8px_32px_rgba(0,0,0,0.25)]"
+                          role="menu"
+                          aria-label="Opciones de adjuntar"
+                        >
                           {[
                             { icon: <DocIcon className="size-[18px]" />, label: "Documento", color: "text-purple-400", onClick: () => { setShowAttachMenu(false); docInputRef.current?.click(); } },
                             { icon: <PhotoVideoIcon className="size-[18px]" />, label: "Fotos y videos", color: "text-blue-400", onClick: () => { setShowAttachMenu(false); const i = mediaInputRef.current; if (!i) return; i.removeAttribute("capture"); i.click(); } },
@@ -2087,8 +2114,10 @@ export function ChatConversation({
                             <button
                               key={label}
                               type="button"
+                              role="menuitem"
+                              aria-label={label}
                               onClick={onClick}
-                              className="flex w-full items-center gap-[var(--space-3)] px-4 py-[11px] text-left transition-colors hover:bg-surface"
+                              className="flex w-full items-center gap-[var(--space-3)] px-4 py-[11px] text-left transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--focus-ring-color)]"
                             >
                               <span className={color}>{icon}</span>
                               <span className="text-body-sm text-app">{label}</span>
@@ -2100,15 +2129,15 @@ export function ChatConversation({
                   </>
                 )}
                 {text.trim() && (
-                  <button
-                    type="button"
+                  <ChatIconButton
+                    label="Enviar mensaje"
+                    size="sm"
+                    tone="primary"
                     onClick={() => void onSend()}
                     disabled={sending}
-                    className="shrink-0 p-2 text-[var(--primary)] transition-opacity hover:opacity-70 disabled:opacity-30"
-                    aria-label="Enviar"
                   >
-                    <LucideSend className="size-5" />
-                  </button>
+                    <SendMsgIcon className="size-5" />
+                  </ChatIconButton>
                 )}
               </>
             )}
@@ -2874,4 +2903,3 @@ export function PhoneCallIcon({ className = "size-icon" }: { className?: string 
 export function VideoCallIcon({ className = "size-icon" }: { className?: string }) {
   return <Video className={className} aria-hidden />;
 }
-

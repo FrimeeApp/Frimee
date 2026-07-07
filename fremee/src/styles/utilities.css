@@ -243,6 +243,10 @@
       top: calc(env(safe-area-inset-top) + clamp(0px, 1vw, 4px));
     }
 
+    .mobile-title-action-top > svg {
+      transform: translateY(-8px);
+    }
+
     html[data-platform="web"] .mobile-title-action-top {
       top: calc(env(safe-area-inset-top) + var(--space-4) + clamp(0px, 1vw, 4px));
     }

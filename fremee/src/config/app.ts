@@ -15,6 +15,7 @@ export const APP_AUTH_CALLBACK_PATH = "/auth/callback";
 export const APP_AUTH_CALLBACK_URI = `${APP_DEEP_LINK_SCHEME}://${APP_AUTH_CALLBACK_PATH.replace(/^\//, "")}`;
 
 export const DEFAULT_LIVEKIT_URL = "wss://frimee-zxm2er85.livekit.cloud";
+export const DEFAULT_WEB_APP_URL = "https://frimee.app";
 export const DEFAULT_SUPABASE_PROFILE_IMAGES_BUCKET = "profile-images";
 
 export const DEFAULT_PLAN_COVER_IMAGE = {

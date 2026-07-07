@@ -371,7 +371,7 @@ export default function AddGastoSheet({ planId, userId, planName, onClose, onCre
       >
         <div
           data-closing={isClosing ? "true" : "false"}
-          className="app-modal-panel relative flex h-full w-full flex-col overflow-hidden bg-app md:h-auto md:max-h-[92dvh] md:max-w-[620px] md:rounded-[22px] md:border md:border-app md:shadow-elev-4"
+          className="app-modal-panel relative flex h-dvh w-full flex-col overflow-hidden bg-app pt-[env(safe-area-inset-top)] md:h-auto md:max-h-[92dvh] md:max-w-[620px] md:rounded-[22px] md:border md:border-app md:pt-0 md:shadow-elev-4"
           onClick={(e) => e.stopPropagation()}
         >
           {feedbackState && (
@@ -387,7 +387,7 @@ export default function AddGastoSheet({ planId, userId, planName, onClose, onCre
           </div>
 
           {/* Top nav */}
-          <div className="flex shrink-0 items-center justify-between px-[var(--space-5)] py-[var(--space-3)]">
+          <div className="flex shrink-0 items-center justify-between pb-[var(--space-3)] pl-[max(var(--space-5),env(safe-area-inset-left))] pr-[max(var(--space-5),env(safe-area-inset-right))] pt-[var(--space-3)] md:px-[var(--space-5)]">
             {step > 1 ? (
               <IconButton onClick={() => setStep(s => s - 1)} tone="app" aria-label="Volver">
                 <svg viewBox="0 0 24 24" fill="none" className="size-[18px]"><path d="M15 19l-7-7 7-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
@@ -424,7 +424,7 @@ export default function AddGastoSheet({ planId, userId, planName, onClose, onCre
           </div>
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto scrollbar-thin px-[var(--space-6)] pb-[var(--space-8)] pt-[var(--space-2)]">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain scrollbar-thin pb-[var(--space-8)] pl-[max(var(--space-6),env(safe-area-inset-left))] pr-[max(var(--space-6),env(safe-area-inset-right))] pt-[var(--space-2)] md:px-[var(--space-6)]">
             {/* Step header */}
             <div className="mb-[var(--space-8)] flex items-start justify-between gap-[var(--space-4)]">
               <div className="min-w-0">
@@ -846,7 +846,7 @@ export default function AddGastoSheet({ planId, userId, planName, onClose, onCre
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-end border-t border-app px-[var(--page-margin-x)] py-[var(--space-4)]">
+          <div className="flex shrink-0 items-center justify-end border-t border-app pb-[calc(var(--space-4)+env(safe-area-inset-bottom))] pl-[max(var(--page-margin-x),env(safe-area-inset-left))] pr-[max(var(--page-margin-x),env(safe-area-inset-right))] pt-[var(--space-4)] md:px-[var(--page-margin-x)] md:pb-[var(--space-4)]">
             <button
               type="button"
               onClick={handleNext}
