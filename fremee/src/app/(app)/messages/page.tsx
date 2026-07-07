@@ -164,6 +164,7 @@ export default function MessagesPage() {
     : chats;
 
   const isInChat = !!(selectedChat && user);
+  const hideMobileChrome = isInChat || showFriendPicker;
 
   /* ── Shared chat list panel content (used in both mobile & desktop) ── */
   const chatListContent = showFriendPicker ? (
@@ -448,7 +449,7 @@ export default function MessagesPage() {
   return (
     <div className="h-dvh bg-app text-app">
       <div className="relative h-full">
-        <AppSidebar hideMobileNav={isInChat} onCreateConversation={() => void openFriendPicker()} />
+        <AppSidebar hideMobileNav={hideMobileChrome} onCreateConversation={() => void openFriendPicker()} />
 
         {/* Sliding two-panel layout */}
         <div className="h-full overflow-hidden md:ml-[102px]">
@@ -459,7 +460,7 @@ export default function MessagesPage() {
             }`}
           >
             {/* Left panel – chat list */}
-            <div className="h-full w-1/2 shrink-0 overflow-hidden pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] md:w-[340px] md:border-r md:border-app md:pb-0 lg:w-[380px]">
+            <div className={`h-full w-1/2 shrink-0 overflow-hidden md:w-[340px] md:border-r md:border-app md:pb-0 lg:w-[380px] ${showFriendPicker ? "pb-0" : "pb-[calc(var(--space-20)+env(safe-area-inset-bottom))]"}`}>
               {chatListContent}
             </div>
 

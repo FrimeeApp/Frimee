@@ -1,4 +1,4 @@
-import { DEFAULT_LIVEKIT_URL, DEFAULT_SUPABASE_PROFILE_IMAGES_BUCKET } from "@/config/app";
+import { DEFAULT_LIVEKIT_URL, DEFAULT_SUPABASE_PROFILE_IMAGES_BUCKET, DEFAULT_WEB_APP_URL } from "@/config/app";
 import { Capacitor } from "@capacitor/core";
 
 export const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar";
@@ -27,7 +27,13 @@ export function getLivekitUrl() {
 }
 
 export function getWebAppUrl() {
-  return process.env.NEXT_PUBLIC_WEB_APP_URL?.replace(/\/+$/, "") ?? null;
+  const rawUrl =
+    process.env.NEXT_PUBLIC_WEB_APP_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : DEFAULT_WEB_APP_URL);
+
+  return rawUrl.replace(/\/+$/, "");
 }
 
 export function buildInternalApiUrl(path: string) {
@@ -35,12 +41,7 @@ export function buildInternalApiUrl(path: string) {
     return path;
   }
 
-  const webAppUrl = getWebAppUrl();
-  if (!webAppUrl) {
-    throw new Error("Falta NEXT_PUBLIC_WEB_APP_URL para llamadas API desde la app nativa.");
-  }
-
-  return `${webAppUrl}${path.startsWith("/") ? path : `/${path}`}`;
+  return `${getWebAppUrl()}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
 export function getProfileImagesBucket() {

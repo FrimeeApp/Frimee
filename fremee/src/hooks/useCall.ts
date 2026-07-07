@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { useAuth } from "@/providers/AuthProvider";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { buildInternalApiUrl } from "@/config/external";
+import { createRealtimeTopic } from "@/lib/realtime";
 
 const supabase = createBrowserSupabaseClient();
 
@@ -50,7 +51,7 @@ export function useCall() {
     if (!userId) return;
 
     const channel = supabase
-      .channel(`incoming-calls-${userId}`)
+      .channel(createRealtimeTopic("incoming-calls", userId))
       .on(
         "postgres_changes",
         {
@@ -101,7 +102,9 @@ export function useCall() {
   }, [userId]);
 
   const startCall = useCallback(async (chatId: string, tipo: "audio" | "video" = "audio", participanteNombre = "Usuario", participanteFoto?: string, miembros: CallMiembro[] = []) => {
-    if (!userId) return;
+    if (!userId) {
+      throw new Error("Debes iniciar sesion para llamar");
+    }
 
     const roomName = `call_${chatId}_${Date.now()}`;
 
@@ -110,7 +113,10 @@ export function useCall() {
       .insert({ chat_id: chatId, room_name: roomName, iniciado_por_user_id: userId, tipo, estado: "ringing" })
       .select()
       .single();
-    if (error || !llamada) { console.error("[call] create error", error?.message, error?.code, error?.details, error?.hint); return; }
+    if (error || !llamada) {
+      console.error("[call] create error", error?.message, error?.code, error?.details, error?.hint);
+      throw new Error(error?.message ?? "No se pudo crear la llamada");
+    }
 
     const { data: { session } } = await supabase.auth.getSession();
     const token = await fetchLivekitToken(roomName, chatId, session?.access_token);

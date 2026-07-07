@@ -15,6 +15,9 @@ type DraggableBottomSheetProps = {
   children: ReactNode;
   className?: string;
   style?: CSSProperties;
+  role?: string;
+  "aria-modal"?: boolean | "true" | "false";
+  "aria-label"?: string;
   isClosing?: boolean;
   disabled?: boolean;
   onDismiss: () => void;
@@ -77,6 +80,9 @@ export function DraggableBottomSheet({
   dragVelocityThreshold = DEFAULT_VELOCITY_THRESHOLD,
   handleLabel = "Arrastrar panel",
   handleClassName = "",
+  role,
+  "aria-modal": ariaModal,
+  "aria-label": ariaLabel,
   onDragProgress,
   onPointerDown,
   onClick,
@@ -251,6 +257,9 @@ export function DraggableBottomSheet({
       data-dragging={isDragging ? "true" : "false"}
       className={className}
       style={style}
+      role={role}
+      aria-modal={ariaModal}
+      aria-label={ariaLabel}
       onPointerDownCapture={(event) => {
         if (!isInteractiveTarget(event.target)) return;
 

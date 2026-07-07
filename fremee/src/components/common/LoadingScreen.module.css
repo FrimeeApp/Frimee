@@ -32,8 +32,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: clamp(112px, 28vw, 148px);
-  aspect-ratio: 1;
+  width: clamp(44px, 10vw, 60px);
 }
 
 .small .content {
@@ -41,29 +40,18 @@
 }
 
 .small .loader {
-  width: 62px;
+  width: 26px;
 }
 
 .small .avatar {
   width: 26px;
 }
 
-.ring {
-  position: absolute;
-  inset: 0;
-  border-radius: 9999px;
-  border: 2px solid color-mix(in srgb, var(--primary) 18%, transparent);
-  border-top-color: var(--primary);
-  border-right-color: color-mix(in srgb, var(--primary) 58%, transparent);
-  animation: loadingRingSpin 1.35s linear infinite;
-}
-
 .avatar {
-  width: clamp(44px, 10vw, 60px);
+  width: 100%;
   height: auto;
   object-fit: contain;
   filter: drop-shadow(0 10px 18px rgb(0 0 0 / 0.12));
-  animation: loadingAvatarFloat 2.4s ease-in-out infinite;
 }
 
 .logoDark {
@@ -76,30 +64,4 @@
 
 :global(.dark) .logoDark {
   display: block;
-}
-
-@keyframes loadingRingSpin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes loadingAvatarFloat {
-  0%, 100% {
-    transform: translateY(0);
-  }
-
-  50% {
-    transform: translateY(-3px);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .ring {
-    animation-duration: 1.8s;
-  }
-
-  .avatar {
-    animation: none;
-  }
 }

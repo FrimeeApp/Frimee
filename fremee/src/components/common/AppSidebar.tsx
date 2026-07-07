@@ -17,9 +17,11 @@ import UserSearchSurface from "@/components/search/UserSearchSurface";
 import { Map, CreditCard, Send, Plus, Search, Bell } from "lucide-react";
 import { ActiveExpensesIcon, ActiveMessagesIcon, ActivePlansIcon, ActiveSearchIcon } from "@/components/common/active-nav-icons";
 import { CloseButton } from "@/components/ui/IconButton";
+import { DraggableBottomSheet } from "@/components/ui/DraggableBottomSheet";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
 import { DEFAULT_PLAN_COVER_IMAGE } from "@/config/app";
 import { formatDateRange } from "@/lib/formatters";
+import { createRealtimeTopic } from "@/lib/realtime";
 type IconProps = {
   className?: string;
   strokeWidth?: number;
@@ -80,7 +82,8 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
 
       setModalOpen(
         document.body.hasAttribute("data-modal-open") ||
-        document.body.hasAttribute("data-create-plan-open")
+        document.body.hasAttribute("data-create-plan-open") ||
+        document.body.hasAttribute("data-call-overlay-open")
       );
     };
 
@@ -88,7 +91,7 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
     const observer = new MutationObserver(() => {
       syncModalState();
     });
-    observer.observe(document.body, { attributes: true, attributeFilter: ["data-modal-open", "data-create-plan-open"] });
+    observer.observe(document.body, { attributes: true, attributeFilter: ["data-modal-open", "data-create-plan-open", "data-call-overlay-open"] });
     return () => observer.disconnect();
   }, []);
   const [hovered, setHovered] = useState(false);
@@ -99,6 +102,7 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
   const [desktopCreateMenuOpen, setDesktopCreateMenuOpen] = useState(false);
   const [expensePickerOpen, setExpensePickerOpen] = useState(false);
   const [selectedExpensePlanId, setSelectedExpensePlanId] = useState<number | null>(null);
+  const [expensePickerDragState, setExpensePickerDragState] = useState({ progress: 0, dragging: false });
   const { isClosing: expensePickerClosing, requestClose: closeExpensePicker } = useModalCloseAnimation(
     () => setExpensePickerOpen(false),
     expensePickerOpen,
@@ -125,6 +129,11 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
     };
   }, [expensePickerOpen]);
 
+  useEffect(() => {
+    if (expensePickerOpen) return;
+    setExpensePickerDragState({ progress: 0, dragging: false });
+  }, [expensePickerOpen]);
+
   const expanded = hovered;
   const loggedUserProfileImage = profile?.profile_image ?? null;
   const loggedUserInitial = (profile?.nombre?.trim()[0] || user?.email?.trim()[0] || "U").toUpperCase();
@@ -143,7 +152,7 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
     if (!user?.id) return;
     const supabase = createBrowserSupabaseClient();
     const channel = supabase
-      .channel(`notif-sidebar-${user.id}`)
+      .channel(createRealtimeTopic("notif-sidebar", user.id))
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "notificaciones", filter: `user_id=eq.${user.id}` },
@@ -522,31 +531,45 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
         <div
           data-closing={expensePickerClosing ? "true" : "false"}
           className="app-modal-overlay app-mobile-sheet-overlay fixed inset-0 z-[1200] flex items-end justify-center px-0 md:items-center md:p-4"
+          style={{
+            animation: "none",
+            backgroundColor: "transparent",
+          }}
           onPointerDown={(event) => {
-            event.preventDefault();
             event.stopPropagation();
             if (event.target === event.currentTarget) closeExpensePicker();
           }}
           role="presentation"
         >
           <div
-            data-closing={expensePickerClosing ? "true" : "false"}
-            className="app-expense-detail-panel app-mobile-sheet-panel flex h-[70dvh] w-full flex-col overflow-hidden rounded-t-[28px] bg-[var(--bg)] shadow-elev-4 md:h-auto md:max-h-[min(620px,82dvh)] md:max-w-[540px] md:rounded-[24px]"
+            className="absolute inset-0 bg-black"
+            style={{
+              opacity: (expensePickerClosing ? 0 : Math.max(0.12, 1 - expensePickerDragState.progress * 1.25)) * 0.55,
+              transition: expensePickerDragState.dragging ? "none" : "opacity 240ms cubic-bezier(0.22, 1, 0.36, 1)",
+            }}
+            onPointerDown={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              closeExpensePicker();
+            }}
+            aria-hidden="true"
+          />
+          <DraggableBottomSheet
+            isClosing={expensePickerClosing}
+            onDismiss={closeExpensePicker}
+            handleLabel="Arrastrar selector de plan"
+            handleClassName="md:hidden"
+            onDragProgress={(progress, dragging) => {
+              setExpensePickerDragState({ progress, dragging });
+            }}
+            className="app-expense-detail-panel app-mobile-sheet-panel relative z-10 flex h-[70dvh] w-full flex-col overflow-hidden rounded-t-[28px] bg-[var(--bg)] shadow-elev-4 md:h-auto md:max-h-[min(620px,82dvh)] md:max-w-[540px] md:rounded-[24px]"
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
             aria-label="Seleccionar plan para crear gasto"
           >
-            <div className="flex justify-center pt-[8px]" aria-hidden="true">
-              <div className="h-[4px] w-10 rounded-full bg-[var(--border)]" />
-            </div>
-
-            <div className="flex shrink-0 items-center justify-end px-[var(--space-5)] pb-[var(--space-2)] pt-[var(--space-2)]">
-              <CloseButton onClick={closeExpensePicker} iconClassName="size-5" />
-            </div>
-
-            <div className="shrink-0 px-[var(--space-6)] pb-[var(--space-5)]">
+            <div className="shrink-0 px-[var(--space-6)] pb-[var(--space-5)] pt-[var(--space-2)]">
               <h2 className="text-[20px] font-[var(--fw-semibold)] leading-tight text-app">Crear gasto</h2>
               <p className="mt-[var(--space-1)] text-body-sm text-muted">Elige el plan al que pertenece.</p>
             </div>
@@ -591,7 +614,7 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
                 </button>
               </div>
             )}
-          </div>
+          </DraggableBottomSheet>
         </div>
       )}
 

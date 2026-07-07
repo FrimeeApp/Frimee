@@ -19,7 +19,6 @@ export default function LoadingScreen({ fullscreen = true, compact = false, size
     >
       <div className={styles.content}>
         <div className={styles.loader} aria-hidden="true">
-          <div className={styles.ring} />
           <Image
             src="/logo-frimee-black.png"
             alt=""
