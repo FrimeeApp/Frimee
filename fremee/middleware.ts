@@ -6,8 +6,10 @@ export async function middleware(request: NextRequest) {
   const { supabase, response } = createMiddlewareClient(request);
   const hostname = request.headers.get("host")?.split(":")[0]?.toLowerCase();
   const blockedHosts = ["frimee.es", "www.frimee.es"];
+  // Set SITE_LOCKED=true in Vercel to close the public domains again without a code change.
+  const siteLocked = process.env.SITE_LOCKED === "true";
 
-  if (blockedHosts.includes(hostname ?? "")) {
+  if (siteLocked && blockedHosts.includes(hostname ?? "")) {
     return new Response(null, { status: 403, statusText: "Forbidden" });
   }
 
