@@ -1,10 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import Image from "next/image";
-import type { GastoRow } from "@/services/api/endpoints/gastos.endpoint";
+import { deleteGastoEndpoint, type GastoRow } from "@/services/api/endpoints/gastos.endpoint";
 import { formatMoney, formatLongDateTime, getInitial } from "@/lib/formatters";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
 import { CloseButton } from "@/components/ui/IconButton";
+import { DiscardChangesDialog } from "@/components/ui/DiscardChangesDialog";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -46,6 +48,8 @@ type PlanGastoDetailModalProps = {
   planName: string;
   currentUserId: string | null;
   onClose: () => void;
+  /** Called after the expense is voided; omit to hide the delete button. */
+  onDeleted?: () => void;
 }
 
 export function PlanGastoDetailModal({
@@ -53,9 +57,27 @@ export function PlanGastoDetailModal({
   planName,
   currentUserId,
   onClose,
+  onDeleted,
 }: PlanGastoDetailModalProps) {
   const { isClosing, requestClose } = useModalCloseAnimation(onClose);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   if (!gasto) return null;
+
+  const handleDelete = async () => {
+    setConfirmOpen(false);
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteGastoEndpoint(gasto.id);
+      onDeleted?.();
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Error al eliminar el gasto");
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const payerName = gasto.pagado_por_nombre ?? "Usuario";
   const categoryLine = gasto.subplan_titulo ?? gasto.categoria_nombre ?? gasto.descripcion?.trim() ?? "Sin detalle";
@@ -149,7 +171,30 @@ export function PlanGastoDetailModal({
             </div>
           </div>
         </div>
+
+        {onDeleted && (
+          <div className="flex items-center justify-between gap-[var(--space-4)] border-t border-app px-[var(--space-5)] py-[var(--space-4)]">
+            <button
+              type="button"
+              disabled={deleting}
+              onClick={() => { setDeleteError(null); setConfirmOpen(true); }}
+              className="text-body-sm font-[var(--fw-semibold)] text-[var(--error)] transition-opacity hover:opacity-60 disabled:opacity-[var(--disabled-opacity)]"
+            >
+              {deleting ? "Eliminando..." : "Eliminar gasto"}
+            </button>
+            {deleteError && <p className="text-body-sm text-[var(--error)]">{deleteError}</p>}
+          </div>
+        )}
       </div>
+
+      <DiscardChangesDialog
+        open={confirmOpen}
+        title="Eliminar gasto"
+        message={`Se anulará "${gasto.titulo}" y se recalcularán las deudas del plan para todos los participantes.`}
+        confirmLabel="Eliminar"
+        onCancel={() => setConfirmOpen(false)}
+        onDiscard={() => void handleDelete()}
+      />
     </div>
   );
 }

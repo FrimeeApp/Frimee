@@ -719,6 +719,32 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
     });
   };
 
+  const handleSubplanDeleted = (deleted: SubplanRow) => {
+    setSubplanes((prev) => {
+      const dateKey = isoDateOnly(deleted.inicio_at);
+      const dayItems = prev
+        .filter((item) => isoDateOnly(item.inicio_at) === dateKey)
+        .sort((a, b) => a.inicio_at.localeCompare(b.inicio_at));
+      // The next activity of the day was routed from the deleted one: its route is stale.
+      const index = dayItems.findIndex((item) => item.id === deleted.id);
+      const successor = index >= 0 ? dayItems[index + 1] : undefined;
+      if (successor) clearRouteCache([successor.id]);
+
+      const nextSubplanes = prev
+        .filter((item) => item.id !== deleted.id)
+        .map((item) =>
+          item.id === successor?.id
+            ? { ...item, ruta_polyline: null, duracion_viaje: null, distancia_viaje: null }
+            : item
+        );
+      updatePlanDetailCache(user?.id, Number(id), { subplanes: nextSubplanes });
+      return nextSubplanes;
+    });
+    // Its expenses were unlinked or voided server-side.
+    loadGastos();
+    loadBalances();
+  };
+
   const toggleCollapsedDay = (dateKey: string) => {
     setCollapsedDays((prev) => {
       const next = new Set(prev);
@@ -2137,6 +2163,8 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
             setAddSheetInitialDate(undefined);
           }}
           onSaved={handleSubplanSaved}
+          onDeleted={handleSubplanDeleted}
+          gastosCount={editingSubplan ? gastos.filter((g) => g.subplan_id === editingSubplan.id).length : 0}
           initialTitulo={addSheetInitialTitulo}
           initialDate={addSheetInitialDate}
           initialSubplan={editingSubplan}
@@ -2156,10 +2184,16 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
       )}
 
       <PlanGastoDetailModal
+        key={selectedGasto?.id ?? "none"}
         gasto={selectedGasto}
         planName={plan.titulo}
         currentUserId={user?.id ?? null}
         onClose={() => setSelectedGastoId(null)}
+        onDeleted={() => {
+          // The detail modal closes itself once the voided expense leaves the list.
+          loadGastos();
+          loadBalances();
+        }}
       />
 
       {/* Invite modal */}
