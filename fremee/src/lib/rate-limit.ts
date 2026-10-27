@@ -51,6 +51,41 @@ export async function checkRateLimit(
   }
 }
 
+// ── Modo invitado ──────────────────────────────────────────────────────────────
+// Los invitados (usuarios anónimos de Supabase) se crean con un clic, así que un
+// límite por usuario no basta: además del cupo diario de cada invitado hay una
+// bolsa común para todos, que pone un techo absoluto al gasto.
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+export const GUEST_DAILY_LIMITS = {
+  "ocr-ticket": { perGuest: 3, allGuests: 100 },
+  "ocr-receipt": { perGuest: 3, allGuests: 100 },
+  livekit: { perGuest: 2, allGuests: 50 },
+} as const;
+
+export type GuestFeature = keyof typeof GUEST_DAILY_LIMITS;
+
+/** Cupo diario del modo invitado. Para usuarios registrados no limita nada. */
+export async function checkGuestDailyLimit(
+  user: { id: string; is_anonymous?: boolean },
+  feature: GuestFeature,
+): Promise<RateLimitResult> {
+  if (!user.is_anonymous) return { limited: false, remaining: Infinity };
+
+  const { perGuest, allGuests } = GUEST_DAILY_LIMITS[feature];
+  const own = await checkRateLimit(`guest-day:${feature}:${user.id}`, perGuest, DAY_MS);
+  if (own.limited) return own;
+  return checkRateLimit(`guest-day:${feature}:all`, allGuests, DAY_MS);
+}
+
+export function guestLimitedResponse(retryAfter: number): NextResponse {
+  return NextResponse.json(
+    { error: "Has llegado al límite diario del modo invitado. Crea una cuenta para seguir usando esta función." },
+    { status: 429, headers: { "Retry-After": String(retryAfter) } },
+  );
+}
+
 export function rateLimitedResponse(retryAfter: number): NextResponse {
   return NextResponse.json(
     { error: "Demasiadas solicitudes. Inténtalo de nuevo en unos segundos." },

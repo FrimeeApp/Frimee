@@ -719,6 +719,32 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
     });
   };
 
+  const handleSubplanDeleted = (deleted: SubplanRow) => {
+    setSubplanes((prev) => {
+      const dateKey = isoDateOnly(deleted.inicio_at);
+      const dayItems = prev
+        .filter((item) => isoDateOnly(item.inicio_at) === dateKey)
+        .sort((a, b) => a.inicio_at.localeCompare(b.inicio_at));
+      // The next activity of the day was routed from the deleted one: its route is stale.
+      const index = dayItems.findIndex((item) => item.id === deleted.id);
+      const successor = index >= 0 ? dayItems[index + 1] : undefined;
+      if (successor) clearRouteCache([successor.id]);
+
+      const nextSubplanes = prev
+        .filter((item) => item.id !== deleted.id)
+        .map((item) =>
+          item.id === successor?.id
+            ? { ...item, ruta_polyline: null, duracion_viaje: null, distancia_viaje: null }
+            : item
+        );
+      updatePlanDetailCache(user?.id, Number(id), { subplanes: nextSubplanes });
+      return nextSubplanes;
+    });
+    // Its expenses were unlinked or voided server-side.
+    loadGastos();
+    loadBalances();
+  };
+
   const toggleCollapsedDay = (dateKey: string) => {
     setCollapsedDays((prev) => {
       const next = new Set(prev);
@@ -861,20 +887,17 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
           });
         });
       })
-      .subscribe();
-
-    // Escuchar broadcast de cambio de rol emitido desde el chat
-    const rolChannel = supabase
-      .channel(`msg:${planChat.chat_id}`)
-      .on("broadcast", { event: "rol_change" }, ({ payload }) => {
-        const { user_id, rol } = payload as { user_id: string; rol: string };
+      // Cambio de rol (promover/degradar admin) leído de la base de datos. No usa el canal
+      // msg:<chat> del chat: supabase.channel() devuelve el canal existente con el mismo nombre
+      // y ChatConversation no podría añadirle sus listeners ni quitarlo sin romper este.
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "plan_usuarios", filter: `plan_id=eq.${planId}` }, ({ new: row }) => {
+        const { user_id, rol } = row as { user_id: string; rol: string };
         if (user_id === user.id) setIsAdmin(rol === "ADMIN");
       })
       .subscribe();
 
     return () => {
       void supabase.removeChannel(channel);
-      void supabase.removeChannel(rolChannel);
     };
   }, [planChat?.chat_id, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -2137,6 +2160,8 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
             setAddSheetInitialDate(undefined);
           }}
           onSaved={handleSubplanSaved}
+          onDeleted={handleSubplanDeleted}
+          gastosCount={editingSubplan ? gastos.filter((g) => g.subplan_id === editingSubplan.id).length : 0}
           initialTitulo={addSheetInitialTitulo}
           initialDate={addSheetInitialDate}
           initialSubplan={editingSubplan}
@@ -2156,10 +2181,16 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
       )}
 
       <PlanGastoDetailModal
+        key={selectedGasto?.id ?? "none"}
         gasto={selectedGasto}
         planName={plan.titulo}
         currentUserId={user?.id ?? null}
         onClose={() => setSelectedGastoId(null)}
+        onDeleted={() => {
+          // The detail modal closes itself once the voided expense leaves the list.
+          loadGastos();
+          loadBalances();
+        }}
       />
 
       {/* Invite modal */}

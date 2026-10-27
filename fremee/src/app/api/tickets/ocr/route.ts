@@ -5,7 +5,7 @@ import { publicEnv, getSupabaseServiceRoleKey } from "@/config/env";
 import { OPENAI_API_BASE_URL } from "@/config/external";
 import { createSupabaseServerClient, createSupabaseServiceClient } from "@/services/supabase/server";
 import { validateUploadFile } from "@/lib/sanitize";
-import { checkRateLimit, rateLimitedResponse } from "@/lib/rate-limit";
+import { checkGuestDailyLimit, checkRateLimit, guestLimitedResponse, rateLimitedResponse } from "@/lib/rate-limit";
 
 export type TicketOcrResult = {
   source_path: string;            // path en Supabase Storage (plan-tickets bucket)
@@ -49,6 +49,8 @@ export async function POST(req: NextRequest) {
 
     const rl = await checkRateLimit(`ocr-ticket:${sessionUser.id}`, 5, 60_000);
     if (rl.limited) return rateLimitedResponse(rl.retryAfter);
+    const guest = await checkGuestDailyLimit(sessionUser, "ocr-ticket");
+    if (guest.limited) return guestLimitedResponse(guest.retryAfter);
 
     const formData = await req.formData();
     const fileRaw = formData.get("file") as File | null;

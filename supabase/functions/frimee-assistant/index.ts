@@ -36,12 +36,12 @@ type BalanceRow = {
   estado: string;
 };
 
+// userId and isAdmin may still arrive from older clients but are ignored: both
+// come from the access token and plan_usuarios (see the handler).
 type RequestBody = {
   message: string;
   members: Member[];
   planInfo?: PlanInfo;
-  isAdmin?: boolean;
-  userId: string;
   planId?: number;
   history?: HistoryEntry[];
   userLocation?: { lat: number; lng: number };
@@ -56,6 +56,16 @@ type FrimeeResult = {
 
 const PERSONAL_LIMIT: Record<string, number> = { free: 5, pro: 50 };
 const GROUP_LIMIT = { free: 20, pro: 200 };
+// Guests (anonymous users) are created with one click, so on top of their
+// personal free limit there is a shared daily pool for all of them.
+const GUEST_POOL_DAILY_LIMIT = 200;
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...CORS, "Content-Type": "application/json" },
+  });
+}
 
 async function checkAndIncrementUsage(
   supabase: ReturnType<typeof createClient>,
@@ -514,7 +524,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
 
   try {
-    const { message, members, planInfo, isAdmin = false, userId, planId, history, userLocation }: RequestBody = await req.json();
+    const { message, members, planInfo, planId, history, userLocation }: RequestBody = await req.json();
 
     const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
     if (!apiKey) return new Response(JSON.stringify({ error: "Missing API key" }), { status: 500, headers: CORS });
@@ -522,6 +532,41 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceKey);
+
+    // Who is calling comes from the access token, never from the body: the
+    // service role client below bypasses RLS and the usage limits are per user.
+    const token = req.headers.get("Authorization")?.replace(/^Bearer /, "");
+    const { data: { user } } = token ? await supabase.auth.getUser(token) : { data: { user: null } };
+    if (!user) return jsonResponse({ error: "No autorizado" }, 401);
+    const userId = user.id;
+
+    // Plan context is read with the service role, so check membership first.
+    let isAdmin = false;
+    if (planId) {
+      const { data: membership } = await supabase
+        .from("plan_usuarios")
+        .select("rol")
+        .eq("plan_id", planId)
+        .eq("user_id", userId)
+        .eq("estado", "PARTICIPA")
+        .maybeSingle();
+      if (!membership) return jsonResponse({ error: "No eres miembro de este plan" }, 403);
+      isAdmin = membership.rol === "ADMIN";
+    }
+
+    if (user.is_anonymous) {
+      const { data: pool } = await supabase.rpc("check_rate_limit", {
+        p_key: "guest-day:assistant:all",
+        p_limit: GUEST_POOL_DAILY_LIMIT,
+        p_window_seconds: 24 * 60 * 60,
+      });
+      if (pool?.[0] && !pool[0].allowed) {
+        return jsonResponse({
+          command: null,
+          reply: "@Frimee ha llegado al límite diario del modo invitado. Crea una cuenta para seguir usándolo.",
+        });
+      }
+    }
 
     const { data: userRow } = await supabase
       .from("usuarios")

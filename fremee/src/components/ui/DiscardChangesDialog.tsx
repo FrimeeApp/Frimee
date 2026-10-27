@@ -1,11 +1,14 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
 
 type DiscardChangesDialogProps = {
   open: boolean;
   title?: string;
   message?: string;
+  /** Extra content under the message, e.g. an option checkbox. */
+  children?: ReactNode;
   confirmLabel?: string;
   cancelLabel?: string;
   onCancel: () => void;
@@ -18,6 +21,7 @@ export function DiscardChangesDialog({
   message = "Si cierras ahora, se perderá la información que has completado.",
   confirmLabel = "Descartar",
   cancelLabel = "Cancelar",
+  children,
   onCancel,
   onDiscard,
 }: DiscardChangesDialogProps) {
@@ -40,6 +44,7 @@ export function DiscardChangesDialog({
       >
         <h3 className="text-[18px] font-[700] leading-tight text-app">{title}</h3>
         <p className="mt-2 text-[14px] leading-snug text-muted">{message}</p>
+        {children}
         <div className="mt-5 flex gap-3">
           <button
             type="button"

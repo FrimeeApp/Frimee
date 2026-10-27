@@ -8,7 +8,7 @@ import {
   TrainFront, TramFront, UtensilsCrossed,
 } from "lucide-react";
 import {
-  createSubplan, updateSubplan,
+  createSubplan, updateSubplan, deleteSubplan,
   type SubplanRow, type TipoSubplan, TIPOS_TRANSPORTE,
 } from "@/services/api/endpoints/subplanes.endpoint";
 import LocationAutocomplete, { type Coords } from "@/components/plans/LocationAutocomplete";
@@ -259,6 +259,9 @@ export type AddSheetProps = {
   subplanes: SubplanRow[];
   onClose: () => void;
   onSaved: (saved: SubplanRow, original?: SubplanRow | null) => void;
+  onDeleted?: (deleted: SubplanRow) => void;
+  /** Active expenses linked to initialSubplan; when > 0 the delete dialog offers to void them. */
+  gastosCount?: number;
   initialTitulo?: string;
   initialDate?: string;
   initialSubplan?: SubplanRow | null;
@@ -266,7 +269,7 @@ export type AddSheetProps = {
 
 export function AddSubplanSheet({
   planId, planStartDate, planEndDate, subplanes,
-  onClose, onSaved, initialTitulo, initialDate, initialSubplan,
+  onClose, onSaved, onDeleted, gastosCount = 0, initialTitulo, initialDate, initialSubplan,
 }: AddSheetProps) {
   const { isClosing, requestClose } = useModalCloseAnimation(onClose);
   const TOTAL_STEPS = 3;
@@ -321,10 +324,13 @@ export function AddSubplanSheet({
   const [transporteLlegada,  setTransporteLlegada]  = useState<string | null>(initialSubplan?.transporte_llegada ?? null);
   const [feedbackState,      setFeedbackState]      = useState<ModalFeedbackState | null>(null);
   const [discardOpen,        setDiscardOpen]        = useState(false);
-  const [wizardStep,         setWizardStep]         = useState(1);
+  const [deleteOpen,         setDeleteOpen]         = useState(false);
+  const [deleteGastos,       setDeleteGastos]       = useState(false);
+  const [wizardStep,        setWizardStep]         = useState(1);
   const [error,              setError]              = useState<string | null>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
   const savedResultRef = useRef<{ saved: SubplanRow; original: SubplanRow | null } | null>(null);
+  const deletedRef = useRef<SubplanRow | null>(null);
 
   const planMonthCount = useMemo(() => {
     const s = new Date(minDate + "T12:00:00");
@@ -450,6 +456,19 @@ export function AddSubplanSheet({
     }
   };
 
+  const handleDelete = async () => {
+    if (!initialSubplan) return;
+    setDeleteOpen(false);
+    setFeedbackState({ type: "loading" });
+    try {
+      await deleteSubplan(initialSubplan.id, gastosCount > 0 && deleteGastos);
+      deletedRef.current = initialSubplan;
+      setFeedbackState({ type: "success", label: "Actividad eliminada" });
+    } catch (err) {
+      setFeedbackState({ type: "error", message: err instanceof Error ? err.message : "Error al eliminar la actividad" });
+    }
+  };
+
   const canContinueWizard = wizardStep === 3 ? titulo.trim().length > 0 : true;
   const isLastStep = wizardStep === TOTAL_STEPS;
   const meta = STEP_META[wizardStep - 1];
@@ -534,7 +553,9 @@ export function AddSubplanSheet({
             <ModalFeedback
               state={feedbackState}
               onSuccess={() => {
-                if (savedResultRef.current) {
+                if (deletedRef.current) {
+                  onDeleted?.(deletedRef.current);
+                } else if (savedResultRef.current) {
                   onSaved(savedResultRef.current.saved, savedResultRef.current.original ?? undefined);
                 }
                 requestClose();
@@ -712,6 +733,15 @@ export function AddSubplanSheet({
                 >
                   Restablecer
                 </button>
+              ) : isEditing && onDeleted ? (
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  onClick={() => { setDeleteGastos(false); setDeleteOpen(true); }}
+                  className="text-body-sm font-[var(--fw-semibold)] text-[var(--error)] transition-opacity hover:opacity-60 disabled:opacity-[var(--disabled-opacity)]"
+                >
+                  Eliminar actividad
+                </button>
               ) : <div />}
               <button
                 type="button"
@@ -733,6 +763,33 @@ export function AddSubplanSheet({
           requestClose();
         }}
       />
+      <DiscardChangesDialog
+        open={deleteOpen}
+        title="Eliminar actividad"
+        message={`Se quitará "${initialSubplan?.titulo ?? ""}" del plan para todos los participantes.`}
+        confirmLabel="Eliminar"
+        onCancel={() => setDeleteOpen(false)}
+        onDiscard={() => void handleDelete()}
+      >
+        {gastosCount > 0 && (
+          <label className="mt-4 flex cursor-pointer items-start gap-3 text-[14px] leading-snug text-app">
+            <input
+              type="checkbox"
+              checked={deleteGastos}
+              onChange={(e) => setDeleteGastos(e.target.checked)}
+              className="mt-[2px] size-4 shrink-0 accent-[var(--error,#dc2626)]"
+            />
+            <span>
+              Eliminar también {gastosCount === 1 ? "su gasto" : `sus ${gastosCount} gastos`}
+              <span className="block text-[13px] text-muted">
+                {deleteGastos
+                  ? "Se anularán y se recalcularán las deudas del plan."
+                  : "Si no lo marcas, se mantienen como gastos generales del plan."}
+              </span>
+            </span>
+          </label>
+        )}
+      </DiscardChangesDialog>
     </>
   );
 }
