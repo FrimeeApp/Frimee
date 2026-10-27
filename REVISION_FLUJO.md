@@ -55,6 +55,20 @@ Las migraciones se prueban primero en dev. Al fusionar la rama, aplicar en produ
 
 **Arreglo:** botón "Eliminar gasto" en el modal de detalle (`PlanGastoDetailModal`), con confirmación. Anula el gasto (borrado lógico), quita sus partes y recalcula las deudas; la página recarga gastos y balances. Sin cambios en la base de datos.
 
+## Por revisar
+
+Partes del flujo que aún no se han recorrido en dev (ver `TEST_PLAN.md` y `CHECKLIST.md`):
+
+- [ ] Perfil: editar nombre y foto, ajustes.
+- [ ] Mis gastos: vista global de deudas y liquidaciones.
+- [ ] Autenticación: recuperar contraseña, cerrar sesión, login con Google (no configurado en dev).
+- [ ] Onboarding tras el registro (el checklist lo marca como bloqueador).
+- [ ] Errores sin mostrar en el chat (bloqueador del checklist).
+- [ ] Notificaciones push (bloqueador del checklist).
+- [ ] Enlace de confirmación de email abierto en otro navegador: falla con `AuthPKCECodeVerifierMissingError` (visto en el log de dev).
+
 ## Pendiente de limpiar
 
-- `PlanPageClient.tsx` tiene 12 avisos de ESLint previos (imports y variables sin usar, `<img>` en lugar de `next/image`).
+- [ ] Dependabot: 135 vulnerabilidades en las dependencias de `main` (16 críticas, 69 altas, 44 moderadas, 6 bajas).
+- [ ] `PlanPageClient.tsx` tiene 12 avisos de ESLint previos (imports y variables sin usar, `<img>` en lugar de `next/image`).
+- [ ] Hay gastos sin opción de editar: `updateGastoEndpoint()` existe pero ninguna pantalla lo usa, y `fn_gasto_update` no acepta `p_receipt_url` aunque el endpoint lo envía.
