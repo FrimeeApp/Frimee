@@ -146,8 +146,12 @@ export async function updateSubplanViaje(subplanId: number, duracion: string, di
   if (error) throw error;
 }
 
-export async function deleteSubplan(subplanId: number): Promise<void> {
+/** Borra (cancela) un subplan. Sus gastos se anulan o, por defecto, se desvinculan y se mantienen. */
+export async function deleteSubplan(subplanId: number, deleteGastos = false): Promise<void> {
   const supabase = createBrowserSupabaseClient();
-  const { error } = await supabase.rpc("fn_subplan_delete", { p_subplan_id: subplanId });
+  const { error } = await supabase.rpc("fn_subplan_delete", {
+    p_subplan_id: subplanId,
+    p_delete_gastos: deleteGastos,
+  });
   if (error) throw error;
 }
