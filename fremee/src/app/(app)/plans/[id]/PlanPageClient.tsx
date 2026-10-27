@@ -887,20 +887,17 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
           });
         });
       })
-      .subscribe();
-
-    // Escuchar broadcast de cambio de rol emitido desde el chat
-    const rolChannel = supabase
-      .channel(`msg:${planChat.chat_id}`)
-      .on("broadcast", { event: "rol_change" }, ({ payload }) => {
-        const { user_id, rol } = payload as { user_id: string; rol: string };
+      // Cambio de rol (promover/degradar admin) leído de la base de datos. No usa el canal
+      // msg:<chat> del chat: supabase.channel() devuelve el canal existente con el mismo nombre
+      // y ChatConversation no podría añadirle sus listeners ni quitarlo sin romper este.
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "plan_usuarios", filter: `plan_id=eq.${planId}` }, ({ new: row }) => {
+        const { user_id, rol } = row as { user_id: string; rol: string };
         if (user_id === user.id) setIsAdmin(rol === "ADMIN");
       })
       .subscribe();
 
     return () => {
       void supabase.removeChannel(channel);
-      void supabase.removeChannel(rolChannel);
     };
   }, [planChat?.chat_id, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 

@@ -55,10 +55,19 @@ Las migraciones se prueban primero en dev. Al fusionar la rama, aplicar en produ
 
 **Arreglo:** botón "Eliminar gasto" en el modal de detalle (`PlanGastoDetailModal`), con confirmación. Anula el gasto (borrado lógico), quita sus partes y recalcula las deudas; la página recarga gastos y balances. Sin cambios en la base de datos.
 
+### 5. Error al abrir el chat del plan ✅
+
+**Qué pasaba:** al entrar en el chat de un plan salía `cannot add postgres_changes callbacks for realtime:msg:<id> after subscribe()`.
+
+**Causa:** la página del plan y el chat se suscribían a un canal de Realtime con el mismo nombre, `msg:<chat_id>`. `supabase.channel(nombre)` no crea otro canal si ya existe uno con ese nombre: devuelve el mismo, ya suscrito, y los listeners `postgres_changes` solo se pueden añadir antes de `subscribe()`. Además, al salir del chat, `removeChannel` quitaba el canal compartido y la página dejaba de enterarse de los cambios de rol.
+
+**Arreglo:** la página ya no usa ese canal. Detecta los cambios de rol con `postgres_changes` (`UPDATE` en `plan_usuarios`, que ya está en la publicación de Realtime) dentro de su propio canal. Es más fiable: antes dependía de un broadcast que enviaba el navegador de quien cambiaba el rol y solo desde el chat. Se quitan los dos envíos de `rol_change` del chat, que ya nadie escucha.
+
 ## Por revisar
 
 Partes del flujo que aún no se han recorrido en dev (ver `TEST_PLAN.md` y `CHECKLIST.md`):
 
+- [ ] Cambio de rol en vivo (fallo 5) con un segundo usuario: hacerle admin desde el chat y ver que su página se actualiza sin recargar.
 - [ ] Perfil: editar nombre y foto, ajustes.
 - [ ] Mis gastos: vista global de deudas y liquidaciones.
 - [ ] Autenticación: recuperar contraseña, cerrar sesión, login con Google (no configurado en dev).
