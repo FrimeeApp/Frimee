@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import LoadingScreen from "@/components/common/LoadingScreen";
@@ -9,6 +10,7 @@ import { APP_HOME_PATH } from "@/config/app";
 export default function AuthCallbackPage() {
   const router = useRouter();
   const hasStartedRef = useRef(false);
+  const [confirmedElsewhere, setConfirmedElsewhere] = useState(false);
 
   useEffect(() => {
     if (hasStartedRef.current) return;
@@ -49,6 +51,14 @@ export default function AuthCallbackPage() {
 
         if (error) {
           console.error("exchangeCodeForSession error:", error);
+          // Link opened in another browser/window than the one that started the flow
+          // (typical for "Guardar mi cuenta"): Supabase already confirmed the email,
+          // only this window cannot get that session. Tell the user, even if this
+          // window happens to be logged in with another account.
+          if (error.name === "AuthPKCECodeVerifierMissingError") {
+            setConfirmedElsewhere(true);
+            return;
+          }
           const {
             data: { session: maybeSession },
           } = await supabase.auth.getSession();
@@ -75,6 +85,23 @@ export default function AuthCallbackPage() {
 
     run();
   }, [router]);
+
+  if (confirmedElsewhere) {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-app px-[var(--space-6)] text-center">
+        <div className="max-w-[380px]">
+          <h1 className="text-[22px] font-[var(--fw-bold)] text-app">Email confirmado</h1>
+          <p className="mt-[var(--space-2)] text-body text-muted">
+            Vuelve a la ventana o al dispositivo donde estabas guardando tu cuenta: allí podrás
+            poner tu contraseña.
+          </p>
+          <Link href="/login" className="mt-[var(--space-5)] inline-block text-body-sm font-[var(--fw-semibold)] text-app underline underline-offset-2">
+            Ir a iniciar sesión
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return <LoadingScreen />;
 

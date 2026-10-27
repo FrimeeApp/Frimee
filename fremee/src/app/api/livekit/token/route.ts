@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { AccessToken } from "livekit-server-sdk";
 import { createSupabaseServiceClient } from "@/services/supabase/server";
 import { sanitizeRoomName, sanitizeUuid } from "@/lib/sanitize";
-import { checkRateLimit, rateLimitedResponse } from "@/lib/rate-limit";
+import { checkGuestDailyLimit, checkRateLimit, guestLimitedResponse, rateLimitedResponse } from "@/lib/rate-limit";
 import { handleCorsPreflight, withCors } from "@/lib/api/cors";
 
 export async function OPTIONS(req: NextRequest) {
@@ -20,6 +20,8 @@ export async function POST(req: NextRequest) {
 
   const rl = await checkRateLimit(`livekit:${user.id}`, 10, 60_000);
   if (rl.limited) return withCors(req, rateLimitedResponse(rl.retryAfter));
+  const guest = await checkGuestDailyLimit(user, "livekit");
+  if (guest.limited) return withCors(req, guestLimitedResponse(guest.retryAfter));
 
   const body = await req.json() as unknown;
   if (typeof body !== "object" || body === null) {

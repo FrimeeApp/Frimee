@@ -160,7 +160,9 @@ export default function ProfilePage() {
           setFollowerCount(followerCountResult.value);
         }
       } catch (err) {
-        console.error("[profile] Error loading profile:", err);
+        // Supabase errors are Error instances: logged as-is they show up as "{}".
+        const { message, code, details } = (err ?? {}) as { message?: string; code?: string; details?: string };
+        console.error("[profile] Error loading profile:", message ?? err, code ?? "", details ?? "");
         if (!cancelled) {
           setProfileData(null);
           setPlans([]);

@@ -5,6 +5,7 @@ import Link from "next/link";
 import GoogleAuthButton from "@/components/auth/GoogleAuthButton";
 import { AUTH_EMAIL_REGEX, focusInput, getAuthErrorMessage } from "@/components/auth/AuthFormUtils";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
+import { startGuestSession } from "@/services/auth/guest";
 import { Input } from "@/components/ui/Input";
 import { EyeIcon } from "@/components/icons";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -44,6 +45,9 @@ function LoginPageInner() {
 
   const emailRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
+  // While entering as a guest the session appears before the demo plan exists:
+  // the auth listener must not redirect, handleGuest does it once the plan is ready.
+  const enteringAsGuestRef = useRef(false);
 
   const router = useRouter();
 
@@ -67,7 +71,7 @@ function LoginPageInner() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) router.replace(redirectTo);
+      if (session && !enteringAsGuestRef.current) router.replace(redirectTo);
     });
 
     return () => {
@@ -119,6 +123,20 @@ function LoginPageInner() {
     } finally {
       setLoading(false);
       setPassword("");
+    }
+  };
+
+  const handleGuest = async () => {
+    setErrorMsg(null);
+    setLoading(true);
+    enteringAsGuestRef.current = true;
+    try {
+      const planId = await startGuestSession();
+      router.replace(planId ? `/plans/${planId}` : APP_HOME_PATH);
+    } catch (err: unknown) {
+      enteringAsGuestRef.current = false;
+      setErrorMsg(getAuthErrorMessage(err, "No se pudo entrar como invitado. Inténtalo de nuevo."));
+      setLoading(false);
     }
   };
 
@@ -211,6 +229,15 @@ function LoginPageInner() {
               Registrarse
             </Link>
           </p>
+
+          <button
+            type="button"
+            onClick={() => void handleGuest()}
+            disabled={loading}
+            className="auth-neutral-button mt-[var(--space-3)] flex h-btn-primary w-full items-center justify-center rounded-button border border-app bg-[var(--input-bg)] text-button-md font-[var(--fw-medium)] text-app transition-colors duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] disabled:opacity-[var(--disabled-opacity)]"
+          >
+            Probar como invitado
+          </button>
         </div>
       </div>
 
