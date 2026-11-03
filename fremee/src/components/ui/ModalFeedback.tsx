@@ -8,7 +8,7 @@ export type ModalFeedbackState =
   | { type: "success"; label?: string }
   | { type: "error"; message: string };
 
-interface ModalFeedbackProps {
+type ModalFeedbackProps = {
   state: ModalFeedbackState;
   /** Llamado ~1.5s después de mostrar el éxito — aquí llama a onCreated() + requestClose() */
   onSuccess: () => void;

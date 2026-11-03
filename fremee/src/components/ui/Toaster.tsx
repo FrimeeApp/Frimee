@@ -4,13 +4,13 @@ import { createContext, useCallback, useContext, useRef, useState, type ReactNod
 
 type ToastType = "error" | "success" | "info";
 
-interface Toast {
+type Toast = {
   id: number;
   type: ToastType;
   message: string;
 }
 
-interface ToastCtx {
+type ToastCtx = {
   toast: (message: string, type?: ToastType) => void;
   toastError: (message: string) => void;
   toastSuccess: (message: string) => void;

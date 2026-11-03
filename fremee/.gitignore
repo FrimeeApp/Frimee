@@ -152,3 +152,8 @@ ios/App/**/*.xcuserstate
 # Capacitor generated config
 ios/App/App/capacitor.config.json
 android/app/src/main/assets/capacitor.config.json
+
+############################
+# Supabase CLI cache
+############################
+supabase/.temp/
