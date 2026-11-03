@@ -1,0 +1,116 @@
+name: CI
+
+# Checks every pull request and every push to main: lint, types and build of the app
+# and the landing, plus the production Docker image. Nothing is deployed from here.
+on:
+  pull_request:
+    branches: [main, dev]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: 22
+  NEXT_TELEMETRY_DISABLED: 1
+
+jobs:
+  app:
+    name: App · lint, tipos y build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: fremee
+    # Placeholders: the build only needs these variables to exist (src/config/env.ts throws
+    # at page-data collection if the server ones are missing). No real keys in CI.
+    env:
+      SUPABASE_SERVICE_ROLE_KEY: ci-placeholder
+      GOOGLE_MAPS_SERVER_KEY: ci
+      NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY: sb_publishable_ci
+      NEXT_PUBLIC_FIREBASE_API_KEY: ci
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ci.firebaseapp.com
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: ci
+      NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ci.appspot.com
+      NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: '0'
+      NEXT_PUBLIC_FIREBASE_APP_ID: '1:0:web:0'
+      NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ci
+      NEXT_PUBLIC_LIVEKIT_URL: wss://ci.livekit.cloud
+      NEXT_PUBLIC_WEB_APP_URL: https://frimee.es
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: fremee/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npx tsc --noEmit
+      - run: npm run build
+
+  landing:
+    name: Landing · lint, tipos y build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: fremee-landings
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: fremee-landings/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npx tsc --noEmit
+      - run: npm run build
+
+  docker:
+    name: Imagen Docker
+    runs-on: ubuntu-latest
+    # Only once the app builds: the image runs the same build inside the Dockerfile.
+    needs: app
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      # Placeholders only. The real server keys must never be build args: mode=max caches
+      # the builder layers, ENV included. Production passes them at `docker run` time.
+      - name: Build (sin publicar)
+        uses: docker/build-push-action@v7
+        with:
+          context: fremee
+          push: false
+          load: true
+          tags: frimee:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            NEXT_PUBLIC_SUPABASE_URL=https://ci-placeholder.supabase.co
+            NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=sb_publishable_ci
+            NEXT_PUBLIC_FIREBASE_API_KEY=ci
+            NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=ci.firebaseapp.com
+            NEXT_PUBLIC_FIREBASE_PROJECT_ID=ci
+            NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=ci.appspot.com
+            NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=0
+            NEXT_PUBLIC_FIREBASE_APP_ID=1:0:web:0
+            SUPABASE_SERVICE_ROLE_KEY=ci-placeholder
+            GOOGLE_MAPS_SERVER_KEY=ci
+      # The standalone server must start and answer; any HTTP status means it is up.
+      - name: Smoke test
+        run: |
+          docker run -d --name frimee -p 3000:3000 frimee:ci
+          for _ in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/ || true)
+            if [ "$code" != "000" ]; then echo "HTTP $code"; exit 0; fi
+            sleep 2
+          done
+          docker logs frimee
+          exit 1

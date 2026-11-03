@@ -121,7 +121,7 @@ export function isCategoryFullyEnabled(
   enabled: boolean
 ): "on" | "off" | "mixed" {
   if (!enabled) return "off";
-  const values = Object.values(category) as boolean[];
+  const values = Object.values(category);
   const allOn = values.every(Boolean);
   const allOff = values.every((v) => !v);
   if (allOn) return "on";
