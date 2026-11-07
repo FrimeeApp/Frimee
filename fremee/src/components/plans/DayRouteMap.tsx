@@ -90,6 +90,9 @@ async function requestDirections(params: {
   travelMode?: string | null;
   accessToken?: string;
 }): Promise<DirectionsResultShape> {
+  // In the app, try the shared cache first: it saves a round trip to our API.
+  // On a miss, fall through to /api/directions like the web does (it accepts the
+  // Bearer token since 5d73025), so the route is drawn even if nobody computed it before.
   if (isNativePlatform()) {
     const supabase = createBrowserSupabaseClient();
     const { data, error } = await supabase
@@ -110,18 +113,15 @@ async function requestDirections(params: {
           to: params.to,
         });
       }
-      return {};
+    } else if (data?.polyline) {
+      return {
+        polyline: data.polyline,
+        legs: [{
+          distance: data.distance ?? undefined,
+          duration: data.duration ?? undefined,
+        }],
+      };
     }
-
-    return data
-      ? {
-          polyline: data.polyline ?? undefined,
-          legs: [{
-            distance: data.distance ?? undefined,
-            duration: data.duration ?? undefined,
-          }],
-        }
-      : {};
   }
 
   try {
