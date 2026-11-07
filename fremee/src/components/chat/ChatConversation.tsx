@@ -203,6 +203,9 @@ export function ChatConversation({
   const channelRef = useRef<ReturnType<typeof supabaseRef.current.channel> | null>(null);
   const onNewMessageRef = useRef(onNewMessage);
   useEffect(() => { onNewMessageRef.current = onNewMessage; });
+  // Same for onLeave: a new function from the parent must not resubscribe the channel.
+  const onLeaveRef = useRef(onLeave);
+  useEffect(() => { onLeaveRef.current = onLeave; });
 
   const name = resolveChatName(chat, currentUserId);
   const avatar = resolveChatAvatar(chat, currentUserId);
@@ -281,8 +284,20 @@ export function ChatConversation({
 
   useEffect(() => {
     const supabase = supabaseRef.current;
-    const channel = supabase
-      .channel(`msg:${chat.chat_id}`)
+    const topic = `msg:${chat.chat_id}`;
+    // supabase.channel() returns an existing channel with the same topic, even one that
+    // is already subscribed, and adding callbacks to it throws. removeChannel() is async,
+    // so after a quick remount the previous channel can still be there: remove it first.
+    let cancelled = false;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    const subscribe = async () => {
+      const stale = supabase.getChannels().find((c) => c.topic === `realtime:${topic}`);
+      if (stale) await supabase.removeChannel(stale);
+      if (cancelled) return;
+
+      channel = supabase
+      .channel(topic)
       .on("broadcast", { event: "new_message" }, ({ payload }) => {
         const msg = payload as MensajeRow;
         if (sentMsgIdsRef.current.has(msg.id)) {
@@ -306,7 +321,7 @@ export function ChatConversation({
       })
       .on("broadcast", { event: "kick_member" }, ({ payload }) => {
         const { user_id } = payload as { user_id: string };
-        if (user_id === currentUserId) onLeave?.();
+        if (user_id === currentUserId) onLeaveRef.current?.();
       })
       .on("broadcast", { event: "poll_vote" }, ({ payload }) => {
         const { mensaje_id } = payload as { mensaje_id: number; option_index: number };
@@ -327,12 +342,16 @@ export function ChatConversation({
         }
       )
       .subscribe();
-    channelRef.current = channel;
+      channelRef.current = channel;
+    };
+    void subscribe();
+
     return () => {
-      void supabase.removeChannel(channel);
+      cancelled = true;
+      if (channel) void supabase.removeChannel(channel);
       channelRef.current = null;
     };
-  }, [chat.chat_id, currentUserId, onLeave]);
+  }, [chat.chat_id, currentUserId]);
 
   const isNearBottomRef = useRef(true);
   const observerReadyRef = useRef(false);
