@@ -1,0 +1,140 @@
+/*
+ * Calls: tokens and motion from the design canvas "Frimee · Sistema de llamadas y videollamadas"
+ * (board T1). The room ("stage") is always dark; everything else around a call follows the
+ * user's theme. Turquoise = connected; red only for hanging up and declining.
+ */
+
+:root {
+  /* Stage (the room): one dark palette in both themes. */
+  --stage-bg: #0e0e10;
+  --stage-tile: #1a1a1f;
+  --stage-tile-2: #222227;
+  --stage-bar: rgba(26, 26, 31, 0.92);
+  --stage-control: #2a2a30;
+  --stage-control-hover: #34343b;
+  --stage-control-pressed: #3e3e46;
+  --stage-control-off: #eeeeef;
+  --stage-control-off-icon: #111114;
+  --stage-control-on: #3cddc2;
+  --stage-control-on-icon: #0b2a25;
+  --stage-control-disabled: #1c1c21;
+  --stage-control-disabled-icon: #5a5a64;
+  --stage-hangup: #dc2626;
+  --stage-hangup-hover: #c42020;
+  --stage-hangup-pressed: #a91b1b;
+  --stage-text: #ffffff;
+  --stage-text-2: #c4c4cc;
+  --stage-label: rgba(11, 11, 13, 0.64);
+  --stage-veil: linear-gradient(to bottom, rgba(0, 0, 0, 0.6), transparent);
+  --stage-speaking: #3cddc2;
+  --stage-warn: #fbbf24;
+  --stage-focus: #3cddc2;
+
+  /* Calls inside the app: light theme. */
+  --call-accept: #298e7d;
+  --call-accept-icon: #ffffff;
+  --call-reject: #dc2626;
+  --call-btn-neutral: #ededef;
+  --call-btn-fill: #227a6c;
+  --call-btn-fill-text: #ffffff;
+  --call-accent-text: #227a6c;
+  --call-pill-bg: #e7f4f1;
+  --call-pill-border: #bfe0d9;
+  --call-border: #e4e4e7;
+  --call-scrim: rgba(28, 28, 34, 0.4);
+  --call-toast: #1c1c22;
+  --call-toast-text: #ffffff;
+
+  /* Motion (T1 · Movimiento). */
+  --call-ease: cubic-bezier(0.2, 0, 0, 1);
+  --call-ease-out: cubic-bezier(0.3, 0, 1, 1);
+}
+
+.dark {
+  --call-accept: #3cddc2;
+  --call-accept-icon: #0b2a25;
+  --call-btn-neutral: #222222;
+  --call-btn-fill: #3cddc2;
+  --call-btn-fill-text: #0b2a25;
+  --call-accent-text: #3cddc2;
+  --call-pill-bg: #15302b;
+  --call-pill-border: #245048;
+  --call-border: #2a2a31;
+  --call-scrim: rgba(0, 0, 0, 0.6);
+  --call-toast: #eeeeef;
+  --call-toast-text: #111111;
+}
+
+/* Instrument Serif for names: the app already loads it as --font-display-face. */
+.call-serif {
+  font-family: var(--font-display-face), Georgia, serif;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+.call-num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* "Llamando ···": three dots fading in turn. */
+.call-dots {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+.call-dots i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.35;
+  animation: call-dot 1200ms ease-in-out infinite;
+}
+.call-dots i:nth-child(2) { animation-delay: 150ms; }
+.call-dots i:nth-child(3) { animation-delay: 300ms; }
+@keyframes call-dot {
+  0%, 100% { opacity: 0.35; }
+  40% { opacity: 1; }
+}
+
+/* Ringing pulse: two rings 900 ms apart, scale 1→1.32, opacity .28→0. */
+.call-pulse {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+  animation: call-pulse 1800ms var(--call-ease) infinite;
+}
+.call-pulse.call-pulse-2 { animation-delay: 900ms; }
+@keyframes call-pulse {
+  0% { transform: scale(1); opacity: 0.28; }
+  100% { transform: scale(1.32); opacity: 0; }
+}
+
+/* Live dot: opacity 1→.45→1 over 2 s. */
+.call-live { animation: call-live 2000ms ease-in-out infinite; }
+@keyframes call-live {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+/* Screens, sheets and modals: in 240 ms (up 16 px), out 180 ms. */
+.call-enter { animation: call-enter 240ms var(--call-ease) both; }
+@keyframes call-enter {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: none; }
+}
+/* Compact notices and the floating pill: in 220 ms (down 12 px). */
+.call-drop { animation: call-drop 220ms var(--call-ease) both; }
+@keyframes call-drop {
+  from { opacity: 0; transform: translateY(-12px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .call-pulse, .call-live, .call-dots i { animation: none; }
+  .call-dots i { opacity: 0.7; }
+  .call-enter, .call-drop { animation: call-fade 120ms linear both; }
+}
+@keyframes call-fade { from { opacity: 0; } to { opacity: 1; } }
