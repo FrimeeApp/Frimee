@@ -310,14 +310,6 @@ export function positionFromProgress(base: JourneyPosition, progress: number): J
   return { ...base, stop, legT: progress - stop };
 }
 
-/** Scroll length of a leg in viewport heights: longer trips take longer to scroll. */
-export function legScrollLength(leg: JourneyLeg): number {
-  // A flight takes one screen whatever its length: the trip is not about the plane.
-  if (leg.long) return 1;
-  if (leg.km <= 0) return 0.6;
-  return Math.min(1.3, 0.45 + 0.18 * Math.sqrt(leg.km));
-}
-
 // ── Dashboard and ambience ───────────────────────────────────────────────────
 
 export type Ambient = "manana" | "tarde" | "atardecer" | "noche";
