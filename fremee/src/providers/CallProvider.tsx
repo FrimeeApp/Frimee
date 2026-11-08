@@ -1,12 +1,13 @@
 "use client";
 
-import { createContext, useCallback, useContext, useRef, useState, useEffect } from "react";
+import { createContext, useCallback, useContext, useMemo, useRef, useState, useEffect } from "react";
 import { useCall, type CallState, type CallMiembro, type CallEndReason } from "@/hooks/useCall";
 import CallRoom from "@/components/calls/CallRoom";
 import IncomingCall from "@/components/calls/IncomingCall";
 import OutgoingCall from "@/components/calls/OutgoingCall";
 import CallWidget from "@/components/calls/CallWidget";
 import { getLivekitUrl } from "@/config/external";
+import { useLivekitRoom, type LivekitRoomApi } from "@/hooks/useLivekitRoom";
 
 const livekitUrl = getLivekitUrl();
 
@@ -29,6 +30,14 @@ type CallContextValue = {
 };
 
 const CallContext = createContext<CallContextValue | null>(null);
+const CallRoomContext = createContext<LivekitRoomApi | null>(null);
+
+/** The LiveKit room of the current call (connection, participants, controls). */
+export function useCallRoom() {
+  const ctx = useContext(CallRoomContext);
+  if (!ctx) throw new Error("useCallRoom must be used within CallProvider");
+  return ctx;
+}
 
 export function useCallContext() {
   const ctx = useContext(CallContext);
@@ -122,6 +131,19 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   const inCall = callState.status === "outgoing" || callState.status === "active";
   const preparingOutgoing = outgoingPending !== null && callState.status !== "incoming" && callState.status !== "active";
   const incomingExpanded = callState.status === "incoming" && !incomingMinimized;
+  // One LiveKit room per call, shared by the outgoing screen, the room and the widget.
+  const roomToken = inCall ? callState.token : null;
+  const roomTipo = inCall ? callState.tipo : "audio";
+  const roomOptions = useMemo(() => roomToken ? {
+    token: roomToken,
+    livekitUrl,
+    tipo: roomTipo,
+    isGroup,
+    onParticipantConnected: markActive,
+    onEnd: () => void endCall(),
+    onEndForAll: () => void endCall(true),
+  } : null, [roomToken, roomTipo, isGroup, markActive, endCall]);
+  const room = useLivekitRoom(roomOptions);
   const participanteNombre = inCall && "participanteNombre" in callState ? callState.participanteNombre : "";
   const participanteFoto = inCall && "participanteFoto" in callState ? callState.participanteFoto : undefined;
 
@@ -147,6 +169,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <CallContext.Provider value={{ callState, startCall, joinCall, endCall, minimized, minimize: () => setMinimized(true), expand: () => setMinimized(false) }}>
+    <CallRoomContext.Provider value={room}>
       {children}
 
       {outgoingPending && callState.status !== "incoming" && callState.status !== "active" && (
@@ -197,17 +220,10 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       {inCall && (
         <div style={{ display: minimized ? "none" : "block" }}>
           <CallRoom
-            token={callState.token}
-            livekitUrl={livekitUrl}
-            tipo={callState.tipo}
             miembros={callState.miembros}
             participanteNombre={participanteNombre}
             isActive={isActive}
             activeSince={activeSince}
-            isGroup={isGroup}
-            onEnd={() => void endCall()}
-            onEndForAll={() => void endCall(true)}
-            onParticipantConnected={markActive}
             onMinimize={() => setMinimized(true)}
           />
         </div>
@@ -235,6 +251,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
           onEnd={() => void endCall()}
         />
       )}
+    </CallRoomContext.Provider>
     </CallContext.Provider>
   );
 }

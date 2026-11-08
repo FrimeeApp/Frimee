@@ -2,319 +2,35 @@
 
 import Image from "next/image";
 import { Capacitor } from "@capacitor/core";
-import { useEffect, useRef, useState, useCallback } from "react";
-import {
-  ConnectionState,
-  Room,
-  RoomEvent,
-  RemoteParticipant,
-  Track,
-  VideoPresets,
-  createLocalAudioTrack,
-  createLocalVideoTrack,
-  type LocalAudioTrack,
-  type LocalVideoTrack,
-} from "livekit-client";
+import { useEffect, useState } from "react";
 import type { CallMiembro } from "@/hooks/useCall";
+import type { ParticipantTile } from "@/hooks/useLivekitRoom";
+import { useCallRoom } from "@/providers/CallProvider";
 import { PhoneOffIcon } from "@/components/icons";
 import { Mic, MicOff, Video, VideoOff, ScreenShare, ScreenShareOff, ChevronLeft, Minus } from "lucide-react";
 
 type Props = {
-  token: string;
-  livekitUrl: string;
-  tipo: "audio" | "video";
   miembros: CallMiembro[];
   participanteNombre: string;
   isActive?: boolean;
   /** When the call was answered (ms since epoch), for the timer. */
   activeSince?: number | null;
-  isGroup?: boolean;
-  onEnd: () => void;
-  onEndForAll?: () => void;
-  onParticipantConnected?: () => void;
   onMinimize?: () => void;
 };
 
-type ParticipantTile = {
-  id: string;            // unique: identity or `${identity}:screen`
-  identity: string;
-  isLocal: boolean;
-  isScreenShare: boolean;
-  audioMuted: boolean;
-  videoMuted: boolean;
-};
-
-export default function CallRoom({ token, livekitUrl, tipo, miembros, participanteNombre, isActive, activeSince, isGroup, onEnd, onEndForAll, onParticipantConnected, onMinimize }: Props) {
+/** The room on screen. The connection itself lives in CallProvider (useCallRoom). */
+export default function CallRoom({ miembros, participanteNombre, isActive, activeSince, onMinimize }: Props) {
   const isNative = Capacitor.isNativePlatform();
-  const roomRef = useRef<Room | null>(null);
-  const audioSinkRef = useRef<HTMLDivElement | null>(null);
-  const attachedAudioElsRef = useRef<Map<string, HTMLMediaElement>>(new Map());
-  const [connected, setConnected] = useState(false);
-  const [tiles, setTiles] = useState<ParticipantTile[]>([]);
+  const {
+    connected, reconnecting, tiles, speaking, hasAnyVideo, micEnabled, cameraEnabled, screenSharing,
+    attachTrack, toggleMute, toggleVideo, toggleScreenShare, disconnect,
+  } = useCallRoom();
   const [focusedId, setFocusedId] = useState<string | null>(null);
-  const [screenSharing, setScreenSharing] = useState(false);
-  const [, setCameraOn] = useState(false);
-  const [hasAnyVideo, setHasAnyVideo] = useState(tipo === "video");
-  // Who is talking (identities) and whether the connection dropped and LiveKit is retrying.
-  const [speaking, setSpeaking] = useState<Set<string>>(() => new Set());
-  const [reconnecting, setReconnecting] = useState(false);
-
-  const onParticipantConnectedRef = useRef(onParticipantConnected);
-  useEffect(() => { onParticipantConnectedRef.current = onParticipantConnected; });
-  const onEndRef = useRef(onEnd);
-  useEffect(() => { onEndRef.current = onEnd; });
-  const onEndForAllRef = useRef(onEndForAll);
-  useEffect(() => { onEndForAllRef.current = onEndForAll; });
-
-  // trackMap keys:
-  //   "__local__"        → local camera track
-  //   "__local__:screen" → local screen share track
-  //   "{identity}"       → remote camera track
-  //   "{identity}:screen"→ remote screen share track
-  const trackMap = useRef<Map<string, Track>>(new Map());
-
-  const addTile = useCallback((id: string, identity: string, isLocal: boolean, isScreenShare: boolean) => {
-    setTiles((prev) => prev.some((t) => t.id === id) ? prev : [
-      ...prev,
-      { id, identity, isLocal, isScreenShare, audioMuted: false, videoMuted: isScreenShare ? false : tipo !== "video" },
-    ]);
-  }, [tipo]);
-
-  const removeTile = useCallback((id: string) => {
-    setTiles((prev) => prev.filter((t) => t.id !== id));
-    setFocusedId((prev) => prev === id ? null : prev);
-  }, []);
-
-  const attachTrack = useCallback((trackKey: string, el: HTMLVideoElement | null) => {
-    if (!el) return;
-    const t = trackMap.current.get(trackKey);
-    if (t) t.attach(el);
-  }, []);
-
-  const attachAudioTrack = useCallback((participantIdentity: string, track: Track) => {
-    const existing = attachedAudioElsRef.current.get(participantIdentity);
-    if (existing) {
-      track.attach(existing);
-      return;
-    }
-
-    const el = track.attach();
-    el.autoplay = true;
-    if (el instanceof HTMLVideoElement) {
-      el.playsInline = true;
-    }
-    el.style.display = "none";
-    audioSinkRef.current?.appendChild(el);
-    attachedAudioElsRef.current.set(participantIdentity, el);
-  }, []);
-
-  const detachAudioTrack = useCallback((participantIdentity: string, track?: Track) => {
-    const el = attachedAudioElsRef.current.get(participantIdentity);
-    if (!el) return;
-    if (track) {
-      track.detach(el);
-    }
-    el.remove();
-    attachedAudioElsRef.current.delete(participantIdentity);
-  }, []);
-
-  useEffect(() => {
-    if (!token || !livekitUrl) return;
-    let cancelled = false;
-    // Adaptive stream: each video arrives at the size it is shown. Dynacast: senders stop
-    // encoding layers nobody watches. Camera at 540p with 180p/360p layers for small tiles.
-    const room = new Room({
-      adaptiveStream: true,
-      dynacast: true,
-      videoCaptureDefaults: { resolution: VideoPresets.h540.resolution },
-      publishDefaults: { simulcast: true, videoSimulcastLayers: [VideoPresets.h180, VideoPresets.h360] },
-    });
-    roomRef.current = room;
-    // Warm up the connection (DNS, TLS, region) while the tracks are being created.
-    void room.prepareConnection(livekitUrl, token).catch(() => {});
-
-    room.on(RoomEvent.TrackSubscribed, (track, _pub, participant) => {
-      if (track.kind === Track.Kind.Video) {
-        if (track.source === Track.Source.ScreenShare) {
-          const tileId = `${participant.identity}:screen`;
-          trackMap.current.set(tileId, track);
-          addTile(tileId, participant.identity, false, true);
-          // attach if element already mounted
-          const el = document.querySelector<HTMLVideoElement>(`video[data-tile="${tileId}"]`);
-          if (el) track.attach(el);
-        } else {
-          trackMap.current.set(participant.identity, track);
-          setHasAnyVideo(true);
-          setTiles((prev) => prev.map((t) => t.id === participant.identity ? { ...t, videoMuted: false } : t));
-          const el = document.querySelector<HTMLVideoElement>(`video[data-tile="${participant.identity}"]`);
-          if (el) track.attach(el);
-        }
-      } else if (track.kind === Track.Kind.Audio) {
-        attachAudioTrack(participant.identity, track);
-      }
-    });
-
-    room.on(RoomEvent.TrackUnsubscribed, (track, _pub, participant) => {
-      if (track.kind === Track.Kind.Video && track.source === Track.Source.ScreenShare) {
-        removeTile(`${participant.identity}:screen`);
-      } else if (track.kind === Track.Kind.Audio) {
-        detachAudioTrack(participant.identity, track);
-      }
-    });
-
-    // Microphone and camera mute separately (a camera turned off is not a muted microphone).
-    const setMuted = (source: Track.Source, identity: string, muted: boolean) => {
-      if (source !== Track.Source.Microphone && source !== Track.Source.Camera) return;
-      const field = source === Track.Source.Microphone ? "audioMuted" : "videoMuted";
-      setTiles((prev) => prev.map((t) => t.identity === identity && !t.isScreenShare ? { ...t, [field]: muted } : t));
-    };
-    room.on(RoomEvent.TrackMuted, (pub, participant) => setMuted(pub.source, participant.identity, true));
-    room.on(RoomEvent.TrackUnmuted, (pub, participant) => setMuted(pub.source, participant.identity, false));
-    room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
-      setSpeaking(new Set(speakers.map((p) => p.identity)));
-    });
-    room.on(RoomEvent.ConnectionStateChanged, (state) => {
-      setReconnecting(state === ConnectionState.Reconnecting || state === ConnectionState.SignalReconnecting);
-    });
-
-    room.on(RoomEvent.Connected, () => {
-      if (!cancelled) {
-        setConnected(true);
-        addTile(room.localParticipant.identity, room.localParticipant.identity, true, false);
-      }
-    });
-    room.on(RoomEvent.Disconnected, () => {
-      attachedAudioElsRef.current.forEach((el) => el.remove());
-      attachedAudioElsRef.current.clear();
-      if (!cancelled) { setConnected(false); onEndRef.current(); }
-    });
-    room.on(RoomEvent.ParticipantConnected, (participant: RemoteParticipant) => {
-      if (!cancelled) {
-        addTile(participant.identity, participant.identity, false, false);
-        onParticipantConnectedRef.current?.();
-      }
-    });
-    room.on(RoomEvent.ParticipantDisconnected, (participant: RemoteParticipant) => {
-      if (!cancelled) {
-        removeTile(participant.identity);
-        removeTile(`${participant.identity}:screen`);
-        if (room.remoteParticipants.size === 0) {
-          if (isGroup) onEndForAllRef.current?.();
-          else onEndRef.current();
-        }
-      }
-    });
-
-    const connect = async () => {
-      // Microphone (and camera) open while the room connects, not after: audio starts sooner.
-      const localTracks: Promise<[LocalAudioTrack, LocalVideoTrack | null]> = Promise.all([
-        createLocalAudioTrack({ echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 }),
-        tipo === "video" ? createLocalVideoTrack() : Promise.resolve(null),
-      ]);
-      localTracks.catch(() => {}); // handled below, after connecting
-      await room.connect(livekitUrl, token);
-      if (cancelled) { room.disconnect(); return; }
-      // Someone may have joined before this side finished connecting: no ParticipantConnected
-      // event comes for them, so the call counts as answered right here.
-      if (room.remoteParticipants.size > 0) onParticipantConnectedRef.current?.();
-      room.remoteParticipants.forEach((p) => {
-        addTile(p.identity, p.identity, false, false);
-        // attach any already-published screen share
-        p.getTrackPublications().forEach((pub) => {
-          if (pub.track && pub.source === Track.Source.ScreenShare) {
-            const tileId = `${p.identity}:screen`;
-            trackMap.current.set(tileId, pub.track);
-            addTile(tileId, p.identity, false, true);
-          }
-        });
-      });
-
-      try {
-        const [audioTrack, videoTrack] = await localTracks;
-        if (cancelled) { audioTrack.stop(); videoTrack?.stop(); room.disconnect(); return; }
-        await room.localParticipant.publishTrack(audioTrack);
-
-        if (videoTrack) {
-          await room.localParticipant.publishTrack(videoTrack);
-          trackMap.current.set("__local__", videoTrack);
-          const el = document.querySelector<HTMLVideoElement>(`video[data-tile="${room.localParticipant.identity}"]`);
-          if (el) videoTrack.attach(el);
-        }
-      } catch (err) {
-        if (!cancelled) console.error("[CallRoom] publish error", err);
-      }
-    };
-
-    connect().catch(console.error);
-    return () => {
-      cancelled = true;
-      attachedAudioElsRef.current.forEach((el) => el.remove());
-      attachedAudioElsRef.current.clear();
-      room.disconnect();
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, livekitUrl, tipo, attachAudioTrack, detachAudioTrack]);
-
-  const toggleMute = useCallback(async () => {
-    const local = roomRef.current?.localParticipant;
-    if (!local) return;
-    const muted = local.isMicrophoneEnabled;
-    await local.setMicrophoneEnabled(!muted);
-    setTiles((prev) => prev.map((t) => t.isLocal && !t.isScreenShare ? { ...t, audioMuted: muted } : t));
-  }, []);
-
-  const toggleVideo = useCallback(async () => {
-    const local = roomRef.current?.localParticipant;
-    if (!local) return;
-    const enabled = local.isCameraEnabled;
-    try {
-      await local.setCameraEnabled(!enabled);
-      if (!enabled) {
-        const pub = local.getTrackPublication(Track.Source.Camera);
-        if (pub?.track) {
-          trackMap.current.set("__local__", pub.track);
-          const el = document.querySelector<HTMLVideoElement>(`video[data-tile="${local.identity}"]`);
-          if (el) pub.track.attach(el);
-        }
-        setHasAnyVideo(true);
-        setCameraOn(true);
-        setTiles((prev) => prev.map((t) => t.isLocal && !t.isScreenShare ? { ...t, videoMuted: false } : t));
-      } else {
-        setCameraOn(false);
-        setTiles((prev) => prev.map((t) => t.isLocal && !t.isScreenShare ? { ...t, videoMuted: true } : t));
-      }
-    } catch (err) { console.error("[CallRoom] camera toggle error", err); }
-  }, []);
-
-  const toggleScreenShare = useCallback(async () => {
-    const local = roomRef.current?.localParticipant;
-    if (!local) return;
-    try {
-      if (!screenSharing) {
-        await local.setScreenShareEnabled(true);
-        const pub = local.getTrackPublication(Track.Source.ScreenShare);
-        if (pub?.track) {
-          const tileId = `${local.identity}:screen`;
-          trackMap.current.set(tileId, pub.track);
-          addTile(tileId, local.identity, true, true);
-          const el = document.querySelector<HTMLVideoElement>(`video[data-tile="${tileId}"]`);
-          if (el) pub.track.attach(el);
-        }
-        setScreenSharing(true);
-      } else {
-        await local.setScreenShareEnabled(false);
-        removeTile(`${local.identity}:screen`);
-        setScreenSharing(false);
-      }
-    } catch (err) { console.error("[CallRoom] screen share error", err); }
-  }, [screenSharing, addTile, removeTile]);
-
-  const handleEnd = useCallback(() => { roomRef.current?.disconnect(); }, []);
+  const handleEnd = disconnect;
 
   const getMiembro = (identity: string) => miembros.find((m) => m.id === identity);
-  const localTile = tiles.find((t) => t.isLocal && !t.isScreenShare);
-  const localMuted = localTile?.audioMuted ?? false;
-  const localVideoOff = localTile?.videoMuted ?? true;
+  const localMuted = !micEnabled;
+  const localVideoOff = !cameraEnabled;
   const showVideo = hasAnyVideo;
   const visibleTileCount = tiles.length > 0 ? tiles.length : miembros.length;
 
@@ -399,7 +115,6 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
       className="fixed inset-0 z-[100] flex flex-col bg-[#1a1a1a] text-white"
       style={isNative ? { paddingTop: "env(safe-area-inset-top)", paddingBottom: "calc(env(safe-area-inset-bottom) + 12px)" } : undefined}
     >
-      <div ref={audioSinkRef} aria-hidden="true" />
       {/* Header */}
       <div className="shrink-0 flex items-center justify-between px-4 pt-4 pb-2">
         <div className="flex flex-col">
