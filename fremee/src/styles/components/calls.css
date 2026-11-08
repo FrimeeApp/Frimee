@@ -138,3 +138,101 @@
   .call-enter, .call-drop { animation: call-fade 120ms linear both; }
 }
 @keyframes call-fade { from { opacity: 0; } to { opacity: 1; } }
+
+/* ── Control button (board C1) ───────────────────────────────────────────────
+   In the room: control 56, hang up 64, secondary 44. Outside the room (ringing screens):
+   accept/reject 72, neutral 56, with a label 8 px below. */
+.call-ctl {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  background: var(--stage-control);
+  color: var(--stage-text);
+  transition: background-color 150ms var(--call-ease), transform 120ms var(--call-ease);
+}
+.call-ctl:active { background: var(--stage-control-pressed); transform: scale(0.94); }
+.call-ctl.call-ctl-sm { width: 44px; height: 44px; }
+.call-ctl.call-ctl-ghost { background: rgba(14, 14, 16, 0.48); }
+.call-ctl.call-ctl-off { background: var(--stage-control-off); color: var(--stage-control-off-icon); }
+.call-ctl.call-ctl-off:active { background: #c9c9cf; }
+.call-ctl.call-ctl-on { background: var(--stage-control-on); color: var(--stage-control-on-icon); }
+.call-ctl.call-ctl-on:active { background: #29b8a0; }
+.call-ctl.call-ctl-hang { width: 64px; height: 64px; background: var(--stage-hangup); color: #ffffff; }
+.call-ctl.call-ctl-hang:active { background: var(--stage-hangup-pressed); }
+.call-ctl[aria-disabled="true"] {
+  background: var(--stage-control-disabled);
+  color: var(--stage-control-disabled-icon);
+  cursor: not-allowed;
+  transform: none;
+}
+/* Outside the room: the user's theme. */
+.call-ctl.call-ctl-app { background: var(--call-btn-neutral); color: var(--text-primary); }
+.call-ctl.call-ctl-app:active { background: var(--surface-inset); }
+.call-ctl.call-ctl-accept { width: 72px; height: 72px; background: var(--call-accept); color: var(--call-accept-icon); }
+.call-ctl.call-ctl-reject { width: 72px; height: 72px; background: var(--call-reject); color: #ffffff; }
+.call-ctl.call-ctl-fill { background: var(--call-btn-fill); color: var(--call-btn-fill-text); }
+/* The small banner buttons (M5, D5) stay 44 px also when they accept or decline. */
+.call-ctl.call-ctl-sm.call-ctl-accept,
+.call-ctl.call-ctl-sm.call-ctl-reject { width: 44px; height: 44px; }
+@media (hover: hover) {
+  .call-ctl:hover { background: var(--stage-control-hover); }
+  .call-ctl.call-ctl-off:hover { background: #dcdce0; }
+  .call-ctl.call-ctl-on:hover { background: #32c9b0; }
+  .call-ctl.call-ctl-hang:hover { background: var(--stage-hangup-hover); }
+  .call-ctl.call-ctl-app:hover { background: var(--surface-2); filter: brightness(0.96); }
+  .call-ctl.call-ctl-accept:hover { filter: brightness(1.08); }
+  .call-ctl.call-ctl-reject:hover { background: var(--stage-hangup-hover); }
+  .call-ctl[aria-disabled="true"]:hover { background: var(--stage-control-disabled); }
+  /* Tooltip after 500 ms, only with a fine pointer. */
+  .call-ctl[data-tip]::after {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translate(-50%, 4px);
+    height: 28px;
+    padding: 0 10px;
+    display: flex;
+    align-items: center;
+    border-radius: 6px;
+    background: #eeeeef;
+    color: #111114;
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 120ms var(--call-ease), transform 120ms var(--call-ease);
+  }
+  .call-ctl[data-tip]:hover::after { opacity: 1; transform: translate(-50%, 0); transition-delay: 500ms; }
+}
+.call-ctl:focus-visible { outline: 2px solid var(--stage-focus); outline-offset: 3px; }
+.call-ctl-label { font-size: 13px; font-weight: 500; line-height: 16px; color: var(--text-secondary); }
+
+/* ── Avatars: initials on a colour picked from the person (light / dark pairs). ── */
+.call-av { display: flex; align-items: center; justify-content: center; flex: none; border-radius: 50%; font-weight: 600; color: var(--text-primary); overflow: hidden; }
+.call-av-0 { background: #f0e4d3; }
+.call-av-1 { background: #dbe2f0; }
+.call-av-2 { background: #eedcea; }
+.call-av-3 { background: #f2dfd4; }
+.call-av-4 { background: #e3e5ea; }
+.call-av-5 { background: #dcebe6; }
+.dark .call-av-0 { background: #4a4033; }
+.dark .call-av-1 { background: #34405a; }
+.dark .call-av-2 { background: #4a3848; }
+.dark .call-av-3 { background: #4d3b30; }
+.dark .call-av-4 { background: #3a3f48; }
+.dark .call-av-5 { background: #2f4a45; }
+/* In the room the avatars always use the dark pairs. */
+.call-stage .call-av { color: var(--stage-text); }
+.call-stage .call-av-0 { background: #4a4033; }
+.call-stage .call-av-1 { background: #34405a; }
+.call-stage .call-av-2 { background: #4a3848; }
+.call-stage .call-av-3 { background: #4d3b30; }
+.call-stage .call-av-4 { background: #3a3f48; }
+.call-stage .call-av-5 { background: #2f4a45; }

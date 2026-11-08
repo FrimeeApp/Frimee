@@ -52,6 +52,14 @@ export function GuestBanner() {
     };
   }, [stage]);
 
+  // Other screens (the guest call limit) ask to open the save-account dialog.
+  useEffect(() => {
+    if (!stage) return;
+    const openDialog = () => setOpen(true);
+    window.addEventListener("frimee:save-account", openDialog);
+    return () => window.removeEventListener("frimee:save-account", openDialog);
+  }, [stage]);
+
   if (!stage) return null;
 
   const label = {
