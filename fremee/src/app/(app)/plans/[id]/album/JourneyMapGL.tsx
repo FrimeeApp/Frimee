@@ -6,7 +6,7 @@ import { createPortal } from "react-dom";
 import type { Map as MaplibreMap, Marker, GeoJSONSource, StyleSpecification, ExpressionSpecification } from "maplibre-gl";
 import type { FeatureCollection } from "geojson";
 import type { LatLng } from "@/lib/polyline";
-import { cameraFor, dashboardAt, legMidpoint, pendingLegs, positionFromProgress, vehicleAt, type JourneyDay, type JourneyPosition } from "@/lib/album-journey";
+import { cameraFor, dashboardAt, FLIGHT_DESCENT_AT, legMidpoint, pendingLegs, positionFromProgress, vehicleAt, type JourneyDay, type JourneyPosition } from "@/lib/album-journey";
 import type { Motion } from "@/lib/motion";
 import { LegIcon } from "./LegIcon";
 import type { AlbumMiembro } from "@/services/api/endpoints/album.endpoint";
@@ -164,9 +164,15 @@ function hasWebGL() {
   }
 }
 
-/** What changes the React-drawn parts (stops, badges, photo pile, camera): not every frame. */
+/** What changes the React-drawn parts (stops, badges, photo pile, camera): not every frame.
+ *  Past FLIGHT_DESCENT_AT of a leg counts too: that is when a flight's camera turns to the destination. */
 function discreteKey(p: JourneyPosition) {
-  return `${p.day}|${p.started}|${p.finished}|${p.stop}|${p.legT === 0}`;
+  return `${p.day}|${p.started}|${p.finished}|${p.stop}|${p.legT === 0}|${p.legT >= FLIGHT_DESCENT_AT}`;
+}
+
+/** Soft start and stop for camera moves. */
+function easeInOutCubic(t: number) {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 
 /** Brand colour up to `t` of the line (by length), transparent after: the trail of the current leg. */
@@ -362,11 +368,23 @@ export function JourneyMapGL({
     const bounds = cameraRef.current.bounds;
     if (!ready || !map || !bounds) return;
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    map.fitBounds(bounds, {
-      // Wide sides: stop names hang under their dots and must not be cut at the edges.
-      padding: { top: topPadding, bottom: 64, left: 80, right: 80 },
-      maxZoom: 16,
-      duration: reduced ? 0 : 1400,
+    // Wide sides: stop names hang under their dots and must not be cut at the edges.
+    const target = map.cameraForBounds(bounds, { padding: { top: topPadding, bottom: 64, left: 80, right: 80 }, maxZoom: 16 });
+    if (!target?.center || target.zoom === undefined) return;
+    if (reduced) {
+      map.jumpTo({ center: target.center, zoom: target.zoom });
+      return;
+    }
+    // A gentle arc (out and back in on long jumps) with a soft start and stop; bigger zoom
+    // changes, such as taking off or landing, get a little more time.
+    const zoomChange = Math.abs(map.getZoom() - target.zoom);
+    map.flyTo({
+      center: target.center,
+      zoom: target.zoom,
+      curve: 1.3,
+      duration: Math.min(2400, 1500 + zoomChange * 180),
+      easing: easeInOutCubic,
+      essential: true,
     });
   }, [ready, cameraKey, topPadding]);
 
