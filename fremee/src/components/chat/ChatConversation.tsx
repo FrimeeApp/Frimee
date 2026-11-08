@@ -1274,6 +1274,9 @@ export function ChatConversation({
         });
 
         let replyText = result.reply;
+        // Encuesta pedida explícitamente: se crea después de guardar la respuesta,
+        // para que en el chat salga primero el mensaje de Frimee y debajo la encuesta.
+        let pollToCreate: string | null = null;
 
         // Si la IA quiere crear una encuesta:
         // - Si el usuario la pidió explícitamente → crear directamente
@@ -1292,16 +1295,8 @@ export function ChatConversation({
             const pollTexto = JSON.stringify({ type: "poll", question, options, expires_at: expiresAt });
 
             if (userAskedForPoll) {
-              // Crear directamente sin confirmación
-              try {
-                const newId = await sendBotMensaje(chat.chat_id, pollTexto);
-                const pollMsg: LocalMsg = { id: newId, _key: newId, sender_id: "frimee", sender_nombre: "Frimee", sender_profile_image: null, texto: pollTexto, created_at: new Date().toISOString(), tipo: "bot" };
-                void channelRef.current?.send({ type: "broadcast", event: "new_message", payload: pollMsg });
-                setMessages((prev) => prev.some((m) => m.id === newId) ? prev : [...prev, pollMsg]);
-                onNewMessageRef.current(pollMsg);
-              } catch {
-                replyText = "No pude crear la encuesta, inténtalo de nuevo.";
-              }
+              // Crear directamente sin confirmación (justo después de la respuesta)
+              pollToCreate = pollTexto;
             } else {
               // IA propone → pedir confirmación
               pendingAiVotarRef.current = { pollTexto, botReply: replyText };
@@ -1329,6 +1324,20 @@ export function ChatConversation({
         setMessages((prev) => prev.map((m) =>
           m.id === thinkingKey ? { ...m, id: botMsgId, _key: botMsgId, texto: replyText || "…" } : m
         ));
+
+        if (pollToCreate) {
+          try {
+            const newId = await sendBotMensaje(chat.chat_id, pollToCreate);
+            const pollMsg: LocalMsg = { id: newId, _key: newId, sender_id: "frimee", sender_nombre: "Frimee", sender_profile_image: null, texto: pollToCreate, created_at: new Date().toISOString(), tipo: "bot" };
+            void channelRef.current?.send({ type: "broadcast", event: "new_message", payload: pollMsg });
+            setMessages((prev) => prev.some((m) => m.id === newId) ? prev : [...prev, pollMsg]);
+            onNewMessageRef.current(pollMsg);
+          } catch {
+            const errorId = await sendBotMensaje(chat.chat_id, "No pude crear la encuesta, inténtalo de nuevo.");
+            const errorMsg: LocalMsg = { id: errorId, _key: errorId, sender_id: "frimee", sender_nombre: "Frimee", sender_profile_image: null, texto: "No pude crear la encuesta, inténtalo de nuevo.", created_at: new Date().toISOString(), tipo: "bot" };
+            setMessages((prev) => prev.some((m) => m.id === errorId) ? prev : [...prev, errorMsg]);
+          }
+        }
       } catch {
         setMessages((prev) => prev.map((m) =>
           m.id === thinkingKey ? { ...m, texto: "No pude procesar tu mensaje, inténtalo de nuevo." } : m
