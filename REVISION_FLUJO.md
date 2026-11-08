@@ -17,6 +17,7 @@ Las migraciones se prueban primero en dev. Al fusionar la rama, aplicar en produ
 - [ ] `supabase/migrations/20261027000006_plan_chat_welcome.sql` (mensaje de bienvenida de Frimee en cada chat de plan nuevo)
 - [ ] `supabase/migrations/20261027000007_route_cache_modo.sql` (caché de rutas por medio de transporte; vacía la caché y borra los trayectos no en coche para recalcularlos)
 - [ ] `supabase/migrations/20261108000001_lock_definer_functions.sql` (funciones con permisos totales que no comprobaban quién llama: **aplicar antes de abrir el modo invitado**)
+- [ ] `supabase/migrations/20261108000004_plan_album.sql` (`fn_plan_album`: todo el álbum del viaje en una llamada, solo para miembros del plan)
 - [ ] Desplegar la Edge Function `frimee-assistant` (fallo 6). Es compatible con la app actual: la app ya envía el token.
 
 ## Fallos
@@ -131,9 +132,10 @@ Partes del flujo que aún no se han recorrido en dev (ver `TEST_PLAN.md` y `CHEC
 - [ ] **Autocompletado al escribir `@` en el chat**: lista con Frimee (asistente) arriba y los miembros del plan debajo. Ayuda a descubrir el asistente y a mencionar a la gente en `/tarea`. Las sugerencias rápidas y el mensaje de bienvenida ya cubren lo básico.
 - [ ] **Trayectos en transporte público según la hora de la actividad.** Hoy Google calcula bus, metro y tren con la hora actual. Enviar como `departure_time` la hora de fin de la actividad anterior (y guardarla en la clave de `route_cache`, o no cachear esos tramos) para que el tiempo y la ruta sean los de ese momento.
 
+- [ ] **Álbum: agrupar por la hora del destino.** Hoy agrupa por días con la zona horaria de quien lo mira: una actividad a las 23:15 en Lisboa cae en el día siguiente vista desde España (00:15). Guardar la zona horaria del plan (o deducirla de las coordenadas) y usarla al agrupar.
+
 ## Pendiente de limpiar
 
-- [ ] **Rama del álbum:** el viaje largo, sus fotos y `demo-photos.ts` ya están en `main` (migración `20261108000003`, con la comprobación de `20261108000002`). Al rebasar la rama, quedarse con la `0004` corta de `main` y no volver a aplicar la `0004` de la rama; su paso 2.10 (`plan_album`) pasa a ser el siguiente libre.
 - [ ] **Baja de cuenta**: rehacer «Eliminar cuenta» (ver «Fallos encontrados» en `VERIFICACION_PUBLICACION.md`).
 - [ ] **Landing**: sus páginas legales (`fremee-landings`) siguen con la versión del 01/05/2026; redirigirlas a las de la app o copiar el texto nuevo.
 
