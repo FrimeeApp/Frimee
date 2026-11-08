@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { focusInput, getAuthErrorMessage } from "@/components/auth/AuthFormUtils";
+import { APP_HOME_PATH } from "@/config/app";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 
 export default function ResetPage() {
@@ -151,12 +152,17 @@ export default function ResetPage() {
 
       if (error) throw error;
 
+      // The recovery link already signed this device in, so it goes straight into
+      // the app. Sessions elsewhere are closed: whoever had the old password is out.
+      const { error: signOutError } = await supabase.auth.signOut({ scope: "others" });
+      if (signOutError) console.error("[reset] signOut others error", signOutError);
+
       setMsg({
         type: "ok",
-        text: "Contraseña actualizada. Te llevamos a iniciar sesión.",
+        text: "Contraseña actualizada. Entrando…",
       });
 
-      setTimeout(() => router.replace("/login"), 1200);
+      setTimeout(() => router.replace(APP_HOME_PATH), 1200);
     } catch (error) {
       console.error("[reset] updateUser error", error);
       setMsg({
