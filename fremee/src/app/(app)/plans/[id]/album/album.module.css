@@ -217,8 +217,15 @@
   scroll-margin-top: var(--al-snap-top);
 }
 /* A leg fills the screen so the next stop stays out of view while it plays, and the last
-   step is tall enough to reach the snap line. */
+   step is tall enough to reach the snap line. Fixed sizes, not --al-snap-top: the header's
+   height changes from step to step, and every leg resizing with it shifted the whole page. */
 .legStep,
 .steps > section:last-child {
-  min-height: calc(100dvh - var(--al-snap-top));
+  min-height: calc(100dvh - min(48dvh, 420px) - 96px);
+}
+@media (min-width: 1024px) {
+  .legStep,
+  .steps > section:last-child {
+    min-height: calc(100dvh - 140px);
+  }
 }
