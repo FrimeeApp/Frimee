@@ -2,9 +2,11 @@
 
 import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import LegalNotice from "@/components/auth/LegalNotice";
 import GoogleAuthButton from "@/components/auth/GoogleAuthButton";
 import { AUTH_EMAIL_REGEX, focusInput, getAuthErrorMessage } from "@/components/auth/AuthFormUtils";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
+import { startGuestSession } from "@/services/auth/guest";
 import { Input } from "@/components/ui/Input";
 import { EyeIcon } from "@/components/icons";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -38,12 +40,19 @@ function LoginPageInner() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  // Full-screen loader: only while checking an existing session or entering as a guest.
   const [loading, setLoading] = useState(() => hasCachedSession());
+  // Email sign-in keeps the form on screen (button shows "Entrando...") until the
+  // credentials are checked, so a wrong password does not flash the splash screen.
+  const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [invalidField, setInvalidField] = useState<"email" | "password" | null>(null);
 
   const emailRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
+  // While entering as a guest the session appears before the demo plan exists:
+  // the auth listener must not redirect, handleGuest does it once the plan is ready.
+  const enteringAsGuestRef = useRef(false);
 
   const router = useRouter();
 
@@ -67,7 +76,7 @@ function LoginPageInner() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) router.replace(redirectTo);
+      if (session && !enteringAsGuestRef.current) router.replace(redirectTo);
     });
 
     return () => {
@@ -101,7 +110,7 @@ function LoginPageInner() {
       return;
     }
 
-    setLoading(true);
+    setSubmitting(true);
     try {
       const supabase = createBrowserSupabaseClient();
 
@@ -112,13 +121,27 @@ function LoginPageInner() {
 
       if (error) throw error;
 
+      // Signed in: keep the button disabled while the app opens.
       router.replace(redirectTo);
     } catch (err: unknown) {
       setErrorMsg(getAuthErrorMessage(err, "No se pudo iniciar sesión. Inténtalo de nuevo."));
       focusInput(emailRef);
-    } finally {
-      setLoading(false);
+      setSubmitting(false);
       setPassword("");
+    }
+  };
+
+  const handleGuest = async () => {
+    setErrorMsg(null);
+    setLoading(true);
+    enteringAsGuestRef.current = true;
+    try {
+      const planId = await startGuestSession();
+      router.replace(planId ? `/plans/${planId}` : APP_HOME_PATH);
+    } catch (err: unknown) {
+      enteringAsGuestRef.current = false;
+      setErrorMsg(getAuthErrorMessage(err, "No se pudo entrar como invitado. Inténtalo de nuevo."));
+      setLoading(false);
     }
   };
 
@@ -198,10 +221,10 @@ function LoginPageInner() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || submitting}
               className="auth-solid-button h-btn-primary w-full rounded-button text-button-md font-[var(--fw-medium)] transition-colors duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] disabled:opacity-[var(--disabled-opacity)]"
             >
-              {loading ? "Entrando..." : "Iniciar sesión"}
+              {submitting ? "Entrando..." : "Iniciar sesión"}
             </button>
           </form>
 
@@ -211,16 +234,19 @@ function LoginPageInner() {
               Registrarse
             </Link>
           </p>
+
+          <button
+            type="button"
+            onClick={() => void handleGuest()}
+            disabled={loading || submitting}
+            className="auth-neutral-button mt-[var(--space-3)] flex h-btn-primary w-full items-center justify-center rounded-button border border-app bg-[var(--input-bg)] text-button-md font-[var(--fw-medium)] text-app transition-colors duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] disabled:opacity-[var(--disabled-opacity)]"
+          >
+            Probar como invitado
+          </button>
         </div>
       </div>
 
-      <p className="mt-auto pb-[max(var(--space-2),env(safe-area-inset-bottom))] pt-[var(--space-4)] text-center text-caption text-tertiary min-[800px]:pt-[var(--space-8)]">
-        Al continuar, aceptas los{" "}
-        <Link href="#" className="font-[var(--fw-semibold)] text-muted">
-          Términos y <br /> Condiciones
-        </Link>{" "}
-        de Frimee
-      </p>
+      <LegalNotice />
     </div>
   );
 }

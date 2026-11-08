@@ -2,8 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import LegalNotice from "@/components/auth/LegalNotice";
 import { useRouter } from "next/navigation";
 import { focusInput, getAuthErrorMessage } from "@/components/auth/AuthFormUtils";
+import { APP_HOME_PATH } from "@/config/app";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 
 export default function ResetPage() {
@@ -151,12 +153,17 @@ export default function ResetPage() {
 
       if (error) throw error;
 
+      // The recovery link already signed this device in, so it goes straight into
+      // the app. Sessions elsewhere are closed: whoever had the old password is out.
+      const { error: signOutError } = await supabase.auth.signOut({ scope: "others" });
+      if (signOutError) console.error("[reset] signOut others error", signOutError);
+
       setMsg({
         type: "ok",
-        text: "Contraseña actualizada. Te llevamos a iniciar sesión.",
+        text: "Contraseña actualizada. Entrando…",
       });
 
-      setTimeout(() => router.replace("/login"), 1200);
+      setTimeout(() => router.replace(APP_HOME_PATH), 1200);
     } catch (error) {
       console.error("[reset] updateUser error", error);
       setMsg({
@@ -181,12 +188,7 @@ export default function ResetPage() {
           </div>
         </div>
 
-        <p className="mt-auto pb-[max(var(--space-2),env(safe-area-inset-bottom))] pt-[var(--space-4)] text-center text-caption text-tertiary min-[800px]:pt-[var(--space-8)]">
-          Al continuar, aceptas los{" "}
-          <span className="font-[var(--fw-semibold)] text-muted">Términos y</span>
-          <br />
-          <span className="font-[var(--fw-semibold)] text-muted">Condiciones</span> de Frimee
-        </p>
+        <LegalNotice />
       </div>
     );
   }
@@ -295,12 +297,7 @@ export default function ResetPage() {
         </div>
       </div>
 
-      <p className="mt-auto pb-[max(var(--space-2),env(safe-area-inset-bottom))] pt-[var(--space-4)] text-center text-caption text-tertiary min-[800px]:pt-[var(--space-8)]">
-        Al continuar, aceptas los{" "}
-        <span className="font-[var(--fw-semibold)] text-muted">Términos y</span>
-        <br />
-        <span className="font-[var(--fw-semibold)] text-muted">Condiciones</span> de Frimee
-      </p>
+      <LegalNotice />
     </div>
   );
 }

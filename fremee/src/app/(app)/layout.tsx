@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { AuthGuard } from "@/components/auth/AuthGuard";
+import { GuestBanner } from "@/components/auth/GuestBanner";
 import { CallProvider } from "@/providers/CallProvider";
 import { PushProvider } from "@/providers/PushProvider";
 
@@ -16,6 +17,7 @@ export default function AppLayout({ children, modal }: { children: ReactNode; mo
             />
             {children}
             {modal}
+            <GuestBanner />
           </div>
         </CallProvider>
       </PushProvider>

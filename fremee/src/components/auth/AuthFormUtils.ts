@@ -10,6 +10,12 @@ export function getAuthErrorMessage(error: unknown, fallback: string) {
 
   const message = error.message.toLowerCase();
 
+  // Supabase Auth limits attempts per IP (Authentication → Rate Limits) and answers 429.
+  const status = (error as { status?: number }).status;
+  if (status === 429 || message.includes("rate limit")) {
+    return "Demasiados intentos seguidos. Espera unos minutos y vuelve a probar.";
+  }
+
   if (message.includes("invalid login credentials")) {
     return "El email o la contraseña no son correctos.";
   }

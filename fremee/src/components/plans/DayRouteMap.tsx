@@ -36,6 +36,20 @@ function logDayRouteMap(message: string, details?: unknown) {
 function isoDateOnly(iso: string) { return iso.slice(0, 10); }
 function roundCoord(n: number) { return Math.round(n * 1e4) / 1e4; }
 
+// Same key as route_cache.modo (route_cache_modo() in SQL and cacheMode in /api/directions).
+function cacheModeFor(travelMode?: string | null): string {
+  const known = ["APIE", "COCHE", "BUS", "METRO", "TREN"];
+  return travelMode && known.includes(travelMode) ? travelMode : "COCHE";
+}
+
+// Preferred vehicle for public transport, like transit_mode in /api/directions.
+function transitPreference(travelMode?: string | null): google.maps.TransitMode | undefined {
+  if (travelMode === "BUS") return google.maps.TransitMode.BUS;
+  if (travelMode === "METRO") return google.maps.TransitMode.SUBWAY;
+  if (travelMode === "TREN") return google.maps.TransitMode.TRAIN;
+  return undefined;
+}
+
 function isNativePlatform() {
   return Capacitor.isNativePlatform();
 }
@@ -61,12 +75,15 @@ async function requestDirectionsFromGoogleClient(params: {
   to: Coord;
   travelMode?: string | null;
 }): Promise<DirectionsResultShape> {
+  await loadGoogleMapsScript(); // the itinerary can call this before any map has loaded the script
   const service = new window.google.maps.DirectionsService();
+  const preferred = transitPreference(params.travelMode);
   const result = await service.route({
     origin: params.from,
     destination: params.to,
     travelMode: mapTravelMode(params.travelMode ?? undefined),
     unitSystem: google.maps.UnitSystem.METRIC,
+    ...(preferred ? { transitOptions: { modes: [preferred] } } : {}),
   });
 
   const route = result.routes[0];
@@ -83,13 +100,17 @@ async function requestDirectionsFromGoogleClient(params: {
   };
 }
 
-async function requestDirections(params: {
+/** Route for one leg: shared cache (native), then /api/directions, then Google in the browser. Also used by the itinerary. */
+export async function requestDirections(params: {
   waypoints: string[];
   from: Coord;
   to: Coord;
   travelMode?: string | null;
   accessToken?: string;
 }): Promise<DirectionsResultShape> {
+  // In the app, try the shared cache first: it saves a round trip to our API.
+  // On a miss, fall through to /api/directions like the web does (it accepts the
+  // Bearer token since 5d73025), so the route is drawn even if nobody computed it before.
   if (isNativePlatform()) {
     const supabase = createBrowserSupabaseClient();
     const { data, error } = await supabase
@@ -99,6 +120,7 @@ async function requestDirections(params: {
       .eq("origin_lng", roundCoord(params.from.lng))
       .eq("dest_lat", roundCoord(params.to.lat))
       .eq("dest_lng", roundCoord(params.to.lng))
+      .eq("modo", cacheModeFor(params.travelMode))
       .maybeSingle();
 
     if (error) {
@@ -110,18 +132,15 @@ async function requestDirections(params: {
           to: params.to,
         });
       }
-      return {};
+    } else if (data?.polyline) {
+      return {
+        polyline: data.polyline,
+        legs: [{
+          distance: data.distance ?? undefined,
+          duration: data.duration ?? undefined,
+        }],
+      };
     }
-
-    return data
-      ? {
-          polyline: data.polyline ?? undefined,
-          legs: [{
-            distance: data.distance ?? undefined,
-            duration: data.duration ?? undefined,
-          }],
-        }
-      : {};
   }
 
   try {

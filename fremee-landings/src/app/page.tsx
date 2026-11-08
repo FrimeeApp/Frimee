@@ -4,7 +4,7 @@ import ScrollEffects from "@/components/landing/ScrollEffects";
 import PhoneMockup from "@/components/landing/PhoneMockup";
 import ValueCarousel from "@/components/landing/ValueCarousel";
 import FlowStepper from "@/components/landing/FlowStepper";
-import WaitlistSection from "@/components/landing/WaitlistSection";
+import StartSection from "@/components/landing/StartSection";
 import { AnimatedTestimonials } from "@/components/blocks/animated-testimonials";
 import { PricingSection, type Plan } from "@/components/ui/pricing";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
@@ -94,6 +94,7 @@ const pricingPlans: Plan[] = [
   {
     name: "Pro",
     highlighted: true,
+    comingSoon: true,
     info: "Para grupos que viajan",
     price: { monthly: 6.99, yearly: 69 },
     features: [
@@ -107,6 +108,7 @@ const pricingPlans: Plan[] = [
   },
   {
     name: "Max",
+    comingSoon: true,
     info: "Para grandes aventuras",
     price: { monthly: 12.99, yearly: 129 },
     features: [
@@ -123,7 +125,7 @@ const pricingPlans: Plan[] = [
 const faqItems = [
   {
     q: "¿Es gratis?",
-    a: "Sí, Frimee es completamente gratuito. Las suscripciones ofrecen funcionalidades adicionales y son opcionales.",
+    a: "Sí, Frimee es completamente gratuito. Próximamente habrá suscripciones opcionales con funcionalidades adicionales.",
   },
   {
     q: "¿Cómo se usa?",
@@ -323,7 +325,7 @@ export default function LandingV3Page() {
         />
       </section>
 
-      <WaitlistSection showModel={false} />
+      <StartSection />
 
       {/* -- 7. Demo ------------------------------------ */}
       <section id="demo" className="v3-demo-dark v3-animate-section">

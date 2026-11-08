@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Maximize2, ChevronLeft, ChevronDown, UserPlus, Share2, Pencil, MapPin, Calendar, ArrowRight, Plus, ExternalLink, Upload, Check, FileText, Download, QrCode } from "lucide-react";
+import { Maximize2, ChevronLeft, ChevronDown, UserPlus, Share2, Pencil, MapPin, Calendar, Plus, ExternalLink, Upload, Check, FileText, Download, QrCode } from "lucide-react";
 import { useAuth } from "@/providers/AuthProvider";
 import { useCallContext } from "@/providers/CallProvider";
 import { ChatConversation, PhoneCallIcon, VideoCallIcon } from "@/components/chat/ChatConversation";
@@ -14,7 +14,7 @@ import CreatePlanModal, { type EditPlanInitialValues } from "@/components/plans/
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { fetchSubplanes, updateSubplanTransporte, updateSubplanViaje, type SubplanRow, TIPOS_TRANSPORTE } from "@/services/api/endpoints/subplanes.endpoint";
 import { getBalancesForPlanEndpoint, listGastosForPlanEndpoint, pagarLiquidacionEndpoint, uploadComprobanteEndpoint, type BalanceRow, type GastoRow } from "@/services/api/endpoints/gastos.endpoint";
-import DayRouteMap from "@/components/plans/DayRouteMap";
+import DayRouteMap, { requestDirections } from "@/components/plans/DayRouteMap";
 import AddGastoSheet from "@/components/plans/modals/AddGastoSheet";
 import { fetchActiveFriends, type PublicUserProfileRow } from "@/services/api/endpoints/users.endpoint";
 import { insertNotificacion, fetchPendingPlanInviteUserIds } from "@/services/api/repositories/notifications.repository";
@@ -33,6 +33,7 @@ import { FIELD_LINE_CLS } from "@/lib/styles";
 import { buildGoogleMapsDirectionsUrl, buildWazeDirectionsUrl } from "@/config/external";
 import { FEED_ENABLED } from "@/config/app";
 import { PlanDetailSkeleton } from "./_components/PlanDetailSkeleton";
+import { ExpenseSummaryCard } from "./_components/ExpenseSummaryCard";
 import { AddSubplanSheet, TRANSPORT_MAP, TRANSPORT_LLEGADA, type AddSheetProps } from "./_components/AddSubplanSheet";
 import { isoDateOnly, groupByDay, normalizeDateKey, summarizeRecipients, getOccupiedIntervals, timeToMin, mergeIntervals, type Interval } from "./_components/plan-utils";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
@@ -108,7 +109,6 @@ const ShareIcon = ({ className = "size-icon" }: { className?: string }) => <Shar
 const EditIcon = ({ className = "size-icon" }: { className?: string }) => <Pencil className={className} aria-hidden />;
 const MapPinIcon = ({ className = "size-icon" }: { className?: string }) => <MapPin className={className} aria-hidden />;
 const CalendarSmallIcon = ({ className = "size-icon" }: { className?: string }) => <Calendar className={className} aria-hidden />;
-const ArrowRightIcon = ({ className = "size-icon" }: { className?: string }) => <ArrowRight className={className} aria-hidden />;
 const PlusIcon = ({ className = "size-icon" }: { className?: string }) => <Plus className={className} aria-hidden />;
 const ExternalLinkIcon = ({ className = "size-icon" }: { className?: string }) => <ExternalLink className={className} aria-hidden />;
 
@@ -719,6 +719,32 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
     });
   };
 
+  const handleSubplanDeleted = (deleted: SubplanRow) => {
+    setSubplanes((prev) => {
+      const dateKey = isoDateOnly(deleted.inicio_at);
+      const dayItems = prev
+        .filter((item) => isoDateOnly(item.inicio_at) === dateKey)
+        .sort((a, b) => a.inicio_at.localeCompare(b.inicio_at));
+      // The next activity of the day was routed from the deleted one: its route is stale.
+      const index = dayItems.findIndex((item) => item.id === deleted.id);
+      const successor = index >= 0 ? dayItems[index + 1] : undefined;
+      if (successor) clearRouteCache([successor.id]);
+
+      const nextSubplanes = prev
+        .filter((item) => item.id !== deleted.id)
+        .map((item) =>
+          item.id === successor?.id
+            ? { ...item, ruta_polyline: null, duracion_viaje: null, distancia_viaje: null }
+            : item
+        );
+      updatePlanDetailCache(user?.id, Number(id), { subplanes: nextSubplanes });
+      return nextSubplanes;
+    });
+    // Its expenses were unlinked or voided server-side.
+    loadGastos();
+    loadBalances();
+  };
+
   const toggleCollapsedDay = (dateKey: string) => {
     setCollapsedDays((prev) => {
       const next = new Set(prev);
@@ -772,6 +798,64 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
     });
     updateSubplanViaje(subplanId, duracion, distancia, polyline).catch(() => {});
   };
+
+  // Itinerary legs used to be computed only by the map, for its selected day, so an open
+  // day the map had not shown listed "Coche"/"A pie" without time or distance. Compute the
+  // missing legs of every open day here; requestDirections reads the shared cache first.
+  const handleViajeComputedRef = useRef(handleViajeComputed);
+  handleViajeComputedRef.current = handleViajeComputed;
+  const requestedLegKeysRef = useRef(new Set<string>());
+  useEffect(() => {
+    if (!collapsedDaysReady) return;
+    const legs: { destId: number; key: string; from: { lat: number; lng: number }; to: { lat: number; lng: number }; mode: string }[] = [];
+    for (const [dateKey, items] of groupByDay(subplanes)) {
+      if (collapsedDays.has(dateKey)) continue;
+      items.forEach((dest, idx) => {
+        if (idx === 0 || !dest.transporte_llegada || dest.duracion_viaje || dest.distancia_viaje) return;
+        if (dest.ubicacion_lat == null || dest.ubicacion_lng == null) return;
+        const prev = items[idx - 1];
+        // Like the map: a transport leg (flight, train...) ends at its destination.
+        const from = TIPOS_TRANSPORTE.includes(prev.tipo) && prev.ubicacion_fin_lat != null && prev.ubicacion_fin_lng != null
+          ? { lat: prev.ubicacion_fin_lat, lng: prev.ubicacion_fin_lng }
+          : prev.ubicacion_lat != null && prev.ubicacion_lng != null
+            ? { lat: prev.ubicacion_lat, lng: prev.ubicacion_lng }
+            : null;
+        if (!from) return;
+        const to = { lat: dest.ubicacion_lat, lng: dest.ubicacion_lng };
+        const key = [dest.id, dest.transporte_llegada, `${from.lat},${from.lng}`, `${to.lat},${to.lng}`].join("|");
+        if (requestedLegKeysRef.current.has(key)) return; // once per page load, also when it fails
+        requestedLegKeysRef.current.add(key);
+        legs.push({ destId: dest.id, key, from, to, mode: dest.transporte_llegada });
+      });
+    }
+    if (legs.length === 0) return;
+
+    void (async () => {
+      const { data: { session } } = await createBrowserSupabaseClient().auth.getSession();
+      for (const leg of legs) {
+        try {
+          const data = await requestDirections({
+            waypoints: [`${leg.from.lat},${leg.from.lng}`, `${leg.to.lat},${leg.to.lng}`],
+            from: leg.from,
+            to: leg.to,
+            travelMode: leg.mode,
+            accessToken: session?.access_token,
+          });
+          const result = data.legs?.[0];
+          if (data.polyline && result?.duration) {
+            handleViajeComputedRef.current(
+              leg.destId,
+              formatCompactRouteDuration(result.duration),
+              formatCompactRouteDistance(result.distance),
+              data.polyline,
+            );
+          }
+        } catch (error) {
+          console.warn("[itinerario] No se pudo calcular el trayecto", leg.key, error);
+        }
+      }
+    })();
+  }, [subplanes, collapsedDays, collapsedDaysReady]);
 
   const handleTransporteChange = async (subplanId: number, transporte: string | null) => {
     // Clear cached route so DayRouteMap recalculates with the new travel mode
@@ -861,20 +945,17 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
           });
         });
       })
-      .subscribe();
-
-    // Escuchar broadcast de cambio de rol emitido desde el chat
-    const rolChannel = supabase
-      .channel(`msg:${planChat.chat_id}`)
-      .on("broadcast", { event: "rol_change" }, ({ payload }) => {
-        const { user_id, rol } = payload as { user_id: string; rol: string };
+      // Cambio de rol (promover/degradar admin) leído de la base de datos. No usa el canal
+      // msg:<chat> del chat: supabase.channel() devuelve el canal existente con el mismo nombre
+      // y ChatConversation no podría añadirle sus listeners ni quitarlo sin romper este.
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "plan_usuarios", filter: `plan_id=eq.${planId}` }, ({ new: row }) => {
+        const { user_id, rol } = row as { user_id: string; rol: string };
         if (user_id === user.id) setIsAdmin(rol === "ADMIN");
       })
       .subscribe();
 
     return () => {
       void supabase.removeChannel(channel);
-      void supabase.removeChannel(rolChannel);
     };
   }, [planChat?.chat_id, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1227,7 +1308,8 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
                           {/* Day header */}
                           <div className={`-mx-[var(--page-margin-x)] border-b border-app px-[var(--page-margin-x)] md:mx-0 md:px-0 ${isDayCollapsed(dateKey) ? "pb-[var(--space-4)]" : "mb-[var(--space-5)] pb-[var(--space-4)]"}`}>
                             {(() => {
-                              const dayHeader = fmtDayHeader(items[0].inicio_at).toLocaleLowerCase("es-ES");
+                              const dayHeaderLower = fmtDayHeader(items[0].inicio_at).toLocaleLowerCase("es-ES");
+                              const dayHeader = dayHeaderLower.charAt(0).toLocaleUpperCase("es-ES") + dayHeaderLower.slice(1);
                               const dayExpense = dayExpenseTotals.get(dateKey);
                               const daySummary = [
                                 `${items.length} actividad${items.length === 1 ? "" : "es"}`,
@@ -1588,126 +1670,10 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
                   )}
 
                   {/* Expenses summary */}
-                  <div className="hidden rounded-[16px] border border-app bg-surface px-[var(--space-4)] py-[var(--space-4)] md:block">
-                    <div className="flex items-center justify-between gap-[var(--space-3)]">
-                      <div className="flex min-w-0 items-center gap-[var(--space-2)]">
-                        <h3 className="text-body font-[var(--fw-semibold)]" style={{ fontFamily: "var(--font-inter), sans-serif" }}>Resumen gastos</h3>
-                        <button
-                          type="button"
-                          onClick={() => setActiveTab("gastos")}
-                          className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted transition-colors hover:bg-surface-inset hover:text-app"
-                          aria-label="Ir a la sección de gastos"
-                        >
-                          <ArrowRightIcon className="size-[16px]" />
-                        </button>
-                      </div>
-                      {expenseSummary.hasExpenses ? (
-                        <span
-                          className="font-[var(--fw-bold)] leading-[1.1] text-app"
-                          style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "var(--font-h3)" }}
-                        >
-                          {formatMoney(expenseSummary.total, expenseSummary.currency)}
-                        </span>
-                      ) : null}
-                    </div>
-
-                    {expenseSummary.hasExpenses ? (
-                      <>
-                        <p className="mt-[4px] text-caption text-muted">
-                          {expenseSummary.count} gasto{expenseSummary.count === 1 ? "" : "s"} confirmados
-                          {expenseSummary.participantCount > 0
-                            ? ` · ${expenseSummary.participantCount} participante${expenseSummary.participantCount === 1 ? "" : "s"}`
-                            : ""}
-                        </p>
-
-                        <div className="mt-[var(--space-4)] grid grid-cols-2 gap-[var(--space-3)]">
-                          <div className="rounded-[12px] border border-app bg-app px-[var(--space-3)] py-[var(--space-3)]">
-                            <p className="text-[14px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
-                              Pagado por ti
-                            </p>
-                            <p className="mt-[6px] text-body font-[var(--fw-semibold)] text-app">
-                              {formatMoney(expenseSummary.paidByYou, expenseSummary.currency)}
-                            </p>
-                          </div>
-                          <div className="rounded-[12px] border border-app bg-app px-[var(--space-3)] py-[var(--space-3)]">
-                            <p className="text-[14px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
-                              Tu parte
-                            </p>
-                            <p className="mt-[6px] text-body font-[var(--fw-semibold)] text-app">
-                              {formatMoney(expenseSummary.yourShare, expenseSummary.currency)}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="mt-[var(--space-3)] rounded-[12px] border border-app bg-app px-[var(--space-3)] py-[var(--space-3)]">
-                          <div className="flex items-center justify-between gap-[var(--space-3)]">
-                            <div>
-                              <p className="text-[14px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
-                                Balance del plan
-                              </p>
-                              <p className={`mt-[6px] text-body font-[var(--fw-semibold)] ${
-                                expenseSummary.net > 0
-                                  ? "text-[var(--success)]"
-                                  : expenseSummary.net < 0
-                                    ? "text-[var(--warning)]"
-                                    : "text-app"
-                              }`}>
-                                {expenseSummary.net > 0 ? "+" : ""}
-                                {formatMoney(expenseSummary.net, expenseSummary.currency)}
-                              </p>
-                            </div>
-                            <span className={`rounded-full px-[var(--space-3)] py-[6px] text-[14px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] ${
-                              expenseSummary.net > 0
-                                ? "bg-[var(--success)]/12 text-[var(--success)]"
-                                : expenseSummary.net < 0
-                                  ? "bg-[var(--warning)]/12 text-[var(--warning)]"
-                                  : "bg-surface-inset text-muted"
-                            }`}>
-                              {expenseSummary.net > 0
-                                ? "Te deben"
-                                : expenseSummary.net < 0
-                                  ? "Debes"
-                                  : "En equilibrio"}
-                            </span>
-                          </div>
-                        </div>
-
-                        {expenseSummary.topCategories.length > 0 ? (
-                          <div className="mt-[var(--space-4)]">
-                            <p className="mb-[var(--space-3)] text-[14px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
-                              Categorías principales
-                            </p>
-                            <div className="space-y-[var(--space-2)]">
-                              {expenseSummary.topCategories.map((category) => (
-                                <div key={category.label} className="flex items-center gap-[var(--space-3)] rounded-[12px] border border-app bg-app px-[var(--space-3)] py-[var(--space-3)]">
-                                  <div className="flex size-[34px] shrink-0 items-center justify-center rounded-full bg-surface-inset text-[16px]">
-                                    {category.icon || "•"}
-                                  </div>
-                                  <div className="min-w-0 flex-1">
-                                    <p className="truncate text-body-sm font-[var(--fw-medium)] text-app">
-                                      {category.label}
-                                    </p>
-                                    <p className="text-caption text-muted">
-                                      {category.count} gasto{category.count === 1 ? "" : "s"}
-                                    </p>
-                                  </div>
-                                  <p className="shrink-0 text-body-sm font-[var(--fw-semibold)] text-app">
-                                    {formatMoney(category.amount, expenseSummary.currency)}
-                                  </p>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ) : null}
-                      </>
-                    ) : (
-                      <>
-                        <p className="mt-[var(--space-2)] text-body-sm text-muted">
-                          Aún no hay gastos confirmados en este plan.
-                        </p>
-                      </>
-                    )}
-                  </div>
+                  <ExpenseSummaryCard
+                    summary={expenseSummary}
+                    onOpen={() => setActiveTab("gastos")}
+                  />
                 </div>
               </div>
             )}
@@ -2137,6 +2103,8 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
             setAddSheetInitialDate(undefined);
           }}
           onSaved={handleSubplanSaved}
+          onDeleted={handleSubplanDeleted}
+          gastosCount={editingSubplan ? gastos.filter((g) => g.subplan_id === editingSubplan.id).length : 0}
           initialTitulo={addSheetInitialTitulo}
           initialDate={addSheetInitialDate}
           initialSubplan={editingSubplan}
@@ -2156,10 +2124,16 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
       )}
 
       <PlanGastoDetailModal
+        key={selectedGasto?.id ?? "none"}
         gasto={selectedGasto}
         planName={plan.titulo}
         currentUserId={user?.id ?? null}
         onClose={() => setSelectedGastoId(null)}
+        onDeleted={() => {
+          // The detail modal closes itself once the voided expense leaves the list.
+          loadGastos();
+          loadBalances();
+        }}
       />
 
       {/* Invite modal */}
@@ -2723,7 +2697,7 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
           <div data-closing={paymentClosing ? "true" : "false"} className="app-modal-overlay absolute inset-0" />
           <div
             data-closing={paymentClosing ? "true" : "false"}
-            className="app-modal-panel relative z-10 w-full max-w-md rounded-t-2xl sm:rounded-2xl bg-surface-1 border border-app p-6 flex flex-col gap-5"
+            className="app-modal-panel relative z-10 w-full max-w-md rounded-t-2xl sm:rounded-2xl bg-app border border-app p-6 flex flex-col gap-5"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-3">
@@ -2753,7 +2727,7 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
                   />
                 </div>
               ) : (
-                <label className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border border-dashed border-app bg-surface-2 px-4 py-5 text-center hover:bg-surface-3 transition-colors">
+                <label className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border border-dashed border-app bg-surface-2 px-4 py-5 text-center hover:bg-surface transition-colors">
                   <Upload className="size-6" aria-hidden />
                   <span className="text-body-sm text-muted">Sube una captura del pago</span>
                   <input

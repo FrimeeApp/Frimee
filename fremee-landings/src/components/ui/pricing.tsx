@@ -31,6 +31,8 @@ export interface Plan {
     href: string;
   };
   highlighted?: boolean;
+  /** Plan announced but not purchasable yet: "Próximamente" badge and a disabled button. */
+  comingSoon?: boolean;
 }
 
 interface PricingSectionProps extends React.ComponentProps<"div"> {
@@ -158,7 +160,9 @@ export function PricingCard({
               <Star size={11} fill="currentColor" /> Popular
             </span>
           )}
-          {discount > 0 && (
+          {plan.comingSoon ? (
+            <span className="v3-pricing-discount">Próximamente</span>
+          ) : discount > 0 && (
             <span className="v3-pricing-discount">{discount}% off</span>
           )}
         </div>
@@ -217,14 +221,20 @@ export function PricingCard({
 
       {/* CTA */}
       <div className={cn("v3-pricing-card-footer", isHighlighted && "highlighted")}>
-        <Button
-          className="w-full"
-          variant={isHighlighted ? "default" : "outline"}
-          size="lg"
-          asChild
-        >
-          <Link href={plan.btn.href}>{plan.btn.text}</Link>
-        </Button>
+        {plan.comingSoon ? (
+          <Button className="w-full" variant="outline" size="lg" disabled>
+            Próximamente
+          </Button>
+        ) : (
+          <Button
+            className="w-full"
+            variant={isHighlighted ? "default" : "outline"}
+            size="lg"
+            asChild
+          >
+            <Link href={plan.btn.href}>{plan.btn.text}</Link>
+          </Button>
+        )}
       </div>
     </div>
   );
