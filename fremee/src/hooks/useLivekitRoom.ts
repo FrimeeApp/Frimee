@@ -27,6 +27,8 @@ export type LivekitRoomOptions = {
   token: string;
   livekitUrl: string;
   tipo: "audio" | "video";
+  /** Publish the camera from the start (a video call answered with the camera off: false). */
+  camera: boolean;
   isGroup: boolean;
   /** Someone else is in the room: the call is answered. */
   onParticipantConnected: () => void;
@@ -78,6 +80,7 @@ export function useLivekitRoom(options: LivekitRoomOptions | null): LivekitRoomA
   const token = options?.token ?? null;
   const livekitUrl = options?.livekitUrl ?? null;
   const tipo = options?.tipo ?? "audio";
+  const camera = options?.camera ?? false;
   const isGroup = options?.isGroup ?? false;
   const callbacksRef = useRef(options);
   useEffect(() => {
@@ -98,9 +101,9 @@ export function useLivekitRoom(options: LivekitRoomOptions | null): LivekitRoomA
   const addTile = useCallback((id: string, identity: string, isLocal: boolean, isScreenShare: boolean) => {
     setTiles((prev) => prev.some((t) => t.id === id) ? prev : [
       ...prev,
-      { id, identity, isLocal, isScreenShare, audioMuted: false, videoMuted: isScreenShare ? false : tipo !== "video" },
+      { id, identity, isLocal, isScreenShare, audioMuted: false, videoMuted: isScreenShare ? false : isLocal ? !camera : tipo !== "video" },
     ]);
-  }, [tipo]);
+  }, [tipo, camera]);
 
   const removeTile = useCallback((id: string) => {
     setTiles((prev) => prev.filter((t) => t.id !== id));
@@ -226,7 +229,7 @@ export function useLivekitRoom(options: LivekitRoomOptions | null): LivekitRoomA
       // Microphone (and camera) open while the room connects, not after: audio starts sooner.
       const localTracks: Promise<[LocalAudioTrack, LocalVideoTrack | null]> = Promise.all([
         createLocalAudioTrack({ echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 }),
-        tipo === "video" ? createLocalVideoTrack() : Promise.resolve(null),
+        camera ? createLocalVideoTrack() : Promise.resolve(null),
       ]);
       localTracks.catch(() => {}); // handled below, after connecting
       await room.connect(livekitUrl, token);
@@ -262,12 +265,12 @@ export function useLivekitRoom(options: LivekitRoomOptions | null): LivekitRoomA
       } else {
         console.error("[call] microphone", audioResult.reason);
       }
-      if (tipo === "video") {
+      if (camera) {
         const publishVideo = async (track: LocalVideoTrack) => {
           await room.localParticipant.publishTrack(track);
           tracks.set("__local__", track);
           setTiles((prev) => prev.map((t) => t.isLocal && !t.isScreenShare ? { ...t, videoMuted: false } : t));
-          document.querySelectorAll<HTMLVideoElement>(`video[data-tile="${room.localParticipant.identity}"]`).forEach((el) => track.attach(el));
+          document.querySelectorAll<HTMLVideoElement>(`video[data-tile="${room.localParticipant.identity}"], video[data-own-video]`).forEach((el) => track.attach(el));
         };
         try {
           if (videoResult.status !== "fulfilled" || !videoResult.value) throw videoResult.status === "rejected" ? videoResult.reason : new Error("sin cámara");
@@ -301,7 +304,7 @@ export function useLivekitRoom(options: LivekitRoomOptions | null): LivekitRoomA
       setScreenSharing(false);
       setHasAnyVideo(false);
     };
-  }, [token, livekitUrl, tipo, isGroup, addTile, removeTile, attachAudioTrack, detachAudioTrack]);
+  }, [token, livekitUrl, tipo, camera, isGroup, addTile, removeTile, attachAudioTrack, detachAudioTrack]);
 
   const toggleMute = useCallback(async () => {
     const local = roomRef.current?.localParticipant;
@@ -321,7 +324,7 @@ export function useLivekitRoom(options: LivekitRoomOptions | null): LivekitRoomA
         const pub = local.getTrackPublication(Track.Source.Camera);
         if (pub?.track) {
           trackMap.current.set("__local__", pub.track);
-          document.querySelectorAll<HTMLVideoElement>(`video[data-tile="${local.identity}"]`).forEach((el) => pub.track?.attach(el));
+          document.querySelectorAll<HTMLVideoElement>(`video[data-tile="${local.identity}"], video[data-own-video]`).forEach((el) => pub.track?.attach(el));
         }
         setHasAnyVideo(true);
         setTiles((prev) => prev.map((t) => t.isLocal && !t.isScreenShare ? { ...t, videoMuted: false } : t));
