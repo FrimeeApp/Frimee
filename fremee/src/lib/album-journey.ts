@@ -310,14 +310,6 @@ export function positionFromProgress(base: JourneyPosition, progress: number): J
   return { ...base, stop, legT: progress - stop };
 }
 
-/** Scroll length of a leg in viewport heights: longer trips take longer to scroll. */
-export function legScrollLength(leg: JourneyLeg): number {
-  // A flight takes one screen whatever its length: the trip is not about the plane.
-  if (leg.long) return 1;
-  if (leg.km <= 0) return 0.6;
-  return Math.min(1.3, 0.45 + 0.18 * Math.sqrt(leg.km));
-}
-
 // ── Dashboard and ambience ───────────────────────────────────────────────────
 
 export type Ambient = "manana" | "tarde" | "atardecer" | "noche";
@@ -386,11 +378,17 @@ function boundsOf(points: LatLng[]): Bounds | null {
  * after each flight): the camera frames the place the group is in, pulls out to both ends while
  * flying, and zooms back in on landing. `key` changes only when the framing must change.
  */
+/** Share of a flight after which the camera heads for the destination (the descent). */
+export const FLIGHT_DESCENT_AT = 0.6;
+
 export function cameraFor(day: JourneyDay | undefined, position: JourneyPosition, routesOnly: boolean): { key: string; bounds: Bounds | null } {
   if (!day) return { key: "none", bounds: null };
   const leg = day.legs.at(position.stop);
-  if (!position.finished && position.legT > 0 && leg?.long && leg.points) {
-    return { key: `${day.key}|fly|${position.stop}`, bounds: boundsOf(leg.points) };
+  // Flights: pull back to the whole arc while climbing, and start framing the destination
+  // as the plane descends, so the camera arrives with it instead of catching up after landing.
+  const flying = !position.finished && position.legT > 0 && leg?.long && leg.points;
+  if (flying && position.legT < FLIGHT_DESCENT_AT) {
+    return { key: `${day.key}|fly|${position.stop}`, bounds: boundsOf(leg.points ?? []) };
   }
   if (position.finished || routesOnly || !day.legs.some((l) => l.long)) {
     return { key: `${day.key}|all|${routesOnly}`, bounds: dayBounds(day, routesOnly) };
@@ -401,7 +399,7 @@ export function cameraFor(day: JourneyDay | undefined, position: JourneyPosition
     if (i > 0 && day.legs.at(i - 1)?.long) place++;
     return place;
   });
-  const here = placeOf.at(position.stop) ?? 0;
+  const here = placeOf.at(flying ? position.stop + 1 : position.stop) ?? 0;
   const points = [
     ...day.stops.flatMap((s, i) => (placeOf.at(i) === here && s.at ? [s.at] : [])),
     ...day.legs.flatMap((l, i) => (!l.long && placeOf.at(i) === here ? l.points ?? [] : [])),

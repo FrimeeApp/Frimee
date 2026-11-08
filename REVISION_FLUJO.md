@@ -129,6 +129,8 @@ Partes del flujo que aún no se han recorrido en dev (ver `TEST_PLAN.md` y `CHEC
 
 ## Ideas para más adelante
 
+- [ ] **Álbum (fase 2/3): fotos con su hora.** Cada foto con la hora en que se hizo (EXIF `DateTimeOriginal`) o, si no la tiene, la de subida (`plan_fotos.created_at`). Las hechas durante un trayecto salen en ese tramo mientras se reproduce (en el punto de la ruta que corresponde a su hora), no solo en la parada. Necesita guardar la hora EXIF al subir (`plan_fotos.tomada_at`) y que `fn_plan_album` la devuelva.
+
 - [ ] **Autocompletado al escribir `@` en el chat**: lista con Frimee (asistente) arriba y los miembros del plan debajo. Ayuda a descubrir el asistente y a mencionar a la gente en `/tarea`. Las sugerencias rápidas y el mensaje de bienvenida ya cubren lo básico.
 - [ ] **Trayectos en transporte público según la hora de la actividad.** Hoy Google calcula bus, metro y tren con la hora actual. Enviar como `departure_time` la hora de fin de la actividad anterior (y guardarla en la clave de `route_cache`, o no cachear esos tramos) para que el tiempo y la ruta sean los de ese momento.
 

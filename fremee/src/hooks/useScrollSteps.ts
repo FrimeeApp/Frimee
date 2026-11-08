@@ -1,27 +1,23 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
- * Scroll position of a story made of steps. Each step element registers with `register(i)`.
- * The active step is the last one whose top has crossed the anchor line (a fraction of the
- * viewport, measured below `cover` when it is a full-width sticky element on top, like the map
- * on phones; beside the story on desktop it takes no height). `t` is how far the anchor line is
- * through the active step (0–1), which drives movement along a leg.
+ * Which step of a story is on screen. Each step element registers with `register(i)`; the
+ * page moves one step at a time (useStepPaging), so the active step is the last one whose
+ * top has reached the line (`line()`, in px from the top of the viewport: below the sticky
+ * map and header). How a step plays out is up to the page, not the scroll speed.
  *
- * Only `index` is React state (the page re-renders when the step changes). The continuous
- * position goes to `onMeasure` on every frame, for the parts that move (map, progress bars).
+ * `index` is React state (the page re-renders when the step changes); `onStep` is called
+ * once per change, before the re-render, for the parts that animate outside React.
  */
-export function useScrollSteps(
-  count: number,
-  anchor: number,
-  cover: RefObject<HTMLElement | null>,
-  onMeasure: (index: number, t: number) => void,
-) {
+export function useScrollSteps(count: number, line: () => number, onStep: (index: number) => void) {
   const elements = useRef<(HTMLElement | null)[]>([]);
   const [index, setIndex] = useState(0);
-  const onMeasureRef = useRef(onMeasure);
+  const onStepRef = useRef(onStep);
+  const lineRef = useRef(line);
   useEffect(() => {
-    onMeasureRef.current = onMeasure;
-  }, [onMeasure]);
+    onStepRef.current = onStep;
+    lineRef.current = line;
+  }, [onStep, line]);
 
   const register = useCallback((i: number) => (el: HTMLElement | null) => {
     elements.current[i] = el;
@@ -29,23 +25,20 @@ export function useScrollSteps(
 
   useEffect(() => {
     let frame = 0;
+    let current = -1;
     const measure = () => {
       frame = 0;
-      const coverRect = cover.current?.getBoundingClientRect();
-      const topInset = coverRect && coverRect.width > window.innerWidth * 0.8 ? Math.max(0, coverRect.bottom) : 0;
-      const line = topInset + (window.innerHeight - topInset) * anchor;
+      // A few px of slack: a snapped step sits exactly on the line.
+      const at = lineRef.current() + 8;
       let active = 0;
-      let t = 0;
       for (let i = 0; i < count; i++) {
         const rect = elements.current[i]?.getBoundingClientRect();
-        if (!rect) continue;
-        if (rect.top <= line) {
-          active = i;
-          t = rect.height > 0 ? Math.min(1, Math.max(0, (line - rect.top) / rect.height)) : 1;
-        }
+        if (rect && rect.top <= at) active = i;
       }
-      onMeasureRef.current(active, t);
-      setIndex((prev) => (prev === active ? prev : active));
+      if (active === current) return;
+      current = active;
+      onStepRef.current(active);
+      setIndex(active);
     };
     const schedule = () => {
       if (!frame) frame = requestAnimationFrame(measure);
@@ -58,7 +51,8 @@ export function useScrollSteps(
       window.removeEventListener("resize", schedule);
       if (frame) cancelAnimationFrame(frame);
     };
-  }, [count, anchor, cover]);
+  }, [count]);
 
-  return { index, register };
+  const steps = useCallback(() => elements.current, []);
+  return { index, register, steps };
 }
