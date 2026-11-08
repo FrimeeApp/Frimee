@@ -2754,7 +2754,7 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
           <div data-closing={paymentClosing ? "true" : "false"} className="app-modal-overlay absolute inset-0" />
           <div
             data-closing={paymentClosing ? "true" : "false"}
-            className="app-modal-panel relative z-10 w-full max-w-md rounded-t-2xl sm:rounded-2xl bg-surface-1 border border-app p-6 flex flex-col gap-5"
+            className="app-modal-panel relative z-10 w-full max-w-md rounded-t-2xl sm:rounded-2xl bg-app border border-app p-6 flex flex-col gap-5"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-3">
@@ -2784,7 +2784,7 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
                   />
                 </div>
               ) : (
-                <label className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border border-dashed border-app bg-surface-2 px-4 py-5 text-center hover:bg-surface-3 transition-colors">
+                <label className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border border-dashed border-app bg-surface-2 px-4 py-5 text-center hover:bg-surface transition-colors">
                   <Upload className="size-6" aria-hidden />
                   <span className="text-body-sm text-muted">Sube una captura del pago</span>
                   <input
