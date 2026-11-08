@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
+import { Capacitor } from "@capacitor/core";
 import { uploadPlanAlbumFile } from "@/services/firebase/upload";
 import {
   getPlanFotos,
@@ -9,7 +11,7 @@ import {
   removePlanFoto,
   type PlanFotoDto,
 } from "@/services/api/repositories/plan-fotos.repository";
-import { Plus, Trash2, Plane, Loader2 } from "lucide-react";
+import { Plus, Trash2, Plane, Loader2, BookOpen, ChevronRight } from "lucide-react";
 import { ImageLightbox } from "@/components/ui/ImageLightbox";
 
 type Props = {
@@ -115,6 +117,8 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, refreshK
         />
       )}
 
+      <AlbumLink planId={planId} />
+
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {/* Add tile: first square of the grid, like "Añadir actividad" lives inside the itinerary. */}
           {isMember && (
@@ -215,5 +219,25 @@ function FotoImage({ src }: { src: string }) {
         onError={() => setLoaded(true)}
       />
     </>
+  );
+}
+
+/** Entry to the trip album (/plans/[id]/album; static route + ?id= in the mobile app). */
+function AlbumLink({ planId }: { planId: number }) {
+  const href = Capacitor.isNativePlatform() ? `/plans/static/album?id=${planId}` : `/plans/${planId}/album`;
+  return (
+    <Link
+      href={href}
+      className="mb-4 flex items-center gap-3 rounded-2xl border border-app bg-[var(--surface)] px-4 py-3 transition-colors hover:border-[var(--primary)]"
+    >
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[var(--primary)]/12 text-[var(--primary)]">
+        <BookOpen className="size-5" aria-hidden />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[15px] font-[600] text-app">Álbum del viaje</span>
+        <span className="block text-[13px] text-muted">El viaje día a día: sitios, rutas, fotos y cifras</span>
+      </span>
+      <ChevronRight className="size-5 shrink-0 text-muted" aria-hidden />
+    </Link>
   );
 }
