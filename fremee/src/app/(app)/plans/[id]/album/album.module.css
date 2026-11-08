@@ -1,0 +1,204 @@
+/* Entry animations of the trip album. Delays come inline (--delay). */
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes pop {
+  from { opacity: 0; transform: scale(0.6); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes settle {
+  from { transform: scale(1.08); }
+  to { transform: none; }
+}
+
+.rise {
+  animation: rise 700ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation-delay: var(--delay, 0ms);
+}
+
+/* One letter of the cover title; inline-block so it can move. */
+.letter {
+  display: inline-block;
+  white-space: pre;
+  animation: rise 650ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation-delay: var(--delay, 0ms);
+}
+
+.pop {
+  animation: pop 450ms cubic-bezier(0.3, 1.4, 0.5, 1) both;
+  animation-delay: var(--delay, 0ms);
+}
+
+/* Cover background: a slow zoom out, like a camera settling. */
+.settle {
+  animation: settle 1800ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise,
+  .letter,
+  .pop,
+  .settle {
+    animation: none;
+  }
+}
+
+/* MapLibre attribution in the album's dark look. */
+.map :global(.maplibregl-ctrl-attrib) {
+  background: var(--al-glass);
+  color: var(--al-muted);
+  font-size: 11px;
+}
+.map :global(.maplibregl-ctrl-attrib a) {
+  color: var(--al-muted);
+}
+.map :global(.maplibregl-ctrl-attrib-button) {
+  background-color: rgba(238, 238, 239, 0.9);
+}
+
+/* ── Arrival at a stop ─────────────────────────────────────────────────────── */
+
+/* The group lands: a small bounce (450 ms). */
+@keyframes bounce {
+  0% { transform: translateY(0); }
+  35% { transform: translateY(-6px); }
+  70% { transform: translateY(0); }
+  85% { transform: translateY(-2px); }
+  100% { transform: translateY(0); }
+}
+
+/* A ring that spreads from the stop. */
+@keyframes halo {
+  from { transform: scale(0.6); opacity: 0.55; }
+  to { transform: scale(1.9); opacity: 0; }
+}
+
+/* A polaroid falls from 40 px and settles on its tilt (600 ms). */
+@keyframes drop {
+  from { opacity: 0; transform: translateY(-40px) rotate(-10deg); }
+  60% { opacity: 1; }
+  to { opacity: 1; transform: translateY(0) rotate(var(--tilt, 0deg)); }
+}
+
+.bounce {
+  animation: bounce 450ms ease-out both;
+}
+
+.halo {
+  animation: halo 900ms ease-out both;
+}
+
+.polaroid {
+  transform: rotate(var(--tilt, 0deg));
+  animation: drop 600ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation-delay: var(--delay, 150ms);
+}
+
+/* Where the pile goes, from the stop's place on screen (set as data-side on the marker). */
+.pile {
+  position: absolute;
+  bottom: 52px;
+  left: 30px;
+}
+:global([data-side~="left"]) > .pileAnchor .pile {
+  left: auto;
+  right: 30px;
+}
+:global([data-side~="below"]) > .pileAnchor .pile {
+  bottom: auto;
+  top: 30px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bounce,
+  .halo,
+  .polaroid {
+    animation: none;
+  }
+  .halo {
+    opacity: 0;
+  }
+}
+
+/* ── Ambience: the map's tone follows the time of day ──────────────────────── */
+.tint {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  transition: background-color 900ms ease;
+}
+.tint[data-ambient="manana"] { background-color: rgba(60, 221, 194, 0.02); }
+.tint[data-ambient="tarde"] { background-color: rgba(251, 191, 36, 0.05); }
+.tint[data-ambient="atardecer"] { background-color: rgba(249, 115, 22, 0.13); }
+.tint[data-ambient="noche"] { background-color: rgba(6, 10, 34, 0.42); }
+
+@media (prefers-reduced-motion: reduce) {
+  .tint { transition: none; }
+}
+
+/* ── Day change: night falls, the chapter card passes, and dawn rises (1.4 s) ── */
+@keyframes night {
+  0% { opacity: 0; transform: translateY(0); }
+  20% { opacity: 1; transform: translateY(0); }
+  55% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 1; transform: translateY(-105%); }
+}
+
+@keyframes chapter {
+  0% { opacity: 0; transform: translateY(30px); }
+  28% { opacity: 1; transform: translateY(0); }
+  62% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-24px); }
+}
+
+.curtain {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, #050816 0%, #0b1030 70%, rgba(11, 16, 48, 0.85) 100%);
+  animation: night 1400ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.curtainCard {
+  animation: chapter 1400ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .curtain {
+    display: none;
+  }
+}
+
+/* ── Album palette: dark by default, light when the app is in light mode ──── */
+.album {
+  --al-base: #111111;
+  --al-text: #eeeeef;
+  --al-muted: #a0a0a9;
+  --al-line: #26262c;
+  --al-card: #1a1a1f;
+  --al-map: #141417;
+  --al-map-dots: rgba(238, 238, 239, 0.07);
+  --al-pending: #6b6b75;
+  --al-on-primary: #111111;
+  --al-glass: rgba(17, 17, 17, 0.82);
+}
+:global(:root:not(.dark)) .album {
+  --al-base: #ffffff;
+  --al-text: #1c1c22;
+  --al-muted: #60606b;
+  --al-line: #dddde0;
+  --al-card: #f6f6f7;
+  --al-map: #f4f7f6;
+  --al-map-dots: rgba(41, 142, 125, 0.16);
+  --al-pending: #8a8a94;
+  --al-on-primary: #ffffff;
+  --al-glass: rgba(255, 255, 255, 0.9);
+}
