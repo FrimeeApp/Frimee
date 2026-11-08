@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
+import LegalNotice from "@/components/auth/LegalNotice";
 import { useRouter } from "next/navigation";
 import { AUTH_EMAIL_REGEX, focusInput, getAuthErrorMessage } from "@/components/auth/AuthFormUtils";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
@@ -118,12 +119,7 @@ export default function ForgotPage() {
         </div>
       </div>
 
-      <p className="mt-auto pb-[max(var(--space-2),env(safe-area-inset-bottom))] pt-[var(--space-4)] text-center text-caption text-tertiary min-[800px]:pt-[var(--space-8)]">
-        Al continuar, aceptas los{" "}
-        <span className="font-[var(--fw-semibold)] text-muted">Términos y</span>
-        <br />
-        <span className="font-[var(--fw-semibold)] text-muted">Condiciones</span> de Frimee
-      </p>
+      <LegalNotice />
     </div>
   );
 }

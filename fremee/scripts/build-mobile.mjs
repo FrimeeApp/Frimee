@@ -40,6 +40,12 @@ const disabledRouteMoves = [
     from: "src/app/(app)/@modal/(.)plans",
     to: ".mobile-build-disabled/@modal/(.)plans",
   },
+  {
+    // Closes the overlay on client-side navigation (web only); a catch-all route would
+    // need generateStaticParams in the static export.
+    from: "src/app/(app)/@modal/[...catchAll]",
+    to: ".mobile-build-disabled/@modal/[...catchAll]",
+  },
 ];
 const movedRoutes = [];
 

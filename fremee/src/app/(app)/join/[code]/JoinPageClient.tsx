@@ -1,12 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { fetchPlanByJoinCode, joinPlanByCode, type PlanByIdRow } from "@/services/api/endpoints/plans.endpoint";
 import { useAuth } from "@/providers/AuthProvider";
 
 export default function JoinPageClient() {
-  const { code } = useParams<{ code: string }>();
+  const params = useParams<{ code: string }>();
+  const searchParams = useSearchParams();
+  // The native app is a static export with a single /join/static page: the code comes as ?code=.
+  const code = params.code === "static" ? searchParams.get("code") ?? "" : params.code;
   const router = useRouter();
   const { user } = useAuth();
 

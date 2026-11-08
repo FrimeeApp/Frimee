@@ -42,11 +42,20 @@ import { ImageLightbox } from "@/components/ui/ImageLightbox";
 import dynamic from "next/dynamic";
 
 const EmojiMartPicker = dynamic(() => import("@emoji-mart/react"), { ssr: false });
+
+// Shown over the input in plan chats so people find out about the @frimee assistant.
+// They go away once the user asks it something or closes them (remembered per browser).
+const AI_HINTS_KEY = "frimee-ai-hints-dismissed";
+const AI_SUGGESTIONS = [
+  { label: "¿Qué tiempo hará?", prompt: "@frimee ¿qué tiempo va a hacer durante el viaje?" },
+  { label: "¿Cómo vamos de cuentas?", prompt: "@frimee ¿cómo vamos de cuentas? ¿quién debe más?" },
+  { label: "Ideas para cenar", prompt: "@frimee proponnos 3 sitios para cenar y haz una encuesta para votar" },
+];
 import {
   Trash2, Ban, AlertTriangle, LogOut, ChevronDown, Pencil, Reply, Copy,
   Smile, Forward, Pin, Star, Camera, Send as LucideSend, PlusCircle, Mic,
   File, Video, Music, BarChart2, Edit, ChevronLeft, Users,
-  Phone, Check, Download, Plus, X,
+  Phone, Check, Download, Plus, X, Sparkles,
 } from "lucide-react";
 
 const CHAT_ICON_BUTTON_BASE =
@@ -165,6 +174,23 @@ export function ChatConversation({
   const pendingAiVotarRef = useRef<PendingAiVotar | null>(null);
   const [sending, setSending] = useState(false);
   const [text, setText] = useState("");
+  // Hidden until read from localStorage, so it never flashes for someone who closed it.
+  const [aiHintsDismissed, setAiHintsDismissed] = useState(true);
+  useEffect(() => {
+    try {
+      setAiHintsDismissed(localStorage.getItem(AI_HINTS_KEY) === "1");
+    } catch {
+      setAiHintsDismissed(false);
+    }
+  }, []);
+  const dismissAiHints = () => {
+    setAiHintsDismissed(true);
+    try {
+      localStorage.setItem(AI_HINTS_KEY, "1");
+    } catch {
+      // Blocked storage: hidden for this visit only.
+    }
+  };
   const [showInfo, setShowInfo] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ msg: MensajeRow; x: number; y: number; triggerTop: number } | null>(null);
   const [replyingTo, setReplyingTo] = useState<MensajeRow | null>(null);
@@ -203,6 +229,9 @@ export function ChatConversation({
   const channelRef = useRef<ReturnType<typeof supabaseRef.current.channel> | null>(null);
   const onNewMessageRef = useRef(onNewMessage);
   useEffect(() => { onNewMessageRef.current = onNewMessage; });
+  // Same for onLeave: a new function from the parent must not resubscribe the channel.
+  const onLeaveRef = useRef(onLeave);
+  useEffect(() => { onLeaveRef.current = onLeave; });
 
   const name = resolveChatName(chat, currentUserId);
   const avatar = resolveChatAvatar(chat, currentUserId);
@@ -281,8 +310,20 @@ export function ChatConversation({
 
   useEffect(() => {
     const supabase = supabaseRef.current;
-    const channel = supabase
-      .channel(`msg:${chat.chat_id}`)
+    const topic = `msg:${chat.chat_id}`;
+    // supabase.channel() returns an existing channel with the same topic, even one that
+    // is already subscribed, and adding callbacks to it throws. removeChannel() is async,
+    // so after a quick remount the previous channel can still be there: remove it first.
+    let cancelled = false;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    const subscribe = async () => {
+      const stale = supabase.getChannels().find((c) => c.topic === `realtime:${topic}`);
+      if (stale) await supabase.removeChannel(stale);
+      if (cancelled) return;
+
+      channel = supabase
+      .channel(topic)
       .on("broadcast", { event: "new_message" }, ({ payload }) => {
         const msg = payload as MensajeRow;
         if (sentMsgIdsRef.current.has(msg.id)) {
@@ -306,7 +347,7 @@ export function ChatConversation({
       })
       .on("broadcast", { event: "kick_member" }, ({ payload }) => {
         const { user_id } = payload as { user_id: string };
-        if (user_id === currentUserId) onLeave?.();
+        if (user_id === currentUserId) onLeaveRef.current?.();
       })
       .on("broadcast", { event: "poll_vote" }, ({ payload }) => {
         const { mensaje_id } = payload as { mensaje_id: number; option_index: number };
@@ -327,12 +368,16 @@ export function ChatConversation({
         }
       )
       .subscribe();
-    channelRef.current = channel;
+      channelRef.current = channel;
+    };
+    void subscribe();
+
     return () => {
-      void supabase.removeChannel(channel);
+      cancelled = true;
+      if (channel) void supabase.removeChannel(channel);
       channelRef.current = null;
     };
-  }, [chat.chat_id, currentUserId, onLeave]);
+  }, [chat.chat_id, currentUserId]);
 
   const isNearBottomRef = useRef(true);
   const observerReadyRef = useRef(false);
@@ -912,7 +957,6 @@ export function ChatConversation({
         if (result === "not_admin") return "Solo los admins pueden promover a otros admins.";
         if (result === "target_not_member") return `${target.nombre} no está en este plan.`;
         if (result === "already_admin") return `${target.nombre} ya es admin.`;
-        void channelRef.current?.send({ type: "broadcast", event: "rol_change", payload: { user_id: target.id, rol: "ADMIN" } });
         onMembersChanged?.();
         return `${target.nombre} ahora es admin del plan.`;
       } catch {
@@ -943,7 +987,6 @@ export function ChatConversation({
         if (result === "cannot_demote_owner") return "No puedes quitar el rol de admin al creador del plan.";
         if (result === "target_not_member") return `${target.nombre} no está en este plan.`;
         if (result === "not_admin_target") return `${target.nombre} no es admin.`;
-        void channelRef.current?.send({ type: "broadcast", event: "rol_change", payload: { user_id: target.id, rol: "PARTICIPANTE" } });
         onMembersChanged?.();
         return `${target.nombre} ya no es admin del plan.`;
       } catch {
@@ -1096,8 +1139,9 @@ export function ChatConversation({
   const isConfirm = (t: string) => /^(@frimee\s+)?(s[ií]?|yes|ok|dale|venga|crea(la)?|adelante)\b/i.test(t.trim());
   const isCancel  = (t: string) => /^(@frimee\s+)?(no?|cancelar?)\b/i.test(t.trim());
 
-  const onSend = async () => {
-    const trimmed = text.trim();
+  // override: send this text instead of the input's (the @frimee suggestions use it).
+  const onSend = async (override?: string) => {
+    const trimmed = (override ?? text).trim();
     if (!trimmed || sending) return;
 
     if (pendingAiVotarRef.current && (isConfirm(trimmed) || isCancel(trimmed))) {
@@ -1621,6 +1665,11 @@ export function ChatConversation({
 
   const pinnedMsg = pinnedId ? messages.find((m) => m.id === pinnedId) ?? null : null;
 
+  const hasAskedFrimee = messages.some(
+    (m) => m.sender_id === currentUserId && /@frimee/i.test(m.texto ?? ""),
+  );
+  const showAiHints = Boolean(planId) && !editingMsg && !text && !aiHintsDismissed && !hasAskedFrimee;
+
   return (
     <div className={containerClassName ?? "flex h-[calc(100dvh-var(--space-20)-env(safe-area-inset-bottom))] flex-col md:h-[calc(100dvh-var(--space-16))]"}>
       {/* Poll creator modal */}
@@ -2011,6 +2060,34 @@ export function ChatConversation({
             </button>
           </div>
         )}
+        {showAiHints && (
+          <div
+            role="group"
+            aria-label="Sugerencias para el asistente @frimee"
+            className="mb-[var(--space-2)] flex items-center gap-[var(--space-2)] overflow-x-auto"
+          >
+            <Sparkles className="size-4 shrink-0 text-primary-token" aria-hidden />
+            {AI_SUGGESTIONS.map((s) => (
+              <button
+                key={s.label}
+                type="button"
+                disabled={sending}
+                onClick={() => void onSend(s.prompt)}
+                className="shrink-0 rounded-full border border-app bg-surface px-3 py-[6px] text-[14px] text-app transition-colors hover:bg-surface-2 disabled:opacity-50"
+              >
+                {s.label}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={dismissAiHints}
+              aria-label="Ocultar sugerencias"
+              className="ml-auto flex size-8 shrink-0 items-center justify-center text-muted transition-colors hover:text-app"
+            >
+              <X className="size-[16px]" />
+            </button>
+          </div>
+        )}
         {editingMsg && (
           <div className="mb-[var(--space-2)] flex items-center gap-[var(--space-2)] rounded-[10px] border-l-2 border-blue-500 bg-surface px-3 py-[8px]">
             <div className="min-w-0 flex-1">
@@ -2079,7 +2156,7 @@ export function ChatConversation({
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                   onKeyDown={onKeyDown}
-                  placeholder={editingMsg ? "Editar mensaje..." : "Escribe un mensaje..."}
+                  placeholder={editingMsg ? "Editar mensaje..." : planId ? "Escribe un mensaje o pregunta a @frimee..." : "Escribe un mensaje..."}
                   aria-label={editingMsg ? "Editar mensaje" : "Escribir mensaje"}
                   className="min-w-0 flex-1 bg-transparent py-[10px] text-body-sm text-app outline-none placeholder:text-muted"
                 />

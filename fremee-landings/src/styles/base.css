@@ -2326,8 +2326,33 @@
     padding-top: 6.5rem;
   }
 
+  /* Same pinned phone as on desktop, smaller. It used to be hidden here, which
+     left the 320dvh scroll sequence as blank screens with only the words. */
+  /* The frame is very wide (2560x1768) with the phone in the middle, and the
+     global max-width: 100% letterboxed it to the screen width: tiny phone and
+     the arm's cut floating above the bottom edge. The video may now be wider
+     than the screen, so the mockup clips it itself: GSAP pins the mockup out of
+     the shell, and without this the page became wider than the screen. */
   .v3-hero-mockup {
-    display: none;
+    margin-top: -12rem;
+    overflow: hidden;
+    /* Fixed track so the video's 50% margin is half the screen, not half its own width. */
+    grid-template-columns: 100%;
+  }
+
+  .v3-hero-mockup-glow {
+    width: 22rem;
+    height: 24rem;
+  }
+
+  /* Wider than its box, so center it by hand (grid would align it to the
+     start). -58% = -50% to center the frame + the desktop -8% phone offset. */
+  .v3-hero-video {
+    height: 66dvh;
+    max-width: none;
+    justify-self: start;
+    margin-left: 50%;
+    transform: translateX(-58%);
   }
 
   .v3-hero-story {
@@ -2518,5 +2543,37 @@
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* Mobile: desktop two-column sections stack into one column but kept their
+   left alignment, mixed with the centered sections around them. */
+@media (max-width: 767px) {
+  .v3-section-heading-full {
+    text-align: center;
+  }
+
+  .v3-value-card-icon {
+    margin-inline: auto;
+  }
+
+  .v3-value-carousel-dots,
+  .v3-testimonials-dots {
+    justify-content: center;
+  }
+
+  .v3-testimonials-left,
+  .v3-demo-left {
+    align-items: center;
+    text-align: center;
+  }
+
+  .v3-testimonials-subtitle,
+  .v3-demo-desc {
+    margin-inline: auto;
+  }
+
+  .v3-section-inner > h2 {
+    text-align: center;
   }
 }
