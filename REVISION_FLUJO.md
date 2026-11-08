@@ -16,6 +16,7 @@ Las migraciones se prueban primero en dev. Al fusionar la rama, aplicar en produ
 - [ ] `supabase/migrations/20261027000005_guest_cleanup.sql` (crea la tarea `guest-cleanup` de pg_cron)
 - [ ] `supabase/migrations/20261027000006_plan_chat_welcome.sql` (mensaje de bienvenida de Frimee en cada chat de plan nuevo)
 - [ ] `supabase/migrations/20261027000007_route_cache_modo.sql` (caché de rutas por medio de transporte; vacía la caché y borra los trayectos no en coche para recalcularlos)
+- [ ] `supabase/migrations/20261108000001_lock_definer_functions.sql` (funciones con permisos totales que no comprobaban quién llama: **aplicar antes de abrir el modo invitado**)
 - [ ] Desplegar la Edge Function `frimee-assistant` (fallo 6). Es compatible con la app actual: la app ya envía el token.
 
 ## Fallos
