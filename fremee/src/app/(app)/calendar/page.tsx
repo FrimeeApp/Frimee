@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import AppSidebar from "@/components/common/AppSidebar";
 import LoadingScreen from "@/components/common/LoadingScreen";
 import CreatePlanModal, { type CreatePlanPayload } from "@/components/plans/modals/CreatePlanModal";
+import EmptyPlansWelcome from "@/components/plans/EmptyPlansWelcome";
 import { useAuth } from "@/providers/AuthProvider";
 import { clearCachedGoogleProviderToken } from "@/services/auth/googleTokenCache";
 import { resolveGoogleProviderToken } from "@/services/auth/googleProviderToken";
@@ -1008,6 +1009,8 @@ function CalendarPageInner() {
               <section className="md:col-start-1 md:row-start-1">
                 {loading ? (
                   <PlanListSkeleton />
+                ) : mergedPlans.length === 0 && !planSearch.trim() ? (
+                  <EmptyPlansWelcome onCreatePlan={() => setCreateModalOpen(true)} onOpenPlan={navigateToPlan} />
                 ) : filteredPlans.length === 0 ? (
                   <p className="pt-[var(--space-2)] text-body-sm text-muted">
                     {planSearch.trim() ? "No hay planes con ese nombre." : "No hay planes para mostrar."}

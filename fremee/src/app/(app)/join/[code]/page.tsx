@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import JoinPageClient from "./JoinPageClient";
 
 export async function generateStaticParams() {
@@ -5,5 +6,10 @@ export async function generateStaticParams() {
 }
 
 export default function JoinPage() {
-  return <JoinPageClient />;
+  // useSearchParams (native ?code=) needs a Suspense boundary in the static export.
+  return (
+    <Suspense>
+      <JoinPageClient />
+    </Suspense>
+  );
 }
