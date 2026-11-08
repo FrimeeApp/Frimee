@@ -40,6 +40,8 @@ type AuthState = {
   refreshProfile: () => Promise<void>;
   setUserSnapshot: (snapshot: UserAuthSnapshotDto | null) => void;
   signOut: () => Promise<void>;
+  /** True after the user signed out on purpose (not an expired session), until the next sign-in. */
+  signedOutByUser: boolean;
 };
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -54,6 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [settings, setSettings] = useState<UserSettingsDto | null>(null);
+  const [signedOutByUser, setSignedOutByUser] = useState(false);
 
   const applySnapshot = useCallback((snapshot: UserAuthSnapshotDto | null, persist = true) => {
     const nextProfile = (snapshot?.profile as Profile | null) ?? null;
@@ -115,6 +118,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     const currentUserId = user?.id ?? null;
+    // AuthGuard sends people to /login?redirect=<page> when a session ends on its own;
+    // after "Cerrar sesión" the next sign-in should start at home, not at that page.
+    setSignedOutByUser(true);
     const { error } = await supabase.auth.signOut();
     if (error) {
       console.warn("[auth] signOut error:", error.message);
@@ -142,6 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         setSession(nextSession);
         setUser(nextSession?.user ?? null);
+        if (nextSession) setSignedOutByUser(false);
 
         const sess = nextSession as { provider_token?: string | null; provider_refresh_token?: string | null } | null;
         const providerToken = sess?.provider_token ?? null;
@@ -177,6 +184,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [supabase, loadUserSnapshot]);
 
   const value: AuthState = {
+    signedOutByUser,
     loading,
     session,
     googleProviderToken,
