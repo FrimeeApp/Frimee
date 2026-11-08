@@ -59,7 +59,9 @@ export function PlanGastoDetailModal({
   onClose,
   onDeleted,
 }: PlanGastoDetailModalProps) {
-  const { isClosing, requestClose } = useModalCloseAnimation(onClose);
+  // The page keeps this mounted with gasto = null while closed: only lock the page scroll
+  // while an expense is shown, or the closed instance restores a stale scroll position.
+  const { isClosing, requestClose } = useModalCloseAnimation(onClose, gasto !== null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
