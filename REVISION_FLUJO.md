@@ -133,7 +133,7 @@ Partes del flujo que aún no se han recorrido en dev (ver `TEST_PLAN.md` y `CHEC
 
 ## Pendiente de limpiar
 
-- [ ] **Rama del álbum:** su versión de `20261027000004_guest_demo_seed.sql` (viaje Barcelona → Lisboa) debe llevar la comprobación nueva de `20261108000002` (`if v_guest is null`), o al aplicarla volvería a ser solo para invitados y «Ver el ejemplo» fallaría para las cuentas registradas.
+- [ ] **Rama del álbum:** el viaje largo, sus fotos y `demo-photos.ts` ya están en `main` (migración `20261108000003`, con la comprobación de `20261108000002`). Al rebasar la rama, quedarse con la `0004` corta de `main` y no volver a aplicar la `0004` de la rama; su paso 2.10 (`plan_album`) pasa a ser el siguiente libre.
 - [ ] **Baja de cuenta**: rehacer «Eliminar cuenta» (ver «Fallos encontrados» en `VERIFICACION_PUBLICACION.md`).
 - [ ] **Landing**: sus páginas legales (`fremee-landings`) siguen con la versión del 01/05/2026; redirigirlas a las de la app o copiar el texto nuevo.
 

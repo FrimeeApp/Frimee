@@ -11,6 +11,29 @@ import {
 } from "@/services/api/repositories/plan-fotos.repository";
 import { Plus, Trash2, Plane, Loader2 } from "lucide-react";
 import { ImageLightbox } from "@/components/ui/ImageLightbox";
+import { DEMO_PHOTO_CREDITS } from "@/config/demo-photos";
+
+/** Author and licence of an example-trip photo (Wikimedia Commons); real uploads have none. */
+function DemoPhotoCaption({ url }: { url: string }) {
+  const credit = DEMO_PHOTO_CREDITS[url];
+  if (!credit) return null;
+  return (
+    <>
+      Foto:{" "}
+      <a href={credit.fuente} target="_blank" rel="noreferrer" className="underline underline-offset-2">
+        {credit.autor}
+      </a>{" "}
+      ·{" "}
+      {credit.licenciaUrl ? (
+        <a href={credit.licenciaUrl} target="_blank" rel="noreferrer" className="underline underline-offset-2">
+          {credit.licencia}
+        </a>
+      ) : (
+        credit.licencia
+      )}
+    </>
+  );
+}
 
 type Props = {
   planId: number;
@@ -186,11 +209,18 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, refreshK
         </div>
       )}
 
+      {fotos.some((foto) => DEMO_PHOTO_CREDITS[foto.url]) && (
+        <p className="mt-[var(--space-3)] text-[12px] text-tertiary">
+          Fotos de ejemplo de Wikimedia Commons; al abrir cada una verás su autor y licencia.
+        </p>
+      )}
+
       {lightboxUrl && (
         <ImageLightbox
           url={lightboxUrl}
           imageUrls={fotos.map((foto) => foto.url)}
           onClose={() => setLightboxUrl(null)}
+          caption={(url) => (DEMO_PHOTO_CREDITS[url] ? <DemoPhotoCaption url={url} /> : null)}
         />
       )}
     </div>
