@@ -30,9 +30,13 @@ export async function POST(req: NextRequest) {
   const raw = body as Record<string, unknown>;
   const roomName = sanitizeRoomName(raw.roomName);
   if (!roomName) return withCors(req, NextResponse.json({ error: "roomName invalido o requerido" }, { status: 400 }));
-  const chatId = raw.chatId != null ? sanitizeUuid(raw.chatId) : null;
-  if (raw.chatId != null && !chatId) {
-    return withCors(req, NextResponse.json({ error: "chatId invalido" }, { status: 400 }));
+  const chatId = sanitizeUuid(raw.chatId);
+  if (!chatId) return withCors(req, NextResponse.json({ error: "chatId invalido o requerido" }, { status: 400 }));
+  // Rooms are named after their chat (useCall: call_<chatId>_<timestamp>). Being a member of
+  // the chat you name is not enough: the room must belong to it, or a member of one chat
+  // could join another chat's call.
+  if (!new RegExp(`^call_${chatId}_\\d+$`).test(roomName)) {
+    return withCors(req, NextResponse.json({ error: "forbidden" }, { status: 403 }));
   }
 
   const apiKey = process.env.LIVEKIT_API_KEY;
@@ -41,15 +45,13 @@ export async function POST(req: NextRequest) {
     return withCors(req, NextResponse.json({ error: "Livekit not configured" }, { status: 500 }));
   }
 
-  if (chatId) {
-    const { data: member } = await supabase
-      .from("chat_miembro")
-      .select("user_id")
-      .eq("chat_id", chatId)
-      .eq("user_id", user.id)
-      .single();
-    if (!member) return withCors(req, NextResponse.json({ error: "forbidden" }, { status: 403 }));
-  }
+  const { data: member } = await supabase
+    .from("chat_miembro")
+    .select("user_id")
+    .eq("chat_id", chatId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!member) return withCors(req, NextResponse.json({ error: "forbidden" }, { status: 403 }));
 
   const at = new AccessToken(apiKey, apiSecret, {
     identity: user.id,
