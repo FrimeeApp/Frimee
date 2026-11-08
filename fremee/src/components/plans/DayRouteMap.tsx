@@ -5,6 +5,7 @@ import { Capacitor } from "@capacitor/core";
 import type { SubplanRow } from "@/services/api/endpoints/subplanes.endpoint";
 import { TIPOS_TRANSPORTE } from "@/services/api/endpoints/subplanes.endpoint";
 import { loadGoogleMapsScript } from "@/lib/googleMaps";
+import { decodePolyline } from "@/lib/polyline";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { buildInternalApiUrl } from "@/config/external";
 import { formatCompactRouteDistance, formatCompactRouteDuration } from "@/lib/route-formatters";
@@ -204,21 +205,6 @@ async function geocode(address: string): Promise<Coord | null> {
       resolve({ lat: loc.lat(), lng: loc.lng() });
     });
   });
-}
-
-function decodePath(encoded: string): Coord[] {
-  const points: Coord[] = [];
-  let index = 0, lat = 0, lng = 0;
-  while (index < encoded.length) {
-    let b, shift = 0, result = 0;
-    do { b = encoded.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
-    lat += result & 1 ? ~(result >> 1) : result >> 1;
-    shift = 0; result = 0;
-    do { b = encoded.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
-    lng += result & 1 ? ~(result >> 1) : result >> 1;
-    points.push({ lat: lat / 1e5, lng: lng / 1e5 });
-  }
-  return points;
 }
 
 const geocodeCache = new Map<string, Promise<Coord | null>>();
@@ -489,7 +475,7 @@ export default function DayRouteMap({
         const drawPolyline = (encoded: string) => {
           const path = google.maps.geometry?.encoding
             ? google.maps.geometry.encoding.decodePath(encoded)
-            : decodePath(encoded);
+            : decodePolyline(encoded);
           new google.maps.Polyline({
             path,
             geodesic: true,

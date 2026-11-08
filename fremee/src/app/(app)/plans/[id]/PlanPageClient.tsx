@@ -14,7 +14,8 @@ import CreatePlanModal, { type EditPlanInitialValues } from "@/components/plans/
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { fetchSubplanes, updateSubplanTransporte, updateSubplanViaje, type SubplanRow, TIPOS_TRANSPORTE } from "@/services/api/endpoints/subplanes.endpoint";
 import { getBalancesForPlanEndpoint, listGastosForPlanEndpoint, pagarLiquidacionEndpoint, uploadComprobanteEndpoint, type BalanceRow, type GastoRow } from "@/services/api/endpoints/gastos.endpoint";
-import DayRouteMap, { requestDirections } from "@/components/plans/DayRouteMap";
+import DayRouteMap from "@/components/plans/DayRouteMap";
+import { findMissingLegs, useComputeMissingLegs } from "@/hooks/useComputeMissingLegs";
 import AddGastoSheet from "@/components/plans/modals/AddGastoSheet";
 import { fetchActiveFriends, type PublicUserProfileRow } from "@/services/api/endpoints/users.endpoint";
 import { insertNotificacion, fetchPendingPlanInviteUserIds } from "@/services/api/repositories/notifications.repository";
@@ -801,61 +802,20 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
 
   // Itinerary legs used to be computed only by the map, for its selected day, so an open
   // day the map had not shown listed "Coche"/"A pie" without time or distance. Compute the
-  // missing legs of every open day here; requestDirections reads the shared cache first.
-  const handleViajeComputedRef = useRef(handleViajeComputed);
-  handleViajeComputedRef.current = handleViajeComputed;
-  const requestedLegKeysRef = useRef(new Set<string>());
-  useEffect(() => {
-    if (!collapsedDaysReady) return;
-    const legs: { destId: number; key: string; from: { lat: number; lng: number }; to: { lat: number; lng: number }; mode: string }[] = [];
-    for (const [dateKey, items] of groupByDay(subplanes)) {
-      if (collapsedDays.has(dateKey)) continue;
-      items.forEach((dest, idx) => {
-        if (idx === 0 || !dest.transporte_llegada || dest.duracion_viaje || dest.distancia_viaje) return;
-        if (dest.ubicacion_lat == null || dest.ubicacion_lng == null) return;
-        const prev = items[idx - 1];
-        // Like the map: a transport leg (flight, train...) ends at its destination.
-        const from = TIPOS_TRANSPORTE.includes(prev.tipo) && prev.ubicacion_fin_lat != null && prev.ubicacion_fin_lng != null
-          ? { lat: prev.ubicacion_fin_lat, lng: prev.ubicacion_fin_lng }
-          : prev.ubicacion_lat != null && prev.ubicacion_lng != null
-            ? { lat: prev.ubicacion_lat, lng: prev.ubicacion_lng }
-            : null;
-        if (!from) return;
-        const to = { lat: dest.ubicacion_lat, lng: dest.ubicacion_lng };
-        const key = [dest.id, dest.transporte_llegada, `${from.lat},${from.lng}`, `${to.lat},${to.lng}`].join("|");
-        if (requestedLegKeysRef.current.has(key)) return; // once per page load, also when it fails
-        requestedLegKeysRef.current.add(key);
-        legs.push({ destId: dest.id, key, from, to, mode: dest.transporte_llegada });
-      });
-    }
-    if (legs.length === 0) return;
-
-    void (async () => {
-      const { data: { session } } = await createBrowserSupabaseClient().auth.getSession();
-      for (const leg of legs) {
-        try {
-          const data = await requestDirections({
-            waypoints: [`${leg.from.lat},${leg.from.lng}`, `${leg.to.lat},${leg.to.lng}`],
-            from: leg.from,
-            to: leg.to,
-            travelMode: leg.mode,
-            accessToken: session?.access_token,
-          });
-          const result = data.legs?.[0];
-          if (data.polyline && result?.duration) {
-            handleViajeComputedRef.current(
-              leg.destId,
-              formatCompactRouteDuration(result.duration),
-              formatCompactRouteDistance(result.distance),
-              data.polyline,
-            );
-          }
-        } catch (error) {
-          console.warn("[itinerario] No se pudo calcular el trayecto", leg.key, error);
-        }
-      }
-    })();
+  // missing legs of every open day here (shared cache first, then Google).
+  const missingLegs = useMemo(() => {
+    if (!collapsedDaysReady) return [];
+    const openDays = groupByDay(subplanes).filter(([dateKey]) => !collapsedDays.has(dateKey));
+    return findMissingLegs(openDays.map(([, items]) => items.map((s) => ({
+      id: s.id,
+      isTransport: TIPOS_TRANSPORTE.includes(s.tipo),
+      transporte: s.transporte_llegada,
+      hasLeg: Boolean(s.duracion_viaje || s.distancia_viaje),
+      at: s.ubicacion_lat != null && s.ubicacion_lng != null ? { lat: s.ubicacion_lat, lng: s.ubicacion_lng } : null,
+      end: s.ubicacion_fin_lat != null && s.ubicacion_fin_lng != null ? { lat: s.ubicacion_fin_lat, lng: s.ubicacion_fin_lng } : null,
+    }))));
   }, [subplanes, collapsedDays, collapsedDaysReady]);
+  useComputeMissingLegs(missingLegs, handleViajeComputed);
 
   const handleTransporteChange = async (subplanId: number, transporte: string | null) => {
     // Clear cached route so DayRouteMap recalculates with the new travel mode
