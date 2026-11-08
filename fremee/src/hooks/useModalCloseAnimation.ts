@@ -50,7 +50,9 @@ function unlockDocumentScroll(lockId: symbol) {
   body.style.paddingRight = previousBodyPaddingRight;
   documentElement.style.overscrollBehavior = previousHtmlOverscroll;
   body.removeAttribute("data-modal-open");
-  window.scrollTo(0, lockedScrollY);
+  // "instant": html has scroll-behavior: smooth, which animated the page from the top
+  // back down to where it was every time a modal closed.
+  window.scrollTo({ top: lockedScrollY, left: 0, behavior: "instant" });
 }
 
 type ModalCloseAnimationOptions = {
