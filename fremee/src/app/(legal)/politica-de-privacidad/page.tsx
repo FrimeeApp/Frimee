@@ -115,7 +115,7 @@ const sections: LegalSection[] = [
       <LegalList
         items={[
           "Mientras tu cuenta esté activa.",
-          "Si pides eliminar tu cuenta (desde Ajustes o escribiendo a contact@frimee.es), se elimina tu acceso y tus datos personales se borran definitivamente en un plazo máximo de 30 días.",
+          "Si pides eliminar tu cuenta (desde Ajustes o escribiendo a contact@frimee.es), se elimina tu acceso y tus datos personales se borran definitivamente en un plazo máximo de 30 días. Los planes en los que solo estás tú se borran enteros. En los planes compartidos, lo que añadiste (gastos, actividades, mensajes y fotos) se queda anonimizado como «Usuario eliminado», para que las cuentas del resto del grupo sigan cuadrando.",
           "Las cuentas de invitado se borran a los 7 días, con todo su contenido.",
           "Las rutas calculadas entre lugares se guardan en una caché común un máximo de 30 días.",
           "Algunos datos pueden conservarse más tiempo solo cuando la ley lo exija o para atender reclamaciones.",

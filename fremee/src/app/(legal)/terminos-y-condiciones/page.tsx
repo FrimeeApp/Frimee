@@ -151,7 +151,8 @@ const sections: LegalSection[] = [
     body: (
       <p>
         Puedes pedir la baja cuando quieras desde Ajustes o escribiendo a contact@frimee.es. Se elimina tu acceso y tus
-        datos personales se borran en un plazo máximo de 30 días.
+        datos personales se borran en un plazo máximo de 30 días. Lo que añadiste a planes compartidos se queda
+        anonimizado como «Usuario eliminado», para que las cuentas del grupo sigan cuadrando.
       </p>
     ),
   },
