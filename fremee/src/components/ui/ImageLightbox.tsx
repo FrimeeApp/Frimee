@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { CloseButton, IconButton } from "@/components/ui/IconButton";
 
@@ -9,9 +9,11 @@ type ImageLightboxProps = {
   url: string;
   imageUrls: string[];
   onClose: () => void;
+  /** Optional line under the current image (e.g. the author and licence of a stock photo). */
+  caption?: (url: string) => ReactNode;
 };
 
-export function ImageLightbox({ url, imageUrls, onClose }: ImageLightboxProps) {
+export function ImageLightbox({ url, imageUrls, onClose, caption }: ImageLightboxProps) {
   const [current, setCurrent] = useState(url);
   const thumbsRef = useRef<HTMLDivElement>(null);
   const touchStartXRef = useRef<number | null>(null);
@@ -106,6 +108,12 @@ export function ImageLightbox({ url, imageUrls, onClose }: ImageLightboxProps) {
           </IconButton>
         )}
       </div>
+
+      {caption?.(current) && (
+        <div className="shrink-0 px-4 pt-2 text-center text-[12px] text-white/70" onClick={(e) => e.stopPropagation()}>
+          {caption(current)}
+        </div>
+      )}
 
       {imageUrls.length > 1 && (
         <div
