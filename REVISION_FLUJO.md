@@ -136,7 +136,6 @@ Partes del flujo que aún no se han recorrido en dev (ver `TEST_PLAN.md` y `CHEC
 
 ## Pendiente de limpiar
 
-- [ ] **Baja de cuenta**: rehacer «Eliminar cuenta» (ver «Fallos encontrados» en `VERIFICACION_PUBLICACION.md`).
 - [ ] **Landing**: sus páginas legales (`fremee-landings`) siguen con la versión del 01/05/2026; redirigirlas a las de la app o copiar el texto nuevo.
 
 
