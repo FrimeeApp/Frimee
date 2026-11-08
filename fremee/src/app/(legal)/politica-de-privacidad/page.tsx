@@ -1,261 +1,245 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import LegalDocument, { LegalList, type LegalSection } from "@/components/legal/LegalDocument";
+import LegalDocument from "@/components/legal/LegalDocument";
 
 export const metadata: Metadata = { title: "Política de Privacidad" };
 
-const ADDRESS = "Carrer Mestre Candi, 30, 08901 L'Hospitalet de Llobregat, Barcelona";
-
-const sections: LegalSection[] = [
-  {
-    title: "Responsable del tratamiento",
-    body: (
-      <>
-        <p>El responsable del tratamiento de los datos personales tratados a través de Frimee es Cayetano Yeste.</p>
-        <p>
-          Correo electrónico de contacto: contact@frimee.es
-          <br />
-          Domicilio a efectos de notificaciones: {ADDRESS}
-          <br />
-          Sitio web: frimee.es
-        </p>
-      </>
-    ),
-  },
-  {
-    title: "Datos personales que tratamos",
-    body: (
-      <>
-        <p>Según cómo uses Frimee, podemos tratar:</p>
-        <LegalList
-          items={[
-            "Datos de cuenta: nombre, correo electrónico, nombre de usuario, foto de perfil, fecha de nacimiento si la indicas, contraseña cifrada, ajustes y preferencias. Si entras con Google, recibimos tu nombre, tu correo y tu foto de esa cuenta.",
-            "Datos de tus viajes: planes, destinos, fechas, actividades con su ubicación, presupuestos, tareas y encuestas.",
-            "Gastos y pagos entre participantes: importes, quién pagó, cómo se reparte, deudas y los comprobantes de pago que subas.",
-            "Contenido que compartes: mensajes de chat, notas de voz, fotos, vídeos y documentos, fotos del álbum del plan, publicaciones, comentarios y \"me gusta\".",
-            "Billetes y entradas que guardes en la cartera (wallet).",
-            "Llamadas: Frimee conecta las llamadas de audio y vídeo en tiempo real pero no las graba; solo guarda que hubo una llamada y su duración.",
-            "Si conectas Google Calendar, el permiso de acceso necesario para sincronizar tus planes con tu calendario.",
-            "Datos del dispositivo y técnicos: identificador para las notificaciones push, dirección IP, tipo de navegador o dispositivo e informes de errores.",
-            "Las consultas que nos envíes por correo.",
-          ]}
-        />
-        <p>
-          <b className="text-app">Modo invitado.</b> Puedes probar Frimee sin registrarte. La cuenta de invitado no
-          tiene correo ni contraseña y se borra, con todo lo que contenga, a los 7 días, salvo que la guardes antes
-          con tu correo.
-        </p>
-      </>
-    ),
-  },
-  {
-    title: "Para qué los usamos",
-    body: (
-      <LegalList
-        items={[
-          "Crear y gestionar tu cuenta y permitirte usar Frimee.",
-          "Organizar viajes en grupo: itinerario, mapas y rutas, gastos y deudas, chat, llamadas, álbum y notificaciones.",
-          "Mostrar, guardar y sincronizar la información que introduces, también con Google Calendar si lo activas.",
-          "Responder a lo que pidas al asistente @frimee y leer tickets y entradas cuando lo solicites.",
-          "Moderar comentarios públicos para evitar contenido ofensivo.",
-          "Mantener la seguridad del servicio, evitar abusos (por ejemplo, limitando intentos) y corregir errores.",
-          "Enviarte los correos necesarios del servicio: confirmación de cuenta, recuperación de contraseña o cambio de correo.",
-          "Atender tus consultas y cumplir obligaciones legales.",
-        ]}
-      />
-    ),
-  },
-  {
-    title: "Base legal",
-    body: (
-      <LegalList
-        items={[
-          "Ejecución del contrato: para darte de alta y prestarte el servicio que pides.",
-          "Interés legítimo: para la seguridad del servicio, prevenir abusos, corregir errores y atender consultas.",
-          "Consentimiento: para funciones opcionales que tú activas, como conectar Google Calendar o recibir notificaciones push. Puedes retirarlo cuando quieras desde los ajustes.",
-          "Obligación legal: cuando una norma nos obligue a conservar o comunicar datos.",
-        ]}
-      />
-    ),
-  },
-  {
-    title: "Datos de otras personas",
-    body: (
-      <>
-        <p>
-          En un plan puedes incluir información de otras personas, por ejemplo participantes de un viaje o los gastos
-          que compartís. En ese caso declaras que puedes hacerlo y que, cuando sea necesario, les has informado.
-        </p>
-        <p>Frimee podrá eliminar o limitar información de terceros si detecta un uso ilícito o abusivo.</p>
-      </>
-    ),
-  },
-  {
-    title: "Inteligencia artificial",
-    body: (
-      <>
-        <LegalList
-          items={[
-            "Asistente @frimee: cuando alguien escribe @frimee en el chat de un plan, se envían a Anthropic (Claude) ese mensaje, la conversación reciente del chat y los datos del plan necesarios para responder (destino, fechas, actividades y saldos).",
-            "Lectura de tickets y entradas: cuando subes una foto para leerla, la imagen se envía a OpenAI para extraer el concepto, el importe o los datos del billete.",
-            "Moderación de comentarios: el texto de los comentarios se revisa con OpenAI antes de publicarse.",
-          ]}
-        />
-        <p>
-          Estos proveedores tratan los datos por cuenta de Frimee y, según sus condiciones de uso de la API, no los
-          utilizan para entrenar sus modelos. Las respuestas de la IA son orientativas y pueden contener errores. No
-          introduzcas información confidencial o sensible que no sea necesaria.
-        </p>
-      </>
-    ),
-  },
-  {
-    title: "Cuánto tiempo los conservamos",
-    body: (
-      <LegalList
-        items={[
-          "Mientras tu cuenta esté activa.",
-          "Si pides eliminar tu cuenta (desde Ajustes o escribiendo a contact@frimee.es), se elimina tu acceso y tus datos personales se borran definitivamente en un plazo máximo de 30 días. Los planes en los que solo estás tú se borran enteros. En los planes compartidos, lo que añadiste (gastos, actividades, mensajes y fotos) se queda anonimizado como «Usuario eliminado», para que las cuentas del resto del grupo sigan cuadrando.",
-          "Las cuentas de invitado se borran a los 7 días, con todo su contenido.",
-          "Las rutas calculadas entre lugares se guardan en una caché común un máximo de 30 días.",
-          "Algunos datos pueden conservarse más tiempo solo cuando la ley lo exija o para atender reclamaciones.",
-        ]}
-      />
-    ),
-  },
-  {
-    title: "Proveedores que nos ayudan a prestar el servicio",
-    body: (
-      <>
-        <p>Frimee no vende tus datos. Los comparte solo con los proveedores necesarios, que actúan como encargados del tratamiento:</p>
-        <LegalList
-          items={[
-            "Supabase: base de datos, cuentas y archivos, con servidores en Irlanda (Unión Europea).",
-            "Vercel: alojamiento de la web.",
-            "Google: Google Maps (mapas, búsqueda de lugares y cálculo de rutas), inicio de sesión con Google, Google Calendar si lo conectas, y Firebase (fotos del álbum, publicaciones y notificaciones push).",
-            "Resend: envío de los correos de la cuenta.",
-            "LiveKit: conexión de las llamadas de audio y vídeo.",
-            "Anthropic y OpenAI: las funciones de inteligencia artificial descritas arriba.",
-            "Sentry: informes de errores. En una pequeña parte de las sesiones puede guardar una reproducción de la pantalla con todo el texto y las imágenes ocultos.",
-            "OpenFreeMap y OpenStreetMap: mapas del álbum del viaje; tu dispositivo descarga el mapa de sus servidores.",
-            "Servicios de datos públicos (tiempo, cambio de divisas, vuelos y barcos): solo reciben el destino, las fechas o el número de vuelo, nunca tu nombre ni tu correo.",
-          ]}
-        />
-        <p>
-          También podremos comunicar datos cuando exista una obligación legal o un requerimiento de una autoridad
-          competente.
-        </p>
-      </>
-    ),
-  },
-  {
-    title: "Transferencias internacionales",
-    body: (
-      <p>
-        Algunos de estos proveedores son empresas de Estados Unidos o tratan datos fuera del Espacio Económico Europeo
-        (por ejemplo Vercel, Google, Resend, LiveKit, Anthropic, OpenAI y Sentry). En esos casos las transferencias se
-        amparan, según el proveedor, en el Marco de Privacidad de Datos UE-EE. UU. o en las cláusulas contractuales
-        tipo aprobadas por la Comisión Europea.
-      </p>
-    ),
-  },
-  {
-    title: "Tus derechos",
-    body: (
-      <>
-        <p>
-          Puedes pedir el acceso, la rectificación, la supresión, la oposición, la limitación y la portabilidad de tus
-          datos, y retirar tu consentimiento cuando el tratamiento se base en él.
-        </p>
-        <p>
-          Puedes cambiar tus datos desde Ajustes. Para eliminar tu cuenta o para cualquier otra solicitud, usa Ajustes
-          o escribe a contact@frimee.es indicando qué derecho quieres ejercer y desde qué cuenta.
-        </p>
-      </>
-    ),
-  },
-  {
-    title: "Reclamaciones",
-    body: (
-      <p>
-        Si consideras que no tratamos bien tus datos, puedes presentar una reclamación ante la Agencia Española de
-        Protección de Datos (aepd.es).
-      </p>
-    ),
-  },
-  {
-    title: "Seguridad",
-    body: (
-      <p>
-        Aplicamos medidas técnicas y organizativas razonables para proteger tus datos: conexiones cifradas, contraseñas
-        cifradas y permisos que limitan lo que cada usuario puede ver a los planes de los que forma parte. Ningún
-        sistema es completamente seguro, así que protege también tus credenciales y no compartas tu cuenta.
-      </p>
-    ),
-  },
-  {
-    title: "Menores de edad",
-    body: (
-      <p>
-        Frimee está dirigida a mayores de 14 años. Los menores de 14 años solo pueden usarla con autorización de sus
-        padres, madres o tutores.
-      </p>
-    ),
-  },
-  {
-    title: "Cookies y almacenamiento en tu dispositivo",
-    body: (
-      <>
-        <p>
-          Frimee no usa cookies publicitarias ni de analítica de terceros. Guarda en tu navegador o en el móvil solo lo
-          necesario para funcionar: tu sesión, el tema, tus preferencias y una copia temporal de datos para que la app
-          cargue más rápido.
-        </p>
-        <p>
-          Al usar los mapas de Google y los informes de errores de Sentry, estos servicios pueden recibir datos técnicos
-          de tu dispositivo (como la dirección IP) para funcionar.
-        </p>
-      </>
-    ),
-  },
-  {
-    title: "Cambios en esta política",
-    body: (
-      <p>
-        Podemos actualizar esta política para adaptarla a cambios legales, técnicos o del servicio. Si el cambio es
-        importante, te avisaremos por la app o por correo.
-      </p>
-    ),
-  },
-  {
-    title: "Contacto",
-    body: (
-      <p>
-        Email: contact@frimee.es
-        <br />
-        Domicilio a efectos de notificaciones: {ADDRESS}
-      </p>
-    ),
-  },
-];
-
+// Text reviewed on 01/05/2026, copied word for word from fremee-landings/src/app (only the styles
+// change): do not edit it here without a new review, and keep both copies in step.
 export default function PoliticaDePrivacidadPage() {
   return (
-    <LegalDocument
-      title="Política de Privacidad"
-      updated="8 de noviembre de 2026"
-      intro={
-        <>
+    <LegalDocument title="Política de Privacidad de Frimee" updated="01/05/2026">
+      <div className="space-y-[var(--space-3)]">
           <p>
-            Esta política explica qué datos personales trata Frimee, la aplicación web (frimee.es) y móvil para
-            organizar viajes en grupo, para qué los usa y qué derechos tienes.
+            Esta Política de Privacidad regula el tratamiento de los datos personales de los usuarios de Frimee,
+            aplicación web disponible en frimee.es, destinada a facilitar la organización y planificación de viajes,
+            especialmente en grupo.
+          </p>
+          <p>El uso de Frimee implica que el usuario ha leído y comprendido esta Política de Privacidad.</p>
+      </div>
+
+        <section className="mt-[var(--space-8)] space-y-[var(--space-3)]">
+          <h2 className="font-sans text-[19px] font-[var(--fw-semibold)] text-app">1. Responsables del tratamiento</h2>
+          <p>Los responsables del tratamiento de los datos personales tratados a través de Frimee son:</p>
+          <p>
+            Victoria Martín y Cayetano Yeste
+            <br />
+            Correo electrónico de contacto: contact@frimee.es
           </p>
           <p>
-            Completa los <Link href="/terminos-y-condiciones" className="text-app underline underline-offset-4">Términos y Condiciones</Link>.
+            Domicilio a efectos de notificaciones: Carrer Mestre Candi, 30, 08901 L&apos;Hospitalet de Llobregat,
+            Barcelona
+            <br />
+            Sitio web: frimee.es
           </p>
-        </>
-      }
-      sections={sections}
-    />
+          <p>Ambos actúan como responsables del tratamiento de los datos personales tratados a través de Frimee.</p>
+        </section>
+
+        <section className="mt-[var(--space-8)] space-y-[var(--space-3)]">
+          <h2 className="font-sans text-[19px] font-[var(--fw-semibold)] text-app">2. Datos personales que tratamos</h2>
+          <p>Frimee podrá tratar las siguientes categorías de datos personales:</p>
+          <p>Datos identificativos y de contacto, como nombre, correo electrónico o nombre de usuario.</p>
+          <p>Datos de cuenta, como credenciales cifradas, configuración y preferencias.</p>
+          <p>
+            Datos relacionados con viajes, como destinos, fechas, planes, participantes, notas, presupuestos o
+            preferencias.
+          </p>
+          <p>Contenido introducido por el usuario dentro de la aplicación.</p>
+          <p>
+            Datos técnicos y de uso necesarios para el funcionamiento, seguridad y mejora de la plataforma, como
+            información del dispositivo, navegador, registros de acceso o uso de la aplicación.
+          </p>
+          <p>Comunicaciones enviadas a Frimee, como consultas, solicitudes o mensajes de soporte.</p>
+          <p>
+            Frimee no solicita datos especialmente sensibles, como datos de salud, ideología, religión, orientación
+            sexual, datos biométricos o datos relativos a infracciones penales. El usuario deberá evitar introducir
+            este tipo de información salvo que sea estrictamente necesario y cuente con legitimación suficiente.
+          </p>
+        </section>
+
+        <section className="mt-[var(--space-8)] space-y-[var(--space-3)]">
+          <h2 className="font-sans text-[19px] font-[var(--fw-semibold)] text-app">3. Finalidades del tratamiento</h2>
+          <p>Los datos personales podrán tratarse para las siguientes finalidades:</p>
+          <p>Crear y gestionar la cuenta del usuario.</p>
+          <p>Permitir el acceso y uso de Frimee.</p>
+          <p>Crear, organizar y gestionar viajes.</p>
+          <p>Permitir funcionalidades colaborativas entre participantes.</p>
+          <p>Mostrar, guardar y sincronizar la información introducida por el usuario.</p>
+          <p>Prestar soporte y responder consultas.</p>
+          <p>Mantener la seguridad, integridad y correcto funcionamiento de la aplicación.</p>
+          <p>Mejorar la experiencia de usuario y el funcionamiento del servicio.</p>
+          <p>Cumplir obligaciones legales aplicables.</p>
+          <p>Enviar comunicaciones relacionadas con el servicio.</p>
+          <p>
+            Enviar comunicaciones comerciales o informativas, solo cuando exista consentimiento o base legal
+            suficiente.
+          </p>
+        </section>
+
+        <section className="mt-[var(--space-8)] space-y-[var(--space-3)]">
+          <h2 className="font-sans text-[19px] font-[var(--fw-semibold)] text-app">4. Base legal del tratamiento</h2>
+          <p>La base legal para tratar los datos personales será, según cada caso:</p>
+          <p>
+            Ejecución de un contrato o relación precontractual, para permitir el registro, acceso y uso de Frimee.
+          </p>
+          <p>
+            Consentimiento del usuario, para comunicaciones comerciales, cookies no necesarias u otros tratamientos que
+            lo requieran.
+          </p>
+          <p>
+            Interés legítimo, para mantener la seguridad del servicio, prevenir abusos, mejorar la plataforma y atender
+            consultas.
+          </p>
+          <p>
+            Cumplimiento de obligaciones legales, cuando Frimee deba conservar o comunicar datos por obligación
+            normativa.
+          </p>
+        </section>
+
+        <section className="mt-[var(--space-8)] space-y-[var(--space-3)]">
+          <h2 className="font-sans text-[19px] font-[var(--fw-semibold)] text-app">5. Datos de terceros introducidos por el usuario</h2>
+          <p>El usuario puede introducir datos de otras personas, por ejemplo, participantes de un viaje.</p>
+          <p>
+            En ese caso, el usuario declara que cuenta con base legítima para introducir dicha información y que,
+            cuando sea necesario, ha informado a esas personas sobre el uso de Frimee y el tratamiento de sus datos.
+          </p>
+          <p>
+            Frimee podrá eliminar o restringir información de terceros cuando detecte un uso ilícito, abusivo o
+            contrario a la normativa de protección de datos.
+          </p>
+        </section>
+
+        <section className="mt-[var(--space-8)] space-y-[var(--space-3)]">
+          <h2 className="font-sans text-[19px] font-[var(--fw-semibold)] text-app">6. Inteligencia artificial</h2>
+          <p>
+            Frimee puede incorporar funcionalidades basadas en inteligencia artificial para ayudar en la planificación y
+            organización de viajes.
+          </p>
+          <p>
+            La información introducida por el usuario podrá ser tratada para generar respuestas, sugerencias, resúmenes,
+            ideas o asistencia relacionada con el viaje.
+          </p>
+          <p>
+            El usuario no deberá introducir información confidencial, sensible o innecesaria en las funcionalidades de
+            inteligencia artificial.
+          </p>
+        </section>
+
+        <section className="mt-[var(--space-8)] space-y-[var(--space-3)]">
+          <h2 className="font-sans text-[19px] font-[var(--fw-semibold)] text-app">7. Conservación de los datos</h2>
+          <p>Los datos personales se conservarán durante el tiempo necesario para prestar el servicio y mantener la cuenta activa.</p>
+          <p>
+            Cuando el usuario solicite la eliminación de su cuenta, Frimee eliminará o anonimizará sus datos
+            personales, salvo aquellos que deban conservarse durante los plazos necesarios para cumplir obligaciones
+            legales, atender responsabilidades o resolver reclamaciones.
+          </p>
+          <p>Los datos tratados con base en el consentimiento se conservarán hasta que el usuario retire dicho consentimiento.</p>
+        </section>
+
+        <section className="mt-[var(--space-8)] space-y-[var(--space-3)]">
+          <h2 className="font-sans text-[19px] font-[var(--fw-semibold)] text-app">8. Destinatarios y proveedores</h2>
+          <p>
+            Frimee podrá compartir datos personales con proveedores necesarios para prestar el servicio, como servicios
+            de alojamiento web, bases de datos, autenticación, correo electrónico, analítica, soporte técnico o
+            proveedores de inteligencia artificial.
+          </p>
+          <p>
+            Estos proveedores actuarán como encargados del tratamiento y tratarán los datos únicamente siguiendo
+            instrucciones de Frimee.
+          </p>
+          <p>Frimee no venderá los datos personales de los usuarios a terceros.</p>
+          <p>
+            También podrán comunicarse datos cuando exista obligación legal, requerimiento de autoridad competente o
+            necesidad de proteger derechos, seguridad o integridad de Frimee, sus usuarios o terceros.
+          </p>
+        </section>
+
+        <section className="mt-[var(--space-8)] space-y-[var(--space-3)]">
+          <h2 className="font-sans text-[19px] font-[var(--fw-semibold)] text-app">9. Transferencias internacionales</h2>
+          <p>
+            Algunos proveedores tecnológicos utilizados por Frimee podrían estar ubicados fuera del Espacio Económico
+            Europeo o tratar datos desde terceros países.
+          </p>
+          <p>
+            En esos casos, Frimee procurará que existan garantías adecuadas conforme al RGPD, como decisiones de
+            adecuación, cláusulas contractuales tipo u otros mecanismos legalmente previstos.
+          </p>
+        </section>
+
+        <section className="mt-[var(--space-8)] space-y-[var(--space-3)]">
+          <h2 className="font-sans text-[19px] font-[var(--fw-semibold)] text-app">10. Derechos de los usuarios</h2>
+          <p>El usuario puede ejercer los siguientes derechos:</p>
+          <p>Acceso a sus datos personales.</p>
+          <p>Rectificación de datos inexactos.</p>
+          <p>Supresión de sus datos.</p>
+          <p>Oposición al tratamiento.</p>
+          <p>Limitación del tratamiento.</p>
+          <p>Portabilidad de sus datos.</p>
+          <p>Retirada del consentimiento cuando el tratamiento se base en consentimiento.</p>
+          <p>Para ejercerlos, el usuario puede escribir a: contact@frimee.es</p>
+          <p>La solicitud deberá indicar qué derecho desea ejercer y permitir identificar razonablemente al usuario.</p>
+        </section>
+
+        <section className="mt-[var(--space-8)] space-y-[var(--space-3)]">
+          <h2 className="font-sans text-[19px] font-[var(--fw-semibold)] text-app">11. Reclamaciones ante la AEPD</h2>
+          <p>
+            Si el usuario considera que el tratamiento de sus datos personales no se ajusta a la normativa aplicable,
+            podrá presentar una reclamación ante la Agencia Española de Protección de Datos, a través de su página web
+            oficial.
+          </p>
+        </section>
+
+        <section className="mt-[var(--space-8)] space-y-[var(--space-3)]">
+          <h2 className="font-sans text-[19px] font-[var(--fw-semibold)] text-app">12. Seguridad</h2>
+          <p>
+            Frimee aplicará medidas técnicas y organizativas razonables para proteger los datos personales frente a
+            pérdida, uso indebido, acceso no autorizado, alteración o destrucción.
+          </p>
+          <p>
+            No obstante, ningún sistema informático es completamente seguro, por lo que el usuario también deberá
+            adoptar medidas de seguridad razonables, como proteger sus credenciales y no compartir su cuenta con
+            terceros.
+          </p>
+        </section>
+
+        <section className="mt-[var(--space-8)] space-y-[var(--space-3)]">
+          <h2 className="font-sans text-[19px] font-[var(--fw-semibold)] text-app">13. Menores de edad</h2>
+          <p>El uso de Frimee está dirigido a personas mayores de 14 años.</p>
+          <p>
+            Los menores de 14 años solo podrán utilizar Frimee con autorización de sus padres, madres, tutores o
+            representantes legales.
+          </p>
+        </section>
+
+        <section className="mt-[var(--space-8)] space-y-[var(--space-3)]">
+          <h2 className="font-sans text-[19px] font-[var(--fw-semibold)] text-app">14. Cookies</h2>
+          <p>
+            Frimee puede utilizar cookies o tecnologías similares. La información específica sobre su uso se encuentra
+            en la Política de Cookies.
+          </p>
+        </section>
+
+        <section className="mt-[var(--space-8)] space-y-[var(--space-3)]">
+          <h2 className="font-sans text-[19px] font-[var(--fw-semibold)] text-app">15. Cambios en esta Política de Privacidad</h2>
+          <p>
+            Frimee podrá modificar esta Política de Privacidad para adaptarla a cambios legales, técnicos o
+            funcionales.
+          </p>
+          <p>Cuando los cambios sean relevantes, Frimee procurará informar al usuario por medios razonables.</p>
+        </section>
+
+        <section className="mt-[var(--space-8)] space-y-[var(--space-3)]">
+          <h2 className="font-sans text-[19px] font-[var(--fw-semibold)] text-app">16. Contacto</h2>
+          <p>
+            Para cualquier cuestión relacionada con esta Política de Privacidad o con el tratamiento de datos
+            personales, el usuario puede contactar con Frimee en:
+          </p>
+          <p>
+            Email: contact@frimee.es
+            <br />
+            Domicilio a efectos de notificaciones: Carrer Mestre Candi, 30, 08901 L&apos;Hospitalet de Llobregat,
+            Barcelona
+          </p>
+        </section>
+    </LegalDocument>
   );
 }

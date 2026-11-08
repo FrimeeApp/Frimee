@@ -138,7 +138,8 @@ Partes del flujo que aún no se han recorrido en dev (ver `TEST_PLAN.md` y `CHEC
 
 ## Pendiente de limpiar
 
-- [ ] **Landing**: sus páginas legales (`fremee-landings`) siguen con la versión del 01/05/2026; redirigirlas a las de la app o copiar el texto nuevo.
+- [ ] **Política de Cookies**: los Términos y la Privacidad (texto revisado del 01/05/2026) remiten a una «Política de Cookies» que no existe. Investigar qué guarda Frimee en el navegador y en el móvil (sesión de Supabase, tema, cachés, Google Maps, Sentry con grabación de sesión al 5 %) y si hace falta un aviso o banner de consentimiento; redactarla y que la revise quien revisó los otros textos.
+
 
 
 - [ ] `frimee-assistant` tiene 5 errores de tipos previos (`deno check`): importa `supabase-js@2` de esm.sh sin fijar versión.

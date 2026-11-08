@@ -1,200 +1,197 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import LegalDocument, { type LegalSection } from "@/components/legal/LegalDocument";
+import LegalDocument from "@/components/legal/LegalDocument";
 
 export const metadata: Metadata = { title: "Términos y Condiciones" };
 
-const ADDRESS = "Carrer Mestre Candi, 30, 08901 L'Hospitalet de Llobregat, Barcelona";
-const privacyLink = (
-  <Link href="/politica-de-privacidad" className="text-app underline underline-offset-4">Política de Privacidad</Link>
-);
-
-const sections: LegalSection[] = [
-  {
-    title: "Titularidad",
-    body: (
-      <p>
-        Frimee es titularidad de Cayetano Yeste.
-        <br />
-        Correo electrónico de contacto: contact@frimee.es
-        <br />
-        Domicilio a efectos de notificaciones: {ADDRESS}
-        <br />
-        Sitio web: frimee.es
-      </p>
-    ),
-  },
-  {
-    title: "Servicio",
-    body: (
-      <>
-        <p>
-          Frimee permite crear, organizar y gestionar viajes en grupo: itinerario con mapas y rutas, gastos compartidos,
-          chat y llamadas, álbum de fotos, cartera de billetes y un asistente con inteligencia artificial.
-        </p>
-        <p>
-          Frimee es una herramienta de organización. No es una agencia de viajes, operador turístico ni intermediario
-          de reservas, y no gestiona pagos: los gastos y deudas que registras son una ayuda para repartir cuentas entre
-          participantes.
-        </p>
-      </>
-    ),
-  },
-  {
-    title: "Cuenta, modo invitado y edad mínima",
-    body: (
-      <>
-        <p>
-          Para usar Frimee necesitas una cuenta. Te comprometes a dar información veraz y a mantener tus credenciales
-          en secreto.
-        </p>
-        <p>
-          También puedes probar Frimee como invitado, sin registrarte. La cuenta de invitado se borra con todo su
-          contenido a los 7 días, salvo que la guardes antes con tu correo.
-        </p>
-        <p>
-          Frimee está dirigida a mayores de 14 años, edad mínima que fija en España la LOPDGDD para consentir el
-          tratamiento de datos personales. Los menores de 14 años necesitan autorización de sus padres, madres o
-          tutores.
-        </p>
-      </>
-    ),
-  },
-  {
-    title: "Uso permitido",
-    body: (
-      <>
-        <p>Te comprometes a usar Frimee de forma legal, responsable y respetuosa.</p>
-        <p>
-          No está permitido usarla con fines ilícitos, fraudulentos o abusivos; publicar contenido falso, ofensivo o que
-          vulnere derechos de terceros; acceder a datos o sistemas sin autorización; interferir en su seguridad o
-          funcionamiento; enviar spam; ni copiar, modificar o hacer ingeniería inversa de la aplicación.
-        </p>
-        <p>Frimee podrá suspender o cancelar las cuentas que incumplan estos términos.</p>
-      </>
-    ),
-  },
-  {
-    title: "Tu contenido",
-    body: (
-      <>
-        <p>
-          El contenido que subes (mensajes, fotos, planes, gastos…) sigue siendo tuyo. Nos autorizas a alojarlo,
-          procesarlo y mostrarlo a las personas con las que lo compartes, solo en la medida necesaria para prestar el
-          servicio.
-        </p>
-        <p>
-          Declaras que tienes los derechos o autorizaciones necesarios para compartirlo, especialmente cuando incluye
-          datos o imágenes de otras personas.
-        </p>
-      </>
-    ),
-  },
-  {
-    title: "Inteligencia artificial",
-    body: (
-      <p>
-        Las respuestas del asistente @frimee, las lecturas automáticas de tickets y otras funciones con IA son
-        orientativas y pueden contener errores o información desactualizada. Comprueba la información importante antes
-        de decidir, sobre todo precios, horarios, reservas, documentación, visados, salud, seguridad o transporte.
-      </p>
-    ),
-  },
-  {
-    title: "Servicios de terceros",
-    body: (
-      <p>
-        Frimee enlaza o se integra con servicios de terceros, como Google Maps, Waze o Google Calendar. Lo que reserves,
-        compres o contrates con terceros se rige por sus propias condiciones, y Frimee no responde de su disponibilidad,
-        precios o incidencias.
-      </p>
-    ),
-  },
-  {
-    title: "Propiedad intelectual",
-    body: (
-      <p>
-        Los derechos sobre Frimee (marca, logotipo, diseño, software, textos y elementos gráficos) pertenecen a su
-        titular o a sus licenciantes. Usar la aplicación no te da ningún derecho sobre ellos.
-      </p>
-    ),
-  },
-  {
-    title: "Disponibilidad y responsabilidad",
-    body: (
-      <>
-        <p>
-          Procuramos que Frimee esté disponible y sea segura, pero no garantizamos un funcionamiento continuo ni libre
-          de errores.
-        </p>
-        <p>
-          Eres responsable del uso que haces de Frimee y de las decisiones que tomas con ella. Frimee no responde de
-          daños derivados de un uso indebido, de información incorrecta introducida por los usuarios, de respuestas de
-          la IA, de servicios de terceros, de conflictos entre participantes ni de fallos técnicos que no le sean
-          imputables.
-        </p>
-        <p>Nada de lo anterior limita los derechos que la ley reconoce a los consumidores.</p>
-      </>
-    ),
-  },
-  {
-    title: "Protección de datos",
-    body: (
-      <p>
-        Tratamos tus datos conforme al RGPD y a la LOPDGDD. Toda la información (qué datos, para qué, con qué
-        proveedores, cuánto tiempo y cómo ejercer tus derechos) está en la {privacyLink}.
-      </p>
-    ),
-  },
-  {
-    title: "Baja",
-    body: (
-      <p>
-        Puedes pedir la baja cuando quieras desde Ajustes o escribiendo a contact@frimee.es. Se elimina tu acceso y tus
-        datos personales se borran en un plazo máximo de 30 días. Lo que añadiste a planes compartidos se queda
-        anonimizado como «Usuario eliminado», para que las cuentas del grupo sigan cuadrando.
-      </p>
-    ),
-  },
-  {
-    title: "Cambios en estos términos",
-    body: (
-      <p>
-        Podemos modificar estos términos por motivos legales, técnicos o del servicio. Si el cambio es importante, te
-        avisaremos por la app o por correo.
-      </p>
-    ),
-  },
-  {
-    title: "Legislación aplicable y contacto",
-    body: (
-      <>
-        <p>
-          Estos términos se rigen por la legislación española y la normativa europea aplicable. Si actúas como
-          consumidor, puedes acudir a los tribunales de tu domicilio.
-        </p>
-        <p>
-          Email: contact@frimee.es
-          <br />
-          Domicilio a efectos de notificaciones: {ADDRESS}
-        </p>
-      </>
-    ),
-  },
-];
-
+// Text reviewed on 01/05/2026, copied word for word from fremee-landings/src/app (only the styles
+// change): do not edit it here without a new review, and keep both copies in step.
 export default function TerminosYCondicionesPage() {
   return (
-    <LegalDocument
-      title="Términos y Condiciones"
-      updated="8 de noviembre de 2026"
-      intro={
-        <p>
-          Estos términos regulan el uso de Frimee, la aplicación web (frimee.es) y móvil para organizar viajes en grupo.
-          Al crear una cuenta o usar Frimee como invitado, los aceptas.
-        </p>
-      }
-      sections={sections}
-    />
+    <LegalDocument title="Términos y Condiciones de Uso de Frimee" updated="01/05/2026">
+      <div className="space-y-[var(--space-3)]">
+          <p>
+            Estos Términos y Condiciones regulan el acceso y uso de Frimee, aplicación web disponible en frimee.es,
+            destinada a facilitar la organización y planificación de viajes, especialmente en grupo.
+          </p>
+          <p>
+            Al acceder, registrarte o utilizar Frimee, aceptas estos Términos y Condiciones. Si no estás de acuerdo,
+            no deberás utilizar la aplicación.
+          </p>
+      </div>
+
+        <section className="mt-[var(--space-8)] space-y-[var(--space-3)]">
+          <h2 className="font-sans text-[19px] font-[var(--fw-semibold)] text-app">1. Titularidad</h2>
+          <p>Frimee es titularidad de Victoria Martín y Cayetano Yeste.</p>
+          <p>Correo electrónico de contacto: contact@frimee.es</p>
+          <p>
+            Domicilio a efectos de notificaciones: Carrer Mestre Candi, 30, 08901 L&apos;Hospitalet de Llobregat,
+            Barcelona
+            <br />
+            Sitio web: frimee.es
+          </p>
+        </section>
+
+        <section className="mt-[var(--space-8)] space-y-[var(--space-3)]">
+          <h2 className="font-sans text-[19px] font-[var(--fw-semibold)] text-app">2. Servicio</h2>
+          <p>
+            Frimee permite crear, organizar y gestionar viajes, invitar a otros participantes, centralizar información
+            del viaje y recibir ayuda mediante funcionalidades digitales o asistidas por inteligencia artificial.
+          </p>
+          <p>
+            Frimee es una herramienta tecnológica de organización. No es una agencia de viajes, operador turístico,
+            intermediario de reservas ni proveedor directo de servicios turísticos, salvo que se indique expresamente
+            lo contrario.
+          </p>
+        </section>
+
+        <section className="mt-[var(--space-8)] space-y-[var(--space-3)]">
+          <h2 className="font-sans text-[19px] font-[var(--fw-semibold)] text-app">3. Registro y edad mínima</h2>
+          <p>
+            Para utilizar determinadas funcionalidades puede ser necesario crear una cuenta. El usuario se compromete
+            a proporcionar información veraz y a mantener la confidencialidad de sus credenciales.
+          </p>
+          <p>
+            El uso de Frimee está dirigido a personas mayores de 14 años. Los menores de 14 años deberán contar con
+            autorización de sus padres, madres, tutores o representantes legales. En España, la LOPDGDD fija los 14
+            años como edad mínima para que un menor pueda consentir por sí mismo el tratamiento de sus datos
+            personales.
+          </p>
+        </section>
+
+        <section className="mt-[var(--space-8)] space-y-[var(--space-3)]">
+          <h2 className="font-sans text-[19px] font-[var(--fw-semibold)] text-app">4. Uso permitido</h2>
+          <p>El usuario se compromete a utilizar Frimee de forma legal, responsable y respetuosa.</p>
+          <p>
+            Queda prohibido usar la aplicación para fines ilícitos, fraudulentos o abusivos; introducir contenido
+            falso, ofensivo o que vulnere derechos de terceros; acceder a sistemas o datos sin autorización; interferir
+            en la seguridad o funcionamiento de Frimee; enviar spam; o copiar, modificar, explotar o realizar
+            ingeniería inversa sobre la aplicación sin autorización.
+          </p>
+          <p>
+            Frimee podrá suspender o cancelar cuentas que incumplan estos Términos o realicen un uso indebido del
+            servicio.
+          </p>
+        </section>
+
+        <section className="mt-[var(--space-8)] space-y-[var(--space-3)]">
+          <h2 className="font-sans text-[19px] font-[var(--fw-semibold)] text-app">5. Contenido de los usuarios</h2>
+          <p>El usuario conserva la titularidad del contenido que introduzca en Frimee.</p>
+          <p>
+            Al usar la aplicación, autoriza a Frimee a alojar, procesar y mostrar dicho contenido únicamente en la
+            medida necesaria para prestar el servicio.
+          </p>
+          <p>
+            El usuario declara que dispone de los derechos o autorizaciones necesarias para compartir la información
+            que introduzca, especialmente cuando incluya datos de otras personas.
+          </p>
+        </section>
+
+        <section className="mt-[var(--space-8)] space-y-[var(--space-3)]">
+          <h2 className="font-sans text-[19px] font-[var(--fw-semibold)] text-app">6. Inteligencia artificial</h2>
+          <p>
+            Frimee puede incorporar funcionalidades basadas en inteligencia artificial para ayudar en la organización
+            de viajes.
+          </p>
+          <p>
+            Las respuestas, sugerencias o recomendaciones generadas por IA tienen carácter orientativo y pueden
+            contener errores, información incompleta o no actualizada. El usuario deberá verificar la información
+            relevante antes de tomar decisiones, especialmente sobre precios, horarios, reservas, documentación,
+            visados, salud, seguridad, transporte o alojamiento.
+          </p>
+        </section>
+
+        <section className="mt-[var(--space-8)] space-y-[var(--space-3)]">
+          <h2 className="font-sans text-[19px] font-[var(--fw-semibold)] text-app">7. Servicios de terceros</h2>
+          <p>Frimee puede incluir enlaces, referencias o integraciones con servicios de terceros.</p>
+          <p>
+            Cualquier reserva, compra, pago o contratación realizada con terceros se regirá por las condiciones de
+            dichos proveedores. Frimee no será responsable de la disponibilidad, calidad, precios, cambios,
+            cancelaciones o incidencias derivadas de servicios externos.
+          </p>
+        </section>
+
+        <section className="mt-[var(--space-8)] space-y-[var(--space-3)]">
+          <h2 className="font-sans text-[19px] font-[var(--fw-semibold)] text-app">8. Propiedad intelectual</h2>
+          <p>
+            Todos los derechos sobre Frimee, incluyendo marca, logotipo, diseño, software, interfaz, textos y
+            elementos gráficos, pertenecen a sus titulares o licenciantes.
+          </p>
+          <p>
+            El usuario no adquiere ningún derecho sobre Frimee por el uso de la aplicación. Queda prohibida la
+            reproducción, modificación, distribución o explotación de cualquier elemento de Frimee sin autorización
+            previa.
+          </p>
+        </section>
+
+        <section className="mt-[var(--space-8)] space-y-[var(--space-3)]">
+          <h2 className="font-sans text-[19px] font-[var(--fw-semibold)] text-app">9. Disponibilidad y responsabilidad</h2>
+          <p>
+            Frimee procurará mantener la aplicación disponible y segura, pero no garantiza un funcionamiento continuo,
+            ininterrumpido o libre de errores.
+          </p>
+          <p>
+            El usuario es responsable del uso que haga de Frimee, de la información que introduzca y de las decisiones
+            que tome a partir de la aplicación.
+          </p>
+          <p>
+            Frimee no será responsable de daños derivados del uso indebido de la aplicación, información incorrecta
+            introducida por usuarios, recomendaciones generadas por IA, decisiones de viaje, servicios de terceros,
+            conflictos entre participantes o fallos técnicos no imputables a Frimee.
+          </p>
+          <p>
+            Nada de lo anterior limitará los derechos que legalmente correspondan a consumidores y usuarios.
+          </p>
+        </section>
+
+        <section className="mt-[var(--space-8)] space-y-[var(--space-3)]">
+          <h2 className="font-sans text-[19px] font-[var(--fw-semibold)] text-app">10. Protección de datos y cookies</h2>
+          <p>
+            El tratamiento de datos personales se realizará conforme al Reglamento General de Protección de Datos
+            (RGPD), la Ley Orgánica 3/2018 de Protección de Datos Personales y garantía de los derechos digitales
+            (LOPDGDD) y demás normativa aplicable.
+          </p>
+          <p>
+            El usuario puede consultar toda la información sobre el tratamiento de sus datos en la Política de
+            Privacidad de Frimee.
+          </p>
+          <p>
+            Para ejercer derechos de acceso, rectificación, supresión, oposición, limitación y portabilidad, el
+            usuario podrá escribir a: contact@frimee.es
+          </p>
+          <p>
+            Frimee puede utilizar cookies o tecnologías similares. El usuario puede consultar la información completa
+            en la Política de Cookies.
+          </p>
+        </section>
+
+        <section className="mt-[var(--space-8)] space-y-[var(--space-3)]">
+          <h2 className="font-sans text-[19px] font-[var(--fw-semibold)] text-app">11. Modificaciones</h2>
+          <p>
+            Frimee podrá modificar estos Términos y Condiciones para adaptarlos a cambios legales, técnicos,
+            funcionales o de seguridad. Cuando los cambios sean relevantes, Frimee procurará informar al usuario por
+            medios razonables.
+          </p>
+        </section>
+
+        <section className="mt-[var(--space-8)] space-y-[var(--space-3)]">
+          <h2 className="font-sans text-[19px] font-[var(--fw-semibold)] text-app">12. Legislación aplicable y contacto</h2>
+          <p>
+            Estos Términos y Condiciones se regirán por la legislación española y por la normativa europea que resulte
+            aplicable.
+          </p>
+          <p>
+            En caso de conflicto, las partes se someterán a los juzgados y tribunales que correspondan conforme a la
+            normativa aplicable. Si el usuario actúa como consumidor, podrá acudir a los tribunales de su domicilio.
+          </p>
+          <p>
+            Para cualquier consulta, puedes contactar con Frimee en:
+            <br />
+            Email: contact@frimee.es
+            <br />
+            Domicilio a efectos de notificaciones: Carrer Mestre Candi, 30, 08901 L&apos;Hospitalet de Llobregat,
+            Barcelona
+          </p>
+        </section>
+    </LegalDocument>
   );
 }
