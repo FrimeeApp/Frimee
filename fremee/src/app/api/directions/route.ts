@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Client, TravelMode, UnitSystem, Language } from "@googlemaps/google-maps-services-js";
+import { Client, TravelMode, TransitMode, UnitSystem, Language } from "@googlemaps/google-maps-services-js";
 import { getGoogleMapsServerKey } from "@/config/env";
 import { createSupabaseServerClient, createSupabaseServiceClient } from "@/services/supabase/server";
 import { sanitizeLatLng } from "@/lib/sanitize";
@@ -90,8 +90,18 @@ export async function POST(req: NextRequest) {
       TREN:  TravelMode.transit,
     };
     const mode = (travelMode && TRAVEL_MODE_MAP[travelMode]) ? TRAVEL_MODE_MAP[travelMode] : TravelMode.driving;
+    // Public transport: ask Google to prefer the vehicle the user picked (a preference, not a guarantee).
+    const TRANSIT_PREFERENCE: Record<string, TransitMode> = {
+      BUS:   TransitMode.bus,
+      METRO: TransitMode.subway,
+      TREN:  TransitMode.train,
+    };
+    const transitMode = travelMode ? TRANSIT_PREFERENCE[travelMode] : undefined;
+    // Cache key: the app's own transport value (same as route_cache_modo() in SQL). TAXI drives like COCHE.
+    const cacheMode = travelMode && travelMode in TRAVEL_MODE_MAP && travelMode !== "TAXI" ? travelMode : "COCHE";
 
     // ── Cache lookup (only when both endpoints have stored coords) ──
+    // Keyed by mode too: a walking leg must not reuse a driving result.
     if (originCoords && destCoords) {
       try {
         const supabase = createSupabaseServiceClient();
@@ -103,6 +113,7 @@ export async function POST(req: NextRequest) {
           .select("polyline, distance, duration")
           .eq("origin_lat", oLat).eq("origin_lng", oLng)
           .eq("dest_lat",   dLat).eq("dest_lng",   dLng)
+          .eq("modo", cacheMode)
           .maybeSingle();
 
         if (cached) {
@@ -130,6 +141,7 @@ export async function POST(req: NextRequest) {
         waypoints: stops,
         optimize: false,
         mode,
+        ...(transitMode ? { transit_mode: [transitMode] } : {}),
         units: UnitSystem.metric,
         language: Language.es,
         key: getGoogleMapsServerKey(),
@@ -156,10 +168,11 @@ export async function POST(req: NextRequest) {
         await supabase.from("route_cache").upsert({
           origin_lat: r(originCoords.lat), origin_lng: r(originCoords.lng),
           dest_lat:   r(destCoords.lat),   dest_lng:   r(destCoords.lng),
+          modo: cacheMode,
           polyline,
           distance: legs[0]?.distance ?? null,
           duration: legs[0]?.duration ?? null,
-        }, { onConflict: "origin_lat,origin_lng,dest_lat,dest_lng" });
+        }, { onConflict: "origin_lat,origin_lng,dest_lat,dest_lng,modo" });
       } catch { /* cache write failed — not critical */ }
     }
 
