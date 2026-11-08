@@ -813,8 +813,9 @@ export default function SettingsPage() {
                 <div className="mt-[var(--space-4)] rounded-[var(--radius-card)] border border-error-token bg-surface p-[var(--space-4)]">
                   <p className="text-body font-[var(--fw-semibold)] text-error-token">¿Seguro que quieres eliminar tu cuenta?</p>
                   <p className="mt-[var(--space-1)] text-body-sm text-muted">
-                    Esta acción es permanente e irreversible. Se borrarán todos tus datos.
-                    Escribe <strong>ELIMINAR</strong> para confirmar.
+                    Esta acción es permanente. Se borrarán tu perfil, tus datos personales y los planes en los
+                    que solo estés tú. En los planes compartidos, lo que añadiste se queda como «Usuario
+                    eliminado» para que los demás no pierdan sus cuentas. Escribe <strong>ELIMINAR</strong> para confirmar.
                   </p>
                   <input
                     type="text"
