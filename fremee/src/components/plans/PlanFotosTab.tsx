@@ -89,11 +89,11 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, refreshK
   if (loading) {
     return (
       <div className="px-[var(--page-margin-x)] pt-5 pb-8">
-        <div className="columns-2 sm:columns-3 gap-2 space-y-2">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {Array.from({ length: 6 }).map((_, i) => (
             <div
               key={i}
-              className="break-inside-avoid aspect-square w-full animate-pulse rounded-xl bg-[var(--surface-raised)]"
+              className="aspect-square w-full animate-pulse rounded-xl bg-[var(--surface-2)]"
               style={{ animationDelay: `${i * 60}ms` }}
             />
           ))}
@@ -105,36 +105,29 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, refreshK
   return (
     <div className="px-[var(--page-margin-x)] pt-5 pb-8">
       {isMember && (
-        <div className="mb-4 hidden items-center gap-3 md:flex">
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-            className="flex items-center gap-2 rounded-full border border-app px-4 h-9 text-[14px] font-[600] text-app transition-colors hover:bg-[var(--surface-raised)] disabled:opacity-50"
-          >
-            <PlusIcon />
-            {uploading ? "Subiendo..." : "Anadir fotos"}
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            className="hidden"
-            onChange={handleFilesSelected}
-          />
-        </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          className="hidden"
+          onChange={handleFilesSelected}
+        />
       )}
 
-      {fotos.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
-          <PlaneEmptyIcon />
-          <p className="text-[14px] font-[600] text-muted">Aún no hay fotos</p>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {/* Add tile: first square of the grid, like "Añadir actividad" lives inside the itinerary. */}
           {isMember && (
-            <p className="text-[14px] text-muted opacity-70">Sube la primera foto del plan</p>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="flex aspect-square w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-app text-muted transition-colors hover:border-[var(--primary)] hover:text-[var(--primary)] disabled:cursor-wait"
+            >
+              {uploading ? <Loader2 className="size-6 animate-spin" aria-hidden /> : <PlusIcon />}
+              <span className="text-[14px] font-[600]">{uploading ? "Subiendo..." : "Añadir fotos"}</span>
+            </button>
           )}
-        </div>
-      ) : (
-        <div className="columns-2 sm:columns-3 gap-2 space-y-2">
           {fotos.map((foto) => {
             const isOwn = foto.userId === currentUserId;
             const isDeleting = deletingId === foto.id;
@@ -143,7 +136,7 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, refreshK
             return (
               <div
                 key={foto.id}
-                className="break-inside-avoid relative overflow-hidden rounded-xl"
+                className="relative overflow-hidden rounded-xl"
                 onMouseEnter={() => isOwn && setHoveredId(foto.id)}
                 onMouseLeave={() => setHoveredId(null)}
               >
@@ -159,15 +152,7 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, refreshK
                   }}
                   className="relative block w-full aspect-square cursor-pointer"
                 >
-                  <Image
-                    src={foto.url}
-                    alt=""
-                    fill
-                    className="object-cover"
-                    sizes="(max-width: 640px) 50vw, 33vw"
-                    unoptimized
-                    referrerPolicy="no-referrer"
-                  />
+                  <FotoImage src={foto.url} />
                   {isOwn && (isHovered || isDeleting) && (
                     <div className="absolute inset-0 flex items-center justify-center bg-black/40 transition-opacity">
                       <button
@@ -191,6 +176,13 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, refreshK
               </div>
             );
           })}
+      </div>
+
+      {/* Members already see the add tile; the empty message is for everyone else. */}
+      {fotos.length === 0 && !isMember && (
+        <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+          <PlaneEmptyIcon />
+          <p className="text-[14px] font-[600] text-muted">Aún no hay fotos</p>
         </div>
       )}
 
@@ -202,5 +194,26 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, refreshK
         />
       )}
     </div>
+  );
+}
+
+/** Photo tile: a pulsing placeholder until the full-size image arrives, then a short fade-in. */
+function FotoImage({ src }: { src: string }) {
+  const [loaded, setLoaded] = useState(false);
+  return (
+    <>
+      {!loaded && <div className="absolute inset-0 animate-pulse bg-[var(--surface-2)]" aria-hidden />}
+      <Image
+        src={src}
+        alt=""
+        fill
+        className={`object-cover transition-opacity duration-300 motion-reduce:transition-none ${loaded ? "opacity-100" : "opacity-0"}`}
+        sizes="(max-width: 640px) 50vw, 33vw"
+        unoptimized
+        referrerPolicy="no-referrer"
+        onLoad={() => setLoaded(true)}
+        onError={() => setLoaded(true)}
+      />
+    </>
   );
 }
