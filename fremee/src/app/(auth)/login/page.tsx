@@ -39,7 +39,11 @@ function LoginPageInner() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  // Full-screen loader: only while checking an existing session or entering as a guest.
   const [loading, setLoading] = useState(() => hasCachedSession());
+  // Email sign-in keeps the form on screen (button shows "Entrando...") until the
+  // credentials are checked, so a wrong password does not flash the splash screen.
+  const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [invalidField, setInvalidField] = useState<"email" | "password" | null>(null);
 
@@ -105,7 +109,7 @@ function LoginPageInner() {
       return;
     }
 
-    setLoading(true);
+    setSubmitting(true);
     try {
       const supabase = createBrowserSupabaseClient();
 
@@ -116,12 +120,12 @@ function LoginPageInner() {
 
       if (error) throw error;
 
+      // Signed in: keep the button disabled while the app opens.
       router.replace(redirectTo);
     } catch (err: unknown) {
       setErrorMsg(getAuthErrorMessage(err, "No se pudo iniciar sesión. Inténtalo de nuevo."));
       focusInput(emailRef);
-    } finally {
-      setLoading(false);
+      setSubmitting(false);
       setPassword("");
     }
   };
@@ -216,10 +220,10 @@ function LoginPageInner() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || submitting}
               className="auth-solid-button h-btn-primary w-full rounded-button text-button-md font-[var(--fw-medium)] transition-colors duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] disabled:opacity-[var(--disabled-opacity)]"
             >
-              {loading ? "Entrando..." : "Iniciar sesión"}
+              {submitting ? "Entrando..." : "Iniciar sesión"}
             </button>
           </form>
 
@@ -233,7 +237,7 @@ function LoginPageInner() {
           <button
             type="button"
             onClick={() => void handleGuest()}
-            disabled={loading}
+            disabled={loading || submitting}
             className="auth-neutral-button mt-[var(--space-3)] flex h-btn-primary w-full items-center justify-center rounded-button border border-app bg-[var(--input-bg)] text-button-md font-[var(--fw-medium)] text-app transition-colors duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] disabled:opacity-[var(--disabled-opacity)]"
           >
             Probar como invitado
