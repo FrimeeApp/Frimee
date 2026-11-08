@@ -17,6 +17,7 @@ Las migraciones se prueban primero en dev. Al fusionar la rama, aplicar en produ
 - [ ] `supabase/migrations/20261027000006_plan_chat_welcome.sql` (mensaje de bienvenida de Frimee en cada chat de plan nuevo)
 - [ ] `supabase/migrations/20261027000007_route_cache_modo.sql` (caché de rutas por medio de transporte; vacía la caché y borra los trayectos no en coche para recalcularlos)
 - [ ] `supabase/migrations/20261108000001_lock_definer_functions.sql` (funciones con permisos totales que no comprobaban quién llama: **aplicar antes de abrir el modo invitado**)
+- [ ] `supabase/migrations/20261108000000_plan_album.sql` (`fn_plan_album`: todo el álbum del viaje en una llamada, solo para miembros del plan)
 - [ ] Desplegar la Edge Function `frimee-assistant` (fallo 6). Es compatible con la app actual: la app ya envía el token.
 
 ## Fallos
@@ -131,7 +132,11 @@ Partes del flujo que aún no se han recorrido en dev (ver `TEST_PLAN.md` y `CHEC
 - [ ] **Autocompletado al escribir `@` en el chat**: lista con Frimee (asistente) arriba y los miembros del plan debajo. Ayuda a descubrir el asistente y a mencionar a la gente en `/tarea`. Las sugerencias rápidas y el mensaje de bienvenida ya cubren lo básico.
 - [ ] **Trayectos en transporte público según la hora de la actividad.** Hoy Google calcula bus, metro y tren con la hora actual. Enviar como `departure_time` la hora de fin de la actividad anterior (y guardarla en la clave de `route_cache`, o no cachear esos tramos) para que el tiempo y la ruta sean los de ese momento.
 
+- [ ] **Álbum: agrupar por la hora del destino.** Hoy agrupa por días con la zona horaria de quien lo mira: una actividad a las 23:15 en Lisboa cae en el día siguiente vista desde España (00:15). Guardar la zona horaria del plan (o deducirla de las coordenadas) y usarla al agrupar.
+
 ## Pendiente de limpiar
+
+- [ ] **Funciones que leen datos de cualquier plan** (encontradas el 2026-11-08): `fn_debug2` y `fn_debug3` (depuración, `security definer`, ejecutables por `anon` y `authenticated`) devuelven gastos y partes de cualquier plan → borrarlas. `fn_gastos_list_for_plan(p_plan_id)` tampoco comprueba que quien llama sea miembro → añadir `is_plan_member(p_plan_id)` como hace `fn_plan_album`.
 
 - [ ] `frimee-assistant` tiene 5 errores de tipos previos (`deno check`): importa `supabase-js@2` de esm.sh sin fijar versión.
 - [ ] Dependabot: 135 vulnerabilidades en las dependencias de `main` (16 críticas, 69 altas, 44 moderadas, 6 bajas).
