@@ -1250,7 +1250,8 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
                           {/* Day header */}
                           <div className={`-mx-[var(--page-margin-x)] border-b border-app px-[var(--page-margin-x)] md:mx-0 md:px-0 ${isDayCollapsed(dateKey) ? "pb-[var(--space-4)]" : "mb-[var(--space-5)] pb-[var(--space-4)]"}`}>
                             {(() => {
-                              const dayHeader = fmtDayHeader(items[0].inicio_at).toLocaleLowerCase("es-ES");
+                              const dayHeaderLower = fmtDayHeader(items[0].inicio_at).toLocaleLowerCase("es-ES");
+                              const dayHeader = dayHeaderLower.charAt(0).toLocaleUpperCase("es-ES") + dayHeaderLower.slice(1);
                               const dayExpense = dayExpenseTotals.get(dateKey);
                               const daySummary = [
                                 `${items.length} actividad${items.length === 1 ? "" : "es"}`,
