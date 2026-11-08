@@ -44,7 +44,7 @@ copia del esquema de producción. Después de cada una, su comprobación.
 | 2.7 | `20261027000006_plan_chat_welcome.sql` | `select tgenabled from pg_trigger where tgname = 'trg_chat_plan_welcome';` → **O** (activo) · `select has_function_privilege('authenticated', 'public.trg_chat_plan_welcome()', 'execute');` → **false** | [x] |
 | 2.8 | `20261027000007_route_cache_modo.sql` | `select indexdef from pg_indexes where indexname = 'route_cache_origin_dest_modo_key';` → incluye **modo** · `select has_function_privilege('authenticated', 'public.sync_route_cache_from_subplan(bigint)', 'execute');` → **false** · `select count(*) from route_cache;` → **0** justo después de aplicarla · `select jobname, schedule, active from cron.job where jobname = 'route-cache-expire';` → **1 fila, `45 3 * * *`, true** | [x] |
 | 2.9 | `20261108000001_lock_definer_functions.sql` | `select count(*) from pg_proc where proname in ('fn_debug2','fn_debug3','fn_debug4','fn_test_gastos');` → **0** · `select has_function_privilege('anon', 'public.fn_subplan_list(bigint)', 'execute');` → **false** · `select has_function_privilege('authenticated', 'public.fn_gasto_insert_partes(bigint, uuid, numeric, metodo_reparto, jsonb, jsonb)', 'execute');` → **false** · Después, en la app: abrir un plan, ver gastos y chat, guardar ajustes y crear un plan funcionan | [x] |
-| 2.10 | `20261108000002_example_plan_for_new_users.sql` | `select position('is_anonymous' in pg_get_functiondef('public.fn_guest_seed_demo()'::regprocedure)) = 0;` → **true** · En frimee.es, con una cuenta sin planes: Mis planes muestra «Tu primer viaje empieza aquí» y «Ver el ejemplo» abre el viaje a Lisboa | [ ] |
+| 2.10 | `20261108000002_example_plan_for_new_users.sql` | `select position('Solo para invitados' in pg_get_functiondef('public.fn_guest_seed_demo()'::regprocedure)) = 0;` → **true** (la función sigue mencionando `is_anonymous` al crear los amigos de ejemplo) · En frimee.es, con una cuenta sin planes: Mis planes muestra «Tu primer viaje empieza aquí» y «Ver el ejemplo» abre el viaje a Lisboa | [x] |
 
 ---
 
@@ -52,7 +52,7 @@ copia del esquema de producción. Después de cada una, su comprobación.
 
 | # | Paso | Live |
 |---|---|---|
-| 3.0 | Desplegar `frimee-assistant` con el arreglo de las respuestas (`npx supabase functions deploy frimee-assistant --remote=fgbsmdktvnshwwmlrdih`). Sin sesión debe seguir dando 401. | [ ] |
+| 3.0 | Desplegar `frimee-assistant` con el arreglo de las respuestas (`npx supabase functions deploy frimee-assistant --remote=fgbsmdktvnshwwmlrdih`). Sin sesión debe seguir dando 401. | [x] |
 | 3.1 | Fusionar la PR #35 en `main`. | [ ] |
 | 3.2 | El despliegue de Vercel termina en verde y apunta al commit de la fusión. | [ ] |
 | 3.3 | frimee.es carga, y en la consola del navegador no hay errores nuevos. | [ ] |
