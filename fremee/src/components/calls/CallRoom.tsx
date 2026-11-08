@@ -4,12 +4,16 @@ import Image from "next/image";
 import { Capacitor } from "@capacitor/core";
 import { useEffect, useRef, useState, useCallback } from "react";
 import {
+  ConnectionState,
   Room,
   RoomEvent,
   RemoteParticipant,
   Track,
+  VideoPresets,
   createLocalAudioTrack,
   createLocalVideoTrack,
+  type LocalAudioTrack,
+  type LocalVideoTrack,
 } from "livekit-client";
 import type { CallMiembro } from "@/hooks/useCall";
 import { PhoneOffIcon } from "@/components/icons";
@@ -22,6 +26,8 @@ type Props = {
   miembros: CallMiembro[];
   participanteNombre: string;
   isActive?: boolean;
+  /** When the call was answered (ms since epoch), for the timer. */
+  activeSince?: number | null;
   isGroup?: boolean;
   onEnd: () => void;
   onEndForAll?: () => void;
@@ -38,7 +44,7 @@ type ParticipantTile = {
   videoMuted: boolean;
 };
 
-export default function CallRoom({ token, livekitUrl, tipo, miembros, participanteNombre, isActive, isGroup, onEnd, onEndForAll, onParticipantConnected, onMinimize }: Props) {
+export default function CallRoom({ token, livekitUrl, tipo, miembros, participanteNombre, isActive, activeSince, isGroup, onEnd, onEndForAll, onParticipantConnected, onMinimize }: Props) {
   const isNative = Capacitor.isNativePlatform();
   const roomRef = useRef<Room | null>(null);
   const audioSinkRef = useRef<HTMLDivElement | null>(null);
@@ -49,7 +55,9 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
   const [screenSharing, setScreenSharing] = useState(false);
   const [, setCameraOn] = useState(false);
   const [hasAnyVideo, setHasAnyVideo] = useState(tipo === "video");
-  const [duration, setDuration] = useState(0);
+  // Who is talking (identities) and whether the connection dropped and LiveKit is retrying.
+  const [speaking, setSpeaking] = useState<Set<string>>(() => new Set());
+  const [reconnecting, setReconnecting] = useState(false);
 
   const onParticipantConnectedRef = useRef(onParticipantConnected);
   useEffect(() => { onParticipantConnectedRef.current = onParticipantConnected; });
@@ -113,8 +121,17 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
   useEffect(() => {
     if (!token || !livekitUrl) return;
     let cancelled = false;
-    const room = new Room();
+    // Adaptive stream: each video arrives at the size it is shown. Dynacast: senders stop
+    // encoding layers nobody watches. Camera at 540p with 180p/360p layers for small tiles.
+    const room = new Room({
+      adaptiveStream: true,
+      dynacast: true,
+      videoCaptureDefaults: { resolution: VideoPresets.h540.resolution },
+      publishDefaults: { simulcast: true, videoSimulcastLayers: [VideoPresets.h180, VideoPresets.h360] },
+    });
     roomRef.current = room;
+    // Warm up the connection (DNS, TLS, region) while the tracks are being created.
+    void room.prepareConnection(livekitUrl, token).catch(() => {});
 
     room.on(RoomEvent.TrackSubscribed, (track, _pub, participant) => {
       if (track.kind === Track.Kind.Video) {
@@ -145,11 +162,19 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
       }
     });
 
-    room.on(RoomEvent.TrackMuted, (_pub, participant) => {
-      setTiles((prev) => prev.map((t) => t.identity === participant.identity && !t.isScreenShare ? { ...t, audioMuted: true } : t));
+    // Microphone and camera mute separately (a camera turned off is not a muted microphone).
+    const setMuted = (source: Track.Source, identity: string, muted: boolean) => {
+      if (source !== Track.Source.Microphone && source !== Track.Source.Camera) return;
+      const field = source === Track.Source.Microphone ? "audioMuted" : "videoMuted";
+      setTiles((prev) => prev.map((t) => t.identity === identity && !t.isScreenShare ? { ...t, [field]: muted } : t));
+    };
+    room.on(RoomEvent.TrackMuted, (pub, participant) => setMuted(pub.source, participant.identity, true));
+    room.on(RoomEvent.TrackUnmuted, (pub, participant) => setMuted(pub.source, participant.identity, false));
+    room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
+      setSpeaking(new Set(speakers.map((p) => p.identity)));
     });
-    room.on(RoomEvent.TrackUnmuted, (_pub, participant) => {
-      setTiles((prev) => prev.map((t) => t.identity === participant.identity && !t.isScreenShare ? { ...t, audioMuted: false } : t));
+    room.on(RoomEvent.ConnectionStateChanged, (state) => {
+      setReconnecting(state === ConnectionState.Reconnecting || state === ConnectionState.SignalReconnecting);
     });
 
     room.on(RoomEvent.Connected, () => {
@@ -181,8 +206,17 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
     });
 
     const connect = async () => {
+      // Microphone (and camera) open while the room connects, not after: audio starts sooner.
+      const localTracks: Promise<[LocalAudioTrack, LocalVideoTrack | null]> = Promise.all([
+        createLocalAudioTrack({ echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 }),
+        tipo === "video" ? createLocalVideoTrack() : Promise.resolve(null),
+      ]);
+      localTracks.catch(() => {}); // handled below, after connecting
       await room.connect(livekitUrl, token);
       if (cancelled) { room.disconnect(); return; }
+      // Someone may have joined before this side finished connecting: no ParticipantConnected
+      // event comes for them, so the call counts as answered right here.
+      if (room.remoteParticipants.size > 0) onParticipantConnectedRef.current?.();
       room.remoteParticipants.forEach((p) => {
         addTile(p.identity, p.identity, false, false);
         // attach any already-published screen share
@@ -196,18 +230,11 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
       });
 
       try {
-        const audioTrack = await createLocalAudioTrack({
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-          channelCount: 1,
-        });
-        if (cancelled) { room.disconnect(); return; }
+        const [audioTrack, videoTrack] = await localTracks;
+        if (cancelled) { audioTrack.stop(); videoTrack?.stop(); room.disconnect(); return; }
         await room.localParticipant.publishTrack(audioTrack);
 
-        if (tipo === "video") {
-          const videoTrack = await createLocalVideoTrack();
-          if (cancelled) { room.disconnect(); return; }
+        if (videoTrack) {
           await room.localParticipant.publishTrack(videoTrack);
           trackMap.current.set("__local__", videoTrack);
           const el = document.querySelector<HTMLVideoElement>(`video[data-tile="${room.localParticipant.identity}"]`);
@@ -227,12 +254,6 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, livekitUrl, tipo, attachAudioTrack, detachAudioTrack]);
-
-  useEffect(() => {
-    if (!isActive) return;
-    const interval = setInterval(() => setDuration((d) => d + 1), 1000);
-    return () => clearInterval(interval);
-  }, [isActive]);
 
   const toggleMute = useCallback(async () => {
     const local = roomRef.current?.localParticipant;
@@ -290,12 +311,6 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
 
   const handleEnd = useCallback(() => { roomRef.current?.disconnect(); }, []);
 
-  const formatDuration = (s: number) => {
-    const m = Math.floor(s / 60).toString().padStart(2, "0");
-    const sec = (s % 60).toString().padStart(2, "0");
-    return `${m}:${sec}`;
-  };
-
   const getMiembro = (identity: string) => miembros.find((m) => m.id === identity);
   const localTile = tiles.find((t) => t.isLocal && !t.isScreenShare);
   const localMuted = localTile?.audioMuted ?? false;
@@ -327,7 +342,7 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
       <div
         key={tile.id}
         onClick={() => setFocusedId(fullscreen ? null : tile.id)}
-        className={`relative overflow-hidden rounded-2xl bg-black flex min-h-0 items-center justify-center cursor-pointer ${fullscreen ? "w-full h-full" : "h-full w-full"}`}
+        className={`relative overflow-hidden rounded-2xl bg-black flex min-h-0 items-center justify-center cursor-pointer ${fullscreen ? "w-full h-full" : "h-full w-full"} ${!tile.isScreenShare && speaking.has(tile.identity) && !tile.audioMuted ? "ring-2 ring-[var(--primary)]" : ""}`}
         style={!fullscreen && tile.isScreenShare ? { gridColumn: `span ${gridConfig.columns}` } : undefined}
       >
         {/* Video element — always rendered for screen share, conditional for camera */}
@@ -390,7 +405,7 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
         <div className="flex flex-col">
           <span className="text-sm font-semibold">{participanteNombre}</span>
           <span className="text-sm text-white/50">
-            {isActive ? formatDuration(duration) : connected ? "Llamando..." : "Conectando..."}
+            {reconnecting ? "Reconectando…" : isActive && activeSince ? <CallTimer since={activeSince} /> : connected ? "Llamando..." : "Conectando..."}
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -443,16 +458,16 @@ export default function CallRoom({ token, livekitUrl, tipo, miembros, participan
 
       {/* Controls */}
       <div className={`shrink-0 flex items-center justify-center gap-4 pt-3 px-4 ${isNative ? "pb-2" : "pb-10"}`}>
-        <button onClick={() => void toggleMute()} className={`flex h-13 w-13 items-center justify-center rounded-full transition-all ${localMuted ? "bg-white text-black" : "bg-white/15 text-white"}`}>
+        <button onClick={() => void toggleMute()} aria-label={localMuted ? "Activar micrófono" : "Silenciar micrófono"} aria-pressed={localMuted} className={`flex h-13 w-13 items-center justify-center rounded-full transition-all ${localMuted ? "bg-white text-black" : "bg-white/15 text-white"}`}>
           {localMuted ? <MicOffIcon /> : <MicIcon />}
         </button>
-        <button onClick={() => void toggleVideo()} className={`flex h-13 w-13 items-center justify-center rounded-full transition-all ${!localVideoOff ? "bg-white text-black" : "bg-white/15 text-white"}`}>
+        <button onClick={() => void toggleVideo()} aria-label={localVideoOff ? "Activar cámara" : "Apagar cámara"} aria-pressed={!localVideoOff} className={`flex h-13 w-13 items-center justify-center rounded-full transition-all ${!localVideoOff ? "bg-white text-black" : "bg-white/15 text-white"}`}>
           {localVideoOff ? <VideoOffIcon /> : <VideoIcon />}
         </button>
-        <button onClick={() => void toggleScreenShare()} className={`flex h-13 w-13 items-center justify-center rounded-full transition-all ${screenSharing ? "bg-white text-black" : "bg-white/15 text-white"}`}>
+        <button onClick={() => void toggleScreenShare()} aria-label={screenSharing ? "Dejar de compartir pantalla" : "Compartir pantalla"} aria-pressed={screenSharing} className={`flex h-13 w-13 items-center justify-center rounded-full transition-all ${screenSharing ? "bg-white text-black" : "bg-white/15 text-white"}`}>
           {screenSharing ? <ScreenShareOffIcon /> : <ScreenShareIcon />}
         </button>
-        <button onClick={handleEnd} className="flex h-16 w-16 items-center justify-center rounded-full bg-red-500 text-white shadow-lg shadow-red-500/40 transition-all hover:bg-red-600 hover:scale-105 active:scale-95">
+        <button onClick={handleEnd} aria-label="Colgar" className="flex h-16 w-16 items-center justify-center rounded-full bg-red-500 text-white shadow-lg shadow-red-500/40 transition-all hover:bg-red-600 hover:scale-105 active:scale-95">
           <PhoneOffIcon />
         </button>
       </div>
@@ -467,3 +482,17 @@ const VideoIcon = () => <Video className="size-6" aria-hidden />;
 const VideoOffIcon = () => <VideoOff className="size-6" aria-hidden />;
 const ScreenShareIcon = ({ small }: { small?: boolean }) => <ScreenShare className={small ? "size-3" : "size-6"} aria-hidden />;
 const ScreenShareOffIcon = () => <ScreenShareOff className="size-6" aria-hidden />;
+
+/** Call time since it was answered. Its own component: ticking every second must not redraw the room. */
+function CallTimer({ since }: { since: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+  const total = Math.max(0, Math.floor((now - since) / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60).toString().padStart(2, "0");
+  const sec = (total % 60).toString().padStart(2, "0");
+  return <>{h > 0 ? `${h}:${m}:${sec}` : `${m}:${sec}`}</>;
+}
