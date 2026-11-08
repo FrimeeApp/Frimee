@@ -1,6 +1,7 @@
 -- fn_subplan_delete only worked for the subplan's creator and silently did
--- nothing for anyone else, so the app showed it as deleted. Align it with
--- fn_subplan_update (any participant of the plan) and fail loudly otherwise.
+-- nothing for anyone else, so the app showed it as deleted. Deleting is for
+-- the plan's admins (the app only shows the itinerary actions to them), and
+-- anyone else now gets an error instead of a silent no-op.
 -- Still a soft delete: fn_subplan_list only returns ACTIVO subplans.
 --
 -- The subplan's expenses are either voided (p_delete_gastos) or kept and
@@ -24,6 +25,7 @@ begin
     where sp.id = p_subplan_id
       and pu.user_id = auth.uid()
       and pu.estado = 'PARTICIPA'
+      and pu.rol = 'ADMIN'
   ) then
     raise exception 'No autorizado';
   end if;
@@ -47,4 +49,5 @@ begin
 end;
 $$;
 
+revoke execute on function public.fn_subplan_delete(bigint, boolean) from public, anon;
 grant execute on function public.fn_subplan_delete(bigint, boolean) to authenticated, service_role;

@@ -48,7 +48,7 @@ Las migraciones se prueban primero en dev. Al fusionar la rama, aplicar en produ
 **Causa:** la función `fn_subplan_delete` y el endpoint `deleteSubplan()` existían, pero ninguna pantalla los usaba. Además, la función solo dejaba borrar al creador de la actividad y, si lo intentaba otro, no hacía nada y no daba error, aunque editar sí lo permite a cualquier participante.
 
 **Arreglo:**
-- `20261027000002_subplan_delete_permissions.sql`: mismos permisos que `fn_subplan_update`, error `No autorizado` si no los tienes y `search_path` fijo (recomendación de seguridad de Supabase para funciones `security definer`). Sigue siendo un borrado lógico (`estado = 'CANCELADO'`).
+- `20261027000002_subplan_delete_permissions.sql`: solo pueden borrar los **admins** del plan (la app solo les enseña a ellos las acciones del itinerario), error `No autorizado` si no lo eres y `search_path` fijo (recomendación de seguridad de Supabase para funciones `security definer`). Sigue siendo un borrado lógico (`estado = 'CANCELADO'`).
 - Gastos de la actividad: el borrado lógico no dispara el `ON DELETE SET NULL` de `gastos_subplan_id_fkey`, así que los gastos seguían apuntando a la actividad cancelada. Nuevo parámetro `p_delete_gastos` (por defecto `false`): sin marcar, los gastos se mantienen y se desvinculan (`subplan_id = null`); marcado, se anulan con `fn_gasto_anular`, que recalcula las deudas. Se elimina la firma antigua para no dejar dos sobrecargas.
 - `AddSubplanSheet`: botón "Eliminar actividad" en modo edición, con confirmación. Si la actividad tiene gastos, el diálogo muestra un tick (desmarcado por defecto) para eliminarlos también.
 - `DiscardChangesDialog`: acepta `children` para mostrar contenido extra bajo el mensaje.
