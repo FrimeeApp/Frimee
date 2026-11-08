@@ -8,7 +8,7 @@ import { syncPlanWidget } from "@/services/widget/planWidget";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { loading, user, signOut } = useAuth();
+  const { loading, user, signOut, signedOutByUser } = useAuth();
   const router = useRouter();
 
   // The session comes from browser storage. A guest deleted by the nightly cleanup
@@ -22,13 +22,18 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!loading && !user) {
-      const redirect = encodeURIComponent(window.location.pathname + window.location.search);
-      router.replace(`/login?redirect=${redirect}`);
+      // Coming back to the same page only makes sense when the session ended on its own.
+      if (signedOutByUser) {
+        router.replace("/login");
+      } else {
+        const redirect = encodeURIComponent(window.location.pathname + window.location.search);
+        router.replace(`/login?redirect=${redirect}`);
+      }
     }
     if (!loading && user) {
       void syncPlanWidget(user.id);
     }
-  }, [loading, user, router]);
+  }, [loading, user, router, signedOutByUser]);
 
   if (loading) return <LoadingScreen />;
   if (!user) return null;
