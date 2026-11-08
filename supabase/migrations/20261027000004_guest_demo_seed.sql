@@ -70,22 +70,23 @@ begin
   -- Chat with every current member (later members join via trg_plan_usuario_sync_chat).
   v_chat_id := fn_plan_create_chat(v_plan_id);
 
-  -- Activities.
+  -- Activities. transporte = how you get there from the previous activity of the
+  -- day (null for the first one); the itinerary computes time and distance.
   insert into subplan (plan_id, titulo, descripcion, creado_por_user_id, inicio_at, fin_at,
-                       ubicacion_nombre, ubicacion_lat, ubicacion_lng, tipo, orden)
+                       ubicacion_nombre, ubicacion_lat, ubicacion_lng, tipo, orden, transporte_llegada)
   select v_plan_id, a.titulo, a.descripcion, a.creador,
          (v_day1 + a.dia + a.inicio) at time zone v_tz,
          (v_day1 + a.dia + a.fin) at time zone v_tz,
-         a.lugar, a.lat, a.lng, a.tipo::tipo_subplan, a.orden
+         a.lugar, a.lat, a.lng, a.tipo::tipo_subplan, a.orden, a.transporte
   from (values
-    (0, time '11:00', time '12:00', 'Check-in en el hotel', 'Dejamos las maletas y salimos a explorar.', 'Hotel Avenida Palace', 38.7155, -9.1416, 'HOTEL', 1, v_friends[1]),
-    (0, time '13:30', time '15:00', 'Comida en el Time Out Market', 'Cada uno elige puesto y comemos juntos.', 'Time Out Market Lisboa', 38.7069, -9.1458, 'RESTAURANTE', 2, v_guest),
-    (0, time '18:30', time '20:00', 'Atardecer en el Miradouro da Senhora do Monte', 'Las mejores vistas de la ciudad.', 'Miradouro da Senhora do Monte', 38.7194, -9.1325, 'ACTIVIDAD', 3, v_friends[3]),
-    (1, time '10:00', time '12:30', 'Torre de Belém y pastéis de nata', 'Parada obligatoria en Pastéis de Belém.', 'Torre de Belém', 38.6916, -9.2160, 'ACTIVIDAD', 4, v_friends[2]),
-    (1, time '13:00', time '14:30', 'Monasterio de los Jerónimos', 'Entradas compradas online.', 'Mosteiro dos Jerónimos', 38.6979, -9.2068, 'ACTIVIDAD', 5, v_friends[2]),
-    (1, time '21:00', time '23:00', 'Cena con fado en Alfama', 'Mesa reservada a las 21:00.', 'Alfama, Lisboa', 38.7114, -9.1302, 'RESTAURANTE', 6, v_friends[2]),
-    (2, time '09:30', time '17:00', 'Excursión a Sintra', 'Tren desde Rossio y subida al Palacio da Pena.', 'Palácio Nacional da Pena', 38.7876, -9.3906, 'ACTIVIDAD', 7, v_friends[3])
-  ) as a(dia, inicio, fin, titulo, descripcion, lugar, lat, lng, tipo, orden, creador);
+    (0, time '11:00', time '12:00', 'Check-in en el hotel', 'Dejamos las maletas y salimos a explorar.', 'Hotel Avenida Palace', 38.7155, -9.1416, 'HOTEL', 1, v_friends[1], null),
+    (0, time '13:30', time '15:00', 'Comida en el Time Out Market', 'Cada uno elige puesto y comemos juntos.', 'Time Out Market Lisboa', 38.7069, -9.1458, 'RESTAURANTE', 2, v_guest, 'APIE'),
+    (0, time '18:30', time '20:00', 'Atardecer en el Miradouro da Senhora do Monte', 'Las mejores vistas de la ciudad.', 'Miradouro da Senhora do Monte', 38.7194, -9.1325, 'ACTIVIDAD', 3, v_friends[3], 'METRO'),
+    (1, time '10:00', time '12:30', 'Torre de Belém y pastéis de nata', 'Parada obligatoria en Pastéis de Belém.', 'Torre de Belém', 38.6916, -9.2160, 'ACTIVIDAD', 4, v_friends[2], null),
+    (1, time '13:00', time '14:30', 'Monasterio de los Jerónimos', 'Entradas compradas online.', 'Mosteiro dos Jerónimos', 38.6979, -9.2068, 'ACTIVIDAD', 5, v_friends[2], 'APIE'),
+    (1, time '21:00', time '23:00', 'Cena con fado en Alfama', 'Mesa reservada a las 21:00.', 'Alfama, Lisboa', 38.7114, -9.1302, 'RESTAURANTE', 6, v_friends[2], 'BUS'),
+    (2, time '09:30', time '17:00', 'Excursión a Sintra', 'Tren desde Rossio y subida al Palacio da Pena.', 'Palácio Nacional da Pena', 38.7876, -9.3906, 'ACTIVIDAD', 7, v_friends[3], null)
+  ) as a(dia, inicio, fin, titulo, descripcion, lugar, lat, lng, tipo, orden, creador, transporte);
 
   select id into v_hotel  from subplan where plan_id = v_plan_id and orden = 1;
   select id into v_market from subplan where plan_id = v_plan_id and orden = 2;
