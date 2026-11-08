@@ -10,7 +10,7 @@ import { useAuth } from "@/providers/AuthProvider";
 import { ImageLightbox } from "@/components/ui/ImageLightbox";
 import { fetchPlanAlbum, type AlbumMiembro, type PlanAlbum } from "@/services/api/endpoints/album.endpoint";
 import { formatKm, type AlbumModel } from "@/lib/album";
-import { buildJourney, dashboardAt, legScrollLength, travelEase, positionAt, positionFromProgress, routeProgress, type Journey, type Ambient, type JourneyDay, type JourneyLeg, type JourneyPosition, type JourneyStop } from "@/lib/album-journey";
+import { buildJourney, dashboardAt, travelEase, positionAt, positionFromProgress, routeProgress, type Journey, type Ambient, type JourneyDay, type JourneyLeg, type JourneyPosition, type JourneyStop } from "@/lib/album-journey";
 import { createMotion, createScrollStore, type Motion, type ScrollStore } from "@/lib/motion";
 import { useIsDarkTheme } from "@/hooks/useIsDarkTheme";
 import { formatDateRange, formatMoney, fmtDayHeader, fmtTime } from "@/lib/formatters";
@@ -20,6 +20,7 @@ import { getWebAppUrl } from "@/config/external";
 import { transportInfo } from "./transport";
 import { findMissingLegs, useComputeMissingLegs } from "@/hooks/useComputeMissingLegs";
 import { useScrollSteps } from "@/hooks/useScrollSteps";
+import { useStepPaging } from "@/hooks/useStepPaging";
 import { useInView } from "@/hooks/useInView";
 import { TIPOS_TRANSPORTE, updateSubplanViaje, type TipoSubplan } from "@/services/api/endpoints/subplanes.endpoint";
 import { JourneyMap } from "./JourneyMap";
@@ -32,6 +33,10 @@ import { CountUp } from "./CountUp";
 import styles from "./album.module.css";
 
 const SERIF = "[font-family:var(--font-display-face)] font-normal";
+// How long a leg takes to play once it is on screen: the same for every leg, so the trip
+// always moves at one pace. Flights get a little more for the camera to pull back and return.
+const LEG_PLAY_MS = 2600;
+const FLIGHT_PLAY_MS = 3400;
 
 function capitalize(text: string) {
   const lower = text.toLocaleLowerCase("es-ES");
@@ -129,16 +134,50 @@ function JourneyView({ album, journey, planId, isGuest, currentUserId }: { album
     observer.observe(head);
     return () => observer.disconnect();
   }, []);
-  // The scroll sets where the group should be (motion target) and the raw step progress (for the
-  // leg bars) every frame, outside React; the page itself only re-renders when the step changes.
+  // The page moves one step per scroll gesture (scroll-snap). Reaching a leg plays it at a fixed
+  // pace, whatever the scroll speed: a small player drives the step progress (for the leg card)
+  // and the motion target (for the map) outside React; the page only re-renders per step.
   const [motion] = useState(() => createMotion());
   const [scroll] = useState(() => createScrollStore());
-  const onMeasure = useCallback((i: number, stepT: number) => {
-    scroll.set(i, Math.round(stepT * 1000) / 1000);
-    const target = positionAt(journey, i, stepT);
-    motion.setTarget(routeProgress(target), `${target.day}|${target.started}|${target.finished}`);
+  const playRef = useRef({ frame: 0, step: -1 });
+  const onStep = useCallback((i: number) => {
+    const player = playRef.current;
+    const previous = player.step;
+    player.step = i;
+    if (player.frame) cancelAnimationFrame(player.frame);
+    player.frame = 0;
+    const apply = (u: number) => {
+      scroll.set(i, u);
+      const target = positionAt(journey, i, u);
+      motion.setTarget(routeProgress(target), `${target.day}|${target.started}|${target.finished}`);
+    };
+    const step = journey.steps.at(i);
+    if (step?.kind !== "leg") return apply(0);
+    // Down the page the group travels the leg; back up it returns to where the leg starts.
+    const backwards = previous > i;
+    const [from, to] = backwards ? [1, 0] : [0, 1];
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return apply(to);
+    const leg = journey.days.at(step.day)?.legs.at(step.leg);
+    const duration = leg?.long ? FLIGHT_PLAY_MS : LEG_PLAY_MS;
+    const start = performance.now();
+    const tick = (now: number) => {
+      const k = Math.min(1, (now - start) / duration);
+      apply(from + (to - from) * k);
+      player.frame = k < 1 ? requestAnimationFrame(tick) : 0;
+    };
+    apply(from);
+    player.frame = requestAnimationFrame(tick);
   }, [journey, motion, scroll]);
-  const { index, register } = useScrollSteps(journey.steps.length, 0.4, mapRef, onMeasure);
+  useEffect(() => () => cancelAnimationFrame(playRef.current.frame), []);
+  // Where a snapped step's top sits: below the sticky map (phones) and the story header.
+  const snapLine = useCallback(() => {
+    const map = mapRef.current?.getBoundingClientRect();
+    const mapBottom = map && map.width > window.innerWidth * 0.8 ? Math.max(0, map.bottom) : 0;
+    return mapBottom + (headRef.current?.offsetHeight ?? 0);
+  }, []);
+  const { index, register, steps } = useScrollSteps(journey.steps.length, snapLine, onStep);
+  // One step per gesture (wheel, swipe, keys), whatever its strength.
+  useStepPaging(mainRef, steps, snapLine);
   const position = positionAt(journey, index, 0);
   // At the end the map shows the whole trip, with the group parked at the last stop.
   // Cover and end show the whole trip; in between, the day being travelled.
@@ -199,7 +238,7 @@ function JourneyView({ album, journey, planId, isGuest, currentUserId }: { album
           <LiveDayHeader journey={journey} base={position} motion={motion} />
         </div>
 
-        <div className="px-5 pb-16 lg:px-9">
+        <div className={`${styles.steps} px-5 pb-16 lg:px-9`}>
           {journey.steps.map((step, i) => {
             const ref = register(i);
             switch (step.kind) {
@@ -261,7 +300,11 @@ function JourneyView({ album, journey, planId, isGuest, currentUserId }: { album
         </div>
       </div>
 
-      {lightbox && <ImageLightbox url={lightbox.url} imageUrls={lightbox.urls} onClose={() => setLightbox(null)} />}
+      {lightbox && (
+        <div data-paging-ignore>
+          <ImageLightbox url={lightbox.url} imageUrls={lightbox.urls} onClose={() => setLightbox(null)} />
+        </div>
+      )}
     </main>
   );
 }
@@ -765,8 +808,8 @@ function LegSection({
   const ordered = [...miembros.filter((m) => m.id !== currentUserId), ...miembros.filter((m) => m.id === currentUserId)];
 
   return (
-    // Tall on purpose: scrolling through it is the trip along this leg.
-    <section ref={ref} className="flex gap-[14px]" style={{ minHeight: `${legScrollLength(leg) * 100}dvh` }} aria-label={`Hacia ${to.place}${facts ? `: ${facts}` : ""}`}>
+    // A whole screen: while the leg plays, the next stop stays out of view.
+    <section ref={ref} className={`${styles.legStep} flex gap-[14px]`} aria-label={`Hacia ${to.place}${facts ? `: ${facts}` : ""}`}>
       <div className="flex w-4 justify-center">
         <div className="relative w-[3px] rounded-full bg-[var(--al-line)]">
           <div className="absolute inset-x-0 top-0 rounded-full bg-[var(--primary)]" style={{ height: `${progress * 100}%` }} />
