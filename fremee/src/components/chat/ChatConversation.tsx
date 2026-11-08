@@ -42,11 +42,20 @@ import { ImageLightbox } from "@/components/ui/ImageLightbox";
 import dynamic from "next/dynamic";
 
 const EmojiMartPicker = dynamic(() => import("@emoji-mart/react"), { ssr: false });
+
+// Shown over the input in plan chats so people find out about the @frimee assistant.
+// They go away once the user asks it something or closes them (remembered per browser).
+const AI_HINTS_KEY = "frimee-ai-hints-dismissed";
+const AI_SUGGESTIONS = [
+  { label: "¿Qué tiempo hará?", prompt: "@frimee ¿qué tiempo va a hacer durante el viaje?" },
+  { label: "¿Cómo vamos de cuentas?", prompt: "@frimee ¿cómo vamos de cuentas? ¿quién debe más?" },
+  { label: "Ideas para cenar", prompt: "@frimee proponnos 3 sitios para cenar y haz una encuesta para votar" },
+];
 import {
   Trash2, Ban, AlertTriangle, LogOut, ChevronDown, Pencil, Reply, Copy,
   Smile, Forward, Pin, Star, Camera, Send as LucideSend, PlusCircle, Mic,
   File, Video, Music, BarChart2, Edit, ChevronLeft, Users,
-  Phone, Check, Download, Plus, X,
+  Phone, Check, Download, Plus, X, Sparkles,
 } from "lucide-react";
 
 const CHAT_ICON_BUTTON_BASE =
@@ -165,6 +174,23 @@ export function ChatConversation({
   const pendingAiVotarRef = useRef<PendingAiVotar | null>(null);
   const [sending, setSending] = useState(false);
   const [text, setText] = useState("");
+  // Hidden until read from localStorage, so it never flashes for someone who closed it.
+  const [aiHintsDismissed, setAiHintsDismissed] = useState(true);
+  useEffect(() => {
+    try {
+      setAiHintsDismissed(localStorage.getItem(AI_HINTS_KEY) === "1");
+    } catch {
+      setAiHintsDismissed(false);
+    }
+  }, []);
+  const dismissAiHints = () => {
+    setAiHintsDismissed(true);
+    try {
+      localStorage.setItem(AI_HINTS_KEY, "1");
+    } catch {
+      // Blocked storage: hidden for this visit only.
+    }
+  };
   const [showInfo, setShowInfo] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ msg: MensajeRow; x: number; y: number; triggerTop: number } | null>(null);
   const [replyingTo, setReplyingTo] = useState<MensajeRow | null>(null);
@@ -1113,8 +1139,9 @@ export function ChatConversation({
   const isConfirm = (t: string) => /^(@frimee\s+)?(s[ií]?|yes|ok|dale|venga|crea(la)?|adelante)\b/i.test(t.trim());
   const isCancel  = (t: string) => /^(@frimee\s+)?(no?|cancelar?)\b/i.test(t.trim());
 
-  const onSend = async () => {
-    const trimmed = text.trim();
+  // override: send this text instead of the input's (the @frimee suggestions use it).
+  const onSend = async (override?: string) => {
+    const trimmed = (override ?? text).trim();
     if (!trimmed || sending) return;
 
     if (pendingAiVotarRef.current && (isConfirm(trimmed) || isCancel(trimmed))) {
@@ -1638,6 +1665,11 @@ export function ChatConversation({
 
   const pinnedMsg = pinnedId ? messages.find((m) => m.id === pinnedId) ?? null : null;
 
+  const hasAskedFrimee = messages.some(
+    (m) => m.sender_id === currentUserId && /@frimee/i.test(m.texto ?? ""),
+  );
+  const showAiHints = Boolean(planId) && !editingMsg && !text && !aiHintsDismissed && !hasAskedFrimee;
+
   return (
     <div className={containerClassName ?? "flex h-[calc(100dvh-var(--space-20)-env(safe-area-inset-bottom))] flex-col md:h-[calc(100dvh-var(--space-16))]"}>
       {/* Poll creator modal */}
@@ -2028,6 +2060,34 @@ export function ChatConversation({
             </button>
           </div>
         )}
+        {showAiHints && (
+          <div
+            role="group"
+            aria-label="Sugerencias para el asistente @frimee"
+            className="mb-[var(--space-2)] flex items-center gap-[var(--space-2)] overflow-x-auto"
+          >
+            <Sparkles className="size-4 shrink-0 text-primary-token" aria-hidden />
+            {AI_SUGGESTIONS.map((s) => (
+              <button
+                key={s.label}
+                type="button"
+                disabled={sending}
+                onClick={() => void onSend(s.prompt)}
+                className="shrink-0 rounded-full border border-app bg-surface px-3 py-[6px] text-[14px] text-app transition-colors hover:bg-surface-2 disabled:opacity-50"
+              >
+                {s.label}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={dismissAiHints}
+              aria-label="Ocultar sugerencias"
+              className="ml-auto flex size-8 shrink-0 items-center justify-center text-muted transition-colors hover:text-app"
+            >
+              <X className="size-[16px]" />
+            </button>
+          </div>
+        )}
         {editingMsg && (
           <div className="mb-[var(--space-2)] flex items-center gap-[var(--space-2)] rounded-[10px] border-l-2 border-blue-500 bg-surface px-3 py-[8px]">
             <div className="min-w-0 flex-1">
@@ -2096,7 +2156,7 @@ export function ChatConversation({
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                   onKeyDown={onKeyDown}
-                  placeholder={editingMsg ? "Editar mensaje..." : "Escribe un mensaje..."}
+                  placeholder={editingMsg ? "Editar mensaje..." : planId ? "Escribe un mensaje o pregunta a @frimee..." : "Escribe un mensaje..."}
                   aria-label={editingMsg ? "Editar mensaje" : "Escribir mensaje"}
                   className="min-w-0 flex-1 bg-transparent py-[10px] text-body-sm text-app outline-none placeholder:text-muted"
                 />
