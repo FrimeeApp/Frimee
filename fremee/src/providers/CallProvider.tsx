@@ -1,22 +1,17 @@
 "use client";
 
-import { createContext, useCallback, useContext, useRef, useState, useEffect } from "react";
-import { useCall, type CallState, type CallMiembro, type CallEndReason } from "@/hooks/useCall";
+import { createContext, useCallback, useContext, useMemo, useRef, useState, useEffect } from "react";
+import { useCall, GuestLimitError, type CallState, type CallMiembro } from "@/hooks/useCall";
 import CallRoom from "@/components/calls/CallRoom";
 import IncomingCall from "@/components/calls/IncomingCall";
-import OutgoingCall from "@/components/calls/OutgoingCall";
+import OutgoingCall, { type OutgoingPhase } from "@/components/calls/OutgoingCall";
+import IncomingBanner from "@/components/calls/IncomingBanner";
+import GuestLimitSheet from "@/components/calls/GuestLimitSheet";
 import CallWidget from "@/components/calls/CallWidget";
 import { getLivekitUrl } from "@/config/external";
+import { useLivekitRoom, type LivekitRoomApi } from "@/hooks/useLivekitRoom";
 
 const livekitUrl = getLivekitUrl();
-
-const END_REASON_TEXT: Record<CallEndReason, string> = {
-  "no-answer": "No contesta",
-  rejected: "Ha rechazado la llamada",
-  busy: "Está en otra llamada",
-};
-/** How long the caller sees why the call did not go through. */
-const END_NOTICE_MS = 2500;
 
 type CallContextValue = {
   callState: CallState;
@@ -29,6 +24,14 @@ type CallContextValue = {
 };
 
 const CallContext = createContext<CallContextValue | null>(null);
+const CallRoomContext = createContext<LivekitRoomApi | null>(null);
+
+/** The LiveKit room of the current call (connection, participants, controls). */
+export function useCallRoom() {
+  const ctx = useContext(CallRoomContext);
+  if (!ctx) throw new Error("useCallRoom must be used within CallProvider");
+  return ctx;
+}
 
 export function useCallContext() {
   const ctx = useContext(CallContext);
@@ -38,17 +41,12 @@ export function useCallContext() {
 
 export function CallProvider({ children }: { children: React.ReactNode }) {
   const { callState, startCall: startCallInternal, joinCall, acceptCall, endCall, markActive, activeSince, endReason, clearEndReason } = useCall();
-  // Who the last outgoing call was for, to show why it did not go through after it ends.
-  const [lastTarget, setLastTarget] = useState<{ nombre: string; foto?: string; tipo: "audio" | "video" } | null>(null);
+  // The last outgoing call: its screen stays after it ends to say why, and "Volver a llamar" repeats it.
+  const [lastTarget, setLastTarget] = useState<{ chatId: string; nombre: string; foto?: string; tipo: "audio" | "video"; miembros: CallMiembro[] } | null>(null);
   const [minimized, setMinimized] = useState(false);
   const [incomingMinimized, setIncomingMinimized] = useState(false);
-  const [outgoingPending, setOutgoingPending] = useState<{
-    chatId: string;
-    tipo: "audio" | "video";
-    participanteNombre: string;
-    participanteFoto?: string;
-    error?: string;
-  } | null>(null);
+  const [outgoingPending, setOutgoingPending] = useState<{ chatId: string; error?: boolean } | null>(null);
+  const [guestLimit, setGuestLimit] = useState(false);
   const cancelledOutgoingChatRef = useRef<string | null>(null);
   const previousCallStatusRef = useRef(callState.status);
   const [now, setNow] = useState(() => Date.now());
@@ -80,20 +78,18 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   ) => {
     cancelledOutgoingChatRef.current = null;
     clearEndReason();
-    setLastTarget({ nombre: participanteNombre, foto: participanteFoto, tipo });
-    setOutgoingPending({ chatId, tipo, participanteNombre, participanteFoto });
+    setLastTarget({ chatId, nombre: participanteNombre, foto: participanteFoto, tipo, miembros });
+    setOutgoingPending({ chatId });
     try {
       await startCallInternal(chatId, tipo, participanteNombre, participanteFoto, miembros);
     } catch (error) {
       console.error("[call] start failed:", error);
-      setOutgoingPending((pending) =>
-        pending?.chatId === chatId
-          ? {
-              ...pending,
-              error: "No se pudo conectar la llamada. Revisa la conexion e intentalo de nuevo.",
-            }
-          : pending,
-      );
+      if (error instanceof GuestLimitError) {
+        setOutgoingPending(null);
+        setGuestLimit(true);
+        return;
+      }
+      setOutgoingPending((pending) => (pending?.chatId === chatId ? { ...pending, error: true } : pending));
     }
   }, [startCallInternal, clearEndReason]);
 
@@ -112,21 +108,50 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   }, [minimized, isActive]);
   const widgetDuration = activeSince ? Math.max(0, Math.floor((now - activeSince) / 1000)) : 0;
 
-  // Why the last call did not go through: shown briefly, then gone.
-  useEffect(() => {
-    if (!endReason) return;
-    const timer = setTimeout(clearEndReason, END_NOTICE_MS);
-    return () => clearTimeout(timer);
-  }, [endReason, clearEndReason]);
-
   const inCall = callState.status === "outgoing" || callState.status === "active";
-  const preparingOutgoing = outgoingPending !== null && callState.status !== "incoming" && callState.status !== "active";
+  // The outgoing screen: from preparing to ringing, then why it did not go through.
+  const outgoingPhase: OutgoingPhase | null =
+    callState.status === "idle" && endReason ? (endReason === "no-answer" ? "no-answer" : endReason)
+      : outgoingPending && callState.status !== "incoming" && callState.status !== "active"
+        ? outgoingPending.error ? "error" : callState.status === "outgoing" ? "ringing" : "connecting"
+        : null;
   const incomingExpanded = callState.status === "incoming" && !incomingMinimized;
+  // One LiveKit room per call, shared by the outgoing screen, the room and the widget.
+  const roomToken = inCall ? callState.token : null;
+  const roomTipo = inCall ? callState.tipo : "audio";
+  const roomCamera = inCall ? callState.camera : false;
+  const roomOptions = useMemo(() => roomToken ? {
+    token: roomToken,
+    livekitUrl,
+    tipo: roomTipo,
+    camera: roomCamera,
+    isGroup,
+    onParticipantConnected: markActive,
+    onEnd: () => void endCall(),
+    onEndForAll: () => void endCall(true),
+  } : null, [roomToken, roomTipo, roomCamera, isGroup, markActive, endCall]);
+  const room = useLivekitRoom(roomOptions);
   const participanteNombre = inCall && "participanteNombre" in callState ? callState.participanteNombre : "";
   const participanteFoto = inCall && "participanteFoto" in callState ? callState.participanteFoto : undefined;
+  const attachOwnVideo = useCallback((el: HTMLVideoElement | null) => room.attachTrack("__local__", el), [room]);
+
+  const closeOutgoing = useCallback(() => {
+    if (callState.status === "outgoing") {
+      void endCall();
+      return;
+    }
+    if (outgoingPending) cancelledOutgoingChatRef.current = outgoingPending.chatId;
+    setOutgoingPending(null);
+    clearEndReason();
+  }, [callState.status, endCall, outgoingPending, clearEndReason]);
+
+  const retryOutgoing = useCallback(() => {
+    if (!lastTarget) return;
+    void startCall(lastTarget.chatId, lastTarget.tipo, lastTarget.nombre, lastTarget.foto, lastTarget.miembros);
+  }, [lastTarget, startCall]);
 
   useEffect(() => {
-    if ((!inCall || minimized) && !incomingExpanded && !preparingOutgoing) return;
+    if ((!inCall || minimized) && !incomingExpanded && !outgoingPhase) return;
 
     const previousBodyOverflow = document.body.style.overflow;
     const previousHtmlOverflow = document.documentElement.style.overflow;
@@ -143,38 +168,53 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         document.body.removeAttribute("data-call-overlay-open");
       }
     };
-  }, [inCall, incomingExpanded, minimized, preparingOutgoing]);
+  }, [inCall, incomingExpanded, minimized, outgoingPhase]);
 
   return (
     <CallContext.Provider value={{ callState, startCall, joinCall, endCall, minimized, minimize: () => setMinimized(true), expand: () => setMinimized(false) }}>
+    <CallRoomContext.Provider value={room}>
       {children}
 
-      {outgoingPending && callState.status !== "incoming" && callState.status !== "active" && (
+      {/* CallRoom: mounted for the whole call; hidden while it rings (the outgoing screen is on
+          top) and while minimized. The connection lives in useLivekitRoom either way. */}
+      {inCall && (
+        <div style={{ display: minimized || callState.status === "outgoing" ? "none" : "block" }}>
+          <CallRoom
+            miembros={callState.miembros}
+            participanteNombre={participanteNombre}
+            isActive={isActive}
+            activeSince={activeSince}
+            onMinimize={() => setMinimized(true)}
+          />
+        </div>
+      )}
+
+      {outgoingPhase && lastTarget && (
         <OutgoingCall
-          participantName={outgoingPending.participanteNombre}
-          participantFoto={outgoingPending.participanteFoto}
-          tipo={outgoingPending.tipo}
-          statusText={outgoingPending.error ?? (callState.status === "outgoing" ? "Llamando..." : "Conectando...")}
-          hasError={Boolean(outgoingPending.error)}
-          onCancel={() => {
-            if (callState.status === "outgoing") {
-              void endCall();
-              return;
-            }
-            cancelledOutgoingChatRef.current = outgoingPending.chatId;
-            setOutgoingPending(null);
-          }}
+          phase={outgoingPhase}
+          tipo={lastTarget.tipo}
+          target={{ id: lastTarget.chatId, nombre: lastTarget.nombre, foto: lastTarget.foto }}
+          group={lastTarget.miembros.length > 2 ? lastTarget.miembros : undefined}
+          micEnabled={room.micEnabled}
+          cameraEnabled={room.cameraEnabled}
+          onToggleMic={() => void room.toggleMute()}
+          onToggleCamera={() => void room.toggleVideo()}
+          ownVideo={attachOwnVideo}
+          onCancel={closeOutgoing}
+          onClose={closeOutgoing}
+          onRetry={retryOutgoing}
         />
       )}
 
       {callState.status === "incoming" && !incomingMinimized && (
         <IncomingCall
-          callerName={callState.callerName}
-          callerFoto={callState.callerFoto}
           tipo={callState.tipo}
-          onAccept={() => {
+          caller={{ id: callState.callerId, nombre: callState.callerName, foto: callState.callerFoto }}
+          plan={callState.chatTipo === "PLAN" ? callState.chatNombre : null}
+          group={callState.chatTipo === "GRUPO" ? callState.miembros : null}
+          onAccept={(withCamera) => {
             setIncomingMinimized(false);
-            void acceptCall();
+            void acceptCall(withCamera);
           }}
           onReject={() => void endCall()}
           onMinimize={() => setIncomingMinimized(true)}
@@ -182,45 +222,25 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       )}
 
       {callState.status === "incoming" && incomingMinimized && (
-        <CallWidget
-          participanteNombre={callState.callerName}
-          participanteFoto={callState.callerFoto}
-          duration={0}
-          isActive={false}
-          statusLabel={callState.tipo === "video" ? "Videollamada entrante" : "Llamada entrante"}
-          onExpand={() => setIncomingMinimized(false)}
-          onEnd={() => void endCall()}
+        <IncomingBanner
+          tipo={callState.tipo}
+          caller={{ id: callState.callerId, nombre: callState.callerName, foto: callState.callerFoto }}
+          onOpen={() => setIncomingMinimized(false)}
+          onAccept={() => {
+            setIncomingMinimized(false);
+            void acceptCall(true);
+          }}
+          onReject={() => void endCall()}
         />
       )}
 
-      {/* CallRoom: always mounted when in call, hidden via CSS when minimized so LiveKit stays connected */}
-      {inCall && (
-        <div style={{ display: minimized ? "none" : "block" }}>
-          <CallRoom
-            token={callState.token}
-            livekitUrl={livekitUrl}
-            tipo={callState.tipo}
-            miembros={callState.miembros}
-            participanteNombre={participanteNombre}
-            isActive={isActive}
-            activeSince={activeSince}
-            isGroup={isGroup}
-            onEnd={() => void endCall()}
-            onEndForAll={() => void endCall(true)}
-            onParticipantConnected={markActive}
-            onMinimize={() => setMinimized(true)}
-          />
-        </div>
-      )}
-
-      {endReason && callState.status === "idle" && lastTarget && (
-        <OutgoingCall
-          participantName={lastTarget.nombre}
-          participantFoto={lastTarget.foto}
-          tipo={lastTarget.tipo}
-          statusText={END_REASON_TEXT[endReason]}
-          hasError
-          onCancel={clearEndReason}
+      {guestLimit && (
+        <GuestLimitSheet
+          onClose={() => setGuestLimit(false)}
+          onCreateAccount={() => {
+            setGuestLimit(false);
+            window.dispatchEvent(new Event("frimee:save-account"));
+          }}
         />
       )}
 
@@ -235,6 +255,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
           onEnd={() => void endCall()}
         />
       )}
+    </CallRoomContext.Provider>
     </CallContext.Provider>
   );
 }

@@ -1,81 +1,73 @@
 "use client";
 
-import Image from "next/image";
-import { Capacitor } from "@capacitor/core";
-import { PhoneOffIcon } from "@/components/icons";
-import { Minimize2, Phone } from "lucide-react";
+import { Phone, Video } from "lucide-react";
+import type { CallMiembro } from "@/hooks/useCall";
+import { CallScreen } from "./CallScreen";
+import { CallControl, HangUpIcon } from "./ui";
 
+/**
+ * Incoming call, full screen (M4, D4). Decline on the left, accept on the right, 120 px apart.
+ * Video calls can be answered without the camera. From a plan: who calls and the plan's name.
+ */
 type Props = {
-  callerName: string;
-  callerFoto?: string;
   tipo: "audio" | "video";
-  onAccept: () => void;
+  caller: { id: string; nombre: string; foto?: string };
+  /** The call comes from a plan's chat: its name. */
+  plan?: string | null;
+  /** A group chat (not a plan): its members, shown stacked. */
+  group?: CallMiembro[] | null;
+  onAccept: (withCamera: boolean) => void;
   onReject: () => void;
   onMinimize: () => void;
 };
 
-export default function IncomingCall({ callerName, callerFoto, tipo, onAccept, onReject, onMinimize }: Props) {
-  const isNative = Capacitor.isNativePlatform();
+export default function IncomingCall({ tipo, caller, plan, group, onAccept, onReject, onMinimize }: Props) {
+  const isGroup = Boolean(group && group.length > 2 && !plan);
+  const status = plan ? "te llama desde el plan" : isGroup ? "llamada de grupo" : "te está llamando";
 
   return (
-    <div
-      className="fixed inset-0 z-[1400] flex flex-col items-center justify-between bg-[#111] text-white"
-      style={isNative ? { paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)" } : undefined}
-      role="dialog"
-      aria-modal="true"
-      aria-label={tipo === "video" ? "Videollamada entrante" : "Llamada de voz entrante"}
-    >
-      <button
-        type="button"
-        onClick={onMinimize}
-        className="absolute right-[max(16px,env(safe-area-inset-right))] top-[calc(env(safe-area-inset-top)+16px)] flex size-11 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 active:scale-95"
-        aria-label="Minimizar llamada entrante"
-        title="Minimizar"
-      >
-        <Minimize2 className="size-5" aria-hidden />
-      </button>
-
-      <div className={`flex flex-col items-center gap-[var(--space-3)] ${isNative ? "pt-[var(--space-12)]" : "pt-[var(--space-20)]"}`}>
-        <p className="text-caption text-muted">{tipo === "video" ? "Llamada de video entrante" : "Llamada de voz entrante"}</p>
-        <div className="h-24 w-24 overflow-hidden rounded-full border border-white/10 bg-white/10">
-          {callerFoto ? (
-            <Image src={callerFoto} alt={callerName} width={96} height={96} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center text-[40px] font-bold">
-              {callerName?.[0]?.toUpperCase()}
+    <CallScreen
+      tipo={tipo}
+      ariaLabel={`${tipo === "video" ? "Videollamada" : "Llamada"} entrante de ${caller.nombre}`}
+      hero={isGroup && group ? { kind: "group", miembros: group } : { kind: "person", id: caller.id, nombre: caller.nombre, foto: caller.foto, pulse: true }}
+      title={caller.nombre}
+      status={status}
+      onMinimize={onMinimize}
+      extra={
+        <>
+          {plan && (
+            <div className="mt-5 inline-flex h-11 items-center gap-2.5 rounded-full bg-[var(--call-pill-bg)] pl-1.5 pr-3.5 text-[var(--text-primary)]">
+              <span aria-hidden="true" className="call-serif flex size-8 items-center justify-center rounded-lg text-[19px] text-[var(--call-accent-text)]">
+                {plan.trim()[0]?.toUpperCase()}
+              </span>
+              <span className="text-[14px] font-semibold">{plan}</span>
             </div>
           )}
-        </div>
-        <p className="text-[var(--font-h2)] font-[var(--fw-bold)]">{callerName}</p>
-      </div>
-
-      <div className={`flex items-center gap-[var(--space-16)] ${isNative ? "pb-[var(--space-8)]" : "pb-[var(--space-20)]"}`}>
-        <div className="flex flex-col items-center gap-[var(--space-2)]">
+        </>
+      }
+      aboveButtons={
+        tipo === "video" ? (
           <button
             type="button"
-            onClick={onReject}
-            className="flex h-16 w-16 items-center justify-center rounded-full bg-red-500 text-white transition-transform active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
-            aria-label="Rechazar llamada"
+            onClick={() => onAccept(false)}
+            className="inline-flex h-11 items-center gap-2 rounded-lg px-4 text-[14px] font-semibold text-[var(--call-accent-text)]"
           >
-            <PhoneOffIcon />
+            <Phone className="size-[18px]" aria-hidden />
+            <span>Contestar sin cámara</span>
           </button>
-          <span className="text-caption text-muted">Rechazar</span>
-        </div>
-
-        <div className="flex flex-col items-center gap-[var(--space-2)]">
-          <button
-            type="button"
-            onClick={onAccept}
-            className="flex h-16 w-16 items-center justify-center rounded-full bg-green-500 text-white transition-transform active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
-            aria-label="Aceptar llamada"
-          >
-            <PhoneIcon />
-          </button>
-          <span className="text-caption text-muted">Aceptar</span>
-        </div>
-      </div>
-    </div>
+        ) : undefined
+      }
+      buttons={
+        <>
+          <CallControl kind="reject" label="Rechazar" ariaLabel="Rechazar llamada" onClick={onReject}>
+            <HangUpIcon size={28} />
+          </CallControl>
+          <div className="w-14" aria-hidden="true" />
+          <CallControl kind="accept" label="Aceptar" ariaLabel={tipo === "video" ? "Aceptar videollamada" : "Aceptar llamada"} onClick={() => onAccept(tipo === "video")}>
+            {tipo === "video" ? <Video className="size-7" aria-hidden /> : <Phone className="size-7" aria-hidden />}
+          </CallControl>
+        </>
+      }
+    />
   );
 }
-
-const PhoneIcon = () => <Phone className="size-6" aria-hidden />;

@@ -1,0 +1,378 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  ConnectionState,
+  Room,
+  RoomEvent,
+  RemoteParticipant,
+  Track,
+  VideoPresets,
+  createLocalAudioTrack,
+  createLocalVideoTrack,
+  type LocalAudioTrack,
+  type LocalVideoTrack,
+} from "livekit-client";
+
+export type ParticipantTile = {
+  id: string;            // unique: identity or `${identity}:screen`
+  identity: string;
+  isLocal: boolean;
+  isScreenShare: boolean;
+  audioMuted: boolean;
+  videoMuted: boolean;
+};
+
+export type LivekitRoomOptions = {
+  token: string;
+  livekitUrl: string;
+  tipo: "audio" | "video";
+  /** Publish the camera from the start (a video call answered with the camera off: false). */
+  camera: boolean;
+  isGroup: boolean;
+  /** Someone else is in the room: the call is answered. */
+  onParticipantConnected: () => void;
+  /** The room closed (you or the other person hung up, or the connection is gone). */
+  onEnd: () => void;
+  /** The last person left a group call. */
+  onEndForAll: () => void;
+};
+
+/** Everything the call screens read and control. One room per call, shared by every screen. */
+export type LivekitRoomApi = {
+  connected: boolean;
+  reconnecting: boolean;
+  tiles: ParticipantTile[];
+  /** Identities talking right now. */
+  speaking: Set<string>;
+  /** Some participant has (or had) a camera on: the room shows video tiles. */
+  hasAnyVideo: boolean;
+  micEnabled: boolean;
+  cameraEnabled: boolean;
+  screenSharing: boolean;
+  /** Attach a track to a <video>: "__local__", "<identity>", "<identity>:screen". */
+  attachTrack: (trackKey: string, el: HTMLVideoElement | null) => void;
+  toggleMute: () => Promise<void>;
+  toggleVideo: () => Promise<void>;
+  toggleScreenShare: () => Promise<void>;
+  /** Leave the room (ends the call through onEnd). */
+  disconnect: () => void;
+};
+
+/**
+ * The LiveKit room of the current call, outside any screen: the outgoing screen, the room and
+ * the floating widget all read and control the same connection, which lives as long as the
+ * call (null options = no call). Track keys:
+ *   "__local__" local camera · "<identity>:screen" a screen share · "<identity>" a remote camera.
+ */
+export function useLivekitRoom(options: LivekitRoomOptions | null): LivekitRoomApi {
+  const roomRef = useRef<Room | null>(null);
+  const trackMap = useRef<Map<string, Track>>(new Map());
+  const audioSinkRef = useRef<HTMLDivElement | null>(null);
+  const attachedAudioElsRef = useRef<Map<string, HTMLMediaElement>>(new Map());
+  const [connected, setConnected] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
+  const [tiles, setTiles] = useState<ParticipantTile[]>([]);
+  const [speaking, setSpeaking] = useState<Set<string>>(() => new Set());
+  const [hasAnyVideo, setHasAnyVideo] = useState(false);
+  const [screenSharing, setScreenSharing] = useState(false);
+
+  const token = options?.token ?? null;
+  const livekitUrl = options?.livekitUrl ?? null;
+  const tipo = options?.tipo ?? "audio";
+  const camera = options?.camera ?? false;
+  const isGroup = options?.isGroup ?? false;
+  const callbacksRef = useRef(options);
+  useEffect(() => {
+    callbacksRef.current = options;
+  });
+
+  // Remote audio plays from hidden elements in the body: the room keeps sounding while
+  // minimized or behind another screen.
+  useEffect(() => {
+    const sink = document.createElement("div");
+    sink.setAttribute("aria-hidden", "true");
+    sink.style.display = "none";
+    document.body.appendChild(sink);
+    audioSinkRef.current = sink;
+    return () => sink.remove();
+  }, []);
+
+  const addTile = useCallback((id: string, identity: string, isLocal: boolean, isScreenShare: boolean) => {
+    setTiles((prev) => prev.some((t) => t.id === id) ? prev : [
+      ...prev,
+      { id, identity, isLocal, isScreenShare, audioMuted: false, videoMuted: isScreenShare ? false : isLocal ? !camera : tipo !== "video" },
+    ]);
+  }, [tipo, camera]);
+
+  const removeTile = useCallback((id: string) => {
+    setTiles((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
+  const attachTrack = useCallback((trackKey: string, el: HTMLVideoElement | null) => {
+    if (!el) return;
+    const t = trackMap.current.get(trackKey);
+    if (t) t.attach(el);
+  }, []);
+
+  const attachAudioTrack = useCallback((participantIdentity: string, track: Track) => {
+    const existing = attachedAudioElsRef.current.get(participantIdentity);
+    if (existing) {
+      track.attach(existing);
+      return;
+    }
+    const el = track.attach();
+    el.autoplay = true;
+    if (el instanceof HTMLVideoElement) el.playsInline = true;
+    el.style.display = "none";
+    audioSinkRef.current?.appendChild(el);
+    attachedAudioElsRef.current.set(participantIdentity, el);
+  }, []);
+
+  const detachAudioTrack = useCallback((participantIdentity: string, track?: Track) => {
+    const el = attachedAudioElsRef.current.get(participantIdentity);
+    if (!el) return;
+    if (track) track.detach(el);
+    el.remove();
+    attachedAudioElsRef.current.delete(participantIdentity);
+  }, []);
+
+  useEffect(() => {
+    if (!token || !livekitUrl) return;
+    let cancelled = false;
+    const audioEls = attachedAudioElsRef.current;
+    const tracks = trackMap.current;
+    // Adaptive stream: each video arrives at the size it is shown. Dynacast: senders stop
+    // encoding layers nobody watches. Camera at 540p with 180p/360p layers for small tiles.
+    const room = new Room({
+      adaptiveStream: true,
+      dynacast: true,
+      videoCaptureDefaults: { resolution: VideoPresets.h540.resolution },
+      publishDefaults: { simulcast: true, videoSimulcastLayers: [VideoPresets.h180, VideoPresets.h360] },
+    });
+    roomRef.current = room;
+    // Warm up the connection (DNS, TLS, region) while the tracks are being created.
+    void room.prepareConnection(livekitUrl, token).catch(() => {});
+
+    room.on(RoomEvent.TrackSubscribed, (track, _pub, participant) => {
+      if (track.kind === Track.Kind.Video) {
+        if (track.source === Track.Source.ScreenShare) {
+          const tileId = `${participant.identity}:screen`;
+          tracks.set(tileId, track);
+          addTile(tileId, participant.identity, false, true);
+          const el = document.querySelector<HTMLVideoElement>(`video[data-tile="${tileId}"]`);
+          if (el) track.attach(el);
+        } else {
+          tracks.set(participant.identity, track);
+          setHasAnyVideo(true);
+          setTiles((prev) => prev.map((t) => t.id === participant.identity ? { ...t, videoMuted: false } : t));
+          const el = document.querySelector<HTMLVideoElement>(`video[data-tile="${participant.identity}"]`);
+          if (el) track.attach(el);
+        }
+      } else if (track.kind === Track.Kind.Audio) {
+        attachAudioTrack(participant.identity, track);
+      }
+    });
+
+    room.on(RoomEvent.TrackUnsubscribed, (track, _pub, participant) => {
+      if (track.kind === Track.Kind.Video && track.source === Track.Source.ScreenShare) {
+        removeTile(`${participant.identity}:screen`);
+      } else if (track.kind === Track.Kind.Audio) {
+        detachAudioTrack(participant.identity, track);
+      }
+    });
+
+    // Microphone and camera mute separately (a camera turned off is not a muted microphone).
+    const setMuted = (source: Track.Source, identity: string, muted: boolean) => {
+      if (source !== Track.Source.Microphone && source !== Track.Source.Camera) return;
+      const field = source === Track.Source.Microphone ? "audioMuted" : "videoMuted";
+      setTiles((prev) => prev.map((t) => t.identity === identity && !t.isScreenShare ? { ...t, [field]: muted } : t));
+    };
+    room.on(RoomEvent.TrackMuted, (pub, participant) => setMuted(pub.source, participant.identity, true));
+    room.on(RoomEvent.TrackUnmuted, (pub, participant) => setMuted(pub.source, participant.identity, false));
+    room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
+      setSpeaking(new Set(speakers.map((p) => p.identity)));
+    });
+    room.on(RoomEvent.ConnectionStateChanged, (state) => {
+      setReconnecting(state === ConnectionState.Reconnecting || state === ConnectionState.SignalReconnecting);
+    });
+
+    room.on(RoomEvent.Connected, () => {
+      if (!cancelled) {
+        setConnected(true);
+        addTile(room.localParticipant.identity, room.localParticipant.identity, true, false);
+      }
+    });
+    room.on(RoomEvent.Disconnected, () => {
+      audioEls.forEach((el) => el.remove());
+      audioEls.clear();
+      if (!cancelled) { setConnected(false); callbacksRef.current?.onEnd(); }
+    });
+    room.on(RoomEvent.ParticipantConnected, (participant: RemoteParticipant) => {
+      if (!cancelled) {
+        addTile(participant.identity, participant.identity, false, false);
+        callbacksRef.current?.onParticipantConnected();
+      }
+    });
+    room.on(RoomEvent.ParticipantDisconnected, (participant: RemoteParticipant) => {
+      if (!cancelled) {
+        removeTile(participant.identity);
+        removeTile(`${participant.identity}:screen`);
+        if (room.remoteParticipants.size === 0) {
+          if (isGroup) callbacksRef.current?.onEndForAll();
+          else callbacksRef.current?.onEnd();
+        }
+      }
+    });
+
+    const connect = async () => {
+      // Microphone (and camera) open while the room connects, not after: audio starts sooner.
+      const localTracks: Promise<[LocalAudioTrack, LocalVideoTrack | null]> = Promise.all([
+        createLocalAudioTrack({ echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 }),
+        camera ? createLocalVideoTrack() : Promise.resolve(null),
+      ]);
+      localTracks.catch(() => {}); // handled below, after connecting
+      await room.connect(livekitUrl, token);
+      if (cancelled) { room.disconnect(); return; }
+      // Someone may have joined before this side finished connecting: no ParticipantConnected
+      // event comes for them, so the call counts as answered right here.
+      if (room.remoteParticipants.size > 0) callbacksRef.current?.onParticipantConnected();
+      room.remoteParticipants.forEach((p) => {
+        addTile(p.identity, p.identity, false, false);
+        p.getTrackPublications().forEach((pub) => {
+          if (pub.track && pub.source === Track.Source.ScreenShare) {
+            const tileId = `${p.identity}:screen`;
+            tracks.set(tileId, pub.track);
+            addTile(tileId, p.identity, false, true);
+          }
+        });
+      });
+
+      // Audio and camera publish separately: a camera that fails (busy, slow to start) must not
+      // leave the call without sound. The camera gets one more try.
+      const [audioResult, videoResult] = await Promise.allSettled([
+        localTracks.then(([audio]) => audio),
+        localTracks.then(([, video]) => video),
+      ]);
+      if (cancelled) {
+        if (audioResult.status === "fulfilled") audioResult.value.stop();
+        if (videoResult.status === "fulfilled") videoResult.value?.stop();
+        room.disconnect();
+        return;
+      }
+      if (audioResult.status === "fulfilled") {
+        await room.localParticipant.publishTrack(audioResult.value).catch((err) => console.error("[call] publish audio", err));
+      } else {
+        console.error("[call] microphone", audioResult.reason);
+      }
+      if (camera) {
+        const publishVideo = async (track: LocalVideoTrack) => {
+          await room.localParticipant.publishTrack(track);
+          tracks.set("__local__", track);
+          setTiles((prev) => prev.map((t) => t.isLocal && !t.isScreenShare ? { ...t, videoMuted: false } : t));
+          document.querySelectorAll<HTMLVideoElement>(`video[data-tile="${room.localParticipant.identity}"], video[data-own-video]`).forEach((el) => track.attach(el));
+        };
+        try {
+          if (videoResult.status !== "fulfilled" || !videoResult.value) throw videoResult.status === "rejected" ? videoResult.reason : new Error("sin cámara");
+          await publishVideo(videoResult.value);
+        } catch (first) {
+          console.warn("[call] camera, retrying", first);
+          await new Promise((r) => setTimeout(r, 600));
+          if (cancelled) return;
+          try {
+            await publishVideo(await createLocalVideoTrack());
+          } catch (err) {
+            console.error("[call] camera", err);
+          }
+        }
+      }
+    };
+
+    connect().catch(console.error);
+    return () => {
+      cancelled = true;
+      audioEls.forEach((el) => el.remove());
+      audioEls.clear();
+      tracks.clear();
+      roomRef.current = null;
+      room.disconnect();
+      // Clean slate for the next call.
+      setConnected(false);
+      setTiles([]);
+      setSpeaking(new Set());
+      setReconnecting(false);
+      setScreenSharing(false);
+      setHasAnyVideo(false);
+    };
+  }, [token, livekitUrl, tipo, camera, isGroup, addTile, removeTile, attachAudioTrack, detachAudioTrack]);
+
+  const toggleMute = useCallback(async () => {
+    const local = roomRef.current?.localParticipant;
+    if (!local) return;
+    const muted = local.isMicrophoneEnabled;
+    await local.setMicrophoneEnabled(!muted);
+    setTiles((prev) => prev.map((t) => t.isLocal && !t.isScreenShare ? { ...t, audioMuted: muted } : t));
+  }, []);
+
+  const toggleVideo = useCallback(async () => {
+    const local = roomRef.current?.localParticipant;
+    if (!local) return;
+    const enabled = local.isCameraEnabled;
+    try {
+      await local.setCameraEnabled(!enabled);
+      if (!enabled) {
+        const pub = local.getTrackPublication(Track.Source.Camera);
+        if (pub?.track) {
+          trackMap.current.set("__local__", pub.track);
+          document.querySelectorAll<HTMLVideoElement>(`video[data-tile="${local.identity}"], video[data-own-video]`).forEach((el) => pub.track?.attach(el));
+        }
+        setHasAnyVideo(true);
+        setTiles((prev) => prev.map((t) => t.isLocal && !t.isScreenShare ? { ...t, videoMuted: false } : t));
+      } else {
+        setTiles((prev) => prev.map((t) => t.isLocal && !t.isScreenShare ? { ...t, videoMuted: true } : t));
+      }
+    } catch (err) { console.error("[call] camera toggle error", err); }
+  }, []);
+
+  const toggleScreenShare = useCallback(async () => {
+    const local = roomRef.current?.localParticipant;
+    if (!local) return;
+    try {
+      if (!screenSharing) {
+        await local.setScreenShareEnabled(true);
+        const pub = local.getTrackPublication(Track.Source.ScreenShare);
+        if (pub?.track) {
+          const tileId = `${local.identity}:screen`;
+          trackMap.current.set(tileId, pub.track);
+          addTile(tileId, local.identity, true, true);
+          const el = document.querySelector<HTMLVideoElement>(`video[data-tile="${tileId}"]`);
+          if (el) pub.track.attach(el);
+        }
+        setScreenSharing(true);
+      } else {
+        await local.setScreenShareEnabled(false);
+        removeTile(`${local.identity}:screen`);
+        setScreenSharing(false);
+      }
+    } catch (err) { console.error("[call] screen share error", err); }
+  }, [screenSharing, addTile, removeTile]);
+
+  const disconnect = useCallback(() => { roomRef.current?.disconnect(); }, []);
+
+  const localTile = tiles.find((t) => t.isLocal && !t.isScreenShare);
+  return {
+    connected,
+    reconnecting,
+    tiles,
+    speaking,
+    hasAnyVideo: hasAnyVideo || (token !== null && tipo === "video"),
+    micEnabled: !(localTile?.audioMuted ?? false),
+    cameraEnabled: !(localTile?.videoMuted ?? true),
+    screenSharing,
+    attachTrack,
+    toggleMute,
+    toggleVideo,
+    toggleScreenShare,
+    disconnect,
+  };
+}

@@ -28,6 +28,7 @@ async function fetchLivekitToken(roomName: string, chatId: string, accessToken?:
   }
 
   const data = await res.json() as { token?: string; error?: string };
+  if (res.status === 429 && data.error?.includes("modo invitado")) throw new GuestLimitError();
   if (!res.ok || !data.token) {
     throw new Error(data.error ?? `No se pudo obtener token de LiveKit (${res.status})`);
   }
@@ -53,14 +54,22 @@ function setCallEstado(id: number, estado: "active" | "missed" | "rejected" | "b
 
 export type CallMiembro = { id: string; nombre: string; foto?: string };
 
+/** A guest used up today's calls: the app offers to create an account. */
+export class GuestLimitError extends Error {
+  constructor() {
+    super("Límite de llamadas del modo invitado");
+    this.name = "GuestLimitError";
+  }
+}
+
 /** Why the last call ended without being answered, to tell the caller. */
 export type CallEndReason = "no-answer" | "rejected" | "busy";
 
 export type CallState =
   | { status: "idle" }
-  | { status: "outgoing"; llamadaId: number; roomName: string; chatId: string; tipo: "audio" | "video"; token: string; isInitiator: true; participanteNombre: string; participanteFoto?: string; miembros: CallMiembro[] }
-  | { status: "incoming"; roomName: string; chatId: string; tipo: "audio" | "video"; llamadaId: number; callerName: string; callerFoto?: string; miembros: CallMiembro[] }
-  | { status: "active"; llamadaId: number | null; roomName: string; chatId: string; tipo: "audio" | "video"; token: string; isInitiator: boolean; participanteNombre: string; participanteFoto?: string; miembros: CallMiembro[] };
+  | { status: "outgoing"; llamadaId: number; roomName: string; chatId: string; tipo: "audio" | "video"; camera: boolean; token: string; isInitiator: true; participanteNombre: string; participanteFoto?: string; miembros: CallMiembro[] }
+  | { status: "incoming"; roomName: string; chatId: string; tipo: "audio" | "video"; llamadaId: number; callerId: string; callerName: string; callerFoto?: string; chatTipo: string | null; chatNombre: string | null; miembros: CallMiembro[] }
+  | { status: "active"; llamadaId: number | null; roomName: string; chatId: string; tipo: "audio" | "video"; camera: boolean; token: string; isInitiator: boolean; participanteNombre: string; participanteFoto?: string; miembros: CallMiembro[] };
 
 type LlamadaRow = { id: number; chat_id: string; room_name: string; tipo: "audio" | "video"; iniciado_por_user_id: string; estado: string };
 type CallInfo = { tipo: string; nombre: string | null; foto: string | null; miembros: Array<{ id: string; nombre: string; foto: string | null }> };
@@ -107,16 +116,11 @@ export function useCall() {
           return;
         }
 
-        let callerName = "Usuario";
-        let callerFoto: string | undefined;
-        if (info?.tipo === "GRUPO") {
-          callerName = info.nombre ?? "Grupo";
-          callerFoto = info.foto ?? undefined;
-        } else {
-          const caller = miembros.find((m) => m.id === llamada.iniciado_por_user_id);
-          callerName = caller?.nombre ?? "Usuario";
-          callerFoto = caller?.foto;
-        }
+        const caller = miembros.find((m) => m.id === llamada.iniciado_por_user_id);
+        // A group chat shows the group; a plan or a direct chat shows the person calling.
+        const isGrupo = info?.tipo === "GRUPO";
+        const callerName = isGrupo ? info?.nombre ?? "Grupo" : caller?.nombre ?? "Usuario";
+        const callerFoto = isGrupo ? info?.foto ?? undefined : caller?.foto;
 
         setEndReason(null);
         setCallState({
@@ -125,8 +129,11 @@ export function useCall() {
           chatId: llamada.chat_id,
           tipo: llamada.tipo,
           llamadaId: llamada.id,
+          callerId: isGrupo ? llamada.chat_id : llamada.iniciado_por_user_id,
           callerName,
           callerFoto,
+          chatTipo: info?.tipo ?? null,
+          chatNombre: info?.nombre ?? null,
           miembros,
         });
       })
@@ -194,10 +201,11 @@ export function useCall() {
 
     setEndReason(null);
     setActiveSince(null);
-    setCallState({ status: "outgoing", llamadaId: (llamada as { id: number }).id, roomName, chatId, tipo, token, isInitiator: true, participanteNombre, participanteFoto, miembros });
+    setCallState({ status: "outgoing", llamadaId: (llamada as { id: number }).id, roomName, chatId, tipo, camera: tipo === "video", token, isInitiator: true, participanteNombre, participanteFoto, miembros });
   }, [userId]);
 
-  const acceptCall = useCallback(async () => {
+  /** Answer; a video call can be answered with the camera off ("Contestar sin cámara"). */
+  const acceptCall = useCallback(async (withCamera = true) => {
     if (callState.status !== "incoming") return;
     const { roomName, chatId, tipo, llamadaId, miembros } = callState;
 
@@ -206,7 +214,7 @@ export function useCall() {
     await setCallEstado(llamadaId, "active");
 
     setActiveSince(Date.now());
-    setCallState({ status: "active", llamadaId, roomName, chatId, tipo, token, isInitiator: false, participanteNombre: callState.callerName, participanteFoto: callState.callerFoto, miembros });
+    setCallState({ status: "active", llamadaId, roomName, chatId, tipo, camera: tipo === "video" && withCamera, token, isInitiator: false, participanteNombre: callState.callerName, participanteFoto: callState.callerFoto, miembros });
   }, [callState]);
 
   const endCall = useCallback(async (endForAll = false) => {
@@ -243,7 +251,7 @@ export function useCall() {
     const token = await fetchLivekitToken(roomName, chatId, session?.access_token);
     setEndReason(null);
     setActiveSince(Date.now());
-    setCallState({ status: "active", llamadaId, roomName, chatId, tipo, token, isInitiator: false, participanteNombre, participanteFoto, miembros });
+    setCallState({ status: "active", llamadaId, roomName, chatId, tipo, camera: tipo === "video", token, isInitiator: false, participanteNombre, participanteFoto, miembros });
   }, [userId]);
 
   /** Someone joined the room the caller opened: the call is answered. */
@@ -257,6 +265,7 @@ export function useCall() {
         roomName: callState.roomName,
         chatId: callState.chatId,
         tipo: callState.tipo,
+        camera: callState.camera,
         token: callState.token,
         isInitiator: true,
         participanteNombre: callState.participanteNombre,
