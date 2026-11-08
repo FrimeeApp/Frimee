@@ -130,10 +130,8 @@ begin
     values (v_chat_id, v_msg.sender, v_msg.texto, now() - v_msg.hace, array[v_msg.sender]);
   end loop;
 
-  update chat
-     set last_message = '¿Alguien se encarga de la comida del primer día?',
-         last_message_at = now() - interval '20 minutes'
-   where id = v_chat_id;
+  -- The chat's last message is Frimee's welcome, added by trg_chat_plan_welcome
+  -- (20261027000006) when fn_plan_create_chat created the chat: it is newer than these.
 
   return v_plan_id;
 end;
