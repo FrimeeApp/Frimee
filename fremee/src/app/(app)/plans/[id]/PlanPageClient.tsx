@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Maximize2, ChevronLeft, ChevronDown, UserPlus, Share2, Pencil, MapPin, Calendar, ArrowRight, Plus, ExternalLink, Upload, Check, FileText, Download, QrCode } from "lucide-react";
+import { Maximize2, ChevronLeft, ChevronDown, UserPlus, Share2, Pencil, MapPin, Calendar, Plus, ExternalLink, Upload, Check, FileText, Download, QrCode } from "lucide-react";
 import { useAuth } from "@/providers/AuthProvider";
 import { useCallContext } from "@/providers/CallProvider";
 import { ChatConversation, PhoneCallIcon, VideoCallIcon } from "@/components/chat/ChatConversation";
@@ -33,6 +33,7 @@ import { FIELD_LINE_CLS } from "@/lib/styles";
 import { buildGoogleMapsDirectionsUrl, buildWazeDirectionsUrl } from "@/config/external";
 import { FEED_ENABLED } from "@/config/app";
 import { PlanDetailSkeleton } from "./_components/PlanDetailSkeleton";
+import { ExpenseSummaryCard } from "./_components/ExpenseSummaryCard";
 import { AddSubplanSheet, TRANSPORT_MAP, TRANSPORT_LLEGADA, type AddSheetProps } from "./_components/AddSubplanSheet";
 import { isoDateOnly, groupByDay, normalizeDateKey, summarizeRecipients, getOccupiedIntervals, timeToMin, mergeIntervals, type Interval } from "./_components/plan-utils";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
@@ -108,7 +109,6 @@ const ShareIcon = ({ className = "size-icon" }: { className?: string }) => <Shar
 const EditIcon = ({ className = "size-icon" }: { className?: string }) => <Pencil className={className} aria-hidden />;
 const MapPinIcon = ({ className = "size-icon" }: { className?: string }) => <MapPin className={className} aria-hidden />;
 const CalendarSmallIcon = ({ className = "size-icon" }: { className?: string }) => <Calendar className={className} aria-hidden />;
-const ArrowRightIcon = ({ className = "size-icon" }: { className?: string }) => <ArrowRight className={className} aria-hidden />;
 const PlusIcon = ({ className = "size-icon" }: { className?: string }) => <Plus className={className} aria-hidden />;
 const ExternalLinkIcon = ({ className = "size-icon" }: { className?: string }) => <ExternalLink className={className} aria-hidden />;
 
@@ -1611,126 +1611,10 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
                   )}
 
                   {/* Expenses summary */}
-                  <div className="hidden rounded-[16px] border border-app bg-surface px-[var(--space-4)] py-[var(--space-4)] md:block">
-                    <div className="flex items-center justify-between gap-[var(--space-3)]">
-                      <div className="flex min-w-0 items-center gap-[var(--space-2)]">
-                        <h3 className="text-body font-[var(--fw-semibold)]" style={{ fontFamily: "var(--font-inter), sans-serif" }}>Resumen gastos</h3>
-                        <button
-                          type="button"
-                          onClick={() => setActiveTab("gastos")}
-                          className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted transition-colors hover:bg-surface-inset hover:text-app"
-                          aria-label="Ir a la sección de gastos"
-                        >
-                          <ArrowRightIcon className="size-[16px]" />
-                        </button>
-                      </div>
-                      {expenseSummary.hasExpenses ? (
-                        <span
-                          className="font-[var(--fw-bold)] leading-[1.1] text-app"
-                          style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "var(--font-h3)" }}
-                        >
-                          {formatMoney(expenseSummary.total, expenseSummary.currency)}
-                        </span>
-                      ) : null}
-                    </div>
-
-                    {expenseSummary.hasExpenses ? (
-                      <>
-                        <p className="mt-[4px] text-caption text-muted">
-                          {expenseSummary.count} gasto{expenseSummary.count === 1 ? "" : "s"} confirmados
-                          {expenseSummary.participantCount > 0
-                            ? ` · ${expenseSummary.participantCount} participante${expenseSummary.participantCount === 1 ? "" : "s"}`
-                            : ""}
-                        </p>
-
-                        <div className="mt-[var(--space-4)] grid grid-cols-2 gap-[var(--space-3)]">
-                          <div className="rounded-[12px] border border-app bg-app px-[var(--space-3)] py-[var(--space-3)]">
-                            <p className="text-[14px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
-                              Pagado por ti
-                            </p>
-                            <p className="mt-[6px] text-body font-[var(--fw-semibold)] text-app">
-                              {formatMoney(expenseSummary.paidByYou, expenseSummary.currency)}
-                            </p>
-                          </div>
-                          <div className="rounded-[12px] border border-app bg-app px-[var(--space-3)] py-[var(--space-3)]">
-                            <p className="text-[14px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
-                              Tu parte
-                            </p>
-                            <p className="mt-[6px] text-body font-[var(--fw-semibold)] text-app">
-                              {formatMoney(expenseSummary.yourShare, expenseSummary.currency)}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="mt-[var(--space-3)] rounded-[12px] border border-app bg-app px-[var(--space-3)] py-[var(--space-3)]">
-                          <div className="flex items-center justify-between gap-[var(--space-3)]">
-                            <div>
-                              <p className="text-[14px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
-                                Balance del plan
-                              </p>
-                              <p className={`mt-[6px] text-body font-[var(--fw-semibold)] ${
-                                expenseSummary.net > 0
-                                  ? "text-[var(--success)]"
-                                  : expenseSummary.net < 0
-                                    ? "text-[var(--warning)]"
-                                    : "text-app"
-                              }`}>
-                                {expenseSummary.net > 0 ? "+" : ""}
-                                {formatMoney(expenseSummary.net, expenseSummary.currency)}
-                              </p>
-                            </div>
-                            <span className={`rounded-full px-[var(--space-3)] py-[6px] text-[14px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] ${
-                              expenseSummary.net > 0
-                                ? "bg-[var(--success)]/12 text-[var(--success)]"
-                                : expenseSummary.net < 0
-                                  ? "bg-[var(--warning)]/12 text-[var(--warning)]"
-                                  : "bg-surface-inset text-muted"
-                            }`}>
-                              {expenseSummary.net > 0
-                                ? "Te deben"
-                                : expenseSummary.net < 0
-                                  ? "Debes"
-                                  : "En equilibrio"}
-                            </span>
-                          </div>
-                        </div>
-
-                        {expenseSummary.topCategories.length > 0 ? (
-                          <div className="mt-[var(--space-4)]">
-                            <p className="mb-[var(--space-3)] text-[14px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
-                              Categorías principales
-                            </p>
-                            <div className="space-y-[var(--space-2)]">
-                              {expenseSummary.topCategories.map((category) => (
-                                <div key={category.label} className="flex items-center gap-[var(--space-3)] rounded-[12px] border border-app bg-app px-[var(--space-3)] py-[var(--space-3)]">
-                                  <div className="flex size-[34px] shrink-0 items-center justify-center rounded-full bg-surface-inset text-[16px]">
-                                    {category.icon || "•"}
-                                  </div>
-                                  <div className="min-w-0 flex-1">
-                                    <p className="truncate text-body-sm font-[var(--fw-medium)] text-app">
-                                      {category.label}
-                                    </p>
-                                    <p className="text-caption text-muted">
-                                      {category.count} gasto{category.count === 1 ? "" : "s"}
-                                    </p>
-                                  </div>
-                                  <p className="shrink-0 text-body-sm font-[var(--fw-semibold)] text-app">
-                                    {formatMoney(category.amount, expenseSummary.currency)}
-                                  </p>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ) : null}
-                      </>
-                    ) : (
-                      <>
-                        <p className="mt-[var(--space-2)] text-body-sm text-muted">
-                          Aún no hay gastos confirmados en este plan.
-                        </p>
-                      </>
-                    )}
-                  </div>
+                  <ExpenseSummaryCard
+                    summary={expenseSummary}
+                    onOpen={() => setActiveTab("gastos")}
+                  />
                 </div>
               </div>
             )}
