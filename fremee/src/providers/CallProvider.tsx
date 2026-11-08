@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useRef, useState, useEffect } from "react";
-import { useCall, type CallState, type CallMiembro } from "@/hooks/useCall";
+import { useCall, type CallState, type CallMiembro, type CallEndReason } from "@/hooks/useCall";
 import CallRoom from "@/components/calls/CallRoom";
 import IncomingCall from "@/components/calls/IncomingCall";
 import OutgoingCall from "@/components/calls/OutgoingCall";
@@ -9,6 +9,14 @@ import CallWidget from "@/components/calls/CallWidget";
 import { getLivekitUrl } from "@/config/external";
 
 const livekitUrl = getLivekitUrl();
+
+const END_REASON_TEXT: Record<CallEndReason, string> = {
+  "no-answer": "No contesta",
+  rejected: "Ha rechazado la llamada",
+  busy: "Está en otra llamada",
+};
+/** How long the caller sees why the call did not go through. */
+const END_NOTICE_MS = 2500;
 
 type CallContextValue = {
   callState: CallState;
@@ -29,7 +37,9 @@ export function useCallContext() {
 }
 
 export function CallProvider({ children }: { children: React.ReactNode }) {
-  const { callState, startCall: startCallInternal, joinCall, acceptCall, endCall, markActive } = useCall();
+  const { callState, startCall: startCallInternal, joinCall, acceptCall, endCall, markActive, activeSince, endReason, clearEndReason } = useCall();
+  // Who the last outgoing call was for, to show why it did not go through after it ends.
+  const [lastTarget, setLastTarget] = useState<{ nombre: string; foto?: string; tipo: "audio" | "video" } | null>(null);
   const [minimized, setMinimized] = useState(false);
   const [incomingMinimized, setIncomingMinimized] = useState(false);
   const [outgoingPending, setOutgoingPending] = useState<{
@@ -41,7 +51,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   } | null>(null);
   const cancelledOutgoingChatRef = useRef<string | null>(null);
   const previousCallStatusRef = useRef(callState.status);
-  const [widgetDuration, setWidgetDuration] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
 
   const isGroup = callState.status !== "idle" && "miembros" in callState && callState.miembros.length > 2;
   const isActive = callState.status === "active";
@@ -57,7 +67,6 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       setIncomingMinimized(false);
       setOutgoingPending(null);
       cancelledOutgoingChatRef.current = null;
-      setWidgetDuration(0);
     }, 0);
     return () => clearTimeout(resetTimer);
   }, [callState.status]);
@@ -70,6 +79,8 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     miembros = [],
   ) => {
     cancelledOutgoingChatRef.current = null;
+    clearEndReason();
+    setLastTarget({ nombre: participanteNombre, foto: participanteFoto, tipo });
     setOutgoingPending({ chatId, tipo, participanteNombre, participanteFoto });
     try {
       await startCallInternal(chatId, tipo, participanteNombre, participanteFoto, miembros);
@@ -84,7 +95,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
           : pending,
       );
     }
-  }, [startCallInternal]);
+  }, [startCallInternal, clearEndReason]);
 
   useEffect(() => {
     if (callState.status !== "outgoing") return;
@@ -93,12 +104,20 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     void endCall();
   }, [callState, endCall]);
 
-  // Drive widget timer independently when minimized
+  // The widget shows the real call time (since it was answered), refreshed while minimized.
   useEffect(() => {
     if (!minimized || !isActive) return;
-    const interval = setInterval(() => setWidgetDuration((d) => d + 1), 1000);
+    const interval = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(interval);
   }, [minimized, isActive]);
+  const widgetDuration = activeSince ? Math.max(0, Math.floor((now - activeSince) / 1000)) : 0;
+
+  // Why the last call did not go through: shown briefly, then gone.
+  useEffect(() => {
+    if (!endReason) return;
+    const timer = setTimeout(clearEndReason, END_NOTICE_MS);
+    return () => clearTimeout(timer);
+  }, [endReason, clearEndReason]);
 
   const inCall = callState.status === "outgoing" || callState.status === "active";
   const preparingOutgoing = outgoingPending !== null && callState.status !== "incoming" && callState.status !== "active";
@@ -184,6 +203,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
             miembros={callState.miembros}
             participanteNombre={participanteNombre}
             isActive={isActive}
+            activeSince={activeSince}
             isGroup={isGroup}
             onEnd={() => void endCall()}
             onEndForAll={() => void endCall(true)}
@@ -191,6 +211,17 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
             onMinimize={() => setMinimized(true)}
           />
         </div>
+      )}
+
+      {endReason && callState.status === "idle" && lastTarget && (
+        <OutgoingCall
+          participantName={lastTarget.nombre}
+          participantFoto={lastTarget.foto}
+          tipo={lastTarget.tipo}
+          statusText={END_REASON_TEXT[endReason]}
+          hasError
+          onCancel={clearEndReason}
+        />
       )}
 
       {/* Floating widget when minimized */}
