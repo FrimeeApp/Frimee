@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import LegalNotice from "@/components/auth/LegalNotice";
 import GoogleAuthButton from "@/components/auth/GoogleAuthButton";
 import { AUTH_EMAIL_REGEX, focusInput, getAuthErrorMessage } from "@/components/auth/AuthFormUtils";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
@@ -245,13 +246,7 @@ function LoginPageInner() {
         </div>
       </div>
 
-      <p className="mt-auto pb-[max(var(--space-2),env(safe-area-inset-bottom))] pt-[var(--space-4)] text-center text-caption text-tertiary min-[800px]:pt-[var(--space-8)]">
-        Al continuar, aceptas los{" "}
-        <Link href="#" className="font-[var(--fw-semibold)] text-muted">
-          Términos y <br /> Condiciones
-        </Link>{" "}
-        de Frimee
-      </p>
+      <LegalNotice />
     </div>
   );
 }
