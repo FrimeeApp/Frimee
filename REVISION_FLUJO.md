@@ -14,6 +14,8 @@ Las migraciones se prueban primero en dev. Al fusionar la rama, aplicar en produ
 - [ ] `supabase/migrations/20261027000003_guest_profiles.sql`
 - [ ] `supabase/migrations/20261027000004_guest_demo_seed.sql`
 - [ ] `supabase/migrations/20261027000005_guest_cleanup.sql` (crea la tarea `guest-cleanup` de pg_cron)
+- [ ] `supabase/migrations/20261027000006_plan_chat_welcome.sql` (mensaje de bienvenida de Frimee en cada chat de plan nuevo)
+- [ ] `supabase/migrations/20261027000007_route_cache_modo.sql` (caché de rutas por medio de transporte; vacía la caché y borra los trayectos no en coche para recalcularlos)
 - [ ] Desplegar la Edge Function `frimee-assistant` (fallo 6). Es compatible con la app actual: la app ya envía el token.
 
 ## Fallos
@@ -122,6 +124,11 @@ Partes del flujo que aún no se han recorrido en dev (ver `TEST_PLAN.md` y `CHEC
 - [ ] Errores sin mostrar en el chat (bloqueador del checklist).
 - [ ] Notificaciones push (bloqueador del checklist).
 - [ ] Enlace de confirmación de email abierto en otro navegador: falla con `AuthPKCECodeVerifierMissingError` (visto en el log de dev).
+
+## Ideas para más adelante
+
+- [ ] **Autocompletado al escribir `@` en el chat**: lista con Frimee (asistente) arriba y los miembros del plan debajo. Ayuda a descubrir el asistente y a mencionar a la gente en `/tarea`. Las sugerencias rápidas y el mensaje de bienvenida ya cubren lo básico.
+- [ ] **Trayectos en transporte público según la hora de la actividad.** Hoy Google calcula bus, metro y tren con la hora actual. Enviar como `departure_time` la hora de fin de la actividad anterior (y guardarla en la clave de `route_cache`, o no cachear esos tramos) para que el tiempo y la ruta sean los de ese momento.
 
 ## Pendiente de limpiar
 
