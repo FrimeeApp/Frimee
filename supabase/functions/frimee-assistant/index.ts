@@ -518,6 +518,53 @@ EJEMPLOS:
 {"command": null, "reply": "Puedo ayudarte con las tareas, el saldo o las deudas del viaje. ¿Qué necesitas?"}`;
 }
 
+// ─── Reply parsing ────────────────────────────────────────────────────────────
+
+/**
+ * The model is asked for a bare {"command", "reply"} object but sometimes adds text after
+ * it (e.g. a stray "</budget:" and a "}"), or writes real line breaks inside a string,
+ * which JSON does not allow. Take the first complete object, counting braces outside
+ * strings and escaping raw line breaks and tabs inside them, and ignore anything after
+ * it. Plain text is used as the reply.
+ */
+export function parseAssistantReply(rawText: string): FrimeeResult {
+  const start = rawText.indexOf("{");
+  if (start !== -1) {
+    let json = "";
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    for (let i = start; i < rawText.length; i++) {
+      const ch = rawText[i];
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (ch === "\\") escaped = true;
+        else if (ch === '"') inString = false;
+        json += ch === "\n" ? "\\n" : ch === "\r" ? "\\r" : ch === "\t" ? "\\t" : ch;
+        continue;
+      }
+      json += ch;
+      if (ch === '"') inString = true;
+      else if (ch === "{") depth++;
+      else if (ch === "}" && --depth === 0) {
+        try {
+          const parsed = JSON.parse(json);
+          if (typeof parsed?.reply === "string") {
+            return {
+              command: typeof parsed.command === "string" ? parsed.command : null,
+              reply: parsed.reply,
+            };
+          }
+        } catch {
+          // Not valid JSON: fall back to the plain text below.
+        }
+        break;
+      }
+    }
+  }
+  return { command: null, reply: rawText.trim() };
+}
+
 // ─── Handler ──────────────────────────────────────────────────────────────────
 
 serve(async (req) => {
@@ -648,16 +695,7 @@ serve(async (req) => {
     const anthropicData = await anthropicRes.json();
     const rawText: string = anthropicData.content?.[0]?.text ?? "";
 
-    let result: FrimeeResult = { command: null, reply: rawText };
-    try {
-      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]) as FrimeeResult;
-        if (typeof parsed.reply === "string") result = parsed;
-      }
-    } catch {
-      // LLM devolvió texto plano, usarlo como reply
-    }
+    const result = parseAssistantReply(rawText);
 
     return new Response(JSON.stringify(result), {
       headers: { ...CORS, "Content-Type": "application/json" },
