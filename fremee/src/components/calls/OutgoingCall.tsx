@@ -19,6 +19,8 @@ type Props = {
   onToggleMic: () => void;
   onToggleCamera: () => void;
   ownVideo?: (el: HTMLVideoElement | null) => void;
+  /** The microphone was refused: the permission sheet is open (M17a). */
+  waitingPermission?: boolean;
   onCancel: () => void;
   onClose: () => void;
   onRetry: () => void;
@@ -26,7 +28,7 @@ type Props = {
 
 const firstName = (nombre: string) => nombre.trim().split(/\s+/)[0] ?? nombre;
 
-export default function OutgoingCall({ phase, tipo, target, group, micEnabled, cameraEnabled, onToggleMic, onToggleCamera, ownVideo, onCancel, onClose, onRetry }: Props) {
+export default function OutgoingCall({ phase, tipo, target, group, micEnabled, cameraEnabled, onToggleMic, onToggleCamera, ownVideo, waitingPermission, onCancel, onClose, onRetry }: Props) {
   const isGroup = Boolean(group && group.length > 2);
   const others = isGroup ? (group ?? []).length - 1 : 1;
   const ended = phase === "no-answer" || phase === "busy" || phase === "rejected" || phase === "error";
@@ -63,7 +65,9 @@ export default function OutgoingCall({ phase, tipo, target, group, micEnabled, c
       buttons = (<>{mic}{cancel}</>);
       break;
     case "ringing":
-      status = (<span className="inline-flex items-center gap-2"><span>{isGroup ? `Llamando a ${others} personas` : "Llamando"}</span><CallDots /></span>);
+      status = waitingPermission
+        ? <span>Esperando permiso</span>
+        : (<span className="inline-flex items-center gap-2"><span>{isGroup ? `Llamando a ${others} personas` : "Llamando"}</span><CallDots /></span>);
       buttons = (<>{mic}{cancel}{camera}</>);
       break;
     case "error":

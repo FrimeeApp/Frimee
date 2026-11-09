@@ -362,3 +362,6 @@
 .call-stage :is(h1, h2, h3) { color: var(--stage-text); }
 /* A label in the flow ("Cámara apagada", "Ana está hablando"), not over a tile. */
 .call-tag.call-tag-inline { position: static; background: var(--stage-tile-2); }
+
+/* While the call pill is on screen (phones), the app's "+" button sits above it. */
+body[data-call-pill] [data-mobile-fab] { bottom: calc(clamp(56px, 8dvh, 64px) + env(safe-area-inset-bottom) + 80px); }

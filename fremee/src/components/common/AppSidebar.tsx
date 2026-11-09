@@ -468,6 +468,7 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
       {!hideMobileNav && !modalOpen && (
         <div
           ref={mobileFabRef}
+          data-mobile-fab
           className="pointer-events-none fixed right-[max(16px,env(safe-area-inset-right))] bottom-[calc(clamp(56px,8dvh,64px)+env(safe-area-inset-bottom)+16px)] z-[70] md:hidden"
         >
           {mobileFabVisible && (
