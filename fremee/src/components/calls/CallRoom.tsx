@@ -13,7 +13,7 @@ import { useAuth } from "@/providers/AuthProvider";
 import { CallAvatar, CallControl, CallDots, HangUpIcon, NO_POSTER } from "./ui";
 import RoomTile, { trackKeyOf } from "./room/RoomTile";
 import SelfView from "./room/SelfView";
-import { firstName, gridShape, paginate, useElementSize } from "./room/layout";
+import { firstName, gridShape, paginate, useElementSize, useSafeAreaBottom } from "./room/layout";
 
 type Props = {
   miembros: CallMiembro[];
@@ -163,7 +163,9 @@ export default function CallRoom({ miembros, participanteNombre, tipo, isGroup, 
   const barBottom = mobile ? 16 : 24;
   const barH = 88;
   const contentTop = headerH;
-  const contentBottom = barBottom + barH + (mobile ? 16 : 12);
+  // The controls sit above the system's bottom area (Android's buttons): the grid and your camera too.
+  const safeBottom = useSafeAreaBottom();
+  const contentBottom = safeBottom + barBottom + barH + (mobile ? 16 : 12);
   const pad = mobile ? 8 : 24;
   const gap = mobile ? 8 : 12;
   const fullBleed = mode === "one";

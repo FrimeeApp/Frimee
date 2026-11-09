@@ -42,6 +42,27 @@ export function useElementSize<T extends HTMLElement>() {
   return [ref, size] as const;
 }
 
+/**
+ * Height of the bottom safe area (Android's buttons, the iPhone's home bar) in px: CSS knows it as
+ * env(safe-area-inset-bottom); the room needs it in numbers to place your camera and the grid.
+ */
+export function useSafeAreaBottom() {
+  const [bottom, setBottom] = useState(0);
+  useEffect(() => {
+    const probe = document.createElement("div");
+    probe.style.cssText = "position:fixed;visibility:hidden;pointer-events:none;bottom:0;height:0;padding-bottom:env(safe-area-inset-bottom)";
+    document.body.appendChild(probe);
+    const read = () => setBottom(parseFloat(getComputedStyle(probe).paddingBottom) || 0);
+    read();
+    window.addEventListener("resize", read);
+    return () => {
+      window.removeEventListener("resize", read);
+      probe.remove();
+    };
+  }, []);
+  return bottom;
+}
+
 export function firstName(nombre: string) {
   return nombre.trim().split(/\s+/)[0] || nombre;
 }
