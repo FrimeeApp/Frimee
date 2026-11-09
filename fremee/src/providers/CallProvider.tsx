@@ -7,7 +7,10 @@ import IncomingCall from "@/components/calls/IncomingCall";
 import OutgoingCall, { type OutgoingPhase } from "@/components/calls/OutgoingCall";
 import IncomingBanner from "@/components/calls/IncomingBanner";
 import GuestLimitSheet from "@/components/calls/GuestLimitSheet";
-import CallWidget from "@/components/calls/CallWidget";
+import CallPill from "@/components/calls/CallPill";
+import CallEnded, { type EndedCall } from "@/components/calls/CallEnded";
+import PermissionSheet from "@/components/calls/PermissionSheet";
+import { useAuth } from "@/providers/AuthProvider";
 import { getLivekitUrl } from "@/config/external";
 import { useLivekitRoom, type LivekitRoomApi } from "@/hooks/useLivekitRoom";
 
@@ -49,10 +52,14 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   const [guestLimit, setGuestLimit] = useState(false);
   const cancelledOutgoingChatRef = useRef<string | null>(null);
   const previousCallStatusRef = useRef(callState.status);
-  const [now, setNow] = useState(() => Date.now());
+  const { profile } = useAuth();
+  const myId = profile?.id ?? null;
+  // The end-of-call screen (M16, D16), from what the call looked like just before it ended.
+  const [ended, setEnded] = useState<(EndedCall & { rejoin?: Parameters<CallContextValue["joinCall"]> }) | null>(null);
+  const lastActiveRef = useRef<{ snapshot: EndedCall; rejoin: Parameters<CallContextValue["joinCall"]>; since: number | null; remotes: number } | null>(null);
+  const iHungUpRef = useRef(false);
 
   const isGroup = callState.status !== "idle" && "miembros" in callState && callState.miembros.length > 2;
-  const isActive = callState.status === "active";
 
   // Reset minimized when call ends
   useEffect(() => {
@@ -60,7 +67,16 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     previousCallStatusRef.current = callState.status;
     if (callState.status !== "idle" || previousStatus === "idle") return;
 
+    const last = previousStatus === "active" ? lastActiveRef.current : null;
+    const iHungUp = iHungUpRef.current;
+    iHungUpRef.current = false;
+    lastActiveRef.current = null;
     const resetTimer = setTimeout(() => {
+      if (last) {
+        const duration = last.since ? Math.max(0, Math.floor((Date.now() - last.since) / 1000)) : 0;
+        const stillInside = last.snapshot.group && iHungUp ? last.remotes : 0;
+        setEnded({ ...last.snapshot, duration, stillInside, rejoin: stillInside > 0 ? last.rejoin : undefined });
+      }
       setMinimized(false);
       setIncomingMinimized(false);
       setOutgoingPending(null);
@@ -100,13 +116,6 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     void endCall();
   }, [callState, endCall]);
 
-  // The widget shows the real call time (since it was answered), refreshed while minimized.
-  useEffect(() => {
-    if (!minimized || !isActive) return;
-    const interval = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(interval);
-  }, [minimized, isActive]);
-  const widgetDuration = activeSince ? Math.max(0, Math.floor((now - activeSince) / 1000)) : 0;
 
   const inCall = callState.status === "outgoing" || callState.status === "active";
   // The outgoing screen: from preparing to ringing, then why it did not go through.
@@ -135,6 +144,40 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   const participanteFoto = inCall && "participanteFoto" in callState ? callState.participanteFoto : undefined;
   const attachOwnVideo = useCallback((el: HTMLVideoElement | null) => room.attachTrack("__local__", el), [room]);
 
+  // You hang up (room, pill, permission sheet): noted, so leaving a group call that goes on
+  // shows "Has salido de la llamada" instead of "Llamada finalizada".
+  const hangUp = useCallback(() => {
+    iHungUpRef.current = true;
+    if (callState.status === "active") room.disconnect();
+    else void endCall();
+  }, [callState.status, room, endCall]);
+  const roomApi = useMemo(() => ({ ...room, disconnect: hangUp }), [room, hangUp]);
+
+  const remoteTiles = room.tiles.filter((t) => !t.isLocal && !t.isScreenShare);
+  const others = inCall ? callState.miembros.filter((m) => m.id !== myId) : [];
+  const persona = !isGroup && inCall ? {
+    id: remoteTiles[0]?.identity ?? others[0]?.id ?? callState.chatId,
+    nombre: participanteNombre,
+    foto: participanteFoto,
+  } : undefined;
+  useEffect(() => {
+    if (callState.status !== "active") return;
+    lastActiveRef.current = {
+      snapshot: { title: participanteNombre, persona, group: isGroup ? others : undefined, duration: 0, stillInside: 0 },
+      rejoin: [callState.llamadaId ?? 0, callState.roomName, callState.chatId, callState.tipo, participanteNombre, participanteFoto, callState.miembros],
+      since: activeSince,
+      remotes: remoteTiles.length,
+    };
+  });
+
+  // The app's "+" button goes up while the pill is on screen (phones), so they do not overlap.
+  const pillVisible = inCall && minimized;
+  useEffect(() => {
+    if (!pillVisible) return;
+    document.body.setAttribute("data-call-pill", "true");
+    return () => document.body.removeAttribute("data-call-pill");
+  }, [pillVisible]);
+
   const closeOutgoing = useCallback(() => {
     if (callState.status === "outgoing") {
       void endCall();
@@ -145,13 +188,19 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     clearEndReason();
   }, [callState.status, endCall, outgoingPending, clearEndReason]);
 
+  const closeEnded = useCallback(() => setEnded(null), []);
+
   const retryOutgoing = useCallback(() => {
     if (!lastTarget) return;
     void startCall(lastTarget.chatId, lastTarget.tipo, lastTarget.nombre, lastTarget.foto, lastTarget.miembros);
   }, [lastTarget, startCall]);
 
+  // Any call screen open (room, ringing, end of call, permission sheet): the app hides its
+  // bottom navigation and floating buttons, which sit above everything else.
+  const endedVisible = !!ended && callState.status === "idle";
+  const permissionOpen = inCall && !!room.blocked;
   useEffect(() => {
-    if ((!inCall || minimized) && !incomingExpanded && !outgoingPhase) return;
+    if ((!inCall || minimized) && !incomingExpanded && !outgoingPhase && !endedVisible && !permissionOpen) return;
 
     const previousBodyOverflow = document.body.style.overflow;
     const previousHtmlOverflow = document.documentElement.style.overflow;
@@ -168,11 +217,11 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         document.body.removeAttribute("data-call-overlay-open");
       }
     };
-  }, [inCall, incomingExpanded, minimized, outgoingPhase]);
+  }, [inCall, incomingExpanded, minimized, outgoingPhase, endedVisible, permissionOpen]);
 
   return (
     <CallContext.Provider value={{ callState, startCall, joinCall, endCall, minimized, minimize: () => setMinimized(true), expand: () => setMinimized(false) }}>
-    <CallRoomContext.Provider value={room}>
+    <CallRoomContext.Provider value={roomApi}>
       {children}
 
       {/* CallRoom: mounted for the whole call; hidden while it rings (the outgoing screen is on
@@ -201,6 +250,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
           onToggleMic={() => void room.toggleMute()}
           onToggleCamera={() => void room.toggleVideo()}
           ownVideo={attachOwnVideo}
+          waitingPermission={room.blocked === "mic"}
           onCancel={closeOutgoing}
           onClose={closeOutgoing}
           onRetry={retryOutgoing}
@@ -245,15 +295,40 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         />
       )}
 
-      {/* Floating widget when minimized */}
-      {inCall && minimized && (
-        <CallWidget
-          participanteNombre={participanteNombre}
-          participanteFoto={participanteFoto}
-          duration={widgetDuration}
-          isActive={isActive}
+      {/* Minimized: the pill (C3, M13, D13). */}
+      {pillVisible && (
+        <CallPill
+          title={participanteNombre}
+          persona={persona}
+          group={isGroup ? others : undefined}
+          activeSince={activeSince}
+          muted={!room.micEnabled}
+          reconnecting={room.reconnecting}
+          sharing={room.screenSharing}
           onExpand={() => setMinimized(false)}
-          onEnd={() => void endCall()}
+          onEnd={hangUp}
+        />
+      )}
+
+      {/* The browser or the phone refused the microphone or the camera (M17, D17). */}
+      {inCall && room.blocked && (
+        <PermissionSheet
+          kind={room.blocked}
+          tipo={callState.tipo}
+          onRetry={() => void room.retryMedia()}
+          onDismiss={room.blocked === "mic" ? hangUp : room.dismissBlocked}
+        />
+      )}
+
+      {ended && endedVisible && (
+        <CallEnded
+          call={ended}
+          onClose={closeEnded}
+          onRejoin={ended.rejoin ? () => {
+            const args = ended.rejoin!;
+            setEnded(null);
+            void joinCall(...args);
+          } : undefined}
         />
       )}
     </CallRoomContext.Provider>
