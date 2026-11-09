@@ -280,6 +280,14 @@ export function useLivekitRoom(options: LivekitRoomOptions | null): LivekitRoomA
       }
     });
 
+    // Phones with a front and a back camera get the flip button. Checked again once the camera
+    // is on: before the permission, Android may list a single camera.
+    const checkFlip = () => {
+      void Room.getLocalDevices("videoinput", false)
+        .then((devices) => { if (!cancelled) setCanFlipCamera(devices.length > 1 && window.matchMedia("(pointer: coarse)").matches); })
+        .catch(() => {});
+    };
+
     const connect = async () => {
       // Microphone (and camera) open while the room connects, not after: audio starts sooner.
       // Each on its own: a camera that fails must not take the microphone with it (and the other
@@ -296,10 +304,7 @@ export function useLivekitRoom(options: LivekitRoomOptions | null): LivekitRoomA
       // Someone may have joined before this side finished connecting: no ParticipantConnected
       // event comes for them, so the call counts as answered right here.
       if (room.remoteParticipants.size > 0) callbacksRef.current?.onParticipantConnected();
-      // Phones with a front and a back camera get the flip button.
-      void Room.getLocalDevices("videoinput", false)
-        .then((devices) => { if (!cancelled) setCanFlipCamera(devices.length > 1 && window.matchMedia("(pointer: coarse)").matches); })
-        .catch(() => {});
+      checkFlip();
       room.remoteParticipants.forEach((p) => {
         addTile(p.identity, p.identity, false, false);
         p.getTrackPublications().forEach((pub) => {
@@ -332,6 +337,7 @@ export function useLivekitRoom(options: LivekitRoomOptions | null): LivekitRoomA
           tracks.set("__local__", track);
           setTiles((prev) => prev.map((t) => t.isLocal && !t.isScreenShare ? { ...t, videoMuted: false } : t));
           document.querySelectorAll<HTMLVideoElement>(`video[data-tile="${room.localParticipant.identity}"], video[data-own-video]`).forEach((el) => track.attach(el));
+          checkFlip();
         };
         try {
           if (videoResult.status !== "fulfilled" || !videoResult.value) throw videoResult.status === "rejected" ? videoResult.reason : new Error("sin cámara");
