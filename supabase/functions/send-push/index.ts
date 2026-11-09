@@ -61,10 +61,12 @@ async function getFCMAccessToken(): Promise<string> {
 
   const signingInput = `${encode(header)}.${encode(payload)}`;
 
+  // Tolerant of how the secret was pasted: quotes, spaces, Windows line ends, literal "\r".
   const pemBody = privateKey
     .replace(/-----BEGIN PRIVATE KEY-----/g, "")
     .replace(/-----END PRIVATE KEY-----/g, "")
-    .replace(/\n/g, "");
+    .replace(/\\r/g, "")
+    .replace(/["'\s]/g, "");
   const keyBuffer = Uint8Array.from(atob(pemBody), (c) => c.charCodeAt(0));
 
   const cryptoKey = await crypto.subtle.importKey(
