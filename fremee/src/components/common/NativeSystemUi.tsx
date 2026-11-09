@@ -5,6 +5,8 @@ import { Capacitor } from "@capacitor/core";
 import { StatusBar, Style } from "@capacitor/status-bar";
 import { NavigationBar } from "@capgo/capacitor-navigation-bar";
 import { ScreenOrientation } from "@capacitor/screen-orientation";
+import { Keyboard } from "@capacitor/keyboard";
+import { setWindowBackground } from "@/services/native/appSettings";
 
 /**
  * Android's navigation bar (gestures or the back / home / recent buttons) in the app's own
@@ -20,6 +22,8 @@ async function paintNavigationBar() {
   } catch (error) {
     console.warn("[native-ui] navigation bar setup failed:", error);
   }
+  // Android 15 ignores that colour: the window behind the (now veil-less) bar gets it instead.
+  await setWindowBackground(bg);
 }
 
 export default function NativeSystemUi() {
@@ -46,11 +50,28 @@ export default function NativeSystemUi() {
 
     void setupSystemUi();
 
+    // The keyboard covers the page (Keyboard resize "none"): its height goes to --keyboard-height
+    // so screens like the chat keep their input and last messages above it.
+    const root = document.documentElement;
+    const subs = [
+      Keyboard.addListener("keyboardWillShow", (info) => {
+        root.style.setProperty("--keyboard-height", `${info.keyboardHeight}px`);
+        window.dispatchEvent(new Event("frimee:keyboard"));
+      }),
+      Keyboard.addListener("keyboardWillHide", () => {
+        root.style.setProperty("--keyboard-height", "0px");
+        window.dispatchEvent(new Event("frimee:keyboard"));
+      }),
+    ];
+
     // Follow the theme: the app switches it with the "dark" class on <html>.
-    if (Capacitor.getPlatform() !== "android") return;
-    const observer = new MutationObserver(() => void paintNavigationBar());
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
-    return () => observer.disconnect();
+    const observer = Capacitor.getPlatform() === "android" ? new MutationObserver(() => void paintNavigationBar()) : null;
+    observer?.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    return () => {
+      observer?.disconnect();
+      subs.forEach((sub) => void sub.then((s) => s.remove()));
+      root.style.removeProperty("--keyboard-height");
+    };
   }, []);
 
   return null;
