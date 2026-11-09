@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ConnectionQuality,
   ConnectionState,
   Room,
   RoomEvent,
@@ -42,6 +43,8 @@ export type LivekitRoomOptions = {
 export type LivekitRoomApi = {
   connected: boolean;
   reconnecting: boolean;
+  /** Identities whose connection is poor right now ("Conexión inestable"). */
+  unstable: Set<string>;
   tiles: ParticipantTile[];
   /** Identities talking right now. */
   speaking: Set<string>;
@@ -55,6 +58,9 @@ export type LivekitRoomApi = {
   toggleMute: () => Promise<void>;
   toggleVideo: () => Promise<void>;
   toggleScreenShare: () => Promise<void>;
+  /** Front / back camera (phones). */
+  canFlipCamera: boolean;
+  flipCamera: () => Promise<void>;
   /** Leave the room (ends the call through onEnd). */
   disconnect: () => void;
 };
@@ -65,6 +71,9 @@ export type LivekitRoomApi = {
  * call (null options = no call). Track keys:
  *   "__local__" local camera · "<identity>:screen" a screen share · "<identity>" a remote camera.
  */
+/** A connection that does not come back within this time ends the call (board M18a). */
+const RECONNECT_GIVE_UP_MS = 30_000;
+
 export function useLivekitRoom(options: LivekitRoomOptions | null): LivekitRoomApi {
   const roomRef = useRef<Room | null>(null);
   const trackMap = useRef<Map<string, Track>>(new Map());
@@ -76,6 +85,9 @@ export function useLivekitRoom(options: LivekitRoomOptions | null): LivekitRoomA
   const [speaking, setSpeaking] = useState<Set<string>>(() => new Set());
   const [hasAnyVideo, setHasAnyVideo] = useState(false);
   const [screenSharing, setScreenSharing] = useState(false);
+  const [unstable, setUnstable] = useState<Set<string>>(() => new Set());
+  const [canFlipCamera, setCanFlipCamera] = useState(false);
+  const facingRef = useRef<"user" | "environment">("user");
 
   const token = options?.token ?? null;
   const livekitUrl = options?.livekitUrl ?? null;
@@ -98,12 +110,13 @@ export function useLivekitRoom(options: LivekitRoomOptions | null): LivekitRoomA
     return () => sink.remove();
   }, []);
 
+  // A remote camera may arrive before its tile: the tile starts with video if the track is there.
   const addTile = useCallback((id: string, identity: string, isLocal: boolean, isScreenShare: boolean) => {
     setTiles((prev) => prev.some((t) => t.id === id) ? prev : [
       ...prev,
-      { id, identity, isLocal, isScreenShare, audioMuted: false, videoMuted: isScreenShare ? false : isLocal ? !camera : tipo !== "video" },
+      { id, identity, isLocal, isScreenShare, audioMuted: false, videoMuted: isScreenShare ? false : isLocal ? !camera : !trackMap.current.has(identity) },
     ]);
-  }, [tipo, camera]);
+  }, [camera]);
 
   const removeTile = useCallback((id: string) => {
     setTiles((prev) => prev.filter((t) => t.id !== id));
@@ -154,7 +167,7 @@ export function useLivekitRoom(options: LivekitRoomOptions | null): LivekitRoomA
     // Warm up the connection (DNS, TLS, region) while the tracks are being created.
     void room.prepareConnection(livekitUrl, token).catch(() => {});
 
-    room.on(RoomEvent.TrackSubscribed, (track, _pub, participant) => {
+    room.on(RoomEvent.TrackSubscribed, (track, pub, participant) => {
       if (track.kind === Track.Kind.Video) {
         if (track.source === Track.Source.ScreenShare) {
           const tileId = `${participant.identity}:screen`;
@@ -165,7 +178,7 @@ export function useLivekitRoom(options: LivekitRoomOptions | null): LivekitRoomA
         } else {
           tracks.set(participant.identity, track);
           setHasAnyVideo(true);
-          setTiles((prev) => prev.map((t) => t.id === participant.identity ? { ...t, videoMuted: false } : t));
+          setTiles((prev) => prev.map((t) => t.id === participant.identity ? { ...t, videoMuted: pub.isMuted } : t));
           const el = document.querySelector<HTMLVideoElement>(`video[data-tile="${participant.identity}"]`);
           if (el) track.attach(el);
         }
@@ -177,6 +190,9 @@ export function useLivekitRoom(options: LivekitRoomOptions | null): LivekitRoomA
     room.on(RoomEvent.TrackUnsubscribed, (track, _pub, participant) => {
       if (track.kind === Track.Kind.Video && track.source === Track.Source.ScreenShare) {
         removeTile(`${participant.identity}:screen`);
+      } else if (track.kind === Track.Kind.Video) {
+        tracks.delete(participant.identity);
+        setTiles((prev) => prev.map((t) => t.id === participant.identity ? { ...t, videoMuted: true } : t));
       } else if (track.kind === Track.Kind.Audio) {
         detachAudioTrack(participant.identity, track);
       }
@@ -193,8 +209,27 @@ export function useLivekitRoom(options: LivekitRoomOptions | null): LivekitRoomA
     room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
       setSpeaking(new Set(speakers.map((p) => p.identity)));
     });
+    room.on(RoomEvent.ConnectionQualityChanged, (quality, participant) => {
+      const bad = quality === ConnectionQuality.Poor || quality === ConnectionQuality.Lost;
+      setUnstable((prev) => {
+        if (bad === prev.has(participant.identity)) return prev;
+        const next = new Set(prev);
+        if (bad) next.add(participant.identity);
+        else next.delete(participant.identity);
+        return next;
+      });
+    });
+    // Reconnecting: LiveKit keeps trying; after 30 s the call ends.
+    let giveUp: ReturnType<typeof setTimeout> | null = null;
     room.on(RoomEvent.ConnectionStateChanged, (state) => {
-      setReconnecting(state === ConnectionState.Reconnecting || state === ConnectionState.SignalReconnecting);
+      const isReconnecting = state === ConnectionState.Reconnecting || state === ConnectionState.SignalReconnecting;
+      setReconnecting(isReconnecting);
+      if (isReconnecting && !giveUp) {
+        giveUp = setTimeout(() => room.disconnect(), RECONNECT_GIVE_UP_MS);
+      } else if (!isReconnecting && giveUp) {
+        clearTimeout(giveUp);
+        giveUp = null;
+      }
     });
 
     room.on(RoomEvent.Connected, () => {
@@ -237,6 +272,10 @@ export function useLivekitRoom(options: LivekitRoomOptions | null): LivekitRoomA
       // Someone may have joined before this side finished connecting: no ParticipantConnected
       // event comes for them, so the call counts as answered right here.
       if (room.remoteParticipants.size > 0) callbacksRef.current?.onParticipantConnected();
+      // Phones with a front and a back camera get the flip button.
+      void Room.getLocalDevices("videoinput", false)
+        .then((devices) => { if (!cancelled) setCanFlipCamera(devices.length > 1 && window.matchMedia("(pointer: coarse)").matches); })
+        .catch(() => {});
       room.remoteParticipants.forEach((p) => {
         addTile(p.identity, p.identity, false, false);
         p.getTrackPublications().forEach((pub) => {
@@ -283,6 +322,8 @@ export function useLivekitRoom(options: LivekitRoomOptions | null): LivekitRoomA
             await publishVideo(await createLocalVideoTrack());
           } catch (err) {
             console.error("[call] camera", err);
+            // No camera after all: your tile shows your avatar.
+            setTiles((prev) => prev.map((t) => t.isLocal && !t.isScreenShare ? { ...t, videoMuted: true } : t));
           }
         }
       }
@@ -291,6 +332,7 @@ export function useLivekitRoom(options: LivekitRoomOptions | null): LivekitRoomA
     connect().catch(console.error);
     return () => {
       cancelled = true;
+      if (giveUp) clearTimeout(giveUp);
       audioEls.forEach((el) => el.remove());
       audioEls.clear();
       tracks.clear();
@@ -303,6 +345,9 @@ export function useLivekitRoom(options: LivekitRoomOptions | null): LivekitRoomA
       setReconnecting(false);
       setScreenSharing(false);
       setHasAnyVideo(false);
+      setUnstable(new Set());
+      setCanFlipCamera(false);
+      facingRef.current = "user";
     };
   }, [token, livekitUrl, tipo, camera, isGroup, addTile, removeTile, attachAudioTrack, detachAudioTrack]);
 
@@ -357,12 +402,24 @@ export function useLivekitRoom(options: LivekitRoomOptions | null): LivekitRoomA
     } catch (err) { console.error("[call] screen share error", err); }
   }, [screenSharing, addTile, removeTile]);
 
+  const flipCamera = useCallback(async () => {
+    const pub = roomRef.current?.localParticipant.getTrackPublication(Track.Source.Camera);
+    const track = pub?.track as LocalVideoTrack | undefined;
+    if (!track) return;
+    const next = facingRef.current === "user" ? "environment" : "user";
+    try {
+      await track.restartTrack({ facingMode: next });
+      facingRef.current = next;
+    } catch (err) { console.error("[call] flip camera", err); }
+  }, []);
+
   const disconnect = useCallback(() => { roomRef.current?.disconnect(); }, []);
 
   const localTile = tiles.find((t) => t.isLocal && !t.isScreenShare);
   return {
     connected,
     reconnecting,
+    unstable,
     tiles,
     speaking,
     hasAnyVideo: hasAnyVideo || (token !== null && tipo === "video"),
@@ -373,6 +430,8 @@ export function useLivekitRoom(options: LivekitRoomOptions | null): LivekitRoomA
     toggleMute,
     toggleVideo,
     toggleScreenShare,
+    canFlipCamera,
+    flipCamera,
     disconnect,
   };
 }
