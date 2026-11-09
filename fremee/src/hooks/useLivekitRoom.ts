@@ -58,6 +58,12 @@ export type LivekitRoomApi = {
   toggleMute: () => Promise<void>;
   toggleVideo: () => Promise<void>;
   toggleScreenShare: () => Promise<void>;
+  /** The browser or the phone refused the microphone or the camera (boards M17, D17). */
+  blocked: "mic" | "camera" | null;
+  /** Ask for the blocked device again (after allowing it) and publish it. */
+  retryMedia: () => Promise<void>;
+  /** Go on without the camera ("Seguir solo con voz"). */
+  dismissBlocked: () => void;
   /** Front / back camera (phones). */
   canFlipCamera: boolean;
   flipCamera: () => Promise<void>;
@@ -74,6 +80,15 @@ export type LivekitRoomApi = {
 /** A connection that does not come back within this time ends the call (board M18a). */
 const RECONNECT_GIVE_UP_MS = 30_000;
 
+const AUDIO_OPTIONS = { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } as const;
+
+/** A refusal (the user or the system said no), not a missing or busy device. */
+function isPermissionError(err: unknown) {
+  const name = (err as { name?: string } | null)?.name ?? "";
+  const message = String((err as { message?: string } | null)?.message ?? "");
+  return name === "NotAllowedError" || name === "PermissionDeniedError" || /permission/i.test(message);
+}
+
 export function useLivekitRoom(options: LivekitRoomOptions | null): LivekitRoomApi {
   const roomRef = useRef<Room | null>(null);
   const trackMap = useRef<Map<string, Track>>(new Map());
@@ -87,6 +102,7 @@ export function useLivekitRoom(options: LivekitRoomOptions | null): LivekitRoomA
   const [screenSharing, setScreenSharing] = useState(false);
   const [unstable, setUnstable] = useState<Set<string>>(() => new Set());
   const [canFlipCamera, setCanFlipCamera] = useState(false);
+  const [blocked, setBlocked] = useState<"mic" | "camera" | null>(null);
   const facingRef = useRef<"user" | "environment">("user");
 
   const token = options?.token ?? null;
@@ -263,7 +279,7 @@ export function useLivekitRoom(options: LivekitRoomOptions | null): LivekitRoomA
     const connect = async () => {
       // Microphone (and camera) open while the room connects, not after: audio starts sooner.
       const localTracks: Promise<[LocalAudioTrack, LocalVideoTrack | null]> = Promise.all([
-        createLocalAudioTrack({ echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 }),
+        createLocalAudioTrack(AUDIO_OPTIONS),
         camera ? createLocalVideoTrack() : Promise.resolve(null),
       ]);
       localTracks.catch(() => {}); // handled below, after connecting
@@ -303,6 +319,7 @@ export function useLivekitRoom(options: LivekitRoomOptions | null): LivekitRoomA
         await room.localParticipant.publishTrack(audioResult.value).catch((err) => console.error("[call] publish audio", err));
       } else {
         console.error("[call] microphone", audioResult.reason);
+        if (isPermissionError(audioResult.reason)) setBlocked("mic");
       }
       if (camera) {
         const publishVideo = async (track: LocalVideoTrack) => {
@@ -315,6 +332,12 @@ export function useLivekitRoom(options: LivekitRoomOptions | null): LivekitRoomA
           if (videoResult.status !== "fulfilled" || !videoResult.value) throw videoResult.status === "rejected" ? videoResult.reason : new Error("sin cámara");
           await publishVideo(videoResult.value);
         } catch (first) {
+          if (isPermissionError(first)) {
+            // Refused: trying again now would fail the same way; the screen asks the user.
+            setTiles((prev) => prev.map((t) => t.isLocal && !t.isScreenShare ? { ...t, videoMuted: true } : t));
+            setBlocked((b) => b ?? "camera");
+            return;
+          }
           console.warn("[call] camera, retrying", first);
           await new Promise((r) => setTimeout(r, 600));
           if (cancelled) return;
@@ -347,6 +370,7 @@ export function useLivekitRoom(options: LivekitRoomOptions | null): LivekitRoomA
       setHasAnyVideo(false);
       setUnstable(new Set());
       setCanFlipCamera(false);
+      setBlocked(null);
       facingRef.current = "user";
     };
   }, [token, livekitUrl, tipo, camera, isGroup, addTile, removeTile, attachAudioTrack, detachAudioTrack]);
@@ -402,6 +426,33 @@ export function useLivekitRoom(options: LivekitRoomOptions | null): LivekitRoomA
     } catch (err) { console.error("[call] screen share error", err); }
   }, [screenSharing, addTile, removeTile]);
 
+  const retryMedia = useCallback(async () => {
+    const room = roomRef.current;
+    if (!room) return;
+    const local = room.localParticipant;
+    try {
+      if (!local.getTrackPublication(Track.Source.Microphone)) {
+        await local.publishTrack(await createLocalAudioTrack(AUDIO_OPTIONS));
+        setTiles((prev) => prev.map((t) => t.isLocal && !t.isScreenShare ? { ...t, audioMuted: false } : t));
+      }
+      if (camera && !local.getTrackPublication(Track.Source.Camera)) {
+        const video = await createLocalVideoTrack();
+        await local.publishTrack(video);
+        trackMap.current.set("__local__", video);
+        setHasAnyVideo(true);
+        setTiles((prev) => prev.map((t) => t.isLocal && !t.isScreenShare ? { ...t, videoMuted: false } : t));
+        document.querySelectorAll<HTMLVideoElement>(`video[data-tile="${local.identity}"], video[data-own-video]`).forEach((el) => video.attach(el));
+      }
+      setBlocked(null);
+    } catch (err) {
+      console.error("[call] retry media", err);
+      // Still refused: keep asking. The microphone first, then the camera.
+      setBlocked(local.getTrackPublication(Track.Source.Microphone) ? "camera" : "mic");
+    }
+  }, [camera]);
+
+  const dismissBlocked = useCallback(() => setBlocked(null), []);
+
   const flipCamera = useCallback(async () => {
     const pub = roomRef.current?.localParticipant.getTrackPublication(Track.Source.Camera);
     const track = pub?.track as LocalVideoTrack | undefined;
@@ -430,6 +481,9 @@ export function useLivekitRoom(options: LivekitRoomOptions | null): LivekitRoomA
     toggleMute,
     toggleVideo,
     toggleScreenShare,
+    blocked,
+    retryMedia,
+    dismissBlocked,
     canFlipCamera,
     flipCamera,
     disconnect,
