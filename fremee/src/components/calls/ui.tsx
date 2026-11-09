@@ -10,7 +10,7 @@ import type { CallMiembro } from "@/hooks/useCall";
  */
 
 export type CallControlKind =
-  | "stage" | "off" | "on" | "hang" | "ghost"         // in the room (always dark)
+  | "stage" | "off" | "on" | "hang" | "ghost" | "plain" // in the room (always dark)
   | "app" | "accept" | "reject" | "fill";              // around the room (user's theme)
 
 export function CallControl({
