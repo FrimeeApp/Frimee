@@ -241,7 +241,8 @@ export function ChatConversation({
   const [ongoingCall, setOngoingCall] = useState<OngoingCall | null>(null);
   useEffect(() => {
     setOngoingCall(null); // reset when chat changes
-    if (chat.tipo !== "GRUPO") return;
+    // Group and plan chats: a call others are still in can be joined again.
+    if (chat.tipo !== "GRUPO" && chat.tipo !== "PLAN") return;
     const sb = supabaseRef.current;
     // Initial query — only calls started in the last 15 min (realtime handles live updates)
     const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();

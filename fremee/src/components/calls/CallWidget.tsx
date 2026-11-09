@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { HangUpIcon } from "./ui";
 import { Capacitor } from "@capacitor/core";
 
 type Props = {
@@ -62,10 +63,7 @@ export default function CallWidget({ participanteNombre, participanteFoto, durat
         className="ml-1 flex size-7 shrink-0 items-center justify-center rounded-full bg-red-500 text-white transition-colors hover:bg-red-600"
         aria-label="Colgar"
       >
-        <svg viewBox="0 0 24 24" fill="none" className="size-4" stroke="currentColor" strokeWidth="1.8">
-          <path d="M10.68 13.31a16 16 0 0 0 3.01 2.99l1.96-1.96a1 1 0 0 1 1.09-.22 11.3 11.3 0 0 0 3.57.73 1 1 0 0 1 .93 1v3.57a1 1 0 0 1-.9 1A17 17 0 0 1 3 5.9a1 1 0 0 1 1-.9h3.57a1 1 0 0 1 1 .92 11.3 11.3 0 0 0 .73 3.57 1 1 0 0 1-.22 1.09l-1.96 1.96" />
-          <line x1="2" y1="2" x2="22" y2="22" />
-        </svg>
+        <HangUpIcon size={16} />
       </button>
     </div>
   );

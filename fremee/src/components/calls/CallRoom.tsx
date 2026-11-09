@@ -30,9 +30,9 @@ type Props = {
 const CHROME_IDLE_MS = 4000;
 
 /**
- * The room (boards M6–M12, D6–D11, M18a, D18a). Always dark. On desktop it leaves the app's side
- * menu visible; going to another page minimizes it. The connection lives in CallProvider
- * (useCallRoom), so this is only the view.
+ * The room (boards M6–M12, D6–D11, M18a, D18a). Always dark and full screen. Sharing your screen
+ * minimizes it, so you can move around the app while the others watch. The connection lives in
+ * CallProvider (useCallRoom), so this is only the view.
  */
 export default function CallRoom({ miembros, participanteNombre, tipo, isGroup, activeSince, onMinimize }: Props) {
   const room = useCallRoom();
@@ -122,7 +122,14 @@ export default function CallRoom({ miembros, participanteNombre, tipo, isGroup, 
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // Going to another page from the side menu minimizes the call.
+  // Starting to share your screen minimizes the call: you share to show the app.
+  const wasSharing = useRef(screenSharing);
+  useEffect(() => {
+    if (screenSharing && !wasSharing.current) onMinimize?.();
+    wasSharing.current = screenSharing;
+  }, [screenSharing, onMinimize]);
+
+  // Going to another page (from a link or the widget) minimizes the call.
   const pathname = usePathname();
   const firstPath = useRef(pathname);
   useEffect(() => {
@@ -196,7 +203,7 @@ export default function CallRoom({ miembros, participanteNombre, tipo, isGroup, 
       ref={stageRef}
       role="dialog"
       aria-label={`Llamada con ${title}`}
-      className="call-stage fixed inset-0 z-[60] overflow-hidden md:left-[102px]"
+      className="call-stage fixed inset-0 z-[60] overflow-hidden"
       style={{ paddingTop: "env(safe-area-inset-top)" }}
       onPointerMove={autoHide ? wake : undefined}
       onPointerDown={autoHide ? wake : undefined}
