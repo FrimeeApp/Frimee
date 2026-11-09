@@ -77,26 +77,31 @@ export default function CallRoom({ miembros, participanteNombre, tipo, isGroup, 
 
   // ── Controls that fade away in video ──
   const autoHide = (mode === "one" && anyCameraOn) && !reconnecting;
+  // Moving the mouse only notes the time (no redraw); a timer hides the controls once idle.
   const [idle, setIdle] = useState(false);
-  const [wakeCount, setWakeCount] = useState(0);
   const [hint, setHint] = useState(false);
   const hintSeen = useRef(false);
+  const lastActivity = useRef(0);
   useEffect(() => {
     if (!autoHide) return;
-    const t = setTimeout(() => {
-      setIdle(true);
-      if (mobile && !hintSeen.current) {
-        hintSeen.current = true;
-        setHint(true);
-        setTimeout(() => setHint(false), 3000);
-      }
-    }, CHROME_IDLE_MS);
-    return () => clearTimeout(t);
-  }, [autoHide, wakeCount, mobile]);
+    lastActivity.current = Date.now();
+    const t = setInterval(() => {
+      if (Date.now() - lastActivity.current < CHROME_IDLE_MS) return;
+      setIdle((wasIdle) => {
+        if (!wasIdle && mobile && !hintSeen.current) {
+          hintSeen.current = true;
+          setHint(true);
+          setTimeout(() => setHint(false), 3000);
+        }
+        return true;
+      });
+    }, 500);
+    return () => clearInterval(t);
+  }, [autoHide, mobile]);
   const chromeHidden = autoHide && idle;
   const wake = () => {
+    lastActivity.current = Date.now();
     if (idle) setIdle(false);
-    setWakeCount((n) => n + 1);
   };
 
   // Desktop shortcuts: M micro, V camera, Ctrl/Cmd+E share, Esc back to the grid.

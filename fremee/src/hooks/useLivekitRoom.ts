@@ -125,7 +125,8 @@ export function useLivekitRoom(options: LivekitRoomOptions | null): LivekitRoomA
   const attachTrack = useCallback((trackKey: string, el: HTMLVideoElement | null) => {
     if (!el) return;
     const t = trackMap.current.get(trackKey);
-    if (t) t.attach(el);
+    // Attaching again restarts the playback: only the first time for each element.
+    if (t && !t.attachedElements.includes(el)) t.attach(el);
   }, []);
 
   const attachAudioTrack = useCallback((participantIdentity: string, track: Track) => {
