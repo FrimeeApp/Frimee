@@ -1,10 +1,19 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- The WebView only records audio (calls, voice notes) with this one too. -->
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- Calls (board M19): ring full screen when locked, keep the microphone and camera in the
+         background during a call, and show their notifications. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 
@@ -59,6 +68,34 @@
                 <data android:host="plans" android:scheme="fremee" />
             </intent-filter>
         </activity>
+
+        <!-- Push: calls are handled natively here (they must ring with the app closed); the rest
+             goes on to Capacitor's push plugin, whose own service this one replaces. -->
+        <service
+            android:name="com.capacitorjs.plugins.pushnotifications.MessagingService"
+            tools:node="remove" />
+        <service android:name=".CallMessagingService" android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+        <!-- Invisible step from a call notification to Frimee: keeps the call link (see the class). -->
+        <activity
+            android:name=".CallLinkActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+        <!-- The ongoing call while Frimee is in the background (M19b). -->
+        <service
+            android:name=".CallService"
+            android:exported="false"
+            android:foregroundServiceType="microphone|camera" />
+        <!-- "Rechazar", "Silenciar" and "Colgar" in the call notifications. -->
+        <receiver android:name=".CallActionReceiver" android:exported="false" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

@@ -13,10 +13,22 @@ import { setWindowBackground } from "@/services/native/appSettings";
  * background colour, with dark buttons on the light theme and light ones on the dark theme.
  * "transparent" let the system draw its own veil, a shade lighter than the app.
  */
+/** Any CSS colour as #RRGGBB (Android accepts only that): the browser resolves it. */
+function toHex6(color: string, fallback: string): string {
+  const probe = document.createElement("span");
+  probe.style.color = color;
+  document.body.appendChild(probe);
+  const rgb = getComputedStyle(probe).color.match(/\d+(\.\d+)?/g);
+  probe.remove();
+  if (!rgb || rgb.length < 3) return fallback;
+  return "#" + rgb.slice(0, 3).map((v) => Math.round(Number(v)).toString(16).padStart(2, "0")).join("");
+}
+
 async function paintNavigationBar() {
   const root = document.documentElement;
   const dark = root.classList.contains("dark");
-  const bg = getComputedStyle(root).getPropertyValue("--bg").trim() || (dark ? "#111111" : "#ffffff");
+  const fallback = dark ? "#111111" : "#ffffff";
+  const bg = toHex6(getComputedStyle(root).getPropertyValue("--bg").trim() || fallback, fallback);
   try {
     await NavigationBar.setNavigationBarColor({ color: bg, darkButtons: !dark });
   } catch (error) {
