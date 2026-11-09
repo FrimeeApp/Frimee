@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { ChevronDown, Minimize2, Phone, Video } from "lucide-react";
 import type { CallMiembro } from "@/hooks/useCall";
-import { AvatarStack, CallAvatar } from "./ui";
+import { AvatarStack, CallAvatar, NO_POSTER } from "./ui";
 
 /**
  * The ringing screens (preparing, outgoing, incoming, no answer, busy): boards M2–M4,
@@ -71,7 +71,7 @@ export function CallScreen({
       <div className="call-enter absolute inset-0 overflow-hidden bg-[var(--bg)] text-[var(--text-primary)] md:hidden">
         {ownVideo && (
           <>
-            <video ref={ownVideo} data-own-video autoPlay playsInline muted aria-hidden="true" className="absolute inset-0 size-full -scale-x-100 object-cover" style={{ filter: "blur(28px)", transform: "scaleX(-1) scale(1.2)" }} />
+            <video ref={ownVideo} data-own-video poster={NO_POSTER} autoPlay playsInline muted aria-hidden="true" className="absolute inset-0 size-full -scale-x-100 object-cover" style={{ filter: "blur(28px)", transform: "scaleX(-1) scale(1.2)" }} />
             <div aria-hidden="true" className="absolute inset-0" style={{ background: "color-mix(in srgb, var(--bg) 72%, transparent)" }} />
           </>
         )}
@@ -109,7 +109,7 @@ export function CallScreen({
         )}
         {ownVideo && (
           <div className="relative mx-3 mt-3 h-[198px] overflow-hidden rounded-lg bg-[var(--stage-tile)]">
-            <video ref={ownVideo} data-own-video autoPlay playsInline muted aria-hidden="true" className="absolute inset-0 size-full -scale-x-100 object-cover" />
+            <video ref={ownVideo} data-own-video poster={NO_POSTER} autoPlay playsInline muted aria-hidden="true" className="absolute inset-0 size-full -scale-x-100 object-cover" />
             <span className="absolute bottom-2 left-2 inline-flex h-6 items-center rounded-md bg-[var(--stage-label)] px-2 text-[12px] font-medium text-white">Tu cámara</span>
           </div>
         )}
