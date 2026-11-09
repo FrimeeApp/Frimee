@@ -182,7 +182,8 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
           <CallRoom
             miembros={callState.miembros}
             participanteNombre={participanteNombre}
-            isActive={isActive}
+            tipo={callState.tipo}
+            isGroup={isGroup}
             activeSince={activeSince}
             onMinimize={() => setMinimized(true)}
           />
