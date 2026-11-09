@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { MicOff, SwitchCamera } from "lucide-react";
-import { CallAvatar } from "../ui";
+import { CallAvatar, CallDots, NO_POSTER } from "../ui";
 
 type Corner = "tl" | "tr" | "bl" | "br";
 
@@ -20,6 +20,7 @@ export default function SelfView({
   userName,
   userFoto,
   canFlip,
+  flipping,
   onFlip,
   attach,
 }: {
@@ -34,6 +35,8 @@ export default function SelfView({
   userName: string;
   userFoto?: string;
   canFlip: boolean;
+  /** The camera is switching (front / back): dots until the new picture arrives. */
+  flipping?: boolean;
   onFlip: () => void;
   attach: (trackKey: string, el: HTMLVideoElement | null) => void;
 }) {
@@ -93,7 +96,12 @@ export default function SelfView({
         }}
         onPointerCancel={() => { setDrag(null); grab.current = null; }}
       >
-        <video data-own-video autoPlay playsInline muted ref={(el) => attach("__local__", el)} style={{ display: cameraOn ? undefined : "none" }} />
+        <video data-own-video poster={NO_POSTER} autoPlay playsInline muted ref={(el) => attach("__local__", el)} style={{ display: cameraOn ? undefined : "none" }} />
+        {cameraOn && flipping && (
+          <div className="absolute inset-0 flex items-center justify-center bg-[var(--stage-tile-2)] text-white" role="status" aria-label="Cambiando de cámara">
+            <CallDots />
+          </div>
+        )}
         {!cameraOn && (
           <div className="absolute inset-0 flex items-center justify-center">
             <CallAvatar id={userId} nombre={userName} foto={userFoto} size={mobile ? 48 : 56} />
