@@ -79,6 +79,16 @@
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
+        <!-- Invisible step from a call notification to Frimee: keeps the call link (see the class). -->
+        <activity
+            android:name=".CallLinkActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
         <!-- The ongoing call while Frimee is in the background (M19b). -->
         <service
             android:name=".CallService"

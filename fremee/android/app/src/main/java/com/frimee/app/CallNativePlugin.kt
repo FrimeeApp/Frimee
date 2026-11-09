@@ -20,11 +20,13 @@ class CallNativePlugin : Plugin() {
         private var instance: CallNativePlugin? = null
 
         /** False when the app is not running (nobody to tell). */
+        @JvmStatic
         fun emitAction(action: String): Boolean {
             val plugin = instance ?: return false
             plugin.notifyListeners("callAction", JSObject().put("action", action))
             return true
         }
+
     }
 
     override fun load() {
@@ -70,6 +72,14 @@ class CallNativePlugin : Plugin() {
         // The call is over: the app no longer shows over the lock screen.
         activity?.runOnUiThread { (activity as? MainActivity)?.releaseLockScreen() }
         call.resolve()
+    }
+
+    /** The call link Frimee was opened with (cold start), once. */
+    @PluginMethod
+    fun takePendingCall(call: PluginCall) {
+        val url = MainActivity.pendingCallUri
+        MainActivity.pendingCallUri = null
+        call.resolve(JSObject().put("url", url))
     }
 
     @PluginMethod

@@ -12,8 +12,7 @@ import CallEnded, { type EndedCall } from "@/components/calls/CallEnded";
 import PermissionSheet from "@/components/calls/PermissionSheet";
 import { useAuth } from "@/providers/AuthProvider";
 import { Capacitor } from "@capacitor/core";
-import { App } from "@capacitor/app";
-import { cancelIncomingCall, onCallNotificationAction, parseCallUrl, startOngoingCall, stopOngoingCall, updateOngoingCall } from "@/services/native/callNative";
+import { cancelIncomingCall, onCallNotificationAction, parseCallUrl, startOngoingCall, stopOngoingCall, takePendingCallLink, updateOngoingCall } from "@/services/native/callNative";
 import { getLivekitUrl } from "@/config/external";
 import { useLivekitRoom, type LivekitRoomApi } from "@/hooks/useLivekitRoom";
 
@@ -55,8 +54,10 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   const [guestLimit, setGuestLimit] = useState(false);
   const cancelledOutgoingChatRef = useRef<string | null>(null);
   const previousCallStatusRef = useRef(callState.status);
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const myId = profile?.id ?? null;
+  // The session (not only the cached profile): needed to read and answer a call.
+  const sessionUserId = user?.id ?? null;
   // The end-of-call screen (M16, D16), from what the call looked like just before it ended.
   const [ended, setEnded] = useState<(EndedCall & { rejoin?: Parameters<CallContextValue["joinCall"]> }) | null>(null);
   const lastActiveRef = useRef<{ snapshot: EndedCall; rejoin: Parameters<CallContextValue["joinCall"]>; since: number | null; remotes: number } | null>(null);
@@ -174,36 +175,48 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   });
 
   // ── Android (board M19) ──
-  // Opened from the call notification: fremee://call/incoming|answer?llamada=… Kept until the
-  // session is there (a cold start loads it after the link arrives).
+  // Opened from the call notification: fremee://call/incoming|answer?llamada=… The native side
+  // keeps the link (Capacitor's launch URL can only be read once, and another screen reads it);
+  // it is taken on start and every time Frimee comes to the front. Kept here until the session
+  // is there: a cold start loads it after the link arrives.
   const [pendingCallLink, setPendingCallLink] = useState<{ llamadaId: number; answer: boolean } | null>(null);
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
-    void App.getLaunchUrl().then((launch) => {
-      const link = parseCallUrl(launch?.url);
-      if (link) setPendingCallLink(link);
-    }).catch(() => {});
-    const sub = App.addListener("appUrlOpen", ({ url }) => {
+    const take = (url: string | null) => {
       const link = parseCallUrl(url);
       if (link) setPendingCallLink(link);
-    });
-    return () => { void sub.then((h) => h.remove()); };
+    };
+    const check = () => {
+      if (document.visibilityState === "visible") void takePendingCallLink().then(take);
+    };
+    check();
+    document.addEventListener("visibilitychange", check);
+    return () => document.removeEventListener("visibilitychange", check);
   }, []);
   useEffect(() => {
-    if (!pendingCallLink || !myId) return;
+    if (!pendingCallLink || !sessionUserId) return;
     const link = pendingCallLink;
     const t = setTimeout(() => {
       setPendingCallLink(null);
       void openFromNotification(link.llamadaId, link.answer);
     }, 0);
     return () => clearTimeout(t);
-  }, [pendingCallLink, myId, openFromNotification]);
+  }, [pendingCallLink, sessionUserId, openFromNotification]);
 
-  // The app took the call (its own ringing screen, or answered): the notification goes.
-  const callLlamadaId = callState.status === "incoming" || callState.status === "active" ? callState.llamadaId : null;
+  // The app took the call: answered, or ringing on its own screen while Frimee is on screen. In the
+  // background the notification stays (the app's screen is not seen; realtime still runs there).
+  const ringingId = callState.status === "incoming" ? callState.llamadaId : null;
+  const answeredId = callState.status === "active" ? callState.llamadaId : null;
   useEffect(() => {
-    if (callLlamadaId) void cancelIncomingCall(callLlamadaId);
-  }, [callLlamadaId]);
+    if (answeredId) void cancelIncomingCall(answeredId);
+  }, [answeredId]);
+  useEffect(() => {
+    if (!ringingId) return;
+    const cancelIfSeen = () => { if (document.visibilityState === "visible") void cancelIncomingCall(ringingId); };
+    cancelIfSeen();
+    document.addEventListener("visibilitychange", cancelIfSeen);
+    return () => document.removeEventListener("visibilitychange", cancelIfSeen);
+  }, [ringingId]);
 
   // In a call: the ongoing-call notification and its foreground service, so Android keeps the
   // microphone working when you leave the app (M19b).

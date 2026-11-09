@@ -63,8 +63,9 @@ object CallNotifications {
             .appendQueryParameter("tipo", data["tipo"] ?: "audio")
             .build()
 
+    /** With a call link: through CallLinkActivity, which keeps the link. Without: straight to Frimee. */
     fun openAppIntent(context: Context, uri: Uri?): Intent =
-        Intent(context, MainActivity::class.java).apply {
+        Intent(context, if (uri != null) CallLinkActivity::class.java else MainActivity::class.java).apply {
             action = Intent.ACTION_VIEW
             data = uri
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
