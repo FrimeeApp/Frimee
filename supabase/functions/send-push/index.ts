@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildCopy, preferenceCategoryAndKey } from "./copy.ts";
+import { callDeclineToken } from "../_shared/callToken.ts";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -8,6 +9,16 @@ type WebhookPayload = {
   type: "INSERT" | "UPDATE" | "DELETE";
   table: string;
   record: NotificacionRow;
+};
+
+/** A row of llamadas, sent by fn_trigger_call_push. */
+type LlamadaRow = {
+  id: number;
+  chat_id: string;
+  room_name: string;
+  tipo: "audio" | "video";
+  iniciado_por_user_id: string;
+  estado: string;
 };
 
 type NotificacionRow = {
@@ -133,6 +144,96 @@ async function sendFCM(
   return { success: false, invalidToken };
 }
 
+// ─── Calls (board M19) ────────────────────────────────────────────────────────
+
+/** How long a call rings before it counts as unanswered (RING_TIMEOUT_MS in the app). */
+const RING_MS = 45_000;
+
+/**
+ * Data-only, high priority: the Android app draws the call itself (CallMessagingService), so it
+ * rings full screen even with Frimee closed. Short TTL: a call is useless once it stopped ringing.
+ */
+async function sendFCMData(
+  token: string,
+  data: Record<string, string>,
+  accessToken: string,
+  ttlSeconds: number,
+): Promise<{ success: boolean; invalidToken: boolean }> {
+  const projectId = Deno.env.get("FIREBASE_PROJECT_ID")!;
+  const res = await fetch(`https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ message: { token, data, android: { priority: "high", ttl: `${ttlSeconds}s` } } }),
+  });
+  if (res.ok) return { success: true, invalidToken: false };
+  const err = await res.json() as { error?: { status?: string } };
+  const status = err?.error?.status;
+  return { success: false, invalidToken: status === "INVALID_ARGUMENT" || status === "NOT_FOUND" || status === "UNREGISTERED" };
+}
+
+/**
+ * A call started ringing ("incoming_call") or stopped ringing ("call_cancel"): to the Android
+ * phones of everyone else in the chat. Calls ring whatever the notification settings say, like
+ * a phone call; only the person who calls is left out.
+ */
+// deno-lint-ignore no-explicit-any
+async function handleCall(op: WebhookPayload["type"], call: LlamadaRow, supabase: any): Promise<Response> {
+  const { data: members } = await supabase.from("chat_miembro").select("user_id").eq("chat_id", call.chat_id) as
+    { data: { user_id: string }[] | null };
+  const recipients = (members ?? []).map((m) => m.user_id).filter((id) => id !== call.iniciado_por_user_id);
+  if (recipients.length === 0) return new Response("no recipients", { status: 200 });
+
+  const { data: tokens } = await supabase
+    .from("push_tokens")
+    .select("user_id, token, platform")
+    .in("user_id", recipients)
+    .eq("platform", "android") as { data: (PushToken & { user_id: string })[] | null };
+  if (!tokens || tokens.length === 0) return new Response("no tokens", { status: 200 });
+
+  let common: Record<string, string>;
+  let ttl: number;
+  if (op === "INSERT") {
+    const [{ data: caller }, { data: chat }] = await Promise.all([
+      supabase.from("usuarios").select("nombre").eq("id", call.iniciado_por_user_id).maybeSingle(),
+      supabase.from("chat").select("tipo, nombre").eq("id", call.chat_id).maybeSingle(),
+    ]) as [{ data: { nombre: string | null } | null }, { data: { tipo: string; nombre: string | null } | null }];
+    // A group shows the group; a direct or a plan chat shows the person calling.
+    const callerName = chat?.tipo === "GRUPO" ? chat.nombre ?? "Grupo" : caller?.nombre ?? "Frimee";
+    common = {
+      type: "incoming_call",
+      llamada_id: String(call.id),
+      room_name: call.room_name,
+      chat_id: call.chat_id,
+      tipo: call.tipo,
+      caller_name: callerName,
+      chat_tipo: chat?.tipo ?? "",
+      chat_nombre: chat?.nombre ?? "",
+      expires_at: String(Date.now() + RING_MS),
+      action_url: `${Deno.env.get("SUPABASE_URL")}/functions/v1/call-action`,
+    };
+    ttl = RING_MS / 1000;
+  } else {
+    common = { type: "call_cancel", llamada_id: String(call.id), estado: call.estado };
+    ttl = 60;
+  }
+
+  const accessToken = await getFCMAccessToken();
+  const staleTokens: string[] = [];
+  await Promise.all(tokens.map(async ({ token, user_id }) => {
+    const data = op === "INSERT"
+      ? { ...common, recipient_id: user_id, decline_token: await callDeclineToken(call.id, user_id) }
+      : common;
+    const { invalidToken } = await sendFCMData(token, data, accessToken, ttl);
+    if (invalidToken) staleTokens.push(token);
+  }));
+  if (staleTokens.length > 0) await supabase.from("push_tokens").delete().in("token", staleTokens);
+
+  return new Response(JSON.stringify({ call: common.type, sent: tokens.length - staleTokens.length }), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
 // ─── Quiet hours check ────────────────────────────────────────────────────────
 
 function isQuietHour(
@@ -186,13 +287,18 @@ function isNotificationEnabled(
 serve(async (req) => {
   try {
     const payload = await req.json() as WebhookPayload;
-    if (payload.type !== "INSERT") return new Response("ok", { status: 200 });
-
-    const notif = payload.record;
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
+
+    // Calls: from fn_trigger_call_push (ringing / stopped ringing).
+    if (payload.table === "llamadas") {
+      return await handleCall(payload.type, payload.record as unknown as LlamadaRow, supabase);
+    }
+
+    if (payload.type !== "INSERT") return new Response("ok", { status: 200 });
+    const notif = payload.record;
 
     // 1. Fetch push tokens for recipient
     const { data: tokens } = await supabase
@@ -218,7 +324,7 @@ serve(async (req) => {
     if (!settings?.notify_push) return new Response("push disabled", { status: 200 });
 
     const prefs = settings.notification_preferences ?? {};
-    const quietHours = (prefs.quiet_hours as { enabled: boolean; start: string; end: string }) ??
+    const quietHours = (prefs.quiet_hours as unknown as { enabled: boolean; start: string; end: string } | undefined) ??
       { enabled: false, start: "23:00", end: "08:00" };
 
     // 3. Check quiet hours

@@ -11,6 +11,9 @@ import CallPill from "@/components/calls/CallPill";
 import CallEnded, { type EndedCall } from "@/components/calls/CallEnded";
 import PermissionSheet from "@/components/calls/PermissionSheet";
 import { useAuth } from "@/providers/AuthProvider";
+import { Capacitor } from "@capacitor/core";
+import { App } from "@capacitor/app";
+import { cancelIncomingCall, onCallNotificationAction, parseCallUrl, startOngoingCall, stopOngoingCall, updateOngoingCall } from "@/services/native/callNative";
 import { getLivekitUrl } from "@/config/external";
 import { useLivekitRoom, type LivekitRoomApi } from "@/hooks/useLivekitRoom";
 
@@ -43,7 +46,7 @@ export function useCallContext() {
 }
 
 export function CallProvider({ children }: { children: React.ReactNode }) {
-  const { callState, startCall: startCallInternal, joinCall, acceptCall, endCall, markActive, activeSince, endReason, clearEndReason } = useCall();
+  const { callState, startCall: startCallInternal, joinCall, acceptCall, endCall, markActive, openFromNotification, activeSince, endReason, clearEndReason } = useCall();
   // The last outgoing call: its screen stays after it ends to say why, and "Volver a llamar" repeats it.
   const [lastTarget, setLastTarget] = useState<{ chatId: string; nombre: string; foto?: string; tipo: "audio" | "video"; miembros: CallMiembro[] } | null>(null);
   const [minimized, setMinimized] = useState(false);
@@ -169,6 +172,72 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       remotes: remoteTiles.length,
     };
   });
+
+  // ── Android (board M19) ──
+  // Opened from the call notification: fremee://call/incoming|answer?llamada=… Kept until the
+  // session is there (a cold start loads it after the link arrives).
+  const [pendingCallLink, setPendingCallLink] = useState<{ llamadaId: number; answer: boolean } | null>(null);
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    void App.getLaunchUrl().then((launch) => {
+      const link = parseCallUrl(launch?.url);
+      if (link) setPendingCallLink(link);
+    }).catch(() => {});
+    const sub = App.addListener("appUrlOpen", ({ url }) => {
+      const link = parseCallUrl(url);
+      if (link) setPendingCallLink(link);
+    });
+    return () => { void sub.then((h) => h.remove()); };
+  }, []);
+  useEffect(() => {
+    if (!pendingCallLink || !myId) return;
+    const link = pendingCallLink;
+    const t = setTimeout(() => {
+      setPendingCallLink(null);
+      void openFromNotification(link.llamadaId, link.answer);
+    }, 0);
+    return () => clearTimeout(t);
+  }, [pendingCallLink, myId, openFromNotification]);
+
+  // The app took the call (its own ringing screen, or answered): the notification goes.
+  const callLlamadaId = callState.status === "incoming" || callState.status === "active" ? callState.llamadaId : null;
+  useEffect(() => {
+    if (callLlamadaId) void cancelIncomingCall(callLlamadaId);
+  }, [callLlamadaId]);
+
+  // In a call: the ongoing-call notification and its foreground service, so Android keeps the
+  // microphone working when you leave the app (M19b).
+  const ongoingRef = useRef(false);
+  const ongoing = callState.status === "active" ? {
+    title: isGroup ? `Llamada con ${participanteNombre}` : participanteNombre,
+    subtitle: isGroup ? `${remoteTiles.length + 1} personas · Toca para volver` : "Toca para volver",
+    video: room.cameraEnabled,
+    muted: !room.micEnabled,
+  } : null;
+  const ongoingKey = ongoing ? JSON.stringify(ongoing) : null;
+  useEffect(() => {
+    if (!ongoingKey) {
+      if (ongoingRef.current) {
+        ongoingRef.current = false;
+        void stopOngoingCall();
+      }
+      return;
+    }
+    const options = JSON.parse(ongoingKey) as Parameters<typeof startOngoingCall>[0];
+    if (ongoingRef.current) void updateOngoingCall(options);
+    else {
+      ongoingRef.current = true;
+      void startOngoingCall(options);
+    }
+  }, [ongoingKey]);
+
+  // "Silenciar" / "Colgar" in that notification.
+  const notificationActionsRef = useRef({ toggleMute: room.toggleMute, hangUp });
+  useEffect(() => { notificationActionsRef.current = { toggleMute: room.toggleMute, hangUp }; });
+  useEffect(() => onCallNotificationAction((action) => {
+    if (action === "mute") void notificationActionsRef.current.toggleMute();
+    else notificationActionsRef.current.hangUp();
+  }), []);
 
   // The app's "+" button goes up while the pill is on screen (phones), so they do not overlap.
   const pillVisible = inCall && minimized;

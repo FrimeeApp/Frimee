@@ -77,6 +77,31 @@ type CallInfo = { tipo: string; nombre: string | null; foto: string | null; miem
 /** One-to-one calls can be rejected or busy; in a group, one member declining ends nothing. */
 const isGroupCall = (miembros: CallMiembro[]) => miembros.length > 2;
 
+type IncomingState = Extract<CallState, { status: "incoming" }>;
+
+/** Who calls and from where, for the incoming screen. */
+async function buildIncoming(llamada: LlamadaRow): Promise<IncomingState> {
+  const { data } = await supabase.rpc("fn_call_info", { p_chat_id: llamada.chat_id });
+  const info = data as CallInfo | null;
+  const miembros: CallMiembro[] = (info?.miembros ?? []).map((m) => ({ id: m.id, nombre: m.nombre, foto: m.foto ?? undefined }));
+  const caller = miembros.find((m) => m.id === llamada.iniciado_por_user_id);
+  // A group chat shows the group; a plan or a direct chat shows the person calling.
+  const isGrupo = info?.tipo === "GRUPO";
+  return {
+    status: "incoming",
+    roomName: llamada.room_name,
+    chatId: llamada.chat_id,
+    tipo: llamada.tipo,
+    llamadaId: llamada.id,
+    callerId: isGrupo ? llamada.chat_id : llamada.iniciado_por_user_id,
+    callerName: isGrupo ? info?.nombre ?? "Grupo" : caller?.nombre ?? "Usuario",
+    callerFoto: isGrupo ? info?.foto ?? undefined : caller?.foto,
+    chatTipo: info?.tipo ?? null,
+    chatNombre: info?.nombre ?? null,
+    miembros,
+  };
+}
+
 export function useCall() {
   const { user } = useAuth();
   const userId = user?.id ?? null;
@@ -104,38 +129,19 @@ export function useCall() {
         const llamada = payload.new as LlamadaRow;
         if (llamada.iniciado_por_user_id === userId) return;
 
-        const { data } = await supabase.rpc("fn_call_info", { p_chat_id: llamada.chat_id });
-        const info = data as CallInfo | null;
-        const miembros: CallMiembro[] = (info?.miembros ?? []).map((m) => ({ id: m.id, nombre: m.nombre, foto: m.foto ?? undefined }));
+        const incoming = await buildIncoming(llamada);
 
         // Already in a call: keep it. A one-to-one caller hears "busy"; in a group, others answer.
         if (stateRef.current.status !== "idle") {
-          if (!isGroupCall(miembros)) {
+          if (stateRef.current.status === "incoming" && stateRef.current.llamadaId === llamada.id) return;
+          if (!isGroupCall(incoming.miembros)) {
             void setCallEstado(llamada.id, "busy");
           }
           return;
         }
 
-        const caller = miembros.find((m) => m.id === llamada.iniciado_por_user_id);
-        // A group chat shows the group; a plan or a direct chat shows the person calling.
-        const isGrupo = info?.tipo === "GRUPO";
-        const callerName = isGrupo ? info?.nombre ?? "Grupo" : caller?.nombre ?? "Usuario";
-        const callerFoto = isGrupo ? info?.foto ?? undefined : caller?.foto;
-
         setEndReason(null);
-        setCallState({
-          status: "incoming",
-          roomName: llamada.room_name,
-          chatId: llamada.chat_id,
-          tipo: llamada.tipo,
-          llamadaId: llamada.id,
-          callerId: isGrupo ? llamada.chat_id : llamada.iniciado_por_user_id,
-          callerName,
-          callerFoto,
-          chatTipo: info?.tipo ?? null,
-          chatNombre: info?.nombre ?? null,
-          miembros,
-        });
+        setCallState(incoming);
       })
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "llamadas" }, (payload: { new: Record<string, unknown> }) => {
         const llamada = payload.new as LlamadaRow;
@@ -254,6 +260,43 @@ export function useCall() {
     setCallState({ status: "active", llamadaId, roomName, chatId, tipo, camera: tipo === "video", token, isInitiator: false, participanteNombre, participanteFoto, miembros });
   }, [userId]);
 
+  /**
+   * Opened from the Android call notification (board M19a): the realtime event was missed while
+   * Frimee was closed, so the call is read by its id. "incoming" shows the ringing screen;
+   * "answer" goes straight into the call. A group call others already answered can be joined.
+   */
+  const openFromNotification = useCallback(async (llamadaId: number, answer: boolean) => {
+    if (!userId) return;
+    const current = stateRef.current;
+    if (current.status !== "idle" && !(current.status === "incoming" && current.llamadaId === llamadaId)) return;
+
+    const { data } = await supabase
+      .from("llamadas")
+      .select("id, chat_id, room_name, tipo, iniciado_por_user_id, estado")
+      .eq("id", llamadaId)
+      .maybeSingle();
+    const llamada = data as LlamadaRow | null;
+    if (!llamada || llamada.iniciado_por_user_id === userId) return;
+    const incoming = await buildIncoming(llamada);
+    const group = isGroupCall(incoming.miembros);
+    if (llamada.estado !== "ringing" && !(group && llamada.estado === "active")) return;
+
+    setEndReason(null);
+    if (!answer) {
+      setCallState(incoming);
+      return;
+    }
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = await fetchLivekitToken(llamada.room_name, llamada.chat_id, session?.access_token);
+    if (llamada.estado === "ringing") await setCallEstado(llamada.id, "active");
+    setActiveSince(Date.now());
+    setCallState({
+      status: "active", llamadaId: llamada.id, roomName: llamada.room_name, chatId: llamada.chat_id, tipo: llamada.tipo,
+      camera: llamada.tipo === "video", token, isInitiator: false,
+      participanteNombre: incoming.callerName, participanteFoto: incoming.callerFoto, miembros: incoming.miembros,
+    });
+  }, [userId]);
+
   /** Someone joined the room the caller opened: the call is answered. */
   const markActive = useCallback(() => {
     if (callState.status === "outgoing") {
@@ -282,5 +325,5 @@ export function useCall() {
       ? callState.token
       : null;
 
-  return { callState, startCall, joinCall, acceptCall, endCall, markActive, activeToken, activeSince, endReason, clearEndReason };
+  return { callState, startCall, joinCall, acceptCall, endCall, markActive, openFromNotification, activeToken, activeSince, endReason, clearEndReason };
 }
