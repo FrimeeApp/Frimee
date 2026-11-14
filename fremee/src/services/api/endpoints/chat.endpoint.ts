@@ -232,3 +232,61 @@ export async function pollGetVotesEndpoint(
   if (error) throw error;
   return (data ?? []) as Array<{ option_index: number; vote_count: number; voted_by_me: boolean }>;
 }
+
+// ── Bitácora, phase 2: pin, star, everyone's reactions, @frimee proposals ────────────────────
+
+export type ReaccionResumen = { mensaje_id: number; emoji: string; total: number; mia: boolean };
+
+export async function getReaccionesEndpoint(chatId: string): Promise<ReaccionResumen[]> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_chat_reacciones", { p_chat_id: chatId });
+  if (error) throw error;
+  return ((data ?? []) as Array<{ mensaje_id: number; emoji: string; total: number | string; mia: boolean }>)
+    .map((r) => ({ ...r, total: Number(r.total) }));
+}
+
+/** mensajeId null unpins. */
+export async function pinMensajeEndpoint(chatId: string, mensajeId: number | null): Promise<void> {
+  const supabase = createBrowserSupabaseClient();
+  const { error } = await supabase.rpc("fn_chat_pin", { p_chat_id: chatId, p_mensaje_id: mensajeId });
+  if (error) throw error;
+}
+
+export async function getPinnedEndpoint(chatId: string): Promise<number | null> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_chat_pinned", { p_chat_id: chatId });
+  if (error) throw error;
+  const row = (data as Array<{ mensaje_id: number }> | null)?.[0];
+  return row?.mensaje_id ?? null;
+}
+
+/** Toggles the star; returns the new state. */
+export async function destacarMensajeEndpoint(mensajeId: number): Promise<boolean> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_mensaje_destacar", { p_mensaje_id: mensajeId });
+  if (error) throw error;
+  return Boolean(data);
+}
+
+export async function getMisDestacadosEndpoint(chatId: string): Promise<number[]> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_chat_mis_destacados", { p_chat_id: chatId });
+  if (error) throw error;
+  return ((data ?? []) as Array<{ mensaje_id: number }>).map((r) => r.mensaje_id);
+}
+
+/** Claims a pending proposal (true) or finds it already resolved by someone else (false). */
+export async function resolverPropuestaEndpoint(
+  mensajeId: number,
+  estado: "aceptada" | "descartada" | "pendiente",
+  resultado?: string,
+): Promise<boolean> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_propuesta_resolver", {
+    p_mensaje_id: mensajeId,
+    p_estado: estado,
+    p_resultado: resultado ?? null,
+  });
+  if (error) throw error;
+  return Boolean(data);
+}
