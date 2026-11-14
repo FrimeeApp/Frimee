@@ -2,6 +2,7 @@ package com.frimee.app
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.media.AudioAttributes
 import android.media.AudioManager
 import android.media.Ringtone
@@ -42,6 +43,35 @@ class CallNativePlugin : Plugin() {
 
     override fun load() {
         instance = this
+    }
+
+    // Android 14+ only lets a microphone foreground service start once the app holds RECORD_AUDIO.
+    // A call accepted before the permission prompt was answered (a fresh install) used to crash
+    // the app: the service waits here and starts when the app resumes with the permission.
+    private var pendingOngoing: Intent? = null
+
+    private fun hasMicrophone() =
+        ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+
+    private fun startCallService(intent: Intent) {
+        if (!hasMicrophone()) {
+            pendingOngoing = intent
+            return
+        }
+        pendingOngoing = null
+        ContextCompat.startForegroundService(context, intent)
+    }
+
+    override fun handleOnResume() {
+        // The permission dialog pauses the app; it resumes once answered.
+        val pending = pendingOngoing ?: return
+        if (!hasMicrophone()) return
+        try {
+            startCallService(pending.setAction(CallService.ACTION_START))
+        } catch (e: Exception) {
+            pendingOngoing = null
+        }
     }
 
     override fun handleOnDestroy() {
@@ -111,7 +141,7 @@ class CallNativePlugin : Plugin() {
     @PluginMethod
     fun startOngoing(call: PluginCall) {
         try {
-            ContextCompat.startForegroundService(context, serviceIntent(call, CallService.ACTION_START))
+            startCallService(serviceIntent(call, CallService.ACTION_START))
             call.resolve()
         } catch (e: Exception) {
             call.reject("No se pudo mostrar la llamada en curso", e)
@@ -121,7 +151,9 @@ class CallNativePlugin : Plugin() {
     @PluginMethod
     fun updateOngoing(call: PluginCall) {
         try {
-            ContextCompat.startForegroundService(context, serviceIntent(call, CallService.ACTION_UPDATE))
+            // Not started yet (no microphone permission): keep the latest details for later.
+            if (pendingOngoing != null) pendingOngoing = serviceIntent(call, CallService.ACTION_START)
+            else startCallService(serviceIntent(call, CallService.ACTION_UPDATE))
             call.resolve()
         } catch (e: Exception) {
             call.reject("No se pudo actualizar la llamada en curso", e)
@@ -130,6 +162,7 @@ class CallNativePlugin : Plugin() {
 
     @PluginMethod
     fun stopOngoing(call: PluginCall) {
+        pendingOngoing = null
         CallService.stop(context)
         // The call is over: the app no longer shows over the lock screen.
         activity?.runOnUiThread { (activity as? MainActivity)?.releaseLockScreen() }

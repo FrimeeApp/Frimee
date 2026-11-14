@@ -4,6 +4,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
@@ -38,17 +39,21 @@ class CallService : Service() {
                 if (startedAt == 0L) startedAt = System.currentTimeMillis()
                 val notification = build(intent)
                 val video = intent.getBooleanExtra("video", false)
+                // Ask only for what the app may use: Android 14+ refuses a type whose permission is missing.
+                val withMic = granted(android.Manifest.permission.RECORD_AUDIO)
+                val withCamera = video && granted(android.Manifest.permission.CAMERA)
                 var type = 0
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
-                    if (video) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+                    if (withMic) type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                    if (withCamera) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
                 }
-                try {
-                    ServiceCompat.startForeground(this, CallNotifications.ID_ONGOING, notification, type)
-                } catch (e: Exception) {
-                    // Without the camera permission (or started from the background) keep the microphone.
-                    ServiceCompat.startForeground(this, CallNotifications.ID_ONGOING, notification,
+                val started = type != 0 && tryStartForeground(notification, type) ||
+                    // Camera refused (or started from the background): keep the microphone.
+                    withMic && tryStartForeground(notification,
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else 0)
+                if (!started) {
+                    // Nothing Android allows yet: stop quietly instead of taking the app down.
+                    stopSelf()
                 }
             }
             ACTION_STOP -> {
@@ -58,6 +63,17 @@ class CallService : Service() {
         }
         return START_NOT_STICKY
     }
+
+    private fun granted(permission: String) =
+        ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
+
+    private fun tryStartForeground(notification: android.app.Notification, type: Int): Boolean =
+        try {
+            ServiceCompat.startForeground(this, CallNotifications.ID_ONGOING, notification, type)
+            true
+        } catch (e: Exception) {
+            false
+        }
 
     private fun build(intent: Intent): android.app.Notification {
         CallNotifications.ensureChannels(this)
