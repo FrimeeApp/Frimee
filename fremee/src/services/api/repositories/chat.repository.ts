@@ -126,12 +126,14 @@ export async function pollGetVotes(
 // - DIRECTO: nombre del otro usuario
 // - GRUPO: nombre del grupo
 export function resolveChatName(chat: ChatListItem, currentUserId: string): string {
+  if (chat.tipo === "PLAN") return chat.plan_titulo ?? chat.nombre ?? "Plan";
   if (chat.tipo === "GRUPO") return chat.nombre ?? "Grupo";
   const other = chat.miembros.find((m) => m.id !== currentUserId);
   return other?.nombre ?? "Usuario";
 }
 
 export function resolveChatAvatar(chat: ChatListItem, currentUserId: string): string | null {
+  if (chat.tipo === "PLAN") return chat.plan_foto ?? null;
   if (chat.tipo === "GRUPO") return chat.foto ?? null;
   const other = chat.miembros.find((m) => m.id !== currentUserId);
   return other?.profile_image ?? null;

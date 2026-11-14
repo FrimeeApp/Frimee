@@ -2,7 +2,7 @@
 
 import NextImage from "next/image";
 import { useEffect, useRef, useState, useCallback, Fragment, type ButtonHTMLAttributes } from "react";
-import { buildTimeline, tripRange, tripStatus } from "@/components/chat/bitacora/timeline";
+import { buildTimeline, inTimeOrder, tripRange, tripStatus } from "@/components/chat/bitacora/timeline";
 import Link from "next/link";
 import { DayChapter } from "@/components/chat/bitacora/DayChapter";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
@@ -1697,7 +1697,10 @@ export function ChatConversation({
   // Bitácora: chapters per day and turns per person (see bitacora/timeline.ts).
   // In a plan's chat the days count towards the trip («faltan 14 días», «Día 2»).
   const trip = planInfo ? { start: new Date(planInfo.inicio_at), end: new Date(planInfo.fin_at) } : null;
-  const timeline = buildTimeline(messages, trip);
+  // Shown in time order: a message created out of order (the plan's welcome before the guest demo's
+  // backdated ones) would otherwise open the same day twice.
+  const timelineMessages = inTimeOrder(messages);
+  const timeline = buildTimeline(timelineMessages, trip);
   const otherMembers = chat.miembros.filter((m) => m.id !== currentUserId).map((m) => m.nombre.split(" ")[0]);
   const headerSubtitle = trip
     ? `${chat.miembros.length} personas · ${tripStatus(trip)}`
@@ -1837,7 +1840,7 @@ export function ChatConversation({
             <button type="button" onClick={() => setShowInfo(true)} className="flex min-h-[44px] min-w-0 flex-1 items-center gap-[var(--space-3)] rounded-[8px] px-1 text-left transition-colors hover:bg-surface">
               {trip ? (
                 <span aria-hidden className="flex size-[36px] shrink-0 flex-col items-center justify-center rounded-[8px] border border-[var(--chat-me-border)] bg-[var(--chat-me)] leading-none">
-                  <span className="[font-family:var(--font-display)] text-[18px] tabular-nums text-app">{trip.start.getDate()}</span>
+                  <span className="[font-family:var(--font-display-face)] text-[18px] tabular-nums text-app">{trip.start.getDate()}</span>
                   <span className="mt-[2px] text-[9px] font-[var(--fw-semibold)] uppercase tracking-[0.04em] text-muted">{trip.start.toLocaleDateString("es-ES", { month: "short" }).replace(".", "")}</span>
                 </span>
               ) : (
@@ -1846,7 +1849,7 @@ export function ChatConversation({
                 </span>
               )}
               <span className="min-w-0">
-                <span className="block truncate [font-family:var(--font-display)] text-[23px] leading-[26px] text-app">{name}</span>
+                <span className="block truncate [font-family:var(--font-display-face)] text-[23px] leading-[26px] text-app">{name}</span>
                 {headerSubtitle && <span className="block truncate text-[12px] text-muted">{headerSubtitle}</span>}
               </span>
             </button>
@@ -1930,7 +1933,7 @@ export function ChatConversation({
                 <div className="size-5 animate-spin rounded-full border-2 border-app border-t-transparent" />
               </div>
             )}
-            {messages.map((msg, idx) => {
+            {timelineMessages.map((msg, idx) => {
               const isMe = msg.sender_id === currentUserId;
               const isBot = msg.tipo === "bot";
               const slot = timeline[idx];

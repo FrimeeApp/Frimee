@@ -131,3 +131,11 @@ export function buildTimeline<T extends TimelineMessage>(messages: T[], trip?: {
     };
   });
 }
+
+/** The messages sorted by time (stable, by id on ties); the same array when they already are. */
+export function inTimeOrder<T extends { id: number; created_at: string | null | undefined }>(messages: T[]): T[] {
+  const time = (m: T) => (m.created_at ? new Date(m.created_at).getTime() : Number.POSITIVE_INFINITY);
+  const sorted = messages.every((m, i) => i === 0 || time(messages[i - 1]) <= time(m));
+  if (sorted) return messages;
+  return [...messages].sort((a, b) => time(a) - time(b) || a.id - b.id);
+}
