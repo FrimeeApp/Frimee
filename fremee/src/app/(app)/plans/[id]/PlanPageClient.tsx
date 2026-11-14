@@ -217,6 +217,12 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
   // While a map is still being built its buttons (Google Maps, Waze, full screen) stay hidden.
   const [mapLoading, setMapLoading] = useState(false);
   const [fullscreenMapLoading, setFullscreenMapLoading] = useState(false);
+  // Fade of the floating map buttons (canvas "Carga del mapa de ruta"): they show up 80 ms after the map.
+  const mapFabClassName = (loading: boolean) =>
+    loading
+      ? "invisible translate-y-[4px] opacity-0 motion-reduce:translate-y-0"
+      : "visible translate-y-0 opacity-100 delay-[80ms] motion-reduce:delay-0";
+  const MAP_FAB_TRANSITION = "flex transition-[opacity,transform,visibility] duration-[160ms] ease-[cubic-bezier(.2,0,0,1)] motion-reduce:duration-150";
   const [collapsedDays, setCollapsedDays] = useState<Set<string>>(
     () => new Set((initialCache?.subplanes?.length ? groupByDay(initialCache.subplanes) : []).map(([dateKey]) => dateKey)),
   );
@@ -1600,7 +1606,7 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
                           onViajeComputed={handleViajeComputed}
                           onLoadingChange={setMapLoading}
                         />
-                        <div className={`absolute left-[var(--space-3)] top-[var(--space-3)] z-10 ${mapLoading ? "hidden" : "flex"} items-center gap-[var(--space-2)]`}>
+                        <div inert={mapLoading} className={`absolute left-[var(--space-3)] top-[var(--space-3)] z-10 ${MAP_FAB_TRANSITION} ${mapFabClassName(mapLoading)} items-center gap-[var(--space-2)]`}>
                           {routeHasRoute && routeMapsUrl && (
                             <a
                               href={routeMapsUrl}
@@ -1630,7 +1636,7 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
                             </a>
                           )}
                         </div>
-                        <div className={`absolute right-[var(--space-3)] top-[var(--space-3)] z-10 ${mapLoading ? "hidden" : "flex"} items-center gap-[var(--space-2)]`}>
+                        <div inert={mapLoading} className={`absolute right-[var(--space-3)] top-[var(--space-3)] z-10 ${MAP_FAB_TRANSITION} ${mapFabClassName(mapLoading)} items-center gap-[var(--space-2)]`}>
                           <button
                             type="button"
                             onClick={() => setShowMapFullscreen(true)}
@@ -1931,11 +1937,12 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
               ubicacionNombre={plan.ubicacion_nombre ?? undefined}
               onViajeComputed={handleViajeComputed}
               onLoadingChange={setFullscreenMapLoading}
+              loaderVariant="fullscreen"
               heightClassName="h-full"
               containerClassName="h-full"
             />
             {/* The close button and the day chips stay usable while it loads. */}
-            <div className={`absolute left-[max(var(--space-3),env(safe-area-inset-left))] top-[calc(env(safe-area-inset-top)+var(--space-3))] z-10 ${fullscreenMapLoading ? "hidden" : "flex"} items-center gap-[var(--space-2)]`}>
+            <div inert={fullscreenMapLoading} className={`absolute left-[max(var(--space-3),env(safe-area-inset-left))] top-[calc(env(safe-area-inset-top)+var(--space-3))] z-10 ${MAP_FAB_TRANSITION} ${mapFabClassName(fullscreenMapLoading)} items-center gap-[var(--space-2)]`}>
               {routeHasRoute && routeMapsUrl && (
                 <a
                   href={routeMapsUrl}
