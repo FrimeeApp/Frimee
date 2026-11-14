@@ -9,6 +9,7 @@ import { decodePolyline } from "@/lib/polyline";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { buildInternalApiUrl } from "@/config/external";
 import { formatCompactRouteDistance, formatCompactRouteDuration } from "@/lib/route-formatters";
+import RouteMapLoader from "@/components/plans/RouteMapLoader";
 
 type Props = {
   subplanes: SubplanRow[];
@@ -17,6 +18,8 @@ type Props = {
   onViajeComputed?: (subplanId: number, duracion: string, distancia: string, polyline: string) => void;
   /** True while the map is being built and still hidden behind the loader. */
   onLoadingChange?: (loading: boolean) => void;
+  /** The full-screen map uses the tall loader (board M2). */
+  loaderVariant?: "embedded" | "fullscreen";
   heightClassName?: string;
   containerClassName?: string;
 };
@@ -284,6 +287,7 @@ export default function DayRouteMap({
   ubicacionNombre,
   onViajeComputed,
   onLoadingChange,
+  loaderVariant = "embedded",
   heightClassName = "h-[300px] md:h-[240px]",
   containerClassName = "",
 }: Props) {
@@ -292,7 +296,7 @@ export default function DayRouteMap({
   const renderGenRef = useRef(0);
   // Legs this map computed itself, so a redraw (another day, back) does not ask again.
   const computedPolylinesRef = useRef(new Map<string, string>());
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const daySubplanes = useMemo(
@@ -370,8 +374,23 @@ export default function DayRouteMap({
   }, [onLoadingChange, showLoader]);
   useEffect(() => () => onLoadingChange?.(false), [onLoadingChange]);
 
+  // The loader fades out (is-ready) and is unmounted afterwards, so its loop stops running.
+  const [loaderMounted, setLoaderMounted] = useState(showLoader);
+  useEffect(() => {
+    if (showLoader) {
+      setLoaderMounted(true);
+      return;
+    }
+    const timer = setTimeout(() => setLoaderMounted(false), 250);
+    return () => clearTimeout(timer);
+  }, [showLoader]);
+  const shellClassName = `map-shell relative w-full bg-surface-inset ${heightClassName}${showLoader ? "" : " is-ready"}`;
+
   const renderFallbackMap = async () => {
-    if (!ubicacionNombre || !fallbackMapRef.current) return;
+    if (!ubicacionNombre || !fallbackMapRef.current) {
+      setLoading(false); // nothing to draw: show the hint, not an endless loader
+      return;
+    }
     const gen = ++renderGenRef.current;
     const alreadyRendered = renderedFallbackMapKeys.has(mapRenderKey);
     setLoading(!alreadyRendered);
@@ -605,13 +624,9 @@ export default function DayRouteMap({
   if (points.length < 2) {
     return (
       <div className={`overflow-hidden ${containerClassName ?? "rounded-[12px] border border-app"}`} style={containerClassName ? undefined : { clipPath: "inset(0 round 12px)" }}>
-        <div className={`relative w-full bg-surface-inset ${heightClassName}`} aria-busy={showLoader}>
-          <div ref={fallbackMapRef} className="absolute inset-0" />
-          {showLoader && (
-            <div role="status" className="absolute inset-0 flex items-center justify-center bg-surface-inset text-body-sm text-muted">
-              Cargando mapa...
-            </div>
-          )}
+        <div className={shellClassName} aria-busy={showLoader}>
+          <div ref={fallbackMapRef} className="map-canvas absolute inset-0" />
+          {loaderMounted && <RouteMapLoader variant={loaderVariant} />}
           {!loading && !ubicacionNombre && (
             <div className="absolute inset-0 flex items-center justify-center px-6 text-center text-body-sm text-muted">
               Anade al menos 2 actividades con ubicacion para ver la ruta
@@ -624,15 +639,11 @@ export default function DayRouteMap({
 
   return (
     <div className={`overflow-hidden ${containerClassName ?? "rounded-[12px] border border-app"}`} style={containerClassName ? undefined : { clipPath: "inset(0 round 12px)" }}>
-      <div className={`relative w-full bg-surface-inset ${heightClassName}`} aria-busy={showLoader}>
-        <div ref={mapRef} className="absolute inset-0" />
-        {showLoader && (
-          <div role="status" className="absolute inset-0 flex items-center justify-center bg-surface-inset text-body-sm text-muted">
-            Calculando ruta...
-          </div>
-        )}
+      <div className={shellClassName} aria-busy={showLoader}>
+        <div ref={mapRef} className="map-canvas absolute inset-0" />
+        {loaderMounted && <RouteMapLoader variant={loaderVariant} />}
         {error && (
-          <div className="absolute inset-0 flex items-center justify-center bg-surface-inset text-body-sm text-[var(--error)]">
+          <div className="absolute inset-0 z-[2] flex items-center justify-center bg-surface-inset text-body-sm text-[var(--error)]">
             {error}
           </div>
         )}
