@@ -21,7 +21,8 @@ import { useToast } from "@/components/ui/Toaster";
 import { createGrupoEndpoint } from "@/services/api/endpoints/grupos.endpoint";
 import { ChatConversation, BackIcon, GroupIcon } from "@/components/chat/ChatConversation";
 import { SearchInput } from "@/components/ui/SearchInput";
-import { Phone, Video } from "lucide-react";
+import { BarChart2, FileText, Image as ImageIcon, Mic, Phone, Receipt, Video } from "lucide-react";
+import { tripStatus } from "@/components/chat/bitacora/timeline";
 
 export default function MessagesPage() {
   const { user, loading } = useAuth();
@@ -356,55 +357,64 @@ export default function MessagesPage() {
             </p>
           </div>
         ) : (
-          <div className="flex flex-col px-2">
-            {filteredChats.map((chat) => {
-              const name = resolveChatName(chat, user?.id ?? "");
-              const avatar = resolveChatAvatar(chat, user?.id ?? "");
-              const hasUnread = chat.unread_count > 0;
-              const isSelected = chat.chat_id === selectedChatId;
-              const lastMsgRaw = (() => { const m = chat.last_message ?? ""; try { return JSON.parse(m)?.type === "poll" ? "📊 Encuesta" : m; } catch { return m; } })();
-              const callPreview = (() => {
-                if (!lastMsgRaw.includes("Llamada") && !lastMsgRaw.includes("Videollamada")) return null;
-                const missed = lastMsgRaw.includes("perdida");
-                const isVideo = lastMsgRaw.includes("Video");
-                const label = missed ? (isVideo ? "Videollamada perdida" : "Llamada perdida") : (isVideo ? "Videollamada" : "Llamada de audio");
-                return { isVideo, missed, label };
-              })();
-              return (
-                <button
-                  key={chat.chat_id}
-                  type="button"
-                  onClick={() => {
-                    setSelectedChatId(chat.chat_id);
-                    setChats((prev) => prev.map((c) => c.chat_id !== chat.chat_id ? c : { ...c, unread_count: 0 }));
-                  }}
-                  className={`flex w-full items-center gap-3 rounded-[14px] px-3 py-[10px] text-left transition-colors focus:outline-none ${isSelected ? "bg-surface" : "hover:bg-surface"}`}
-                >
-                  <div className="relative shrink-0 self-start mt-[1px]">
-                    <ChatPreviewAvatar name={name} image={avatar} isGroup={chat.tipo === "GRUPO"} />
-                    {hasUnread && (
-                      <span className="absolute -right-[3px] -top-[3px] flex min-w-[18px] h-[18px] items-center justify-center rounded-full border-2 border-[var(--bg)] bg-[var(--primary)] px-[3px] text-[10px] font-[700] text-white leading-none">
-                        {chat.unread_count > 9 ? "9+" : chat.unread_count}
-                      </span>
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2 mb-[2px]">
-                      <p className={`truncate text-[15px] ${hasUnread ? "font-[700]" : "font-[600]"} text-app`}>{name}</p>
-                      <span className="shrink-0 text-[12px] text-muted tabular-nums">{formatChatTime(chat.last_message_at)}</span>
-                    </div>
-                    <p className={`truncate text-[13px] leading-[1.4] ${hasUnread ? "font-[600] text-app" : "text-muted"}`}>
-                      {callPreview ? (
-                        <span className={`flex items-center gap-1 ${callPreview.missed ? "text-red-700 dark:text-red-800" : ""}`}>
-                          {callPreview.isVideo ? <Video className="size-3 shrink-0" /> : <Phone className="size-3 shrink-0" />}
-                          <span className="truncate">{callPreview.label}</span>
+          <div className="flex flex-col pb-[var(--space-4)]">
+            {[
+              { title: "Viajes", items: filteredChats.filter((c) => c.tipo === "PLAN") },
+              { title: "Personas y grupos", items: filteredChats.filter((c) => c.tipo !== "PLAN") },
+            ].filter((section) => section.items.length > 0).map((section, sectionIdx, sections) => (
+              <section key={section.title} aria-label={section.title}>
+                {/* Headings only when there are trips: a list of people alone needs none */}
+                {sections.length > 1 || section.title === "Viajes" ? (
+                  <h2 className={`px-[var(--space-4)] pb-[6px] text-[12px] font-[var(--fw-semibold)] tracking-[0.02em] text-muted ${sectionIdx === 0 ? "pt-[var(--space-2)]" : "pt-[var(--space-4)]"}`}>{section.title}</h2>
+                ) : null}
+                {section.items.map((chat) => {
+                  const name = resolveChatName(chat, user?.id ?? "");
+                  const avatar = resolveChatAvatar(chat, user?.id ?? "");
+                  const hasUnread = chat.unread_count > 0;
+                  const isSelected = chat.chat_id === selectedChatId;
+                  const trip = chat.plan_inicio_at && chat.plan_fin_at ? { start: new Date(chat.plan_inicio_at), end: new Date(chat.plan_fin_at) } : null;
+                  const preview = describeLastMessage(chat.last_message);
+                  return (
+                    <button
+                      key={chat.chat_id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedChatId(chat.chat_id);
+                        setChats((prev) => prev.map((c) => c.chat_id !== chat.chat_id ? c : { ...c, unread_count: 0 }));
+                      }}
+                      className={`flex min-h-[68px] w-full items-center gap-3 px-[var(--space-4)] py-[10px] text-left transition-colors focus:outline-none focus-visible:bg-surface ${isSelected ? "bg-surface" : "hover:bg-surface"}`}
+                    >
+                      {trip ? (
+                        <span aria-hidden className={`flex size-[44px] shrink-0 flex-col items-center justify-center rounded-[8px] border leading-none ${hasUnread ? "border-[var(--chat-me-border)] bg-[var(--chat-me)]" : "border-app bg-[var(--surface)]"}`}>
+                          <span className="[font-family:var(--font-display-face)] text-[21px] tabular-nums text-app">{trip.start.getDate()}</span>
+                          <span className="mt-[3px] text-[10px] font-[var(--fw-semibold)] uppercase tracking-[0.04em] text-muted">{trip.start.toLocaleDateString("es-ES", { month: "short" }).replace(".", "")}</span>
                         </span>
-                      ) : lastMsgRaw}
-                    </p>
-                  </div>
-                </button>
-              );
-            })}
+                      ) : (
+                        <span className="shrink-0"><ChatPreviewAvatar name={name} image={avatar} isGroup={chat.tipo === "GRUPO"} /></span>
+                      )}
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-baseline gap-2">
+                          <span className={`truncate text-[16px] ${hasUnread ? "font-[700]" : "font-[600]"} text-app`}>{name}</span>
+                          {trip && <span className="shrink-0 text-[12px] text-muted">{tripStatus(trip)}</span>}
+                          <span className={`ml-auto shrink-0 text-[12px] tabular-nums ${hasUnread ? "font-[var(--fw-semibold)] text-primary-token" : "text-muted"}`}>{formatChatTime(chat.last_message_at)}</span>
+                        </span>
+                        <span className="mt-[2px] flex items-center gap-2">
+                          <span className={`flex min-w-0 flex-1 items-center gap-[6px] text-[14px] leading-[1.4] ${preview.missed ? "text-[var(--error)]" : hasUnread ? "text-app" : "text-muted"}`}>
+                            {preview.icon}
+                            <span className="truncate">{preview.text}</span>
+                          </span>
+                          {hasUnread && (
+                            <span className="flex h-[20px] min-w-[20px] shrink-0 items-center justify-center rounded-full bg-[var(--primary)] px-[6px] text-[11px] font-[700] leading-none text-[var(--contrast)]" aria-label={`${chat.unread_count} sin leer`}>
+                              {chat.unread_count > 99 ? "99+" : chat.unread_count}
+                            </span>
+                          )}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </section>
+            ))}
           </div>
         )}
       </div>
@@ -416,6 +426,13 @@ export default function MessagesPage() {
     <ChatConversation
       chat={selectedChat}
       currentUserId={user.id}
+      planId={selectedChat.plan_id ?? undefined}
+      planInfo={selectedChat.plan_id && selectedChat.plan_inicio_at && selectedChat.plan_fin_at ? {
+        titulo: selectedChat.plan_titulo ?? "",
+        inicio_at: selectedChat.plan_inicio_at,
+        fin_at: selectedChat.plan_fin_at,
+        ubicacion_nombre: selectedChat.plan_ubicacion ?? "",
+      } : undefined}
       containerClassName="flex h-full flex-col pt-[var(--space-2)]"
       onBack={() => { setSelectedChatId(null); void loadChats(); }}
       onStartCall={(tipo) => {
@@ -510,4 +527,24 @@ function ChatPreviewAvatar({ name, image, isGroup }: { name: string; image: stri
       {isGroup ? <GroupIcon className="size-[20px] text-muted" /> : (name.trim()[0] || "U").toUpperCase()}
     </div>
   );
+}
+
+/** How the last message reads in the chat list: an icon for its kind and a short text. */
+function describeLastMessage(raw: string | null): { icon: React.ReactNode; text: string; missed: boolean } {
+  const m = raw ?? "";
+  try {
+    const parsed = JSON.parse(m) as { type?: string; question?: string };
+    if (parsed?.type === "poll") return { icon: <BarChart2 className="size-[14px] shrink-0" aria-hidden />, text: `Encuesta · ${parsed.question ?? ""}`, missed: false };
+    if (parsed?.type === "resumen_viaje") return { icon: <Receipt className="size-[14px] shrink-0" aria-hidden />, text: "Resumen del viaje", missed: false };
+  } catch { /* plain text */ }
+  if (/llamada|videollamada/i.test(m)) {
+    const missed = /perdida/i.test(m);
+    const isVideo = /video/i.test(m);
+    const Icon = isVideo ? Video : Phone;
+    return { icon: <Icon className="size-[14px] shrink-0" aria-hidden />, text: missed ? (isVideo ? "Videollamada perdida" : "Llamada perdida") : (isVideo ? "Videollamada" : "Llamada de audio"), missed };
+  }
+  if (/^📷/.test(m)) return { icon: <ImageIcon className="size-[14px] shrink-0" aria-hidden />, text: m.replace(/^📷\s*/, "") || "Foto", missed: false };
+  if (/^🎤|nota de voz/i.test(m)) return { icon: <Mic className="size-[14px] shrink-0" aria-hidden />, text: m.replace(/^🎤\s*/, "") || "Nota de voz", missed: false };
+  if (/^📄|^📎/.test(m)) return { icon: <FileText className="size-[14px] shrink-0" aria-hidden />, text: m.replace(/^(📄|📎)\s*/, "") || "Documento", missed: false };
+  return { icon: null, text: m, missed: false };
 }

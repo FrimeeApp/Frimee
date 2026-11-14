@@ -9,6 +9,13 @@ export type ChatListItem = {
   last_message_at: string | null;
   unread_count: number;
   miembros: Array<{ id: string; nombre: string; username: string | null; profile_image: string | null }>;
+  /** Set for a plan's chat (fn_chats_list joins its plan). */
+  plan_id?: number | null;
+  plan_titulo?: string | null;
+  plan_inicio_at?: string | null;
+  plan_fin_at?: string | null;
+  plan_ubicacion?: string | null;
+  plan_foto?: string | null;
 };
 
 export type MensajeRow = {
@@ -41,7 +48,8 @@ export async function listChatsEndpoint(): Promise<ChatListItem[]> {
   const supabase = createBrowserSupabaseClient();
   const { data, error } = await supabase.rpc("fn_chats_list");
   if (error) throw error;
-  return ((data ?? []) as ChatListItem[]).filter((c) => c.tipo !== "PLAN");
+  // Plan chats are listed too (with their trip); a plan's chat whose plan is gone is not.
+  return ((data ?? []) as ChatListItem[]).filter((c) => c.tipo !== "PLAN" || c.plan_id != null);
 }
 
 export async function fetchPlanChatItem(planId: number): Promise<ChatListItem | null> {
