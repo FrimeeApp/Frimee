@@ -12,7 +12,7 @@ import CallEnded, { type EndedCall } from "@/components/calls/CallEnded";
 import PermissionSheet from "@/components/calls/PermissionSheet";
 import { useAuth } from "@/providers/AuthProvider";
 import { Capacitor } from "@capacitor/core";
-import { cancelIncomingCall, onCallNotificationAction, parseCallUrl, startOngoingCall, stopOngoingCall, takePendingCallLink, updateOngoingCall } from "@/services/native/callNative";
+import { cancelIncomingCall, onCallNotificationAction, parseCallUrl, startRinging, stopRinging, startOngoingCall, stopOngoingCall, takePendingCallLink, updateOngoingCall } from "@/services/native/callNative";
 import { getLivekitUrl } from "@/config/external";
 import { useLivekitRoom, type LivekitRoomApi } from "@/hooks/useLivekitRoom";
 
@@ -210,12 +210,25 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (answeredId) void cancelIncomingCall(answeredId);
   }, [answeredId]);
+  // Frimee shows the ringing call: it rings itself (the notification, and its sound, go away).
+  // Once ringing it keeps on in the background too, until the call stops ringing here.
   useEffect(() => {
     if (!ringingId) return;
-    const cancelIfSeen = () => { if (document.visibilityState === "visible") void cancelIncomingCall(ringingId); };
-    cancelIfSeen();
-    document.addEventListener("visibilitychange", cancelIfSeen);
-    return () => document.removeEventListener("visibilitychange", cancelIfSeen);
+    let ringing = false;
+    const takeOver = () => {
+      if (document.visibilityState !== "visible") return;
+      void cancelIncomingCall(ringingId);
+      if (!ringing) {
+        ringing = true;
+        void startRinging();
+      }
+    };
+    takeOver();
+    document.addEventListener("visibilitychange", takeOver);
+    return () => {
+      document.removeEventListener("visibilitychange", takeOver);
+      if (ringing) void stopRinging();
+    };
   }, [ringingId]);
 
   // In a call: the ongoing-call notification and its foreground service, so Android keeps the

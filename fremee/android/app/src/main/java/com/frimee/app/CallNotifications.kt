@@ -116,6 +116,8 @@ object CallNotifications {
             .setFullScreenIntent(fullScreen, true)
             .setStyle(NotificationCompat.CallStyle.forIncomingCall(person, decline, answer).setIsVideo(video))
             .build()
+        // Ring and vibrate again and again, like a phone call, until it is taken away.
+        notification.flags = notification.flags or android.app.Notification.FLAG_INSISTENT
 
         try {
             NotificationManagerCompat.from(context).notify(requestCode, notification)

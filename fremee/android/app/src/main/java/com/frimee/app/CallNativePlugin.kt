@@ -1,6 +1,15 @@
 package com.frimee.app
 
+import android.content.Context
 import android.content.Intent
+import android.media.AudioAttributes
+import android.media.AudioManager
+import android.media.Ringtone
+import android.media.RingtoneManager
+import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import androidx.core.content.ContextCompat
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
@@ -13,6 +22,8 @@ import com.getcapacitor.annotation.CapacitorPlugin
  * - startOngoing / updateOngoing / stopOngoing: the foreground service and its notification (M19b).
  * - cancelIncoming: drop the ringing notification once the app took the call.
  * - "callAction" events: "Silenciar" and "Colgar" pressed in the notification.
+ * - startRinging / stopRinging: the phone's ringtone while a call rings on Frimee's own screen
+ *   (with the app closed the notification rings; once Frimee shows the call it takes over).
  */
 @CapacitorPlugin(name = "CallNative")
 class CallNativePlugin : Plugin() {
@@ -34,7 +45,58 @@ class CallNativePlugin : Plugin() {
     }
 
     override fun handleOnDestroy() {
+        stopRingtone()
         if (instance === this) instance = null
+    }
+
+    private var ringtone: Ringtone? = null
+
+    private fun vibrator(): Vibrator? =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            (context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager)?.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+        }
+
+    private fun stopRingtone() {
+        ringtone?.stop()
+        ringtone = null
+        vibrator()?.cancel()
+    }
+
+    /** Ring like a phone call: silent mode = nothing, vibrate mode = only vibration. */
+    @PluginMethod
+    fun startRinging(call: PluginCall) {
+        if (ringtone?.isPlaying == true) {
+            call.resolve()
+            return
+        }
+        val audio = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+        val mode = audio?.ringerMode ?: AudioManager.RINGER_MODE_NORMAL
+        if (mode == AudioManager.RINGER_MODE_NORMAL) {
+            val uri = RingtoneManager.getActualDefaultRingtoneUri(context, RingtoneManager.TYPE_RINGTONE)
+                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+            ringtone = RingtoneManager.getRingtone(context, uri)?.apply {
+                audioAttributes = AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build()
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) isLooping = true
+                play()
+            }
+        }
+        if (mode != AudioManager.RINGER_MODE_SILENT) {
+            val pattern = longArrayOf(0, 1000, 1000)
+            vibrator()?.vibrate(VibrationEffect.createWaveform(pattern, 0))
+        }
+        call.resolve()
+    }
+
+    @PluginMethod
+    fun stopRinging(call: PluginCall) {
+        stopRingtone()
+        call.resolve()
     }
 
     private fun serviceIntent(call: PluginCall, action: String) =
