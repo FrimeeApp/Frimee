@@ -24,6 +24,7 @@ import { SearchInput } from "@/components/ui/SearchInput";
 import { BarChart2, CalendarDays, FileText, Image as ImageIcon, MapPin, Mic, Phone, Receipt, Video } from "lucide-react";
 import { momentPreview } from "@/components/chat/bitacora/moments";
 import { tripStatus } from "@/components/chat/bitacora/timeline";
+import { fetchPlanUserRol } from "@/services/api/endpoints/plans.endpoint";
 
 export default function MessagesPage() {
   const { user, loading } = useAuth();
@@ -153,6 +154,18 @@ export default function MessagesPage() {
       .subscribe();
     return () => { void supabase.removeChannel(ch); };
   }, [user, loadChats]);
+
+  // A plan's chat opened from here needs the role too: @frimee proposals and /tarea depend on it.
+  const selectedPlanId = chats.find((c) => c.chat_id === selectedChatId)?.plan_id ?? null;
+  const [planAdminFor, setPlanAdminFor] = useState<number | null>(null);
+  useEffect(() => {
+    if (!selectedPlanId || !user) return;
+    let cancelled = false;
+    fetchPlanUserRol(selectedPlanId, user.id)
+      .then((rol) => { if (!cancelled) setPlanAdminFor(rol === "ADMIN" ? selectedPlanId : null); })
+      .catch((e) => console.error("[mensajes] Error leyendo el rol en el plan:", (e as { message?: string })?.message ?? String(e)));
+    return () => { cancelled = true; };
+  }, [selectedPlanId, user]);
 
   if (loading) return <LoadingScreen />;
 
@@ -428,6 +441,7 @@ export default function MessagesPage() {
       chat={selectedChat}
       currentUserId={user.id}
       planId={selectedChat.plan_id ?? undefined}
+      isAdmin={Boolean(selectedChat.plan_id) && planAdminFor === selectedChat.plan_id}
       planInfo={selectedChat.plan_id && selectedChat.plan_inicio_at && selectedChat.plan_fin_at ? {
         titulo: selectedChat.plan_titulo ?? "",
         inicio_at: selectedChat.plan_inicio_at,
