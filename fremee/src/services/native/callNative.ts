@@ -15,6 +15,8 @@ type CallNativePlugin = {
   takePendingCall(): Promise<{ url?: string | null }>;
   startRinging(): Promise<void>;
   stopRinging(): Promise<void>;
+  setSpeaker(options: { on: boolean }): Promise<void>;
+  resetAudio(): Promise<void>;
   addListener(event: "callAction", listener: (e: { action: "mute" | "hangup" }) => void): Promise<PluginListenerHandle>;
 };
 
@@ -50,6 +52,21 @@ export async function startRinging() {
 export async function stopRinging() {
   if (!isAndroid()) return;
   try { await CallNative.stopRinging(); } catch { /* not ringing */ }
+}
+
+/** Only the Android app chooses where the call is heard; a browser leaves it to the system. */
+export const canChooseCallOutput = () => isAndroid();
+
+/** Call audio through the loudspeaker (true) or the earpiece / headset (false). */
+export async function setCallSpeaker(on: boolean) {
+  if (!isAndroid()) return;
+  try { await CallNative.setSpeaker({ on }); } catch (err) { console.warn("[call-native] speaker", err); }
+}
+
+/** Back to normal audio once the call is over. */
+export async function resetCallAudio() {
+  if (!isAndroid()) return;
+  try { await CallNative.resetAudio(); } catch { /* nothing to undo */ }
 }
 
 /** The call link Frimee was opened with from a call notification (cold start), once. */
