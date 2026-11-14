@@ -2,7 +2,8 @@
 
 import NextImage from "next/image";
 import { useEffect, useRef, useState, useCallback, Fragment, type ButtonHTMLAttributes } from "react";
-import { buildTimeline } from "@/components/chat/bitacora/timeline";
+import { buildTimeline, tripRange, tripStatus } from "@/components/chat/bitacora/timeline";
+import Link from "next/link";
 import { DayChapter } from "@/components/chat/bitacora/DayChapter";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import {
@@ -1694,7 +1695,15 @@ export function ChatConversation({
   const showAiHints = Boolean(planId) && !editingMsg && !text && !aiHintsDismissed && !hasAskedFrimee;
 
   // Bitácora: chapters per day and turns per person (see bitacora/timeline.ts).
-  const timeline = buildTimeline(messages);
+  // In a plan's chat the days count towards the trip («faltan 14 días», «Día 2»).
+  const trip = planInfo ? { start: new Date(planInfo.inicio_at), end: new Date(planInfo.fin_at) } : null;
+  const timeline = buildTimeline(messages, trip);
+  const otherMembers = chat.miembros.filter((m) => m.id !== currentUserId).map((m) => m.nombre.split(" ")[0]);
+  const headerSubtitle = trip
+    ? `${chat.miembros.length} personas · ${tripStatus(trip)}`
+    : chat.tipo === "GRUPO"
+      ? `Grupo · ${otherMembers.length > 3 ? `${otherMembers.slice(0, 3).join(", ")} y ${otherMembers.length - 3} más` : `${otherMembers.join(", ")} y tú`}`
+      : null;
   const isDirectChat = chat.tipo === "DIRECTO";
 
   return (
@@ -1818,27 +1827,45 @@ export function ChatConversation({
         </div>
       )}
 
-      {/* Header */}
+      {/* Header (Bitácora): who, in serif; in a plan's chat, its date and where the trip stands */}
       {!embedded && (
-        <div className="flex min-w-0 items-center gap-[var(--space-3)] border-b border-app px-[var(--space-3)] pb-[var(--space-3)] pt-mobile-safe-top md:px-[var(--space-4)] md:py-[var(--space-3)]">
-          <button type="button" onClick={onBack} className="flex size-[32px] shrink-0 items-center justify-center rounded-full transition-colors hover:bg-surface" aria-label="Volver">
-            <BackIcon className="size-[18px]" />
-          </button>
-          <button type="button" onClick={() => setShowInfo(true)} className="flex min-w-0 flex-1 items-center gap-[var(--space-3)] rounded-[8px] px-1 py-1 text-left transition-colors hover:bg-surface">
-            <div className="avatar-md flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">
-              {avatar ? <NextImage src={avatar} alt={name} width={40} height={40} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" /> : chat.tipo === "GRUPO" ? <GroupIcon className="size-[16px] text-muted" /> : (name[0] ?? "?").toUpperCase()}
+        <div className="border-b border-app bg-app pt-mobile-safe-top md:pt-0">
+          <div className="flex min-h-[56px] min-w-0 items-center gap-[4px] px-[4px] md:min-h-[64px] md:px-[var(--space-2)]">
+            <button type="button" onClick={onBack} className="flex size-[44px] shrink-0 items-center justify-center rounded-[8px] text-app transition-colors hover:bg-surface" aria-label="Volver">
+              <BackIcon className="size-[22px]" />
+            </button>
+            <button type="button" onClick={() => setShowInfo(true)} className="flex min-h-[44px] min-w-0 flex-1 items-center gap-[var(--space-3)] rounded-[8px] px-1 text-left transition-colors hover:bg-surface">
+              {trip ? (
+                <span aria-hidden className="flex size-[36px] shrink-0 flex-col items-center justify-center rounded-[8px] border border-[var(--chat-me-border)] bg-[var(--chat-me)] leading-none">
+                  <span className="[font-family:var(--font-display)] text-[18px] tabular-nums text-app">{trip.start.getDate()}</span>
+                  <span className="mt-[2px] text-[9px] font-[var(--fw-semibold)] uppercase tracking-[0.04em] text-muted">{trip.start.toLocaleDateString("es-ES", { month: "short" }).replace(".", "")}</span>
+                </span>
+              ) : (
+                <span className="flex size-[36px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-[var(--surface-2)] text-[14px] font-[var(--fw-semibold)] text-app">
+                  {avatar ? <NextImage src={avatar} alt="" width={36} height={36} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" /> : chat.tipo === "GRUPO" ? <GroupIcon className="size-[16px] text-muted" /> : (name[0] ?? "?").toUpperCase()}
+                </span>
+              )}
+              <span className="min-w-0">
+                <span className="block truncate [font-family:var(--font-display)] text-[23px] leading-[26px] text-app">{name}</span>
+                {headerSubtitle && <span className="block truncate text-[12px] text-muted">{headerSubtitle}</span>}
+              </span>
+            </button>
+            <ChatIconButton label="Iniciar llamada de voz" onClick={() => onStartCall?.("audio")}>
+              <PhoneCallIcon className="size-[22px]" />
+            </ChatIconButton>
+            <ChatIconButton label="Iniciar videollamada" onClick={() => onStartCall?.("video")}>
+              <VideoCallIcon className="size-[23px]" />
+            </ChatIconButton>
+          </div>
+          {trip && planId && (
+            <div className="flex min-h-[36px] items-center gap-[var(--space-2)] border-t border-app px-[var(--space-4)] text-[13px]">
+              <span className="tabular-nums text-app">{tripRange(trip)}</span>
+              {planInfo?.ubicacion_nombre && <span className="min-w-0 truncate text-muted">· {planInfo.ubicacion_nombre}</span>}
+              <Link href={`/plans/${planId}`} className="ml-auto flex min-h-[36px] shrink-0 items-center font-[var(--fw-semibold)] text-primary-token hover:underline">
+                Ver plan
+              </Link>
             </div>
-            <div className="min-w-0">
-              <p className="truncate text-body-sm font-[var(--fw-semibold)] text-app">{name}</p>
-              {chat.tipo === "GRUPO" && <p className="text-[14px] text-muted">{chat.miembros.length} miembros</p>}
-            </div>
-          </button>
-          <ChatIconButton label="Iniciar llamada de voz" onClick={() => onStartCall?.("audio")}>
-            <PhoneCallIcon className="size-[22px]" />
-          </ChatIconButton>
-          <ChatIconButton label="Iniciar videollamada" onClick={() => onStartCall?.("video")}>
-            <VideoCallIcon className="size-[23px]" />
-          </ChatIconButton>
+          )}
         </div>
       )}
 
@@ -2169,7 +2196,7 @@ export function ChatConversation({
           <input ref={audioFileInputRef} type="file" className="hidden" accept="audio/*,.mp3,.m4a,.ogg,.wav,.aac,.flac" onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleSendAudioFile(f); e.target.value = ""; }} />
 
           {/* Single input container */}
-          <div className="flex min-w-0 flex-1 items-center gap-1 rounded-full border border-app bg-surface px-2">
+          <div className="flex min-h-[44px] min-w-0 flex-1 items-center gap-1 rounded-full bg-[var(--surface-2)] px-2">
             {isRecording ? (
               <>
                 <span className="mx-1 size-2 shrink-0 animate-pulse rounded-full bg-red-500" />
@@ -2221,7 +2248,7 @@ export function ChatConversation({
                   onKeyDown={onKeyDown}
                   placeholder={editingMsg ? "Editar mensaje..." : planId ? "Escribe un mensaje o pregunta a @frimee..." : "Escribe un mensaje..."}
                   aria-label={editingMsg ? "Editar mensaje" : "Escribir mensaje"}
-                  className="min-w-0 flex-1 bg-transparent py-[10px] text-body-sm text-app outline-none placeholder:text-muted"
+                  className="min-w-0 flex-1 bg-transparent py-[10px] text-[15px] text-app outline-none placeholder:text-muted"
                 />
                 {!text.trim() && (
                   <>
