@@ -1,4 +1,5 @@
 import type { CapacitorConfig } from '@capacitor/cli';
+import { KeyboardResize } from '@capacitor/keyboard';
 
 const serverUrl = process.env.CAP_SERVER_URL;
 
@@ -16,9 +17,8 @@ const config: CapacitorConfig = {
     : {}),
   plugins: {
     Keyboard: {
-      resize: "none",
+      resize: KeyboardResize.None,
       resizeOnFullScreen: true,
-      scrollOnFocus: false,
     },
     PushNotifications: {
       presentationOptions: ["badge", "sound", "alert"],

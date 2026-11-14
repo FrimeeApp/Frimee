@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Capacitor } from "@capacitor/core";
 import {
   ConnectionQuality,
   ConnectionState,
@@ -66,6 +67,8 @@ export type LivekitRoomApi = {
   dismissBlocked: () => void;
   /** Front / back camera (phones). */
   canFlipCamera: boolean;
+  /** Switching between the front and the back camera. */
+  flippingCamera: boolean;
   flipCamera: () => Promise<void>;
   /** Leave the room (ends the call through onEnd). */
   disconnect: () => void;
@@ -102,6 +105,7 @@ export function useLivekitRoom(options: LivekitRoomOptions | null): LivekitRoomA
   const [screenSharing, setScreenSharing] = useState(false);
   const [unstable, setUnstable] = useState<Set<string>>(() => new Set());
   const [canFlipCamera, setCanFlipCamera] = useState(false);
+  const [flippingCamera, setFlippingCamera] = useState(false);
   const [blocked, setBlocked] = useState<"mic" | "camera" | null>(null);
   const facingRef = useRef<"user" | "environment">("user");
 
@@ -276,22 +280,31 @@ export function useLivekitRoom(options: LivekitRoomOptions | null): LivekitRoomA
       }
     });
 
+    // Phones with a front and a back camera get the flip button. Checked again once the camera
+    // is on: before the permission, Android may list a single camera.
+    const checkFlip = () => {
+      void Room.getLocalDevices("videoinput", false)
+        .then((devices) => { if (!cancelled) setCanFlipCamera(devices.length > 1 && window.matchMedia("(pointer: coarse)").matches); })
+        .catch(() => {});
+    };
+
     const connect = async () => {
       // Microphone (and camera) open while the room connects, not after: audio starts sooner.
-      const localTracks: Promise<[LocalAudioTrack, LocalVideoTrack | null]> = Promise.all([
-        createLocalAudioTrack(AUDIO_OPTIONS),
-        camera ? createLocalVideoTrack() : Promise.resolve(null),
-      ]);
-      localTracks.catch(() => {}); // handled below, after connecting
+      // Each on its own: a camera that fails must not take the microphone with it (and the other
+      // way round). In the Android app they go one after the other: while the system asks for the
+      // first permission, a second request at the same time is refused straight away.
+      const audioTrack: Promise<LocalAudioTrack> = createLocalAudioTrack(AUDIO_OPTIONS);
+      const videoTrack: Promise<LocalVideoTrack | null> = !camera ? Promise.resolve(null)
+        : Capacitor.isNativePlatform() ? audioTrack.catch(() => null).then(() => createLocalVideoTrack())
+          : createLocalVideoTrack();
+      audioTrack.catch(() => {}); // handled below, after connecting
+      videoTrack.catch(() => {});
       await room.connect(livekitUrl, token);
       if (cancelled) { room.disconnect(); return; }
       // Someone may have joined before this side finished connecting: no ParticipantConnected
       // event comes for them, so the call counts as answered right here.
       if (room.remoteParticipants.size > 0) callbacksRef.current?.onParticipantConnected();
-      // Phones with a front and a back camera get the flip button.
-      void Room.getLocalDevices("videoinput", false)
-        .then((devices) => { if (!cancelled) setCanFlipCamera(devices.length > 1 && window.matchMedia("(pointer: coarse)").matches); })
-        .catch(() => {});
+      checkFlip();
       room.remoteParticipants.forEach((p) => {
         addTile(p.identity, p.identity, false, false);
         p.getTrackPublications().forEach((pub) => {
@@ -305,10 +318,7 @@ export function useLivekitRoom(options: LivekitRoomOptions | null): LivekitRoomA
 
       // Audio and camera publish separately: a camera that fails (busy, slow to start) must not
       // leave the call without sound. The camera gets one more try.
-      const [audioResult, videoResult] = await Promise.allSettled([
-        localTracks.then(([audio]) => audio),
-        localTracks.then(([, video]) => video),
-      ]);
+      const [audioResult, videoResult] = await Promise.allSettled([audioTrack, videoTrack]);
       if (cancelled) {
         if (audioResult.status === "fulfilled") audioResult.value.stop();
         if (videoResult.status === "fulfilled") videoResult.value?.stop();
@@ -327,6 +337,7 @@ export function useLivekitRoom(options: LivekitRoomOptions | null): LivekitRoomA
           tracks.set("__local__", track);
           setTiles((prev) => prev.map((t) => t.isLocal && !t.isScreenShare ? { ...t, videoMuted: false } : t));
           document.querySelectorAll<HTMLVideoElement>(`video[data-tile="${room.localParticipant.identity}"], video[data-own-video]`).forEach((el) => track.attach(el));
+          checkFlip();
         };
         try {
           if (videoResult.status !== "fulfilled" || !videoResult.value) throw videoResult.status === "rejected" ? videoResult.reason : new Error("sin cámara");
@@ -458,10 +469,20 @@ export function useLivekitRoom(options: LivekitRoomOptions | null): LivekitRoomA
     const track = pub?.track as LocalVideoTrack | undefined;
     if (!track) return;
     const next = facingRef.current === "user" ? "environment" : "user";
+    setFlippingCamera(true);
     try {
       await track.restartTrack({ facingMode: next });
       facingRef.current = next;
+      // The new camera's first frame: until then, the dots.
+      const el = track.attachedElements[0] as HTMLVideoElement | undefined;
+      if (el && "requestVideoFrameCallback" in el) {
+        await new Promise<void>((resolve) => {
+          const t = setTimeout(resolve, 2000);
+          el.requestVideoFrameCallback(() => { clearTimeout(t); resolve(); });
+        });
+      }
     } catch (err) { console.error("[call] flip camera", err); }
+    setFlippingCamera(false);
   }, []);
 
   const disconnect = useCallback(() => { roomRef.current?.disconnect(); }, []);
@@ -485,6 +506,7 @@ export function useLivekitRoom(options: LivekitRoomOptions | null): LivekitRoomA
     retryMedia,
     dismissBlocked,
     canFlipCamera,
+    flippingCamera,
     flipCamera,
     disconnect,
   };

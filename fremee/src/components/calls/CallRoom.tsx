@@ -10,10 +10,10 @@ import type { CallMiembro } from "@/hooks/useCall";
 import type { ParticipantTile } from "@/hooks/useLivekitRoom";
 import { useCallRoom } from "@/providers/CallProvider";
 import { useAuth } from "@/providers/AuthProvider";
-import { CallAvatar, CallControl, CallDots, HangUpIcon } from "./ui";
+import { CallAvatar, CallControl, CallDots, HangUpIcon, NO_POSTER } from "./ui";
 import RoomTile, { trackKeyOf } from "./room/RoomTile";
 import SelfView from "./room/SelfView";
-import { firstName, gridShape, paginate, useElementSize } from "./room/layout";
+import { firstName, gridShape, paginate, useElementSize, useSafeAreaBottom } from "./room/layout";
 
 type Props = {
   miembros: CallMiembro[];
@@ -163,7 +163,9 @@ export default function CallRoom({ miembros, participanteNombre, tipo, isGroup, 
   const barBottom = mobile ? 16 : 24;
   const barH = 88;
   const contentTop = headerH;
-  const contentBottom = barBottom + barH + (mobile ? 16 : 12);
+  // The controls sit above the system's bottom area (Android's buttons): the grid and your camera too.
+  const safeBottom = useSafeAreaBottom();
+  const contentBottom = safeBottom + barBottom + barH + (mobile ? 16 : 12);
   const pad = mobile ? 8 : 24;
   const gap = mobile ? 8 : 12;
   const fullBleed = mode === "one";
@@ -222,7 +224,7 @@ export default function CallRoom({ miembros, participanteNombre, tipo, isGroup, 
             <>
               {remote && !remote.videoMuted ? (
                 <div className="absolute inset-0" onClick={() => mobile && (chromeHidden ? wake() : setIdle(true))}>
-                  <video data-tile={remote.id} autoPlay playsInline muted ref={(el) => attachTrack(trackKeyOf(remote), el)} className="absolute inset-0 size-full object-cover" />
+                  <video data-tile={remote.id} poster={NO_POSTER} autoPlay playsInline muted ref={(el) => attachTrack(trackKeyOf(remote), el)} className="absolute inset-0 size-full object-cover" />
                   {unstable.has(remote.identity) && (
                     <span className="call-tag call-tag-warn absolute left-4" style={{ top: headerH + 8 }}>
                       <SignalLow className="size-3.5" aria-hidden /><span>Conexión inestable</span>
@@ -246,6 +248,7 @@ export default function CallRoom({ miembros, participanteNombre, tipo, isGroup, 
                 userName={me.nombre}
                 userFoto={me.foto}
                 canFlip={room.canFlipCamera}
+                flipping={room.flippingCamera}
                 onFlip={() => void room.flipCamera()}
                 attach={attachTrack}
               />
@@ -311,7 +314,7 @@ export default function CallRoom({ miembros, participanteNombre, tipo, isGroup, 
                     </div>
                     <div className="call-tile flex flex-1 flex-col items-center justify-center p-6 text-center">
                       <div className="relative aspect-[16/10] w-[320px] max-w-full overflow-hidden rounded-lg bg-black">
-                        <video data-tile={mainTile.id} autoPlay playsInline muted ref={(el) => attachTrack(trackKeyOf(mainTile), el)} className="absolute inset-0 size-full object-contain" />
+                        <video data-tile={mainTile.id} poster={NO_POSTER} autoPlay playsInline muted ref={(el) => attachTrack(trackKeyOf(mainTile), el)} className="absolute inset-0 size-full object-contain" />
                       </div>
                       <p className="m-0 mt-5 text-[17px] font-semibold">Los demás están viendo tu pantalla</p>
                       <p className="m-0 mt-1 text-[14px] text-[var(--stage-text-2)]">Aquí la verás en pequeño para evitar el efecto espejo.</p>

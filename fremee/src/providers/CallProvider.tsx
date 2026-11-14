@@ -11,6 +11,8 @@ import CallPill from "@/components/calls/CallPill";
 import CallEnded, { type EndedCall } from "@/components/calls/CallEnded";
 import PermissionSheet from "@/components/calls/PermissionSheet";
 import { useAuth } from "@/providers/AuthProvider";
+import { Capacitor } from "@capacitor/core";
+import { cancelIncomingCall, onCallNotificationAction, parseCallUrl, startOngoingCall, stopOngoingCall, takePendingCallLink, updateOngoingCall } from "@/services/native/callNative";
 import { getLivekitUrl } from "@/config/external";
 import { useLivekitRoom, type LivekitRoomApi } from "@/hooks/useLivekitRoom";
 
@@ -43,7 +45,7 @@ export function useCallContext() {
 }
 
 export function CallProvider({ children }: { children: React.ReactNode }) {
-  const { callState, startCall: startCallInternal, joinCall, acceptCall, endCall, markActive, activeSince, endReason, clearEndReason } = useCall();
+  const { callState, startCall: startCallInternal, joinCall, acceptCall, endCall, markActive, openFromNotification, activeSince, endReason, clearEndReason } = useCall();
   // The last outgoing call: its screen stays after it ends to say why, and "Volver a llamar" repeats it.
   const [lastTarget, setLastTarget] = useState<{ chatId: string; nombre: string; foto?: string; tipo: "audio" | "video"; miembros: CallMiembro[] } | null>(null);
   const [minimized, setMinimized] = useState(false);
@@ -52,8 +54,10 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   const [guestLimit, setGuestLimit] = useState(false);
   const cancelledOutgoingChatRef = useRef<string | null>(null);
   const previousCallStatusRef = useRef(callState.status);
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const myId = profile?.id ?? null;
+  // The session (not only the cached profile): needed to read and answer a call.
+  const sessionUserId = user?.id ?? null;
   // The end-of-call screen (M16, D16), from what the call looked like just before it ended.
   const [ended, setEnded] = useState<(EndedCall & { rejoin?: Parameters<CallContextValue["joinCall"]> }) | null>(null);
   const lastActiveRef = useRef<{ snapshot: EndedCall; rejoin: Parameters<CallContextValue["joinCall"]>; since: number | null; remotes: number } | null>(null);
@@ -169,6 +173,84 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       remotes: remoteTiles.length,
     };
   });
+
+  // ── Android (board M19) ──
+  // Opened from the call notification: fremee://call/incoming|answer?llamada=… The native side
+  // keeps the link (Capacitor's launch URL can only be read once, and another screen reads it);
+  // it is taken on start and every time Frimee comes to the front. Kept here until the session
+  // is there: a cold start loads it after the link arrives.
+  const [pendingCallLink, setPendingCallLink] = useState<{ llamadaId: number; answer: boolean } | null>(null);
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    const take = (url: string | null) => {
+      const link = parseCallUrl(url);
+      if (link) setPendingCallLink(link);
+    };
+    const check = () => {
+      if (document.visibilityState === "visible") void takePendingCallLink().then(take);
+    };
+    check();
+    document.addEventListener("visibilitychange", check);
+    return () => document.removeEventListener("visibilitychange", check);
+  }, []);
+  useEffect(() => {
+    if (!pendingCallLink || !sessionUserId) return;
+    const link = pendingCallLink;
+    const t = setTimeout(() => {
+      setPendingCallLink(null);
+      void openFromNotification(link.llamadaId, link.answer);
+    }, 0);
+    return () => clearTimeout(t);
+  }, [pendingCallLink, sessionUserId, openFromNotification]);
+
+  // The app took the call: answered, or ringing on its own screen while Frimee is on screen. In the
+  // background the notification stays (the app's screen is not seen; realtime still runs there).
+  const ringingId = callState.status === "incoming" ? callState.llamadaId : null;
+  const answeredId = callState.status === "active" ? callState.llamadaId : null;
+  useEffect(() => {
+    if (answeredId) void cancelIncomingCall(answeredId);
+  }, [answeredId]);
+  useEffect(() => {
+    if (!ringingId) return;
+    const cancelIfSeen = () => { if (document.visibilityState === "visible") void cancelIncomingCall(ringingId); };
+    cancelIfSeen();
+    document.addEventListener("visibilitychange", cancelIfSeen);
+    return () => document.removeEventListener("visibilitychange", cancelIfSeen);
+  }, [ringingId]);
+
+  // In a call: the ongoing-call notification and its foreground service, so Android keeps the
+  // microphone working when you leave the app (M19b).
+  const ongoingRef = useRef(false);
+  const ongoing = callState.status === "active" ? {
+    title: isGroup ? `Llamada con ${participanteNombre}` : participanteNombre,
+    subtitle: isGroup ? `${remoteTiles.length + 1} personas · Toca para volver` : "Toca para volver",
+    video: room.cameraEnabled,
+    muted: !room.micEnabled,
+  } : null;
+  const ongoingKey = ongoing ? JSON.stringify(ongoing) : null;
+  useEffect(() => {
+    if (!ongoingKey) {
+      if (ongoingRef.current) {
+        ongoingRef.current = false;
+        void stopOngoingCall();
+      }
+      return;
+    }
+    const options = JSON.parse(ongoingKey) as Parameters<typeof startOngoingCall>[0];
+    if (ongoingRef.current) void updateOngoingCall(options);
+    else {
+      ongoingRef.current = true;
+      void startOngoingCall(options);
+    }
+  }, [ongoingKey]);
+
+  // "Silenciar" / "Colgar" in that notification.
+  const notificationActionsRef = useRef({ toggleMute: room.toggleMute, hangUp });
+  useEffect(() => { notificationActionsRef.current = { toggleMute: room.toggleMute, hangUp }; });
+  useEffect(() => onCallNotificationAction((action) => {
+    if (action === "mute") void notificationActionsRef.current.toggleMute();
+    else notificationActionsRef.current.hangUp();
+  }), []);
 
   // The app's "+" button goes up while the pill is on screen (phones), so they do not overlap.
   const pillVisible = inCall && minimized;
