@@ -1909,6 +1909,11 @@ export function ChatConversation({
               const slot = timeline[idx];
               const startsTurn = slot?.startsTurn ?? true;
               const endsTurn = slot?.endsTurn ?? true;
+              const startsBurst = slot?.startsBurst ?? true;
+              const endsBurst = slot?.endsBurst ?? true;
+              // An exchange of quick messages: one time at its start, no repeated headers inside it.
+              const inBurst = slot?.inBurst ?? false;
+              const timeHere = inBurst ? endsBurst : endsTurn;
               const msgDate = msg.created_at ? new Date(msg.created_at) : null;
               const msgTime = msgDate ? msgDate.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", hour12: false }) : formatChatTime(msg.created_at);
               const isCallRecord = Boolean(msg.tipo?.startsWith("call_"));
@@ -1988,7 +1993,7 @@ export function ChatConversation({
               ) : msg.document_url ? (
                 <DocumentBubble url={msg.document_url} name={msg.document_name ?? "Documento"} sending={msg.id < 0} />
               ) : msg.image_url ? (
-                <MediaBubble url={msg.image_url} type={msg.image_type ?? "image/jpeg"} sending={msg.id < 0} time={isMe && endsTurn ? msgTime : ""} isMe={isMe} onOpenLightbox={!msg.image_type?.startsWith("video/") ? () => setLightboxUrl(msg.image_url!) : undefined} />
+                <MediaBubble url={msg.image_url} type={msg.image_type ?? "image/jpeg"} sending={msg.id < 0} time={isMe && timeHere ? msgTime : ""} isMe={isMe} onOpenLightbox={!msg.image_type?.startsWith("video/") ? () => setLightboxUrl(msg.image_url!) : undefined} />
               ) : isResumenViaje(msg.texto) ? (
                 <ResumenViajeBubble texto={msg.texto} />
               ) : isPollMessage(msg.texto) ? (
@@ -2012,25 +2017,48 @@ export function ChatConversation({
                 <span className="mt-[4px] inline-flex items-center rounded-full border border-app bg-[var(--surface)] px-[6px] py-px text-[13px]">{reaction}</span>
               ) : null;
               const highlight = highlightedId === msg.id ? "bg-[var(--text-primary)]/10 transition-colors" : "";
-              const gapAbove = slot?.chapter ? "" : startsTurn ? "mt-[14px]" : "mt-[2px]";
+              const burstTimeRow = inBurst && startsBurst;
+              const gapAbove = burstTimeRow ? "mt-[6px]"
+                : slot?.chapter ? ""
+                : startsBurst ? "mt-[14px]"
+                : startsTurn ? "mt-[8px]"
+                : "mt-[2px]";
+              // Others: name and time on top of a turn; inside a burst only the name, and only in groups.
+              const showHeader = startsTurn && (!inBurst || showName || isBot);
+              const compactMine = inBurst && !isRichContent && !replyQuote;
               return (
                 <Fragment key={(msg)._key ?? msg.id}>
                 {slot?.chapter && <DayChapter label={slot.chapter} />}
+                {burstTimeRow && (
+                  <div className={`pl-[56px] pr-[var(--space-4)] text-[12px] tabular-nums text-muted ${slot?.chapter ? "mt-[4px]" : "mt-[14px]"}`}>{msgTime}</div>
+                )}
                 {isMe ? (
                   <article id={`msg-${msg.id}`} aria-label={`Tú, ${msgTime}`} className={`group/msg relative pl-[56px] pr-[var(--space-4)] ${gapAbove} ${highlight}`}>
                     {startsTurn && <span aria-hidden className="absolute left-[24px] top-[12px] size-[7px] rounded-full bg-[var(--primary)]" />}
                     <div className="flex flex-col items-end">
                       <div className={`relative max-w-[min(286px,100%)] md:max-w-[min(520px,100%)] ${contextMenu?.msg.id === msg.id ? "opacity-75" : ""}`} {...gestureProps}>
-                        <div className={msg.image_url ? "" : `rounded-[8px] bg-[var(--chat-me)] ${isRichContent ? "px-3 py-2" : "px-[12px] py-[8px]"}`}>
-                          {replyQuote}
-                          {content}
-                          {!msg.image_url && (endsTurn || isStarred) && (
-                            <div className="mt-[2px] flex items-center justify-end gap-[4px] text-[12px] text-muted">
-                              {isStarred && <span aria-label="Destacado">★</span>}
-                              {endsTurn && <span className="tabular-nums">{msgTime}</span>}
-                            </div>
-                          )}
-                        </div>
+                        {compactMine ? (
+                          <div className="flex items-end gap-[8px] rounded-[8px] bg-[var(--chat-me)] px-[10px] py-[4px]">
+                            {content}
+                            {(timeHere || isStarred) && (
+                              <span className="flex shrink-0 items-center gap-[4px] pb-[2px] text-[12px] tabular-nums text-muted">
+                                {isStarred && <span aria-label="Destacado">★</span>}
+                                {timeHere && msgTime}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <div className={msg.image_url ? "" : `rounded-[8px] bg-[var(--chat-me)] ${isRichContent ? "px-3 py-2" : "px-[12px] py-[8px]"}`}>
+                            {replyQuote}
+                            {content}
+                            {!msg.image_url && (timeHere || isStarred) && (
+                              <div className="mt-[2px] flex items-center justify-end gap-[4px] text-[12px] text-muted">
+                                {isStarred && <span aria-label="Destacado">★</span>}
+                                {timeHere && <span className="tabular-nums">{msgTime}</span>}
+                              </div>
+                            )}
+                          </div>
+                        )}
                         <span className="absolute -left-[26px] top-[4px]">{menuButton}</span>
                       </div>
                       {reactionChip}
@@ -2049,22 +2077,22 @@ export function ChatConversation({
                         </span>
                       )
                     )}
-                    {startsTurn && (
+                    {showHeader && (
                       <div className="flex min-h-[20px] items-baseline gap-[8px] pt-[4px]">
                         {showName && <span className={`text-[13px] font-[var(--fw-semibold)] ${isBot ? "text-primary-token" : "text-app"}`}>{isBot ? "Frimee" : msg.sender_nombre}</span>}
                         {isBot && <span className="rounded-[4px] border border-app px-[6px] py-px text-[11px] font-[var(--fw-semibold)] text-muted">Asistente</span>}
-                        <span className="text-[12px] tabular-nums text-muted">{msgTime}</span>
+                        {!inBurst && <span className="text-[12px] tabular-nums text-muted">{msgTime}</span>}
                         {isStarred && <span className="text-[12px] text-muted" aria-label="Destacado">★</span>}
                         {menuButton}
                       </div>
                     )}
-                    <div className={`relative max-w-[640px] ${startsTurn ? "mt-[4px]" : ""} ${contextMenu?.msg.id === msg.id ? "opacity-75" : ""}`} {...gestureProps}>
+                    <div className={`relative max-w-[640px] ${showHeader ? "mt-[4px]" : startsTurn ? "pt-[3px]" : ""} ${contextMenu?.msg.id === msg.id ? "opacity-75" : ""}`} {...gestureProps}>
                       <div className={`${isBot ? "rounded-[8px] border border-dashed border-[var(--chat-me-border)] bg-[var(--surface-inset)] p-[12px]" : richFrame} ${msg.image_url ? "max-w-[min(286px,100%)]" : isRichContent ? "inline-block max-w-full" : ""}`}>
                         {replyQuote}
                         {content}
                       </div>
-                      {!startsTurn && !isBot && (
-                        <span className="absolute -left-[28px] top-[2px]">{menuButton}</span>
+                      {!showHeader && !isBot && (
+                        <span className={`absolute ${startsTurn ? "right-0" : "-left-[28px]"} top-[2px]`}>{menuButton}</span>
                       )}
                     </div>
                     {reactionChip}
