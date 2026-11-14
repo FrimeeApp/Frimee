@@ -21,7 +21,8 @@ import { useToast } from "@/components/ui/Toaster";
 import { createGrupoEndpoint } from "@/services/api/endpoints/grupos.endpoint";
 import { ChatConversation, BackIcon, GroupIcon } from "@/components/chat/ChatConversation";
 import { SearchInput } from "@/components/ui/SearchInput";
-import { BarChart2, FileText, Image as ImageIcon, Mic, Phone, Receipt, Video } from "lucide-react";
+import { BarChart2, CalendarDays, FileText, Image as ImageIcon, MapPin, Mic, Phone, Receipt, Video } from "lucide-react";
+import { momentPreview } from "@/components/chat/bitacora/moments";
 import { tripStatus } from "@/components/chat/bitacora/timeline";
 
 export default function MessagesPage() {
@@ -449,7 +450,7 @@ export default function MessagesPage() {
       }}
       inCall={callState.status !== "idle"}
       onNewMessage={(msg) => {
-        const preview = msg.audio_url ? "🎤 Nota de voz" : msg.document_url ? `📄 ${msg.document_name ?? "Documento"}` : msg.image_url ? (msg.image_type?.startsWith("video/") ? "🎥 Vídeo" : "📷 Foto") : (() => { try { return JSON.parse(msg.texto)?.type === "poll" ? "📊 Encuesta" : msg.texto; } catch { return msg.texto; } })();
+        const preview = msg.audio_url ? "🎤 Nota de voz" : msg.document_url ? `📄 ${msg.document_name ?? "Documento"}` : msg.image_url ? (msg.image_type?.startsWith("video/") ? "🎥 Vídeo" : "📷 Foto") : msg.texto;
         setChats((prev) => prev.map((c) =>
           c.chat_id !== selectedChatId ? c : { ...c, last_message: preview, last_message_at: msg.created_at }
         ));
@@ -533,9 +534,12 @@ function ChatPreviewAvatar({ name, image, isGroup }: { name: string; image: stri
 function describeLastMessage(raw: string | null): { icon: React.ReactNode; text: string; missed: boolean } {
   const m = raw ?? "";
   try {
-    const parsed = JSON.parse(m) as { type?: string; question?: string };
-    if (parsed?.type === "poll") return { icon: <BarChart2 className="size-[14px] shrink-0" aria-hidden />, text: `Encuesta · ${parsed.question ?? ""}`, missed: false };
-    if (parsed?.type === "resumen_viaje") return { icon: <Receipt className="size-[14px] shrink-0" aria-hidden />, text: "Resumen del viaje", missed: false };
+    const parsed = JSON.parse(m) as { type?: string };
+    const text = momentPreview(m);
+    if (text) {
+      const Icon = parsed?.type === "poll" ? BarChart2 : parsed?.type === "lugar" ? MapPin : parsed?.type === "tarjeta" ? CalendarDays : Receipt;
+      return { icon: <Icon className="size-[14px] shrink-0" aria-hidden />, text, missed: false };
+    }
   } catch { /* plain text */ }
   if (/llamada|videollamada/i.test(m)) {
     const missed = /perdida/i.test(m);

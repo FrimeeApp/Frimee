@@ -37,6 +37,11 @@
   /* Chat (Bitácora): your messages and the @frimee frame, from the Frimee design system */
   --chat-me: #e7f4f1;
   --chat-me-border: #bfe0d9;
+  /* Bitácora moments: poll bars, own reaction, pending chip; red only for a missed call. */
+  --chat-tint: rgba(41, 142, 125, 0.14);
+  --chat-accent-text: #227a6c;
+  --chat-missed: #b91c1c;
+  --chat-missed-bg: #fdeeee;
 
   --interactive-hover-surface: color-mix(in srgb, var(--surface) 88%, var(--primary) 12%);
   --interactive-active-surface: color-mix(in srgb, var(--surface) 82%, var(--primary) 18%);
@@ -183,6 +188,10 @@
   --border-strong: #3a3a3d;
   --chat-me: #15302b;
   --chat-me-border: #245048;
+  --chat-tint: rgba(60, 221, 194, 0.16);
+  --chat-accent-text: #3cddc2;
+  --chat-missed: #f87171;
+  --chat-missed-bg: #2b1a1c;
 
   --interactive-hover-surface: color-mix(in srgb, var(--surface) 84%, var(--primary) 16%);
   --interactive-active-surface: color-mix(in srgb, var(--surface) 78%, var(--primary) 22%);

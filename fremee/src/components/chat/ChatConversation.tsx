@@ -17,7 +17,6 @@ import {
   sendBotMensaje,
   markChatRead,
   reactMensaje,
-  getMyReacciones,
   pollVote,
   pollGetVotes,
   resolveChatName,
@@ -29,7 +28,25 @@ import {
   type MensajeRow,
 } from "@/services/api/repositories/chat.repository";
 import { fetchActiveFriends, type PublicUserProfileRow } from "@/services/api/endpoints/users.endpoint";
-import { closePollEndpoint } from "@/services/api/endpoints/chat.endpoint";
+import {
+  closePollEndpoint,
+  getReaccionesEndpoint,
+  pinMensajeEndpoint,
+  getPinnedEndpoint,
+  destacarMensajeEndpoint,
+  getMisDestacadosEndpoint,
+  resolverPropuestaEndpoint,
+  type ReaccionResumen,
+} from "@/services/api/endpoints/chat.endpoint";
+import { createSubplan } from "@/services/api/endpoints/subplanes.endpoint";
+import { parseMoment, momentPreview, momentAsAssistantText, formatEuros, type Moment, type ProposalMoment } from "@/components/chat/bitacora/moments";
+import { PollMoment, emitPollVote } from "@/components/chat/bitacora/PollMoment";
+import { CallLine } from "@/components/chat/bitacora/CallLine";
+import { TripSummaryCard, ExpenseCard, PlanItemCard } from "@/components/chat/bitacora/MomentCards";
+import { PlaceCard } from "@/components/chat/bitacora/PlaceCard";
+import { FrimeeProposal } from "@/components/chat/bitacora/FrimeeProposal";
+import { MessageActions } from "@/components/chat/bitacora/MessageActions";
+import { PlaceSheet, ExpenseSheet, PlanItemSheet } from "@/components/chat/bitacora/AttachSheets";
 import { uploadPlanCoverFile, uploadAudioBlob, uploadAudioFile, uploadDocumentFile, uploadMediaFile } from "@/services/firebase/upload";
 import { createRealtimeTopic } from "@/lib/realtime";
 import AudioPlayer from "@/components/common/AudioPlayer";
@@ -55,10 +72,10 @@ const AI_SUGGESTIONS = [
   { label: "Ideas para cenar", prompt: "@frimee proponnos 3 sitios para cenar y haz una encuesta para votar" },
 ];
 import {
-  Trash2, Ban, AlertTriangle, LogOut, ChevronDown, Pencil, Reply, Copy,
-  Smile, Forward, Pin, Star, Camera, Send as LucideSend, PlusCircle, Mic,
+  Trash2, Ban, AlertTriangle, LogOut, ChevronDown,
+  Smile, Pin, Camera, Send as LucideSend, PlusCircle, Mic,
   File, Video, Music, BarChart2, Edit, ChevronLeft, Users,
-  Phone, Check, Download, Plus, X, Sparkles,
+  Phone, Download, Plus, X, Sparkles, MapPin, Receipt, CalendarDays,
 } from "lucide-react";
 
 const CHAT_ICON_BUTTON_BASE =
@@ -173,8 +190,6 @@ export function ChatConversation({
   const pendingGastoRef = useRef<PendingGasto | null>(null);
   type PendingPollWinner = { planId: number; winnerOption: string; question: string };
   const pendingPollWinnerRef = useRef<PendingPollWinner | null>(null);
-  type PendingAiVotar = { pollTexto: string; botReply: string };
-  const pendingAiVotarRef = useRef<PendingAiVotar | null>(null);
   const [sending, setSending] = useState(false);
   const [text, setText] = useState("");
   // Hidden until read from localStorage, so it never flashes for someone who closed it.
@@ -195,12 +210,12 @@ export function ChatConversation({
     }
   };
   const [showInfo, setShowInfo] = useState(false);
-  const [contextMenu, setContextMenu] = useState<{ msg: MensajeRow; x: number; y: number; triggerTop: number } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ msg: MensajeRow; x: number; y: number } | null>(null);
   const [replyingTo, setReplyingTo] = useState<MensajeRow | null>(null);
   const [editingMsg, setEditingMsg] = useState<MensajeRow | null>(null);
-  const [reactingToId, setReactingToId] = useState<number | null>(null);
-  const [reactingPos, setReactingPos] = useState<{ x: number; y: number } | null>(null);
-  const [localReactions, setLocalReactions] = useState<Record<number, string>>({});
+  // Everyone's reactions per message: emoji, count and whether one of them is mine.
+  const [reactions, setReactions] = useState<Record<number, ReaccionResumen[]>>({});
+  const [attachSheet, setAttachSheet] = useState<null | "lugar" | "gasto" | "plan">(null);
   const [starredIds, setStarredIds] = useState<Set<number>>(new Set());
   const [pinnedId, setPinnedId] = useState<number | null>(null);
   const [highlightedId, setHighlightedId] = useState<number | null>(null);
@@ -290,18 +305,14 @@ export function ChatConversation({
   useEffect(() => {
     void (async () => {
       try {
-        const [data, reacciones] = await Promise.all([
-          listMensajes({ chatId: chat.chat_id, limit: 50 }),
-          getMyReacciones(chat.chat_id),
-        ]);
+        const data = await listMensajes({ chatId: chat.chat_id, limit: 50 });
         setMessages(data);
         if (data.length > 0) oldestIdRef.current = data[0].id;
         setHasMore(data.length === 50);
-        const reaccionesMap: Record<number, string> = {};
-        for (const r of reacciones) {
-          reaccionesMap[r.mensaje_id] = r.emoji;
-        }
-        setLocalReactions(reaccionesMap);
+        // Reactions, pin and stars never block the conversation: each one may fail on its own.
+        void loadReactionsRef.current();
+        void getPinnedEndpoint(chat.chat_id).then(setPinnedId).catch((e) => console.error("[chat] Error leyendo el fijado:", (e as { message?: string })?.message ?? String(e)));
+        void getMisDestacadosEndpoint(chat.chat_id).then((ids) => setStarredIds(new Set(ids))).catch((e) => console.error("[chat] Error leyendo destacados:", (e as { message?: string })?.message ?? String(e)));
       } catch (e) {
         console.error("[chat] Error cargando mensajes:", e);
       } finally {
@@ -355,6 +366,11 @@ export function ChatConversation({
       .on("broadcast", { event: "poll_vote" }, ({ payload }) => {
         const { mensaje_id } = payload as { mensaje_id: number; option_index: number };
         emitPollVote(mensaje_id);
+      })
+      .on("broadcast", { event: "reactions_changed" }, () => { void loadReactionsRef.current(); })
+      .on("broadcast", { event: "pin_changed" }, ({ payload }) => {
+        const { mensaje_id } = payload as { mensaje_id: number | null };
+        setPinnedId(mensaje_id);
       })
       .on(
         "postgres_changes",
@@ -457,13 +473,6 @@ export function ChatConversation({
   }, [forwardMsg]);
 
   useEffect(() => {
-    if (reactingToId === null) return;
-    const close = () => { setReactingToId(null); setReactingPos(null); };
-    document.addEventListener("click", close);
-    return () => document.removeEventListener("click", close);
-  }, [reactingToId]);
-
-  useEffect(() => {
     if (!showEmojiPicker) return;
     const handleOutside = (e: MouseEvent) => {
       if (emojiContainerRef.current && !emojiContainerRef.current.contains(e.target as Node)) {
@@ -488,7 +497,243 @@ export function ChatConversation({
     });
   }, []);
 
-  const closeOverlays = () => { setContextMenu(null); setReactingToId(null); setReactingPos(null); setShowAttachMenu(false); setShowEmojiPicker(false); };
+  const closeOverlays = () => { setContextMenu(null); setShowAttachMenu(false); setShowEmojiPicker(false); };
+  const logError = (what: string, e: unknown) => console.error(`[chat] ${what}:`, (e as { message?: string })?.message ?? String(e));
+
+  // ── Reactions, pin and stars (phase 2: stored, and the pin is shared by the whole chat) ──
+  const loadReactions = async () => {
+    try {
+      const rows = await getReaccionesEndpoint(chat.chat_id);
+      const map: Record<number, ReaccionResumen[]> = {};
+      for (const r of rows) (map[r.mensaje_id] ??= []).push(r);
+      setReactions(map);
+    } catch (e) {
+      logError("Error leyendo reacciones", e);
+    }
+  };
+  const loadReactionsRef = useRef(loadReactions);
+  useEffect(() => { loadReactionsRef.current = loadReactions; });
+
+  const myReactionOf = (msgId: number) => reactions[msgId]?.find((r) => r.mia)?.emoji ?? null;
+
+  /** emoji "" removes mine. One reaction per person, as before. */
+  const reactTo = (msgId: number, emoji: string) => {
+    if (msgId < 0) return;
+    const prev = reactions;
+    setReactions((all) => {
+      const list = (all[msgId] ?? [])
+        .map((r) => (r.mia ? { ...r, total: r.total - 1, mia: false } : { ...r }))
+        .filter((r) => r.total > 0);
+      if (emoji) {
+        const same = list.find((r) => r.emoji === emoji);
+        if (same) { same.total += 1; same.mia = true; } else list.push({ mensaje_id: msgId, emoji, total: 1, mia: true });
+      }
+      return { ...all, [msgId]: list };
+    });
+    void reactMensaje(msgId, emoji)
+      .then(() => channelRef.current?.send({ type: "broadcast", event: "reactions_changed", payload: { mensaje_id: msgId } }))
+      .catch((e) => { setReactions(prev); logError("Error guardando reacción", e); });
+  };
+
+  const togglePin = (msgId: number) => {
+    const next = pinnedId === msgId ? null : msgId;
+    const prev = pinnedId;
+    setPinnedId(next);
+    void pinMensajeEndpoint(chat.chat_id, next)
+      .then(() => channelRef.current?.send({ type: "broadcast", event: "pin_changed", payload: { mensaje_id: next } }))
+      .catch((e) => { setPinnedId(prev); logError("Error fijando mensaje", e); });
+  };
+
+  const toggleStar = (msgId: number) => {
+    const flip = (set: Set<number>) => { const n = new Set(set); if (n.has(msgId)) n.delete(msgId); else n.add(msgId); return n; };
+    setStarredIds(flip);
+    void destacarMensajeEndpoint(msgId).catch((e) => { setStarredIds(flip); logError("Error destacando mensaje", e); });
+  };
+
+  /** Sends a moment (place, card, expense) as one of my messages; throws so the sheet can say so. */
+  const sendMoment = async (moment: Moment) => {
+    const texto = JSON.stringify(moment);
+    const tempId = -Date.now();
+    const me = chat.miembros.find((m) => m.id === currentUserId);
+    const tempMsg: LocalMsg = {
+      id: tempId, _key: tempId,
+      sender_id: currentUserId,
+      sender_nombre: me?.nombre ?? "",
+      sender_profile_image: me?.profile_image ?? null,
+      texto,
+      created_at: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, tempMsg]);
+    requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }));
+    try {
+      const newId = await sendMensaje({ chatId: chat.chat_id, texto });
+      const realMsg: LocalMsg = { ...tempMsg, id: newId };
+      sentMsgIdsRef.current.add(newId);
+      void channelRef.current?.send({ type: "broadcast", event: "new_message", payload: realMsg });
+      setMessages((prev) => prev.map((m) => (m.id === tempId ? realMsg : m)));
+      onNewMessageRef.current(realMsg);
+    } catch (e) {
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+      throw e;
+    }
+  };
+
+  // ── @frimee proposals: the plan changes only when someone accepts ──
+  /** tarea and actividad create plan items, which only admins may do (checked again in the DB). */
+  const proposalNeedsAdmin = (p: ProposalMoment) => p.kind === "tarea" || p.kind === "actividad";
+
+  const replaceMsgTexto = (id: number, texto: string) => {
+    setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, texto } : m)));
+    void channelRef.current?.send({ type: "broadcast", event: "edit_message", payload: { id, texto } });
+  };
+
+  /** What the line «Lucía añadió …» adds after the name: day and time of the activity. */
+  const proposalResult = (p: ProposalMoment): string | null => {
+    const pl = p.payload ?? {};
+    if (p.kind === "actividad" && typeof pl.inicio === "string") {
+      const d = new Date(pl.inicio);
+      const time = d.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", hour12: false });
+      if (planInfo) {
+        const start = new Date(planInfo.inicio_at);
+        const dayStart = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+        const day = Math.round((dayStart(d) - dayStart(start)) / 86_400_000) + 1;
+        if (day >= 1) return `Día ${day}, ${time}`;
+      }
+      return `${d.toLocaleDateString("es-ES", { weekday: "short", day: "numeric" })}, ${time}`;
+    }
+    return null;
+  };
+
+  const runProposal = async (p: ProposalMoment) => {
+    const pl = p.payload ?? {};
+    if (p.kind === "gasto") {
+      if (!planId) throw new Error("no_plan");
+      await createGastoEndpoint({
+        plan_id: planId,
+        titulo: String(pl.titulo),
+        pagado_por_user_id: String(pl.pagado_por_id),
+        fecha_gasto: new Date().toISOString(),
+        total: Number(pl.total),
+        metodo_reparto: "IGUAL",
+        participantes: (pl.participantes as string[]).map((user_id) => ({ user_id })),
+      });
+      return;
+    }
+    if (p.kind === "encuesta") {
+      await handleCreatePoll(String(pl.question), pl.options as string[]);
+      return;
+    }
+    if (p.kind === "tarea") {
+      if (!planId) throw new Error("no_plan");
+      await crearTareaEndpoint({ planId, titulo: String(pl.titulo), asignadoUserId: String(pl.asignado_id), categoria: String(pl.categoria) });
+      return;
+    }
+    if (p.kind === "actividad") {
+      if (!planId) throw new Error("no_plan");
+      const start = new Date(String(pl.inicio));
+      await createSubplan({
+        planId,
+        titulo: String(pl.titulo),
+        descripcion: String(pl.detalle ?? ""),
+        inicioAt: start.toISOString(),
+        // A two-hour block in the itinerary; it can be changed in the plan.
+        finAt: new Date(start.getTime() + 2 * 3_600_000).toISOString(),
+        tipo: "ACTIVIDAD",
+        ubicacionNombre: String(pl.lugar ?? ""),
+      });
+    }
+  };
+
+  const resolveProposal = async (msg: MensajeRow, p: ProposalMoment, accept: boolean) => {
+    const meName = (chat.miembros.find((m) => m.id === currentUserId)?.nombre ?? "").split(" ")[0] || "Alguien";
+    const resultado = accept ? proposalResult(p) : null;
+    let claimed: boolean;
+    try {
+      claimed = await resolverPropuestaEndpoint(msg.id, accept ? "aceptada" : "descartada", resultado ?? undefined);
+    } catch (e) {
+      logError("Error resolviendo propuesta", e);
+      return;
+    }
+    if (!claimed) {
+      // Someone got there first: show what they did.
+      const fresh = await listMensajes({ chatId: chat.chat_id, limit: 50 }).catch(() => null);
+      const updated = fresh?.find((m) => m.id === msg.id);
+      if (updated) setMessages((prev) => prev.map((m) => (m.id === msg.id ? { ...m, texto: updated.texto } : m)));
+      return;
+    }
+    const resolved: ProposalMoment = { ...p, estado: accept ? "aceptada" : "descartada", resuelta_por: currentUserId, resuelta_por_nombre: meName, resuelta_at: new Date().toISOString(), resultado };
+    if (!accept) {
+      replaceMsgTexto(msg.id, JSON.stringify(resolved));
+      return;
+    }
+    try {
+      await runProposal(p);
+      replaceMsgTexto(msg.id, JSON.stringify(resolved));
+    } catch (e) {
+      logError("Error aplicando propuesta", e);
+      // Give it back so someone can try again.
+      await resolverPropuestaEndpoint(msg.id, "pendiente").catch(() => undefined);
+      const local: LocalMsg = { id: -Date.now(), _key: -Date.now(), sender_id: "frimee", sender_nombre: "Frimee", sender_profile_image: null, texto: "No pude aplicarlo al plan. Inténtalo de nuevo.", created_at: new Date().toISOString(), tipo: "bot" };
+      setMessages((prev) => [...prev, local]);
+    }
+  };
+
+  /**
+   * Turns a plan-changing command of @frimee into a proposal, parsed now so that accepting runs
+   * exactly what the group saw. Returns a text instead when the command cannot be understood.
+   */
+  const buildProposal = async (cmd: string, reply: string): Promise<ProposalMoment | string> => {
+    const name = cmd.slice(1).trim().split(/\s+/)[0]?.toLowerCase();
+    const base = { type: "propuesta" as const, reply, command: cmd, estado: "pendiente" as const };
+    const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
+    const first = (n: string) => n.split(" ")[0] || n;
+    const fallback = reply || "No lo he entendido bien. ¿Me lo dices de otra forma?";
+
+    if (name === "gasto") {
+      // handleCommand validates and parses it (payer, amount, people) into pendingGastoRef.
+      pendingGastoRef.current = null;
+      const check = await handleCommand(cmd);
+      const g = pendingGastoRef.current as PendingGasto | null;
+      pendingGastoRef.current = null;
+      if (!g) return reply ? `${reply}\n\n${check}` : check;
+      const n = g.participantes.length;
+      return {
+        ...base, kind: "gasto",
+        titulo: `${cap(g.titulo)} · ${formatEuros(g.total)}`,
+        detalle: `Pagó ${first(g.pagadoPorNombre)} · ${n > 1 ? `a partes iguales entre ${n} · ${formatEuros(g.total / n)} cada uno` : "para una persona"}`,
+        payload: { titulo: cap(g.titulo), total: g.total, pagado_por_id: g.pagadoPorId, participantes: g.participantes.map((x) => x.user_id) },
+      };
+    }
+
+    if (name === "tarea") {
+      const tokens = cmd.slice(1).trim().split(/\s+/).slice(1);
+      const mentionIdx = tokens.findIndex((t) => t.startsWith("@"));
+      const categoria = tokens.find((t) => (CATEGORIAS_VALIDAS as readonly string[]).includes(t.toLowerCase()))?.toLowerCase() ?? "otro";
+      const miembro = mentionIdx === -1 ? undefined
+        : chat.miembros.find((m) => m.nombre.toLowerCase().startsWith(tokens[mentionIdx].slice(1).toLowerCase()));
+      const titulo = tokens.filter((t, i) => i !== mentionIdx && t.toLowerCase() !== categoria).join(" ").trim();
+      if (!miembro || !titulo) return fallback;
+      return {
+        ...base, kind: "tarea", titulo: cap(titulo), detalle: `Para ${first(miembro.nombre)} · ${categoria}`,
+        payload: { titulo: cap(titulo), asignado_id: miembro.id, categoria },
+      };
+    }
+
+    if (name === "actividad") {
+      const [titulo, when, lugar, detalle] = cmd.slice("/actividad".length).split("|").map((x) => x.trim());
+      // «2026-11-29T10:00» without a zone reads as local time, which is what @frimee means.
+      const start = when ? new Date(when) : null;
+      if (!titulo || !start || Number.isNaN(start.getTime())) return fallback;
+      const day = start.toLocaleDateString("es-ES", { weekday: "long", day: "numeric" });
+      const time = start.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", hour12: false });
+      return {
+        ...base, kind: "actividad", titulo: cap(titulo),
+        detalle: [`${day}, ${time}`, lugar, detalle].filter(Boolean).join(" · "),
+        payload: { titulo: cap(titulo), inicio: start.toISOString(), lugar: lugar ?? "", detalle: detalle ?? "" },
+      };
+    }
+    return fallback;
+  };
 
   const scrollToMessage = (msgId: number) => {
     const el = document.getElementById(`msg-${msgId}`);
@@ -1159,29 +1404,6 @@ export function ChatConversation({
     const trimmed = (override ?? text).trim();
     if (!trimmed || sending) return;
 
-    if (pendingAiVotarRef.current && (isConfirm(trimmed) || isCancel(trimmed))) {
-      const pending = pendingAiVotarRef.current;
-      pendingAiVotarRef.current = null;
-      setText("");
-      if (isCancel(trimmed)) {
-        const botMsg: LocalMsg = { id: -Date.now(), _key: -Date.now(), sender_id: "frimee", sender_nombre: "Frimee", sender_profile_image: null, texto: "Vale, no creo la encuesta.", created_at: new Date().toISOString(), tipo: "bot" };
-        setMessages((prev) => [...prev, botMsg]);
-        return;
-      }
-      try {
-        // La encuesta la envía la IA (bot), no el usuario
-        const newId = await sendBotMensaje(chat.chat_id, pending.pollTexto);
-        const pollMsg: LocalMsg = { id: newId, _key: newId, sender_id: "frimee", sender_nombre: "Frimee", sender_profile_image: null, texto: pending.pollTexto, created_at: new Date().toISOString(), tipo: "bot" };
-        void channelRef.current?.send({ type: "broadcast", event: "new_message", payload: pollMsg });
-        setMessages((prev) => prev.some((m) => m.id === newId) ? prev : [...prev, pollMsg]);
-        onNewMessageRef.current(pollMsg);
-      } catch {
-        const botMsg: LocalMsg = { id: -Date.now(), _key: -Date.now(), sender_id: "frimee", sender_nombre: "Frimee", sender_profile_image: null, texto: "No pude crear la encuesta, inténtalo de nuevo.", created_at: new Date().toISOString(), tipo: "bot" };
-        setMessages((prev) => [...prev, botMsg]);
-      }
-      return;
-    }
-
     if (pendingGastoRef.current && (isConfirm(trimmed) || isCancel(trimmed))) {
       const pending = pendingGastoRef.current;
       pendingGastoRef.current = null;
@@ -1233,14 +1455,14 @@ export function ChatConversation({
       const frimeeHistory: FrimeeHistoryEntry[] = messages
         .filter((m) => {
           if (!m.texto || m.texto === "…") return false;
-          try { const p = JSON.parse(m.texto); if (p.type) return false; } catch { /* not JSON */ }
+          try { const p = JSON.parse(m.texto); if (p.type && p.type !== "propuesta") return false; } catch { /* not JSON */ }
           const isBot = m.sender_id === "frimee" || m.sender_id === null || m.tipo === "bot";
           return isBot || m.sender_id === currentUserId;
         })
         .slice(-6)
         .map((m) => ({
           role: m.sender_id === currentUserId ? "user" : "assistant",
-          content: m.texto,
+          content: momentAsAssistantText(m.texto) ?? m.texto,
         }));
 
       // Mostrar mensaje del usuario al instante con ID temporal
@@ -1280,7 +1502,7 @@ export function ChatConversation({
         const result = await callFrimeeAssistant({
           message: trimmed,
           members: chat.miembros.map((m) => ({ id: m.id, nombre: m.nombre })),
-          planInfo: planInfo ? { titulo: planInfo.titulo, ubicacion_nombre: planInfo.ubicacion_nombre } : undefined,
+          planInfo: planInfo ? { titulo: planInfo.titulo, ubicacion_nombre: planInfo.ubicacion_nombre, inicio_at: planInfo.inicio_at, fin_at: planInfo.fin_at } : undefined,
           isAdmin,
           userId: currentUserId,
           planId: planId ?? undefined,
@@ -1313,11 +1535,18 @@ export function ChatConversation({
               // Crear directamente sin confirmación (justo después de la respuesta)
               pollToCreate = pollTexto;
             } else {
-              // IA propone → pedir confirmación
-              pendingAiVotarRef.current = { pollTexto, botReply: replyText };
-              replyText = `${replyText}\n\n¿Creo la encuesta? Responde "s" para confirmar o "n" para cancelar.`;
+              // @frimee lo sugiere por su cuenta: queda como propuesta que cualquiera puede aceptar.
+              const proposal: ProposalMoment = {
+                type: "propuesta", kind: "encuesta", reply: replyText, titulo: question,
+                detalle: options.join(" · "), command: result.command, estado: "pendiente",
+                payload: { question, options },
+              };
+              replyText = JSON.stringify(proposal);
             }
           }
+        } else if (result.command && /^\/(gasto|tarea|actividad)\b/i.test(result.command)) {
+          const proposal = await buildProposal(result.command, replyText);
+          replyText = typeof proposal === "string" ? proposal : JSON.stringify(proposal);
         } else if (result.command) {
           const cmdResult = await handleCommand(result.command);
           if (cmdResult) replyText = cmdResult;
@@ -1726,65 +1955,58 @@ export function ChatConversation({
           onClose={() => setShowCamera(false)}
         />
       )}
-      {/* Context menu */}
-      {contextMenu && (
-        <MsgContextMenu
-          msg={contextMenu.msg}
-          x={contextMenu.x}
-          y={contextMenu.y}
-          isMe={contextMenu.msg.sender_id === currentUserId}
-          isStarred={starredIds.has(contextMenu.msg.id)}
-          isPinned={pinnedId === contextMenu.msg.id}
-          onClose={closeOverlays}
-          onEdit={() => { setEditingMsg(contextMenu.msg); setText(contextMenu.msg.texto); closeOverlays(); setTimeout(() => inputRef.current?.focus(), 50); }}
-          onReply={() => { setReplyingTo(contextMenu.msg); closeOverlays(); setTimeout(() => inputRef.current?.focus(), 50); }}
-          onCopy={() => { void navigator.clipboard.writeText(contextMenu.msg.texto); closeOverlays(); }}
-          onReact={() => { setReactingToId(contextMenu.msg.id); setReactingPos({ x: contextMenu.x, y: contextMenu.triggerTop - 56 }); setContextMenu(null); }}
-          onForward={() => { setForwardMsg(contextMenu.msg); closeOverlays(); }}
-          onPin={() => { setPinnedId((p) => (p === contextMenu.msg.id ? null : contextMenu.msg.id)); closeOverlays(); }}
-          onStar={() => {
-            setStarredIds((p) => {
-              const n = new Set(p);
-              if (n.has(contextMenu.msg.id)) n.delete(contextMenu.msg.id);
-              else n.add(contextMenu.msg.id);
-              return n;
-            });
-            closeOverlays();
-          }}
-          onDelete={() => { void handleDeleteMsg(contextMenu.msg); closeOverlays(); }}
+      {/* Actions on a message: reactions on top, then the actions (sheet on phones). */}
+      {contextMenu && (() => {
+        const m = contextMenu.msg;
+        const mine = m.sender_id === currentUserId;
+        const t = m.created_at ? new Date(m.created_at).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", hour12: false }) : "";
+        const isCall = Boolean(m.tipo?.startsWith("call_"));
+        const plain = !parseMoment(m.texto) && !m.audio_url && !m.document_url && !m.image_url && !isCall;
+        const preview = momentPreview(m.texto)
+          ?? (m.audio_url ? "Nota de voz" : m.document_url ? (m.document_name ?? "Documento") : m.image_url ? (m.image_type?.startsWith("video/") ? "Vídeo" : "Foto") : isCall ? "Llamada" : m.texto);
+        return (
+          <MessageActions
+            author={mine ? "Tú" : m.tipo === "bot" ? "Frimee" : m.sender_nombre}
+            preview={preview}
+            meta={mine ? `Tu mensaje · ${t}` : t}
+            isMe={mine}
+            canEdit={mine && plain}
+            canCopy={plain}
+            isPinned={pinnedId === m.id}
+            isStarred={starredIds.has(m.id)}
+            myReaction={myReactionOf(m.id)}
+            anchor={{ x: contextMenu.x, y: contextMenu.y }}
+            onClose={closeOverlays}
+            onReact={(emoji) => { reactTo(m.id, emoji); closeOverlays(); }}
+            onReply={() => { setReplyingTo(m); closeOverlays(); setTimeout(() => inputRef.current?.focus(), 50); }}
+            onEdit={() => { setEditingMsg(m); setText(m.texto); closeOverlays(); setTimeout(() => inputRef.current?.focus(), 50); }}
+            onForward={() => { setForwardMsg(m); closeOverlays(); }}
+            onCopy={() => { void navigator.clipboard.writeText(m.texto); closeOverlays(); }}
+            onPin={() => { togglePin(m.id); closeOverlays(); }}
+            onStar={() => { toggleStar(m.id); closeOverlays(); }}
+            onDelete={() => { void handleDeleteMsg(m); closeOverlays(); }}
+          />
+        );
+      })()}
+
+      {/* Adjuntar: sitio, gasto y del plan */}
+      {attachSheet === "lugar" && <PlaceSheet onClose={() => setAttachSheet(null)} onSend={(place) => sendMoment(place)} />}
+      {attachSheet === "gasto" && planId && (
+        <ExpenseSheet
+          planId={planId}
+          members={chat.miembros.map((m) => ({ id: m.id, nombre: m.nombre }))}
+          currentUserId={currentUserId}
+          onClose={() => setAttachSheet(null)}
+          onSent={(moment) => sendMoment(moment)}
         />
       )}
-
-      {/* Emoji reaction picker */}
-      {reactingToId !== null && reactingPos && (
-        <div
-          className="fixed z-[99] flex gap-[2px] rounded-full border border-app bg-app p-[6px] shadow-[0_4px_24px_rgba(0,0,0,0.3)]"
-          style={{
-            left: Math.min(reactingPos.x - 120, (typeof window !== "undefined" ? window.innerWidth : 800) - 256),
-            top: Math.max(reactingPos.y - 60, 8),
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {["👍", "❤️", "😂", "😮", "😢", "🙏"].map((emoji) => (
-            <button
-              key={emoji}
-              type="button"
-              onClick={() => {
-                const msgId = reactingToId;
-                const newEmoji = localReactions[msgId] === emoji ? "" : emoji;
-                setLocalReactions((prev) => ({ ...prev, [msgId]: newEmoji }));
-                setReactingToId(null);
-                setReactingPos(null);
-                void reactMensaje(msgId, newEmoji).catch((e) =>
-                  console.error("[chat] Error guardando reacción:", (e as { message?: string })?.message ?? String(e))
-                );
-              }}
-              className="flex size-[38px] items-center justify-center rounded-full text-[20px] transition-transform hover:scale-125 hover:bg-surface"
-            >
-              {emoji}
-            </button>
-          ))}
-        </div>
+      {attachSheet === "plan" && (
+        <PlanItemSheet
+          plan={planId && planInfo ? { id: planId, titulo: planInfo.titulo, inicio_at: planInfo.inicio_at, fin_at: planInfo.fin_at, ubicacion_nombre: planInfo.ubicacion_nombre } : null}
+          currentUserId={currentUserId}
+          onClose={() => setAttachSheet(null)}
+          onSend={(card) => sendMoment(card)}
+        />
       )}
 
       {/* Lightbox */}
@@ -1905,15 +2127,16 @@ export function ChatConversation({
 
       {/* Pinned message banner */}
       {pinnedMsg && (
-        <button
-          type="button"
-          onClick={() => setPinnedId(null)}
-          className="flex items-center gap-[var(--space-2)] border-b border-app bg-surface px-[var(--space-3)] py-[8px] text-left"
-        >
-          <PinIcon className="size-[13px] shrink-0 text-muted" />
-          <p className="min-w-0 flex-1 truncate text-[14px] text-muted">{pinnedMsg.texto}</p>
-          <X className="size-[14px] shrink-0 text-muted" />
-        </button>
+        <div className="flex items-center gap-[var(--space-2)] border-b border-app bg-[var(--surface)] pl-[var(--space-4)] pr-[4px]">
+          <button type="button" onClick={() => scrollToMessage(pinnedMsg.id)} className="flex min-h-[44px] min-w-0 flex-1 items-center gap-[8px] text-left">
+            <PinIcon className="size-[13px] shrink-0 text-[var(--chat-accent-text)]" aria-hidden />
+            <span className="shrink-0 text-[12px] font-[var(--fw-semibold)] text-[var(--chat-accent-text)]">Fijado</span>
+            <span className="min-w-0 flex-1 truncate text-[14px] text-app">{momentPreview(pinnedMsg.texto) ?? pinnedMsg.texto}</span>
+          </button>
+          <button type="button" onClick={() => togglePin(pinnedMsg.id)} aria-label="Desfijar" className="flex size-[44px] shrink-0 items-center justify-center rounded-full text-muted hover:bg-[var(--surface-2)]">
+            <X className="size-[14px]" />
+          </button>
+        </div>
       )}
 
       {/* Messages */}
@@ -1947,25 +2170,24 @@ export function ChatConversation({
               const msgDate = msg.created_at ? new Date(msg.created_at) : null;
               const msgTime = msgDate ? msgDate.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", hour12: false }) : formatChatTime(msg.created_at);
               const isCallRecord = Boolean(msg.tipo?.startsWith("call_"));
-              const isRichContent = isCallRecord || Boolean(msg.audio_url || msg.document_url || msg.image_url) || isResumenViaje(msg.texto) || isPollMessage(msg.texto);
-              const reaction = localReactions[msg.id];
+              const moment = parseMoment(msg.texto);
+              // Cards carry their own frame: no tinted block around them, not even mine.
+              const isCard = Boolean(moment && moment.type !== "poll" && moment.type !== "propuesta");
+              const isRichContent = isCallRecord || Boolean(msg.audio_url || msg.document_url || msg.image_url) || Boolean(moment);
+              const msgReactions = reactions[msg.id] ?? [];
               const isStarred = starredIds.has(msg.id);
               // In 1 a 1 the avatar on the spine is enough; groups and plans name each turn.
               const showName = startsTurn && (isBot || !isDirectChat);
               const openMsgMenu = (e: React.MouseEvent<HTMLButtonElement>) => {
                 e.stopPropagation();
                 const rect = e.currentTarget.getBoundingClientRect();
-                setContextMenu({ msg, x: rect.left, y: rect.bottom + 4, triggerTop: rect.top });
-                setReactingToId(null);
-                setReactingPos(null);
+                setContextMenu({ msg, x: rect.left + rect.width / 2, y: rect.bottom + 4 });
               };
               const onBubbleTouchStart = (e: React.TouchEvent) => {
                 const t = e.touches[0];
                 swipeRef.current = { startX: t.clientX, startY: t.clientY, el: e.currentTarget as HTMLElement, triggered: false };
                 longPressTimerRef.current = setTimeout(() => {
-                  setContextMenu({ msg, x: t.clientX, y: t.clientY + 4, triggerTop: t.clientY });
-                  setReactingToId(null);
-                  setReactingPos(null);
+                  setContextMenu({ msg, x: t.clientX, y: t.clientY + 4 });
                   if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(40);
                 }, 500);
               };
@@ -2010,32 +2232,38 @@ export function ChatConversation({
                 >
                   <p className="truncate text-[13px] font-[var(--fw-semibold)] text-app">{msg.reply_sender_nombre ?? "Usuario"}</p>
                   <p className="truncate text-[13px] text-muted">
-                    {msg.reply_texto && isPollMessage(msg.reply_texto)
-                      ? `📊 ${(JSON.parse(msg.reply_texto) as { question: string }).question}`
-                      : msg.reply_texto}
+                    {momentPreview(msg.reply_texto) ?? msg.reply_texto}
                   </p>
                 </button>
               ) : null;
-              const content = msg.tipo?.startsWith("call_") ? (
-                <CallBubble tipo={msg.tipo} duracion={parseInt(msg.texto) || 0} />
-              ) : msg.audio_url ? (
+              // Calls never get here: they are drawn as a line on the spine (CallLine) below.
+              const content = msg.audio_url ? (
                 <AudioPlayer src={msg.audio_url} sending={msg.id < 0} />
               ) : msg.document_url ? (
                 <DocumentBubble url={msg.document_url} name={msg.document_name ?? "Documento"} sending={msg.id < 0} />
               ) : msg.image_url ? (
                 <MediaBubble url={msg.image_url} type={msg.image_type ?? "image/jpeg"} sending={msg.id < 0} time={isMe && timeHere ? msgTime : ""} isMe={isMe} onOpenLightbox={!msg.image_type?.startsWith("video/") ? () => setLightboxUrl(msg.image_url!) : undefined} />
-              ) : isResumenViaje(msg.texto) ? (
-                <ResumenViajeBubble texto={msg.texto} />
-              ) : isPollMessage(msg.texto) ? (
-                <PollBubble msg={msg} isMe={isMe} onVote={(idx) => {
-                  emitPollVote(msg.id);
-                  void channelRef.current?.send({ type: "broadcast", event: "poll_vote", payload: { mensaje_id: msg.id, option_index: idx } });
-                }} />
+              ) : moment?.type === "resumen_viaje" ? (
+                <TripSummaryCard data={moment} planTitle={planInfo?.titulo} planDates={trip ? tripRange(trip) : undefined} planId={planId} />
+              ) : moment?.type === "gasto" ? (
+                <ExpenseCard data={moment} planId={planId} />
+              ) : moment?.type === "tarjeta" ? (
+                <PlanItemCard data={moment} tripStart={planId === moment.plan_id ? planInfo?.inicio_at : null} />
+              ) : moment?.type === "lugar" ? (
+                <PlaceCard data={moment} title={isMe ? "Compartiste un sitio" : `${msg.sender_nombre.split(" ")[0]} compartió un sitio`} time={msgTime} />
+              ) : moment?.type === "propuesta" ? (
+                <FrimeeProposal
+                  data={moment}
+                  canAccept={msg.id > 0 && (!proposalNeedsAdmin(moment) || Boolean(isAdmin))}
+                  cannotAcceptReason={proposalNeedsAdmin(moment) ? "Solo un admin del plan puede añadirlo." : undefined}
+                  onAccept={() => resolveProposal(msg, moment, true)}
+                  onDismiss={() => resolveProposal(msg, moment, false)}
+                />
               ) : (
                 <p className={`break-words text-[15px] leading-[1.45] text-app${isBot ? " whitespace-pre-line" : ""}`}>{msg.texto}</p>
               );
               // Rich content keeps its own look until phase 2: framed on a surface for the others.
-              const richFrame = isRichContent && !msg.image_url ? "rounded-[8px] border border-app bg-[var(--surface)] px-3 py-2" : "";
+              const richFrame = isRichContent && !msg.image_url && !moment ? "rounded-[8px] border border-app bg-[var(--surface)] px-3 py-2" : "";
               const gestureProps = {
                 onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
                 onTouchStart: onBubbleTouchStart,
@@ -2043,8 +2271,22 @@ export function ChatConversation({
                 onTouchEnd: onBubbleTouchEnd,
                 onTouchCancel: onBubbleTouchEnd,
               };
-              const reactionChip = reaction ? (
-                <span className="mt-[4px] inline-flex items-center rounded-full border border-app bg-[var(--surface)] px-[6px] py-px text-[13px]">{reaction}</span>
+              // Everyone's reactions; tapping one toggles mine.
+              const reactionChip = msgReactions.length > 0 ? (
+                <div className="mt-[4px] flex flex-wrap gap-[4px]">
+                  {msgReactions.map((r) => (
+                    <button
+                      key={r.emoji}
+                      type="button"
+                      aria-pressed={r.mia}
+                      aria-label={`${r.emoji} ${r.total}${r.mia ? ", tu reacción" : ""}`}
+                      onClick={(e) => { e.stopPropagation(); reactTo(msg.id, r.mia ? "" : r.emoji); }}
+                      className={`inline-flex min-h-[28px] items-center gap-[4px] rounded-full border px-[8px] text-[13px] tabular-nums ${r.mia ? "border-[var(--chat-me-border)] bg-[var(--chat-tint)] text-app" : "border-app bg-[var(--surface)] text-muted"}`}
+                    >
+                      <span>{r.emoji}</span>{r.total > 1 && <span>{r.total}</span>}
+                    </button>
+                  ))}
+                </div>
               ) : null;
               const highlight = highlightedId === msg.id ? "bg-[var(--text-primary)]/10 transition-colors" : "";
               const burstTimeRow = inBurst && startsBurst;
@@ -2056,6 +2298,49 @@ export function ChatConversation({
               // Others: name and time on top of a turn; inside a burst only the name, and only in groups.
               const showHeader = startsTurn && (!inBurst || showName || isBot);
               const compactMine = inBurst && !isRichContent && !replyQuote;
+              if (isCallRecord && msg.tipo) {
+                const callTipo = msg.tipo;
+                return (
+                  <Fragment key={(msg)._key ?? msg.id}>
+                    {slot?.chapter && <DayChapter label={slot.chapter} />}
+                    <div id={`msg-${msg.id}`} className={`mt-[8px] ${highlight}`}>
+                      <CallLine
+                        tipo={callTipo}
+                        duracion={parseInt(msg.texto) || 0}
+                        time={msgTime}
+                        isMe={isMe}
+                        otherName={msg.sender_nombre.split(" ")[0] || "Alguien"}
+                        onCallBack={onStartCall && !inCall ? () => onStartCall(callTipo.includes("video") ? "video" : "audio") : undefined}
+                      />
+                    </div>
+                  </Fragment>
+                );
+              }
+              if (moment?.type === "poll") {
+                const pollDecided = Boolean(moment.closed || (moment.expires_at && new Date(moment.expires_at) < new Date()));
+                return (
+                  <Fragment key={(msg)._key ?? msg.id}>
+                    {slot?.chapter && <DayChapter label={slot.chapter} />}
+                    <article id={`msg-${msg.id}`} aria-label={`Encuesta, ${msgTime}`} className={`group/msg relative pl-[56px] pr-[var(--space-4)] ${slot?.chapter ? "mt-[4px]" : "mt-[14px]"} ${highlight}`}>
+                      <span aria-hidden className={`absolute left-[23px] top-[18px] size-[9px] rotate-45 ${pollDecided ? "bg-[var(--primary)]" : "border border-[var(--primary)] bg-[var(--bg)]"}`} />
+                      <div className={`relative max-w-[460px] ${contextMenu?.msg.id === msg.id ? "opacity-75" : ""}`} {...gestureProps}>
+                        <PollMoment
+                          mensajeId={msg.id}
+                          poll={moment}
+                          askedBy={isMe ? "Preguntas tú" : `${isBot ? "Frimee" : msg.sender_nombre.split(" ")[0]} pregunta`}
+                          members={chat.miembros.length}
+                          onVote={(idx) => {
+                            emitPollVote(msg.id);
+                            void channelRef.current?.send({ type: "broadcast", event: "poll_vote", payload: { mensaje_id: msg.id, option_index: idx } });
+                          }}
+                        />
+                        <span className="absolute right-[8px] top-[8px]">{menuButton}</span>
+                      </div>
+                      {reactionChip}
+                    </article>
+                  </Fragment>
+                );
+              }
               return (
                 <Fragment key={(msg)._key ?? msg.id}>
                 {slot?.chapter && <DayChapter label={slot.chapter} />}
@@ -2078,7 +2363,7 @@ export function ChatConversation({
                             )}
                           </div>
                         ) : (
-                          <div className={msg.image_url ? "" : `rounded-[8px] bg-[var(--chat-me)] ${isRichContent ? "px-3 py-2" : "px-[12px] py-[8px]"}`}>
+                          <div className={msg.image_url || isCard ? "" : `rounded-[8px] bg-[var(--chat-me)] ${isRichContent ? "px-3 py-2" : "px-[12px] py-[8px]"}`}>
                             {replyQuote}
                             {content}
                             {!msg.image_url && (timeHere || isStarred) && (
@@ -2143,9 +2428,7 @@ export function ChatConversation({
             <div className="min-w-0 flex-1">
               <p className="text-[14px] font-[var(--fw-semibold)] text-[var(--text-primary)]">{replyingTo.sender_nombre || "Tú"}</p>
               <p className="truncate text-[14px] text-muted">
-                {replyingTo.texto && isPollMessage(replyingTo.texto)
-                  ? `📊 ${(JSON.parse(replyingTo.texto) as { question: string }).question}`
-                  : replyingTo.texto}
+                {momentPreview(replyingTo.texto) ?? replyingTo.texto}
               </p>
             </div>
             <button type="button" onClick={cancelReply} className="shrink-0 text-muted transition-colors hover:text-app">
@@ -2280,6 +2563,9 @@ export function ChatConversation({
                             { icon: <CameraIcon className="size-[18px]" />, label: "Cámara", color: "text-red-400", onClick: () => { setShowAttachMenu(false); setShowCamera(true); } },
                             { icon: <AudioFileIcon className="size-[18px]" />, label: "Audio", color: "text-orange-400", onClick: () => { setShowAttachMenu(false); audioFileInputRef.current?.click(); } },
                             { icon: <PollIcon className="size-[18px]" />, label: "Encuesta", color: "text-green-400", onClick: () => { setShowAttachMenu(false); setShowPollCreator(true); } },
+                            { icon: <MapPin className="size-[18px]" />, label: "Ubicación", color: "text-[var(--chat-accent-text)]", onClick: () => { setShowAttachMenu(false); setAttachSheet("lugar"); } },
+                            ...(planId ? [{ icon: <Receipt className="size-[18px]" />, label: "Gasto", color: "text-[var(--chat-accent-text)]", onClick: () => { setShowAttachMenu(false); setAttachSheet("gasto"); } }] : []),
+                            { icon: <CalendarDays className="size-[18px]" />, label: planId ? "Del plan" : "Un plan", color: "text-[var(--chat-accent-text)]", onClick: () => { setShowAttachMenu(false); setAttachSheet("plan"); } },
                           ].map(({ icon, label, color, onClick }) => (
                             <button
                               key={label}
@@ -2314,73 +2600,6 @@ export function ChatConversation({
           </div>
         </div>
       </div>
-    </div>
-  );
-}
-
-function MsgContextMenu({
-  x, y, isMe, isStarred, isPinned,
-  onClose, onEdit, onReply, onCopy, onReact, onForward, onPin, onStar, onDelete,
-}: {
-  msg: MensajeRow;
-  x: number;
-  y: number;
-  isMe: boolean;
-  isStarred: boolean;
-  isPinned: boolean;
-  onClose: () => void;
-  onEdit: () => void;
-  onReply: () => void;
-  onCopy: () => void;
-  onReact: () => void;
-  onForward: () => void;
-  onPin: () => void;
-  onStar: () => void;
-  onDelete: () => void;
-}) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  const menuW = 210;
-  const itemH = 44;
-  const itemCount = isMe ? 8 : 6;
-  const menuH = itemCount * itemH + 8;
-  const vw = typeof window !== "undefined" ? window.innerWidth : 1200;
-  const vh = typeof window !== "undefined" ? window.innerHeight : 800;
-  const left = Math.min(x, vw - menuW - 8);
-  const top = y + menuH > vh ? Math.max(y - menuH, 8) : y;
-
-  const items: { label: string; icon: React.ReactNode; danger?: boolean; action: () => void }[] = [
-    ...(isMe ? [{ label: "Editar", icon: <EditIcon />, action: onEdit }] : []),
-    { label: "Responder", icon: <ReplyIcon />, action: onReply },
-    { label: "Copiar", icon: <CopyIcon />, action: onCopy },
-    { label: "Reaccionar", icon: <EmojiIcon />, action: onReact },
-    { label: "Reenviar", icon: <ForwardIcon />, action: onForward },
-    { label: isPinned ? "Desfijar" : "Fijar", icon: <PinIcon />, action: onPin },
-    { label: isStarred ? "Quitar destacado" : "Destacar", icon: <StarIcon />, action: onStar },
-    ...(isMe ? [{ label: "Eliminar", icon: <TrashIcon />, danger: true, action: onDelete }] : []),
-  ];
-
-  return (
-    <div
-      className="fixed z-[100] min-w-[210px] overflow-hidden rounded-[12px] border border-app bg-app py-[4px] shadow-[0_4px_24px_rgba(0,0,0,0.25)]"
-      style={{ left, top }}
-      onClick={(e) => e.stopPropagation()}
-    >
-      {items.map((item) => (
-        <button
-          key={item.label}
-          type="button"
-          onClick={item.action}
-          className={`flex w-full items-center gap-[10px] px-[14px] py-[10px] text-left text-body-sm transition-colors hover:bg-surface ${item.danger ? "text-red-500" : "text-app"}`}
-        >
-          <span className="size-[18px] shrink-0">{item.icon}</span>
-          {item.label}
-        </button>
-      ))}
     </div>
   );
 }
@@ -2748,13 +2967,8 @@ const BlockIcon = Ban;
 const ReportIcon = AlertTriangle;
 const LeaveIcon = LogOut;
 const ChevronDownIcon = ChevronDown;
-const EditIcon = Pencil;
-const ReplyIcon = Reply;
-const CopyIcon = Copy;
 const EmojiIcon = Smile;
-const ForwardIcon = Forward;
 const PinIcon = Pin;
-const StarIcon = Star;
 const CameraIcon = Camera;
 const PhotoVideoIcon = Video;
 const AudioFileIcon = Music;
@@ -2776,31 +2990,6 @@ export function GroupIcon({ className = "size-icon" }: { className?: string }) {
   return <Users className={className} aria-hidden />;
 }
 
-
-function CallBubble({ tipo, duracion }: { tipo: string; duracion: number }) {
-  const missed = tipo.includes("missed");
-  const isVideo = tipo.includes("video");
-  const label = missed
-    ? isVideo ? "Videollamada perdida" : "Llamada perdida"
-    : isVideo ? "Videollamada" : "Llamada de audio";
-  const formatDur = (s: number) => {
-    if (!s) return "";
-    const m = Math.floor(s / 60);
-    const sec = s % 60;
-    return m > 0 ? `${m} min ${sec} s` : `${sec} s`;
-  };
-  return (
-    <div className={`flex items-start gap-[var(--space-2)] ${missed ? "text-red-700 dark:text-red-800" : ""}`}>
-      {isVideo ? <Video className="mt-[2px] size-[16px] shrink-0" /> : <Phone className="mt-[2px] size-[16px] shrink-0" />}
-      <div className="flex flex-col">
-        <span className="text-body-sm font-[var(--fw-medium)]">{label}</span>
-        {!missed && duracion > 0 && (
-          <span className="text-[14px] opacity-60">{formatDur(duracion)}</span>
-        )}
-      </div>
-    </div>
-  );
-}
 
 function MediaBubble({ url, type, sending, time, isMe, onOpenLightbox }: { url: string; type: string; sending?: boolean; time: string; isMe: boolean; onOpenLightbox?: () => void }) {
   const isVideo = type.startsWith("video/");
@@ -2851,193 +3040,6 @@ function MediaBubble({ url, type, sending, time, isMe, onOpenLightbox }: { url: 
 function isPollMessage(texto: string): boolean {
   try { return JSON.parse(texto)?.type === "poll"; } catch { return false; }
 }
-
-function isResumenViaje(texto: string): boolean {
-  try { return JSON.parse(texto)?.type === "resumen_viaje"; } catch { return false; }
-}
-
-type ResumenViajeData = {
-  type: "resumen_viaje";
-  total: number;
-  por_persona: number;
-  num_miembros: number;
-  top_pagador: string | null;
-  top_pagador_importe: number | null;
-  deudas_pendientes: number;
-  actividades: number;
-};
-
-function ResumenViajeBubble({ texto }: { texto: string }) {
-  let data: ResumenViajeData;
-  try { data = JSON.parse(texto) as ResumenViajeData; } catch { return null; }
-
-  const fmtEur = (n: number) => n.toFixed(2).replace(".", ",") + "€";
-
-  return (
-    <div className="w-[260px] overflow-hidden rounded-[16px] border border-[var(--border)] bg-[var(--surface)]">
-      {/* Header */}
-      <div className="flex items-center gap-[10px] bg-primary-token/10 px-4 py-3">
-        <span className="text-[22px]">✈️</span>
-        <div>
-          <p className="text-[14px] font-[var(--fw-semibold)] text-primary-token leading-tight">¡El viaje ha terminado!</p>
-          <p className="text-[14px] text-primary-token/70">Aquí va el resumen</p>
-        </div>
-      </div>
-
-      {/* Stats */}
-      <div className="px-4 py-3 space-y-[10px]">
-        {data.total > 0 ? (
-          <div>
-            <p className="text-[14px] text-muted uppercase tracking-wide">Total gastado</p>
-            <p className="text-[18px] font-[var(--fw-semibold)] text-app leading-tight">{fmtEur(data.total)}</p>
-            {data.num_miembros > 1 && (
-              <p className="text-[14px] text-muted">{fmtEur(data.por_persona)} por persona</p>
-            )}
-          </div>
-        ) : (
-          <div>
-            <p className="text-[14px] text-muted uppercase tracking-wide">Total gastado</p>
-            <p className="text-[14px] text-muted">Sin gastos registrados</p>
-          </div>
-        )}
-
-        {data.top_pagador && (
-          <div>
-            <p className="text-[14px] text-muted uppercase tracking-wide">Pagó más</p>
-            <p className="text-[14px] font-[var(--fw-medium)] text-app">
-              {data.top_pagador}
-              <span className="ml-1 text-muted font-normal">{fmtEur(data.top_pagador_importe ?? 0)}</span>
-            </p>
-          </div>
-        )}
-
-        {/* Counters */}
-        <div className="flex gap-[8px] pt-[2px]">
-          <div className="flex-1 rounded-[10px] bg-[var(--surface-inset)] px-3 py-2 text-center">
-            <p className="text-[18px] font-[var(--fw-semibold)] text-app">{data.actividades}</p>
-            <p className="text-[14px] text-muted">actividad{data.actividades !== 1 ? "es" : ""}</p>
-          </div>
-          <div className="flex-1 rounded-[10px] bg-[var(--surface-inset)] px-3 py-2 text-center">
-            <p className="text-[18px] font-[var(--fw-semibold)] text-app">{data.deudas_pendientes}</p>
-            <p className="text-[14px] text-muted">deuda{data.deudas_pendientes !== 1 ? "s" : ""} pend.</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Module-level event emitter para sincronizar votos en tiempo real entre PollBubble y el canal broadcast
-const pollVoteCallbacks = new Map<number, Set<() => void>>();
-function emitPollVote(mensajeId: number) {
-  pollVoteCallbacks.get(mensajeId)?.forEach(fn => fn());
-}
-function subscribePollVote(mensajeId: number, fn: () => void): () => void {
-  if (!pollVoteCallbacks.has(mensajeId)) pollVoteCallbacks.set(mensajeId, new Set());
-  pollVoteCallbacks.get(mensajeId)!.add(fn);
-  return () => { pollVoteCallbacks.get(mensajeId)?.delete(fn); };
-}
-
-function PollBubble({ msg, isMe, onVote }: { msg: MensajeRow; isMe: boolean; onVote?: (idx: number) => void }) {
-  const poll = JSON.parse(msg.texto) as { question: string; options: string[]; closed?: boolean };
-  const [votes, setVotes] = useState<Record<number, number>>({});
-  const [myVote, setMyVote] = useState<number | null>(null);
-  const [fetched, setFetched] = useState(false);
-
-  const fetchVotes = useCallback(async () => {
-    if (msg.id < 0) return;
-    try {
-      const data = await pollGetVotes(msg.id);
-      const map: Record<number, number> = {};
-      let my: number | null = null;
-      for (const row of data) {
-        map[row.option_index] = Number(row.vote_count);
-        if (row.voted_by_me) my = row.option_index;
-      }
-      setVotes(map);
-      setMyVote(my);
-    } finally { setFetched(true); }
-  }, [msg.id]);
-
-  useEffect(() => {
-    if (msg.id < 0) { setFetched(true); return; }
-    void fetchVotes();
-  }, [fetchVotes, msg.id]);
-
-  useEffect(() => {
-    if (msg.id < 0) return;
-    return subscribePollVote(msg.id, () => { void fetchVotes(); });
-  }, [fetchVotes, msg.id]);
-
-  const handleVote = async (idx: number) => {
-    if (msg.id < 0) return;
-    const prevVote = myVote;
-    const prevVotes = { ...votes };
-    const newVotes = { ...votes };
-    if (prevVote !== null) newVotes[prevVote] = Math.max(0, (newVotes[prevVote] ?? 0) - 1);
-    newVotes[idx] = (newVotes[idx] ?? 0) + 1;
-    setMyVote(idx);
-    setVotes(newVotes);
-    try {
-      await pollVote(msg.id, idx);
-      onVote?.(idx);
-    } catch {
-      setMyVote(prevVote);
-      setVotes(prevVotes);
-    }
-  };
-
-  const total = Object.values(votes).reduce((a, b) => a + b, 0);
-
-  return (
-    <div className="w-full max-w-[min(260px,calc(100vw-96px))] min-w-0">
-      <div className="mb-[10px] flex items-center gap-[6px]">
-        <PollIcon className="size-[14px] shrink-0 opacity-60" />
-        <p className="min-w-0 whitespace-normal break-words text-body-sm font-[var(--fw-semibold)]">{poll.question}</p>
-      </div>
-      <div className="space-y-[6px]">
-        {poll.options.map((opt, idx) => {
-          const count = votes[idx] ?? 0;
-          const pct = total > 0 ? Math.round((count / total) * 100) : 0;
-          const selected = myVote === idx;
-          return (
-            <button
-              key={idx}
-              type="button"
-              onClick={() => void handleVote(idx)}
-              disabled={!fetched || msg.id < 0 || poll.closed}
-              className="relative w-full overflow-hidden rounded-[8px] border px-[10px] py-[8px] text-left transition-all disabled:opacity-50"
-              style={{ borderColor: selected ? (isMe ? "rgba(255,255,255,0.6)" : "var(--text-primary)") : (isMe ? "rgba(255,255,255,0.2)" : "var(--border-app, #e2e8f0)") }}
-            >
-              <div
-                className="absolute inset-y-0 left-0 transition-[width] duration-500"
-                style={{
-                  width: `${pct}%`,
-                  backgroundColor: isMe
-                    ? "rgba(255,255,255,0.5)"
-                    : selected ? "rgba(99,102,241,0.65)" : "rgba(99,102,241,0.35)",
-                }}
-              />
-              <div className="relative flex min-w-0 items-center justify-between gap-2">
-                <div className="flex min-w-0 items-center gap-[6px]">
-                  {selected && (
-                    <Check className="size-[13px] shrink-0" strokeWidth={2.5} style={{ color: isMe ? "rgba(255,255,255,0.9)" : "var(--text-primary)" }} aria-hidden />
-                  )}
-                  <span className="min-w-0 whitespace-normal break-words text-body-sm">{opt}</span>
-                </div>
-                <span className={`shrink-0 text-[14px] ${isMe ? "text-white/60" : "text-muted"}`}>{pct}%</span>
-              </div>
-            </button>
-          );
-        })}
-      </div>
-      <p className={`mt-[8px] text-[14px] ${isMe ? "text-white/60" : "text-muted"}`}>
-        {poll.closed ? `Cerrada · ${total} ${total === 1 ? "voto" : "votos"}` : `${total} ${total === 1 ? "voto" : "votos"}`}
-      </p>
-    </div>
-  );
-}
-
 
 function DocumentBubble({ url, name, sending }: { url: string; name: string; sending?: boolean }) {
   const ext = name.split(".").pop()?.toUpperCase() ?? "DOC";
