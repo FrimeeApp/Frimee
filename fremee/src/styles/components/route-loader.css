@@ -47,11 +47,10 @@
     fill: none; stroke: var(--rl-primary);
     stroke-width: 3.5; stroke-linecap: round;
     stroke-dasharray: 100 100; stroke-dashoffset: 100;
-    animation: 2.2s linear infinite both;
   }
-  .rl-s1 { animation-name: rl-s1; }
-  .rl-s2 { animation-name: rl-s2; }
-  .rl-s3 { animation-name: rl-s3; }
+  .rl-s1 { animation: rl-s1 2.2s linear infinite both; }
+  .rl-s2 { animation: rl-s2 2.2s linear infinite both; }
+  .rl-s3 { animation: rl-s3 2.2s linear infinite both; }
   @keyframes rl-s1 {
     0%, 10% { stroke-dashoffset: 100; animation-timing-function: cubic-bezier(.45, 0, .25, 1); }
     28%, 100% { stroke-dashoffset: 0; }
@@ -70,14 +69,14 @@
   /* Numbered stops: same style as the markers on the map */
   .rl-mk {
     transform-box: fill-box; transform-origin: center;
-    opacity: 0; animation: 2.2s linear infinite both;
+    opacity: 0;
   }
   .rl-mk circle { fill: #00C9A7; stroke: #fff; stroke-width: 2; }
   .rl-mk text { fill: #000; font-weight: 700; }
-  .rl-m1 { animation-name: rl-m1; }
-  .rl-m2 { animation-name: rl-m2; }
-  .rl-m3 { animation-name: rl-m3; }
-  .rl-m4 { animation-name: rl-m4; }
+  .rl-m1 { animation: rl-m1 2.2s linear infinite both; }
+  .rl-m2 { animation: rl-m2 2.2s linear infinite both; }
+  .rl-m3 { animation: rl-m3 2.2s linear infinite both; }
+  .rl-m4 { animation: rl-m4 2.2s linear infinite both; }
   @keyframes rl-m1 {
     0%, 4% { opacity: 0; transform: scale(.4); animation-timing-function: cubic-bezier(.34, 1.56, .64, 1); }
     12%, 100% { opacity: 1; transform: scale(1); }
