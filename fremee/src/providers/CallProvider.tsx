@@ -12,6 +12,8 @@ import CallEnded, { type EndedCall } from "@/components/calls/CallEnded";
 import PermissionSheet from "@/components/calls/PermissionSheet";
 import { useAuth } from "@/providers/AuthProvider";
 import { Capacitor } from "@capacitor/core";
+import { startRingback, stopRingback } from "@/lib/ringback";
+import { canChooseCallOutput, resetCallAudio, setCallSpeaker } from "@/services/native/callNative";
 import { cancelIncomingCall, onCallNotificationAction, parseCallUrl, startRinging, stopRinging, startOngoingCall, stopOngoingCall, takePendingCallLink, updateOngoingCall } from "@/services/native/callNative";
 import { getLivekitUrl } from "@/config/external";
 import { useLivekitRoom, type LivekitRoomApi } from "@/hooks/useLivekitRoom";
@@ -231,6 +233,37 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     };
   }, [ringingId]);
 
+  // The caller hears a ringback tone while the other side rings; it stops as soon as the call
+  // leaves "outgoing" (answered, rejected, busy, no answer or hung up).
+  const outgoingId = callState.status === "outgoing" ? callState.llamadaId : null;
+  useEffect(() => {
+    if (!outgoingId) return;
+    startRingback();
+    return () => stopRingback();
+  }, [outgoingId]);
+
+  // Where the call is heard (Android app): a voice call starts at the ear, a video call on the
+  // loudspeaker, as on a phone; the speaker button changes it for this call.
+  const activeRoomName = callState.status === "active" ? callState.roomName : null;
+  const activeTipo = callState.status === "active" ? callState.tipo : null;
+  const [speakerChoice, setSpeakerChoice] = useState<{ roomName: string; on: boolean } | null>(null);
+  const speakerOn = speakerChoice && speakerChoice.roomName === activeRoomName ? speakerChoice.on : activeTipo === "video";
+  const toggleSpeaker = useCallback(() => {
+    if (activeRoomName) setSpeakerChoice({ roomName: activeRoomName, on: !speakerOn });
+  }, [activeRoomName, speakerOn]);
+  useEffect(() => {
+    if (!activeRoomName) return;
+    void setCallSpeaker(speakerOn);
+    // The WebView switches the loudspeaker back on when it (re)opens the microphone or camera:
+    // apply it again once the media has settled.
+    const again = setTimeout(() => void setCallSpeaker(speakerOn), 1500);
+    return () => clearTimeout(again);
+  }, [activeRoomName, speakerOn, room.micEnabled, room.cameraEnabled]);
+  useEffect(() => {
+    if (!activeRoomName) return;
+    return () => void resetCallAudio();
+  }, [activeRoomName]);
+
   // In a call: the ongoing-call notification and its foreground service, so Android keeps the
   // microphone working when you leave the app (M19b).
   const ongoingRef = useRef(false);
@@ -330,6 +363,8 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
             isGroup={isGroup}
             activeSince={activeSince}
             onMinimize={() => setMinimized(true)}
+            speakerOn={speakerOn}
+            onToggleSpeaker={canChooseCallOutput() ? toggleSpeaker : undefined}
           />
         </div>
       )}

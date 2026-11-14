@@ -2,7 +2,9 @@ package com.frimee.app
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.media.AudioAttributes
+import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.media.Ringtone
 import android.media.RingtoneManager
@@ -22,6 +24,7 @@ import com.getcapacitor.annotation.CapacitorPlugin
  * - startOngoing / updateOngoing / stopOngoing: the foreground service and its notification (M19b).
  * - cancelIncoming: drop the ringing notification once the app took the call.
  * - "callAction" events: "Silenciar" and "Colgar" pressed in the notification.
+ * - setSpeaker / resetAudio: where the call is heard (earpiece or loudspeaker; headsets win).
  * - startRinging / stopRinging: the phone's ringtone while a call rings on Frimee's own screen
  *   (with the app closed the notification rings; once Frimee shows the call it takes over).
  */
@@ -42,6 +45,35 @@ class CallNativePlugin : Plugin() {
 
     override fun load() {
         instance = this
+    }
+
+    // Android 14+ only lets a microphone foreground service start once the app holds RECORD_AUDIO.
+    // A call accepted before the permission prompt was answered (a fresh install) used to crash
+    // the app: the service waits here and starts when the app resumes with the permission.
+    private var pendingOngoing: Intent? = null
+
+    private fun hasMicrophone() =
+        ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+
+    private fun startCallService(intent: Intent) {
+        if (!hasMicrophone()) {
+            pendingOngoing = intent
+            return
+        }
+        pendingOngoing = null
+        ContextCompat.startForegroundService(context, intent)
+    }
+
+    override fun handleOnResume() {
+        // The permission dialog pauses the app; it resumes once answered.
+        val pending = pendingOngoing ?: return
+        if (!hasMicrophone()) return
+        try {
+            startCallService(pending.setAction(CallService.ACTION_START))
+        } catch (e: Exception) {
+            pendingOngoing = null
+        }
     }
 
     override fun handleOnDestroy() {
@@ -93,6 +125,60 @@ class CallNativePlugin : Plugin() {
         call.resolve()
     }
 
+    private fun audioManager() = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+
+    /**
+     * Call audio through the loudspeaker (true) or the earpiece (false). The WebView puts the phone
+     * in communication mode with the loudspeaker on, as a browser would; a phone call starts at the
+     * ear. A wired, USB or Bluetooth headset, when connected, is used instead of the earpiece.
+     */
+    @PluginMethod
+    fun setSpeaker(call: PluginCall) {
+        val on = call.getBoolean("on", false) ?: false
+        try {
+            val audio = audioManager()
+            audio.mode = AudioManager.MODE_IN_COMMUNICATION
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val devices = audio.availableCommunicationDevices
+                val headset = devices.firstOrNull {
+                    it.type == AudioDeviceInfo.TYPE_WIRED_HEADSET ||
+                        it.type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES ||
+                        it.type == AudioDeviceInfo.TYPE_USB_HEADSET ||
+                        it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                        it.type == AudioDeviceInfo.TYPE_BLE_HEADSET
+                }
+                val wanted = if (on) {
+                    devices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
+                } else {
+                    headset ?: devices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE }
+                }
+                if (wanted != null) audio.setCommunicationDevice(wanted) else audio.clearCommunicationDevice()
+            } else {
+                @Suppress("DEPRECATION")
+                audio.isSpeakerphoneOn = on
+            }
+            call.resolve()
+        } catch (e: Exception) {
+            call.reject("No se pudo cambiar la salida de audio", e)
+        }
+    }
+
+    /** The call is over: back to normal audio, so the phone does not stay in call mode. */
+    @PluginMethod
+    fun resetAudio(call: PluginCall) {
+        try {
+            val audio = audioManager()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                audio.clearCommunicationDevice()
+            } else {
+                @Suppress("DEPRECATION")
+                audio.isSpeakerphoneOn = false
+            }
+            audio.mode = AudioManager.MODE_NORMAL
+        } catch (e: Exception) { /* nothing to undo */ }
+        call.resolve()
+    }
+
     @PluginMethod
     fun stopRinging(call: PluginCall) {
         stopRingtone()
@@ -111,7 +197,7 @@ class CallNativePlugin : Plugin() {
     @PluginMethod
     fun startOngoing(call: PluginCall) {
         try {
-            ContextCompat.startForegroundService(context, serviceIntent(call, CallService.ACTION_START))
+            startCallService(serviceIntent(call, CallService.ACTION_START))
             call.resolve()
         } catch (e: Exception) {
             call.reject("No se pudo mostrar la llamada en curso", e)
@@ -121,7 +207,9 @@ class CallNativePlugin : Plugin() {
     @PluginMethod
     fun updateOngoing(call: PluginCall) {
         try {
-            ContextCompat.startForegroundService(context, serviceIntent(call, CallService.ACTION_UPDATE))
+            // Not started yet (no microphone permission): keep the latest details for later.
+            if (pendingOngoing != null) pendingOngoing = serviceIntent(call, CallService.ACTION_START)
+            else startCallService(serviceIntent(call, CallService.ACTION_UPDATE))
             call.resolve()
         } catch (e: Exception) {
             call.reject("No se pudo actualizar la llamada en curso", e)
@@ -130,6 +218,7 @@ class CallNativePlugin : Plugin() {
 
     @PluginMethod
     fun stopOngoing(call: PluginCall) {
+        pendingOngoing = null
         CallService.stop(context)
         // The call is over: the app no longer shows over the lock screen.
         activity?.runOnUiThread { (activity as? MainActivity)?.releaseLockScreen() }

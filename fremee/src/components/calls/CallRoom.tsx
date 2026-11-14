@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import {
   ChevronDown, ChevronLeft, ChevronRight, LayoutGrid, Maximize2, Mic, MicOff, Minimize2,
-  ScreenShare, ScreenShareOff, Signal, SignalLow, Video, VideoOff,
+  ScreenShare, ScreenShareOff, Signal, SignalLow, Video, VideoOff, Volume2,
 } from "lucide-react";
 import type { CallMiembro } from "@/hooks/useCall";
 import type { ParticipantTile } from "@/hooks/useLivekitRoom";
@@ -24,6 +24,10 @@ type Props = {
   /** When the call was answered (ms since epoch), for the timer. */
   activeSince?: number | null;
   onMinimize?: () => void;
+  /** Loudspeaker on (Android app). */
+  speakerOn?: boolean;
+  /** Only in the Android app, where Frimee chooses earpiece or loudspeaker. */
+  onToggleSpeaker?: () => void;
 };
 
 /** Controls hide after this long without touching the screen, in video. */
@@ -34,7 +38,7 @@ const CHROME_IDLE_MS = 4000;
  * menu visible; going to another page minimizes it. The connection lives in CallProvider
  * (useCallRoom), so this is only the view.
  */
-export default function CallRoom({ miembros, participanteNombre, tipo, isGroup, activeSince, onMinimize }: Props) {
+export default function CallRoom({ miembros, participanteNombre, tipo, isGroup, activeSince, onMinimize, speakerOn = false, onToggleSpeaker }: Props) {
   const room = useCallRoom();
   const { tiles, speaking, unstable, reconnecting, micEnabled, cameraEnabled, screenSharing, attachTrack } = room;
   const { profile } = useAuth();
@@ -390,6 +394,16 @@ export default function CallRoom({ miembros, participanteNombre, tipo, isGroup, 
             <CallControl kind={micEnabled ? "stage" : "off"} ariaLabel={micEnabled ? "Silenciar micro" : "Activar micro"} pressed={!micEnabled} onClick={() => void room.toggleMute()}>
               {micEnabled ? <Mic className="size-6" aria-hidden /> : <MicOff className="size-6" aria-hidden />}
             </CallControl>
+            {onToggleSpeaker && (
+              <CallControl
+                kind={speakerOn ? "on" : "stage"}
+                ariaLabel={speakerOn ? "Desactivar altavoz" : "Activar altavoz"}
+                pressed={speakerOn}
+                onClick={onToggleSpeaker}
+              >
+                <Volume2 className="size-6" aria-hidden />
+              </CallControl>
+            )}
             <CallControl
               kind={cameraEnabled || tipo === "audio" ? "stage" : "off"}
               ariaLabel={cameraEnabled ? "Apagar cámara" : "Activar cámara"}

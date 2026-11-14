@@ -71,7 +71,9 @@ export function GuestBanner() {
 
   return (
     <>
-      <div className="pointer-events-none fixed inset-x-0 top-[calc(env(safe-area-inset-top)+var(--space-2))] z-[60] flex justify-center px-[var(--space-4)]">
+      {/* Phones: in the page flow, so it pushes the screen down instead of covering its header.
+          From md it floats over the top, where the layout leaves room for it. */}
+      <div className="relative z-[60] flex justify-center px-[var(--space-4)] pb-[var(--space-2)] pt-[calc(env(safe-area-inset-top)+var(--space-2))] md:pointer-events-none md:fixed md:inset-x-0 md:top-[calc(env(safe-area-inset-top)+var(--space-2))] md:p-0 md:px-[var(--space-4)]">
         <div className="pointer-events-auto flex max-w-full items-center gap-[var(--space-3)] rounded-full border border-app bg-app py-[6px] pl-[var(--space-4)] pr-[6px] text-body-sm shadow-elev-2">
           <span className="truncate text-muted">{label}</span>
           <button
