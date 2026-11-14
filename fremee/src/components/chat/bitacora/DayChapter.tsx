@@ -9,7 +9,7 @@ export function DayChapter({ label }: { label: ChapterLabel }) {
         className="absolute left-[22px] top-[27px] size-[11px] rounded-full border-2 border-[var(--text-secondary)] bg-[var(--bg)]"
       />
       <h3 className="flex flex-wrap items-baseline gap-x-[8px] font-normal">
-        <span className="font-[family-name:var(--font-display)] text-[24px] leading-[28px] text-app">{label.title}</span>
+        <span className="[font-family:var(--font-display-face)] text-[24px] leading-[28px] text-app">{label.title}</span>
         <span className="text-[12px] text-muted">{label.subtitle}</span>
       </h3>
     </div>
