@@ -1447,7 +1447,8 @@ export function ChatConversation({
         id: thinkingKey, _key: thinkingKey,
         sender_id: "frimee", sender_nombre: "Frimee", sender_profile_image: null,
         texto: "…",
-        created_at: new Date().toISOString(),
+        // A moment after the question, so the timeline (sorted by time) keeps it below it.
+        created_at: new Date(now + 1000).toISOString(),
         tipo: "bot",
       };
 
