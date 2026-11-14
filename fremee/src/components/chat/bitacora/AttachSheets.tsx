@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { BedDouble, Bus, CalendarDays, LocateFixed, Plane, Ship, Ticket, Train, UtensilsCrossed } from "lucide-react";
+import { CalendarDays, LocateFixed } from "lucide-react";
 import LocationAutocomplete, { type Coords } from "@/components/plans/LocationAutocomplete";
 import { createGastoEndpoint } from "@/services/api/endpoints/gastos.endpoint";
-import { fetchSubplanes, type SubplanRow, type TipoSubplan } from "@/services/api/endpoints/subplanes.endpoint";
 import { fetchUserRelatedPlans, type PlanByIdRow } from "@/services/api/endpoints/plans.endpoint";
-import type { CardKind, CardMoment, ExpenseMoment, PlaceMoment } from "./moments";
+import type { CardMoment, ExpenseMoment, PlaceMoment } from "./moments";
 import { formatEuros } from "./moments";
 import { Sheet, sheetField, sheetLabel, sheetPrimaryButton } from "./Sheet";
 
@@ -177,127 +176,77 @@ export function ExpenseSheet({
   );
 }
 
-// ── Del plan ──────────────────────────────────────────────────────────────────────────────────
-
-const KIND_BY_TIPO: Record<TipoSubplan, CardKind> = {
-  VUELO: "vuelo", BARCO: "barco", TREN: "tren", BUS: "bus", COCHE: "actividad",
-  HOTEL: "alojamiento", RESTAURANTE: "restaurante", ACTIVIDAD: "actividad", OTRO: "actividad",
-};
-const ICON_BY_KIND: Record<CardKind, typeof Plane> = {
-  plan: CalendarDays, vuelo: Plane, barco: Ship, tren: Train, bus: Bus,
-  alojamiento: BedDouble, restaurante: UtensilsCrossed, actividad: Ticket,
-};
-
-export function cardFromSubplan(s: SubplanRow, planTitulo: string): CardMoment {
-  return {
-    type: "tarjeta",
-    kind: KIND_BY_TIPO[s.tipo] ?? "actividad",
-    plan_id: s.plan_id,
-    plan_titulo: planTitulo,
-    subplan_id: s.id,
-    titulo: s.titulo,
-    inicio_at: s.inicio_at,
-    fin_at: s.fin_at,
-    all_day: s.all_day,
-    lugar: s.ubicacion_nombre || null,
-    lugar_fin: s.ubicacion_fin_nombre,
-    duracion: s.duracion_viaje,
-  };
-}
-
-function cardFromPlan(p: { id: number; titulo: string; inicio_at: string; fin_at: string; ubicacion_nombre: string | null; foto_portada?: string | null }): CardMoment {
-  return {
-    type: "tarjeta", kind: "plan", plan_id: p.id, plan_titulo: p.titulo, titulo: p.titulo,
-    inicio_at: p.inicio_at, fin_at: p.fin_at, lugar: p.ubicacion_nombre || null, foto: p.foto_portada ?? null,
-  };
-}
+// ── Invitar a un plan ─────────────────────────────────────────────────────────────────────────
 
 const whenLabel = (iso: string) =>
   new Date(iso).toLocaleDateString("es-ES", { weekday: "short", day: "numeric", month: "short" }).replace(/\./g, "");
 
 /**
- * Share a card. In a plan's chat: the plan or one of its items. Elsewhere: one of your plans
- * (board k-momentos · Tarjetas).
+ * Invite someone to one of your plans from a chat that is not the plan's: the card carries the
+ * plan's join code, so whoever receives it can join in one tap. Only plans that have not ended.
  */
-export function PlanItemSheet({
-  plan, currentUserId, onClose, onSend,
+export function InvitePlanSheet({
+  currentUserId, onClose, onSend,
 }: {
-  plan: { id: number; titulo: string; inicio_at: string; fin_at: string; ubicacion_nombre: string } | null;
   currentUserId: string;
   onClose: () => void;
   onSend: (card: CardMoment) => Promise<void>;
 }) {
-  const [items, setItems] = useState<SubplanRow[] | null>(null);
   const [plans, setPlans] = useState<PlanByIdRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    const load = plan
-      ? fetchSubplanes(plan.id).then((rows) => { if (!cancelled) setItems(rows.filter((r) => !r.parent_subplan_id).sort((a, b) => a.inicio_at.localeCompare(b.inicio_at))); })
-      : fetchUserRelatedPlans({ userId: currentUserId, limit: 50 }).then((rows) => {
-          if (cancelled) return;
-          const now = Date.now();
-          // Upcoming first, then the most recent past ones.
-          setPlans([...rows].sort((a, b) => {
-            const fa = new Date(a.fin_at).getTime() >= now;
-            const fb = new Date(b.fin_at).getTime() >= now;
-            if (fa !== fb) return fa ? -1 : 1;
-            return fa ? a.inicio_at.localeCompare(b.inicio_at) : b.inicio_at.localeCompare(a.inicio_at);
-          }));
-        });
-    load.catch((e) => { console.error("[chat] Error cargando el plan:", errMsg(e)); if (!cancelled) setError("No se pudo cargar. Inténtalo de nuevo."); });
+    fetchUserRelatedPlans({ userId: currentUserId, limit: 100 })
+      .then((rows) => {
+        if (cancelled) return;
+        const now = Date.now();
+        setPlans(rows
+          .filter((p) => p.join_code && new Date(p.fin_at).getTime() >= now)
+          .sort((a, b) => a.inicio_at.localeCompare(b.inicio_at)));
+      })
+      .catch((e) => { console.error("[chat] Error cargando planes:", errMsg(e)); if (!cancelled) setError("No se pudieron cargar tus planes. Inténtalo de nuevo."); });
     return () => { cancelled = true; };
-  }, [plan, currentUserId]);
+  }, [currentUserId]);
 
-  const send = async (card: CardMoment) => {
+  const send = async (p: PlanByIdRow) => {
     if (busy) return;
     setBusy(true);
     try {
-      await onSend(card);
+      await onSend({
+        type: "tarjeta", kind: "plan", plan_id: p.id, plan_titulo: p.titulo, titulo: p.titulo,
+        inicio_at: p.inicio_at, fin_at: p.fin_at, lugar: p.ubicacion_nombre || null,
+        foto: p.foto_portada, join_code: p.join_code,
+      });
       onClose();
     } catch (e) {
-      console.error("[chat] Error enviando tarjeta:", errMsg(e));
+      console.error("[chat] Error enviando invitación:", errMsg(e));
       setError("No se pudo enviar. Inténtalo de nuevo.");
     } finally {
       setBusy(false);
     }
   };
 
-  const Row = ({ card, sub }: { card: CardMoment; sub: string }) => {
-    const Icon = ICON_BY_KIND[card.kind];
-    return (
-      <li>
-        <button type="button" disabled={busy} onClick={() => void send(card)}
-          className="flex min-h-[56px] w-full items-center gap-[12px] rounded-[8px] px-[8px] py-[8px] text-left hover:bg-[var(--surface-2)] disabled:opacity-50">
-          <span className="flex size-[36px] shrink-0 items-center justify-center rounded-[8px] border border-app bg-[var(--surface)] text-muted"><Icon className="size-[16px]" aria-hidden /></span>
-          <span className="min-w-0">
-            <span className="block truncate text-[15px] text-app">{card.titulo}</span>
-            <span className="block truncate text-[12px] text-muted">{sub}</span>
-          </span>
-        </button>
-      </li>
-    );
-  };
-
-  const loading = plan ? items === null : plans === null;
-
   return (
-    <Sheet title={plan ? "Del plan" : "Compartir un plan"} onClose={onClose}>
+    <Sheet title="Invitar a un plan" onClose={onClose}>
       {error && <p role="alert" className="mb-[8px] text-[13px] text-[var(--chat-missed)]">{error}</p>}
-      {loading && !error && <p className="py-[16px] text-[14px] text-muted">Cargando…</p>}
-      {plan && items && (
+      {plans === null && !error && <p className="py-[16px] text-[14px] text-muted">Cargando…</p>}
+      {plans && (
         <ul className="flex flex-col">
-          <Row card={cardFromPlan(plan)} sub={`El plan entero · ${whenLabel(plan.inicio_at)}`} />
-          {items.map((s) => <Row key={s.id} card={cardFromSubplan(s, plan.titulo)} sub={`${whenLabel(s.inicio_at)}${s.ubicacion_nombre ? ` · ${s.ubicacion_nombre}` : ""}`} />)}
-          {items.length === 0 && <li className="px-[8px] py-[12px] text-[14px] text-muted">El plan aún no tiene nada en el itinerario.</li>}
-        </ul>
-      )}
-      {!plan && plans && (
-        <ul className="flex flex-col">
-          {plans.map((p) => <Row key={p.id} card={cardFromPlan(p)} sub={`${whenLabel(p.inicio_at)}${p.ubicacion_nombre ? ` · ${p.ubicacion_nombre}` : ""}`} />)}
-          {plans.length === 0 && <li className="px-[8px] py-[12px] text-[14px] text-muted">Todavía no tienes planes.</li>}
+          {plans.map((p) => (
+            <li key={p.id}>
+              <button type="button" disabled={busy} onClick={() => void send(p)}
+                className="flex min-h-[56px] w-full items-center gap-[12px] rounded-[8px] px-[8px] py-[8px] text-left hover:bg-[var(--surface-2)] disabled:opacity-50">
+                <span className="flex size-[36px] shrink-0 items-center justify-center rounded-[8px] border border-app bg-[var(--surface)] text-muted"><CalendarDays className="size-[16px]" aria-hidden /></span>
+                <span className="min-w-0">
+                  <span className="block truncate text-[15px] text-app">{p.titulo}</span>
+                  <span className="block truncate text-[12px] text-muted">{whenLabel(p.inicio_at)}{p.ubicacion_nombre ? ` · ${p.ubicacion_nombre}` : ""}</span>
+                </span>
+              </button>
+            </li>
+          ))}
+          {plans.length === 0 && <li className="px-[8px] py-[12px] text-[14px] text-muted">No tienes planes por delante a los que invitar.</li>}
         </ul>
       )}
     </Sheet>

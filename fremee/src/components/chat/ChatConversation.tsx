@@ -46,7 +46,7 @@ import { TripSummaryCard, ExpenseCard, PlanItemCard } from "@/components/chat/bi
 import { PlaceCard } from "@/components/chat/bitacora/PlaceCard";
 import { FrimeeProposal } from "@/components/chat/bitacora/FrimeeProposal";
 import { MessageActions } from "@/components/chat/bitacora/MessageActions";
-import { PlaceSheet, ExpenseSheet, PlanItemSheet } from "@/components/chat/bitacora/AttachSheets";
+import { PlaceSheet, ExpenseSheet, InvitePlanSheet } from "@/components/chat/bitacora/AttachSheets";
 import { uploadPlanCoverFile, uploadAudioBlob, uploadAudioFile, uploadDocumentFile, uploadMediaFile } from "@/services/firebase/upload";
 import { createRealtimeTopic } from "@/lib/realtime";
 import AudioPlayer from "@/components/common/AudioPlayer";
@@ -2000,9 +2000,8 @@ export function ChatConversation({
           onSent={(moment) => sendMoment(moment)}
         />
       )}
-      {attachSheet === "plan" && (
-        <PlanItemSheet
-          plan={planId && planInfo ? { id: planId, titulo: planInfo.titulo, inicio_at: planInfo.inicio_at, fin_at: planInfo.fin_at, ubicacion_nombre: planInfo.ubicacion_nombre } : null}
+      {attachSheet === "plan" && !planId && (
+        <InvitePlanSheet
           currentUserId={currentUserId}
           onClose={() => setAttachSheet(null)}
           onSend={(card) => sendMoment(card)}
@@ -2248,7 +2247,7 @@ export function ChatConversation({
               ) : moment?.type === "gasto" ? (
                 <ExpenseCard data={moment} planId={planId} />
               ) : moment?.type === "tarjeta" ? (
-                <PlanItemCard data={moment} tripStart={planId === moment.plan_id ? planInfo?.inicio_at : null} />
+                <PlanItemCard data={moment} isMe={isMe} tripStart={planId === moment.plan_id ? planInfo?.inicio_at : null} />
               ) : moment?.type === "lugar" ? (
                 <PlaceCard data={moment} title={isMe ? "Compartiste un sitio" : `${msg.sender_nombre.split(" ")[0]} compartió un sitio`} time={msgTime} />
               ) : moment?.type === "propuesta" ? (
@@ -2565,7 +2564,8 @@ export function ChatConversation({
                             { icon: <PollIcon className="size-[18px]" />, label: "Encuesta", color: "text-green-400", onClick: () => { setShowAttachMenu(false); setShowPollCreator(true); } },
                             { icon: <MapPin className="size-[18px]" />, label: "Ubicación", color: "text-[var(--chat-accent-text)]", onClick: () => { setShowAttachMenu(false); setAttachSheet("lugar"); } },
                             ...(planId ? [{ icon: <Receipt className="size-[18px]" />, label: "Gasto", color: "text-[var(--chat-accent-text)]", onClick: () => { setShowAttachMenu(false); setAttachSheet("gasto"); } }] : []),
-                            { icon: <CalendarDays className="size-[18px]" />, label: planId ? "Del plan" : "Un plan", color: "text-[var(--chat-accent-text)]", onClick: () => { setShowAttachMenu(false); setAttachSheet("plan"); } },
+                            // Inviting only makes sense outside the plan's own chat.
+                            ...(!planId ? [{ icon: <CalendarDays className="size-[18px]" />, label: "Invitar a un plan", color: "text-[var(--chat-accent-text)]", onClick: () => { setShowAttachMenu(false); setAttachSheet("plan"); } }] : []),
                           ].map(({ icon, label, color, onClick }) => (
                             <button
                               key={label}
