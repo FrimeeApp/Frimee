@@ -70,6 +70,28 @@ export function chapterLabel(day: Date, now: Date = new Date(), trip?: { start: 
   return { title: relative, subtitle: rest };
 }
 
+/** Where the trip stands, for the chat header: «en 14 días», «mañana», «día 2 de 5», «terminado». */
+export function tripStatus(trip: { start: Date; end: Date }, now: Date = new Date()): string {
+  const toStart = daysBetween(now, trip.start);
+  const length = daysBetween(trip.start, trip.end) + 1;
+  if (toStart > 1) return `en ${toStart} días`;
+  if (toStart === 1) return "mañana";
+  const day = daysBetween(trip.start, now) + 1;
+  if (day >= 1 && day <= length) return day === 1 ? "empieza hoy" : `día ${day} de ${length}`;
+  return "terminado";
+}
+
+/** «21–25 nov», «30 dic – 2 ene» */
+export function tripRange(trip: { start: Date; end: Date }): string {
+  const month = (d: Date) => d.toLocaleDateString("es-ES", { month: "short" }).replace(".", "");
+  if (trip.start.getMonth() === trip.end.getMonth() && trip.start.getFullYear() === trip.end.getFullYear()) {
+    return trip.start.getDate() === trip.end.getDate()
+      ? `${trip.start.getDate()} ${month(trip.start)}`
+      : `${trip.start.getDate()}–${trip.end.getDate()} ${month(trip.end)}`;
+  }
+  return `${trip.start.getDate()} ${month(trip.start)} – ${trip.end.getDate()} ${month(trip.end)}`;
+}
+
 /** One slot per message, in the same order. */
 export function buildTimeline<T extends TimelineMessage>(messages: T[], trip?: { start: Date; end: Date } | null, now: Date = new Date()): TimelineSlot[] {
   const dates = messages.map((m) => (m.created_at ? new Date(m.created_at) : null));
