@@ -58,6 +58,8 @@ export type CardMoment = {
   lugar_fin?: string | null;
   duracion?: string | null;
   foto?: string | null;
+  /** Plan invitations: whoever receives the card joins with this code (/join/<code>). */
+  join_code?: string | null;
 };
 
 export type ProposalKind = "gasto" | "encuesta" | "tarea" | "actividad";
@@ -123,7 +125,7 @@ export function momentPreview(texto: string | null | undefined): string | null {
     case "resumen_viaje": return "Resumen del viaje";
     case "gasto": return `Gasto · ${m.titulo} · ${formatEuros(m.total)}`;
     case "lugar": return `Sitio · ${m.nombre}`;
-    case "tarjeta": return `${cardLabel(m.kind)} · ${m.titulo}`;
+    case "tarjeta": return m.kind === "plan" ? `Invitación · ${m.titulo}` : `${cardLabel(m.kind)} · ${m.titulo}`;
     case "propuesta": return `Frimee propone · ${m.titulo}`;
   }
 }

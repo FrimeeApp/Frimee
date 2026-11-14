@@ -119,7 +119,7 @@ function inDays(iso: string) {
  * Plan, flight, boat, stay and restaurant share a header (icon + kind) and a footer (where it is in
  * the plan, or a link to open it) — board k-momentos · Tarjetas.
  */
-export function PlanItemCard({ data, tripStart }: { data: CardMoment; tripStart?: string | null }) {
+export function PlanItemCard({ data, tripStart, isMe = false }: { data: CardMoment; tripStart?: string | null; isMe?: boolean }) {
   const Icon = CARD_ICON[data.kind] ?? CalendarDays;
   const isTransport = data.kind === "vuelo" || data.kind === "barco" || data.kind === "tren" || data.kind === "bus";
   const dayN = tripStart ? daysBetween(tripStart, data.inicio_at) + 1 : null;
@@ -128,7 +128,7 @@ export function PlanItemCard({ data, tripStart }: { data: CardMoment; tripStart?
   return (
     <div className={frame}>
       <div className="p-[14px]">
-        <p className={label}><Icon className="size-[14px]" aria-hidden /> {cardLabel(data.kind)}</p>
+        <p className={label}><Icon className="size-[14px]" aria-hidden /> {data.kind === "plan" ? "Invitación a un plan" : cardLabel(data.kind)}</p>
 
         {data.kind === "plan" ? (
           <>
@@ -166,8 +166,18 @@ export function PlanItemCard({ data, tripStart }: { data: CardMoment; tripStart?
         )}
       </div>
       <div className={footer}>
-        <span className="min-w-0 truncate text-muted">{where ?? `Plan · ${data.plan_titulo}`}</span>
-        <Link href={`/plans/${data.plan_id}`} className="flex min-h-[44px] shrink-0 items-center font-[var(--fw-semibold)] text-[var(--chat-accent-text)]">Abrir plan</Link>
+        {data.kind === "plan" && data.join_code && !isMe ? (
+          <>
+            <span className="min-w-0 truncate text-muted">Te invitan a unirte</span>
+            {/* The join page shows the plan and, if you are already in, opens it. */}
+            <Link href={`/join/${data.join_code}`} className="flex min-h-[44px] shrink-0 items-center font-[var(--fw-semibold)] text-[var(--chat-accent-text)]">Ver invitación</Link>
+          </>
+        ) : (
+          <>
+            <span className="min-w-0 truncate text-muted">{data.kind === "plan" ? "Invitación enviada" : where ?? `Plan · ${data.plan_titulo}`}</span>
+            <Link href={`/plans/${data.plan_id}`} className="flex min-h-[44px] shrink-0 items-center font-[var(--fw-semibold)] text-[var(--chat-accent-text)]">Abrir plan</Link>
+          </>
+        )}
       </div>
     </div>
   );
