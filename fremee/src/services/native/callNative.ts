@@ -13,6 +13,8 @@ type CallNativePlugin = {
   stopOngoing(): Promise<void>;
   cancelIncoming(options: { llamadaId: string }): Promise<void>;
   takePendingCall(): Promise<{ url?: string | null }>;
+  startRinging(): Promise<void>;
+  stopRinging(): Promise<void>;
   addListener(event: "callAction", listener: (e: { action: "mute" | "hangup" }) => void): Promise<PluginListenerHandle>;
 };
 
@@ -37,6 +39,17 @@ export async function stopOngoingCall() {
 export async function cancelIncomingCall(llamadaId: number) {
   if (!isAndroid()) return;
   try { await CallNative.cancelIncoming({ llamadaId: String(llamadaId) }); } catch { /* nothing to cancel */ }
+}
+
+/** The phone's ringtone while a call rings on Frimee's screen (silent / vibrate modes respected). */
+export async function startRinging() {
+  if (!isAndroid()) return;
+  try { await CallNative.startRinging(); } catch (err) { console.warn("[call-native] ring", err); }
+}
+
+export async function stopRinging() {
+  if (!isAndroid()) return;
+  try { await CallNative.stopRinging(); } catch { /* not ringing */ }
 }
 
 /** The call link Frimee was opened with from a call notification (cold start), once. */
