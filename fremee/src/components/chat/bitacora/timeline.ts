@@ -35,22 +35,30 @@ const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
  * With the dates of the chat's plan: before it «faltan 14 días», during it «Día 2», after it the date.
  */
 export function chapterLabel(day: Date, now: Date = new Date(), trip?: { start: Date; end: Date } | null): ChapterLabel {
-  const longDate = day.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long", ...(day.getFullYear() !== now.getFullYear() ? { year: "numeric" } : {}) });
+  const otherYear = day.getFullYear() !== now.getFullYear();
+  const weekday = day.toLocaleDateString("es-ES", { weekday: "long" });
+  const month = day.toLocaleDateString("es-ES", { month: "long" });
+  // «sábado 14 de noviembre» (no comma), with the year only when it is not this one
+  const longDate = `${weekday} ${day.getDate()} de ${month}${otherYear ? ` de ${day.getFullYear()}` : ""}`;
+  const monthOnly = `${month}${otherYear ? ` de ${day.getFullYear()}` : ""}`;
   const ago = daysBetween(day, now);
-  const relative = ago === 0 ? "Hoy" : ago === 1 ? "Ayer" : capitalize(day.toLocaleDateString("es-ES", { weekday: "long", day: "numeric" }));
+  const isNear = ago === 0 || ago === 1;
+  const relative = ago === 0 ? "Hoy" : ago === 1 ? "Ayer" : `${capitalize(weekday)} ${day.getDate()}`;
+  // The title already names the weekday and day: below it, only what it leaves out.
+  const rest = isNear ? longDate : monthOnly;
 
   if (trip) {
     const toStart = daysBetween(day, trip.start);
     const sinceStart = daysBetween(trip.start, day);
     const length = daysBetween(trip.start, trip.end) + 1;
     if (toStart > 0) {
-      return { title: relative, subtitle: `${longDate} · ${toStart === 1 ? "falta 1 día" : `faltan ${toStart} días`}` };
+      return { title: relative, subtitle: `${rest} · ${toStart === 1 ? "falta 1 día" : `faltan ${toStart} días`}` };
     }
     if (sinceStart >= 0 && sinceStart < length) {
       return { title: `Día ${sinceStart + 1}`, subtitle: `${ago === 0 ? "hoy · " : ago === 1 ? "ayer · " : ""}${longDate}` };
     }
   }
-  return { title: relative, subtitle: longDate };
+  return { title: relative, subtitle: rest };
 }
 
 /** One slot per message, in the same order. */
