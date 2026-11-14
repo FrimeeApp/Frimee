@@ -12,6 +12,7 @@ import CallEnded, { type EndedCall } from "@/components/calls/CallEnded";
 import PermissionSheet from "@/components/calls/PermissionSheet";
 import { useAuth } from "@/providers/AuthProvider";
 import { Capacitor } from "@capacitor/core";
+import { startRingback, stopRingback } from "@/lib/ringback";
 import { cancelIncomingCall, onCallNotificationAction, parseCallUrl, startRinging, stopRinging, startOngoingCall, stopOngoingCall, takePendingCallLink, updateOngoingCall } from "@/services/native/callNative";
 import { getLivekitUrl } from "@/config/external";
 import { useLivekitRoom, type LivekitRoomApi } from "@/hooks/useLivekitRoom";
@@ -230,6 +231,15 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       if (ringing) void stopRinging();
     };
   }, [ringingId]);
+
+  // The caller hears a ringback tone while the other side rings; it stops as soon as the call
+  // leaves "outgoing" (answered, rejected, busy, no answer or hung up).
+  const outgoingId = callState.status === "outgoing" ? callState.llamadaId : null;
+  useEffect(() => {
+    if (!outgoingId) return;
+    startRingback();
+    return () => stopRingback();
+  }, [outgoingId]);
 
   // In a call: the ongoing-call notification and its foreground service, so Android keeps the
   // microphone working when you leave the app (M19b).
