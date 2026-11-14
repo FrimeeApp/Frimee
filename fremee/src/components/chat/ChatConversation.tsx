@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, useCallback, Fragment, type ButtonHTMLAttr
 import { buildTimeline, inTimeOrder, tripRange, tripStatus } from "@/components/chat/bitacora/timeline";
 import Link from "next/link";
 import { DayChapter } from "@/components/chat/bitacora/DayChapter";
+import { ChatRuler, type RulerMark } from "@/components/chat/bitacora/ChatRuler";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import {
   listChats,
@@ -96,6 +97,10 @@ type ChatIconButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "type">
   tone?: keyof typeof CHAT_ICON_BUTTON_TONE;
 };
 
+/** Long press opens reactions and actions (board s-sistema · Gestos). */
+const LONG_PRESS_MS = 350;
+const LAST_REACTION_KEY = "frimee:ultima-reaccion";
+
 function ChatIconButton({
   label,
   size = "md",
@@ -158,6 +163,7 @@ export function ChatConversation({
   onAbrirActividad,
   onLeave,
   onMembersChanged,
+  unreadAtOpen = 0,
 }: {
   chat: ChatListItem;
   currentUserId: string;
@@ -176,6 +182,8 @@ export function ChatConversation({
   onAbrirActividad?: (titulo: string) => void;
   onLeave?: () => void;
   onMembersChanged?: () => void;
+  /** Unread messages when the chat was opened (the list zeroes its count on open): the ruler marks where you left off. */
+  unreadAtOpen?: number;
 }) {
   type LocalMsg = MensajeRow & { _key?: number };
   const [messages, setMessages] = useState<LocalMsg[]>([]);
@@ -231,7 +239,7 @@ export function ChatConversation({
   const [showPollCreator, setShowPollCreator] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
-  const [, setAudioError] = useState<string | null>(null);
+  const [audioError, setAudioError] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -239,7 +247,12 @@ export function ChatConversation({
   const mediaInputRef = useRef<HTMLInputElement | null>(null);
   const audioFileInputRef = useRef<HTMLInputElement | null>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const swipeRef = useRef<{ startX: number; startY: number; el: HTMLElement; triggered: boolean } | null>(null);
+  const swipeRef = useRef<{ startX: number; startY: number; el: HTMLElement; triggered: boolean; moved: boolean; t0: number } | null>(null);
+  const lastTapRef = useRef<{ id: number; t: number } | null>(null);
+  const lastTouchAtRef = useRef(0);
+  // Hold the mic to record: release sends, slide left cancels, slide up locks.
+  const [recordHold, setRecordHold] = useState<{ dx: number; locked: boolean } | null>(null);
+  const micPointerTypeRef = useRef<string | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const sentMsgIdsRef = useRef<Set<number>>(new Set());
@@ -400,6 +413,13 @@ export function ChatConversation({
 
   const isNearBottomRef = useRef(true);
   const observerReadyRef = useRef(false);
+  // «Ir a lo último» (board m-recorrer): away from the end, and how many arrived meanwhile.
+  const [awayFromEnd, setAwayFromEnd] = useState(false);
+  const [newWhileAway, setNewWhileAway] = useState(0);
+  const lastMsgIdRef = useRef<number | null>(null);
+  // First message you had not read when the chat opened (frozen after the first load).
+  const [firstUnreadId, setFirstUnreadId] = useState<number | null>(null);
+  const firstUnreadDoneRef = useRef(false);
 
   useEffect(() => {
     setLoading(true);
@@ -409,7 +429,49 @@ export function ChatConversation({
     oldestIdRef.current = null;
     isNearBottomRef.current = true;
     observerReadyRef.current = false;
+    setAwayFromEnd(false);
+    setNewWhileAway(0);
+    lastMsgIdRef.current = null;
+    setFirstUnreadId(null);
+    firstUnreadDoneRef.current = false;
   }, [chat.chat_id]);
+
+  // Follow the reader: new messages only pull the view down when you are at the end.
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const onScroll = () => {
+      const fromEnd = container.scrollHeight - container.scrollTop - container.clientHeight;
+      isNearBottomRef.current = fromEnd < 120;
+      setAwayFromEnd(fromEnd > container.clientHeight / 2);
+      if (fromEnd < 120) setNewWhileAway(0);
+    };
+    container.addEventListener("scroll", onScroll, { passive: true });
+    return () => container.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // Count what others send while you read further up.
+  useEffect(() => {
+    const last = messages[messages.length - 1];
+    if (!last) return;
+    const prevId = lastMsgIdRef.current;
+    lastMsgIdRef.current = last.id;
+    if (prevId === null || last.id === prevId || last.id < 0) return;
+    if (!isNearBottomRef.current && last.sender_id !== currentUserId) setNewWhileAway((n) => n + 1);
+  }, [messages, currentUserId]);
+
+  useEffect(() => {
+    if (loading || firstUnreadDoneRef.current) return;
+    firstUnreadDoneRef.current = true;
+    if (unreadAtOpen <= 0) return;
+    const ordered = inTimeOrder(messages);
+    let n = 0;
+    for (let i = ordered.length - 1; i >= 0; i--) {
+      if (ordered[i].sender_id === currentUserId) continue;
+      n += 1;
+      if (n === unreadAtOpen) { setFirstUnreadId(ordered[i].id); break; }
+    }
+  }, [loading, messages, unreadAtOpen, currentUserId]);
 
   // Phones: the keyboard opens or closes (NativeSystemUi). If you were at the end of the chat, the
   // last messages stay in view right above it instead of being covered.
@@ -519,6 +581,9 @@ export function ChatConversation({
   /** emoji "" removes mine. One reaction per person, as before. */
   const reactTo = (msgId: number, emoji: string) => {
     if (msgId < 0) return;
+    if (emoji) {
+      try { localStorage.setItem(LAST_REACTION_KEY, emoji); } catch { /* storage blocked: keep the default */ }
+    }
     const prev = reactions;
     setReactions((all) => {
       const list = (all[msgId] ?? [])
@@ -533,6 +598,14 @@ export function ChatConversation({
     void reactMensaje(msgId, emoji)
       .then(() => channelRef.current?.send({ type: "broadcast", event: "reactions_changed", payload: { mensaje_id: msgId } }))
       .catch((e) => { setReactions(prev); logError("Error guardando reacción", e); });
+  };
+
+  /** Double tap (board s-sistema · Gestos): react with the last emoji used; again removes it. */
+  const reactWithLast = (msgId: number) => {
+    let emoji = "❤️";
+    try { emoji = localStorage.getItem(LAST_REACTION_KEY) || emoji; } catch { /* storage blocked */ }
+    reactTo(msgId, myReactionOf(msgId) === emoji ? "" : emoji);
+    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10);
   };
 
   const togglePin = (msgId: number) => {
@@ -1725,6 +1798,7 @@ export function ChatConversation({
   };
 
   const handleCancelRecording = () => {
+    setRecordHold(null);
     mediaRecorderRef.current?.stream.getTracks().forEach((t) => t.stop());
     mediaRecorderRef.current?.stop();
     mediaRecorderRef.current = null;
@@ -1732,6 +1806,59 @@ export function ChatConversation({
     if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
     setIsRecording(false);
     setRecordingSeconds(0);
+  };
+
+  /** Touch: hold to record. A mouse click (or the keyboard) keeps the old tap-to-start. */
+  const onMicPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    micPointerTypeRef.current = e.pointerType;
+    if (e.pointerType === "mouse") return;
+    e.preventDefault();
+    const hold = { x: e.clientX, y: e.clientY, t0: Date.now(), released: false, locked: false, cancelled: false };
+    setAudioError(null);
+    setRecordHold({ dx: 0, locked: false });
+    // On window: the mic button is replaced by the recording bar while the finger stays down.
+    const stop = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+    };
+    const onMove = (ev: PointerEvent) => {
+      if (hold.locked || hold.cancelled) return;
+      const dx = ev.clientX - hold.x;
+      const dy = ev.clientY - hold.y;
+      if (dx < -80) {
+        hold.cancelled = true;
+        stop();
+        handleCancelRecording();
+        if (navigator.vibrate) navigator.vibrate(20);
+      } else if (dy < -60) {
+        hold.locked = true;
+        stop();
+        setRecordHold({ dx: 0, locked: true });
+        if (navigator.vibrate) navigator.vibrate(15);
+      } else {
+        setRecordHold({ dx: Math.min(0, dx), locked: false });
+      }
+    };
+    const onUp = () => {
+      stop();
+      hold.released = true;
+      if (hold.cancelled || hold.locked) return;
+      if (Date.now() - hold.t0 < 350) {
+        handleCancelRecording();
+        setAudioError("Mantén pulsado para grabar");
+        return;
+      }
+      if (mediaRecorderRef.current) handleSendRecording();
+    };
+    const onCancel = () => { stop(); hold.cancelled = true; handleCancelRecording(); };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
+    void handleStartRecording().then(() => {
+      // Let go (or cancelled) while the microphone was still opening: nothing to send.
+      if (hold.cancelled || (hold.released && !hold.locked)) handleCancelRecording();
+    });
   };
 
   const handleSendRecording = () => {
@@ -1747,6 +1874,7 @@ export function ChatConversation({
       if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
       setIsRecording(false);
       setRecordingSeconds(0);
+      setRecordHold(null);
       setAudioError(null);
       if (blob.size < 100) { setAudioError("Grabación demasiado corta"); return; }
 
@@ -1910,6 +2038,12 @@ export function ChatConversation({
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void onSend(); }
+    // ↑ on an empty composer edits your last message (board s-sistema · Gestos).
+    if (e.key === "ArrowUp" && !text && !editingMsg) {
+      const last = [...messages].reverse().find((m) => m.sender_id === currentUserId && m.id > 0 && !m.tipo?.startsWith("call_")
+        && !parseMoment(m.texto) && !m.audio_url && !m.document_url && !m.image_url);
+      if (last) { e.preventDefault(); setEditingMsg(last); setText(last.texto); }
+    }
     if (e.key === "Escape") { cancelEdit(); cancelReply(); closeOverlays(); }
   };
 
@@ -1931,6 +2065,18 @@ export function ChatConversation({
   // backdated ones) would otherwise open the same day twice.
   const timelineMessages = inTimeOrder(messages);
   const timeline = buildTimeline(timelineMessages, trip);
+  // The ruler travels days and milestones (polls and @frimee proposals that were not dismissed).
+  const rulerMarks: RulerMark[] = [];
+  timelineMessages.forEach((m, i) => {
+    const chapter = timeline[i]?.chapter;
+    if (chapter) rulerMarks.push({ kind: "day", elementId: `day-${m.id}`, label: chapter });
+    const mo = parseMoment(m.texto);
+    if (mo?.type === "poll") {
+      rulerMarks.push({ kind: "hito", elementId: `msg-${m.id}`, label: mo.question, decided: Boolean(mo.closed || (mo.expires_at && new Date(mo.expires_at) < new Date())) });
+    } else if (mo?.type === "propuesta" && mo.estado !== "descartada") {
+      rulerMarks.push({ kind: "hito", elementId: `msg-${m.id}`, label: mo.titulo, decided: mo.estado === "aceptada" });
+    }
+  });
   const otherMembers = chat.miembros.filter((m) => m.id !== currentUserId).map((m) => m.nombre.split(" ")[0]);
   const headerSubtitle = trip
     ? `${chat.miembros.length} personas · ${tripStatus(trip)}`
@@ -2140,6 +2286,7 @@ export function ChatConversation({
       )}
 
       {/* Messages */}
+      <div className="relative flex min-h-0 flex-1 flex-col">
       <div ref={scrollContainerRef} className="scrollbar-thin min-h-0 flex-1 overflow-x-hidden overflow-y-auto pb-[var(--space-2)] pt-[var(--space-2)]" onClick={closeOverlays}>
         {loading ? (
           <div className="flex h-full items-center justify-center text-body-sm text-muted">Cargando...</div>
@@ -2185,23 +2332,27 @@ export function ChatConversation({
               };
               const onBubbleTouchStart = (e: React.TouchEvent) => {
                 const t = e.touches[0];
-                swipeRef.current = { startX: t.clientX, startY: t.clientY, el: e.currentTarget as HTMLElement, triggered: false };
+                lastTouchAtRef.current = Date.now();
+                swipeRef.current = { startX: t.clientX, startY: t.clientY, el: e.currentTarget as HTMLElement, triggered: false, moved: false, t0: Date.now() };
                 longPressTimerRef.current = setTimeout(() => {
                   setContextMenu({ msg, x: t.clientX, y: t.clientY + 4 });
                   if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(40);
-                }, 500);
+                }, LONG_PRESS_MS);
               };
               const onBubbleTouchMove = (e: React.TouchEvent) => {
-                if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }
                 const s = swipeRef.current;
                 if (!s) return;
                 const t = e.touches[0];
                 const dx = t.clientX - s.startX;
                 const dy = Math.abs(t.clientY - s.startY);
+                // A finger that barely moves is still a tap or a long press.
+                if (Math.abs(dx) < 8 && dy < 8) return;
+                s.moved = true;
+                if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }
                 if (dy > Math.abs(dx) + 8) { swipeRef.current = null; return; }
-                const validSwipe = isMe ? dx < 0 : dx > 0;
-                if (!validSwipe) return;
-                const clamped = isMe ? Math.max(dx, -80) : Math.min(dx, 80);
+                // Right on any message replies (board s-sistema · Gestos), mine included.
+                if (dx <= 0) return;
+                const clamped = Math.min(dx, 80);
                 s.el.style.transform = `translateX(${clamped}px)`;
                 s.el.style.transition = "none";
                 if (Math.abs(dx) >= 64 && !s.triggered) {
@@ -2215,6 +2366,16 @@ export function ChatConversation({
               const onBubbleTouchEnd = () => {
                 if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }
                 const s = swipeRef.current;
+                // Two quick taps on the same message: react with the last emoji.
+                if (s && !s.moved && Date.now() - s.t0 < 300 && msg.id > 0) {
+                  const prev = lastTapRef.current;
+                  if (prev && prev.id === msg.id && Date.now() - prev.t < 320) {
+                    lastTapRef.current = null;
+                    reactWithLast(msg.id);
+                  } else {
+                    lastTapRef.current = { id: msg.id, t: Date.now() };
+                  }
+                }
                 if (s) {
                   s.el.style.transition = "transform 0.25s ease";
                   s.el.style.transform = "translateX(0)";
@@ -2264,8 +2425,41 @@ export function ChatConversation({
               );
               // Rich content keeps its own look until phase 2: framed on a surface for the others.
               const richFrame = isRichContent && !msg.image_url && !moment ? "rounded-[8px] border border-app bg-[var(--surface)] px-3 py-2" : "";
+              const isPlainText = !moment && !msg.audio_url && !msg.document_url && !msg.image_url && !isCallRecord;
+              // Desktop keyboard (board s-sistema · Gestos): R reply, E edit mine, Supr delete mine, Enter actions.
+              const onMessageKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+                if (e.target !== e.currentTarget || e.ctrlKey || e.metaKey || e.altKey || msg.id < 0) return;
+                const key = e.key.toLowerCase();
+                if (key === "r") {
+                  e.preventDefault();
+                  setReplyingTo(msg);
+                  setTimeout(() => inputRef.current?.focus(), 0);
+                } else if (key === "e" && isMe && isPlainText) {
+                  e.preventDefault();
+                  setEditingMsg(msg);
+                  setText(msg.texto);
+                  setTimeout(() => inputRef.current?.focus(), 0);
+                } else if (e.key === "Delete" && isMe) {
+                  e.preventDefault();
+                  void handleDeleteMsg(msg);
+                } else if ((e.key === "Enter" || e.key === "ContextMenu") && !isBot) {
+                  e.preventDefault();
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  setContextMenu({ msg, x: rect.left + rect.width / 2, y: rect.bottom + 4 });
+                }
+              };
               const gestureProps = {
+                tabIndex: 0,
+                "aria-keyshortcuts": isMe ? "R E Delete Enter" : "R Enter",
+                onKeyDown: onMessageKeyDown,
                 onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
+                onDoubleClick: (e: React.MouseEvent) => {
+                  // Phones already handled the double tap on touchend.
+                  if (Date.now() - lastTouchAtRef.current < 800 || msg.id < 0) return;
+                  e.preventDefault();
+                  window.getSelection()?.removeAllRanges();
+                  reactWithLast(msg.id);
+                },
                 onTouchStart: onBubbleTouchStart,
                 onTouchMove: onBubbleTouchMove,
                 onTouchEnd: onBubbleTouchEnd,
@@ -2302,7 +2496,7 @@ export function ChatConversation({
                 const callTipo = msg.tipo;
                 return (
                   <Fragment key={(msg)._key ?? msg.id}>
-                    {slot?.chapter && <DayChapter label={slot.chapter} />}
+                    {slot?.chapter && <DayChapter id={`day-${msg.id}`} label={slot.chapter} />}
                     <div id={`msg-${msg.id}`} className={`mt-[8px] ${highlight}`}>
                       <CallLine
                         tipo={callTipo}
@@ -2320,7 +2514,7 @@ export function ChatConversation({
                 const pollDecided = Boolean(moment.closed || (moment.expires_at && new Date(moment.expires_at) < new Date()));
                 return (
                   <Fragment key={(msg)._key ?? msg.id}>
-                    {slot?.chapter && <DayChapter label={slot.chapter} />}
+                    {slot?.chapter && <DayChapter id={`day-${msg.id}`} label={slot.chapter} />}
                     <article id={`msg-${msg.id}`} aria-label={`Encuesta, ${msgTime}`} className={`group/msg relative pl-[56px] pr-[var(--space-4)] ${slot?.chapter ? "mt-[4px]" : "mt-[14px]"} ${highlight}`}>
                       <span aria-hidden className={`absolute left-[23px] top-[18px] size-[9px] rotate-45 ${pollDecided ? "bg-[var(--primary)]" : "border border-[var(--primary)] bg-[var(--bg)]"}`} />
                       <div className={`relative max-w-[460px] ${contextMenu?.msg.id === msg.id ? "opacity-75" : ""}`} {...gestureProps}>
@@ -2343,7 +2537,7 @@ export function ChatConversation({
               }
               return (
                 <Fragment key={(msg)._key ?? msg.id}>
-                {slot?.chapter && <DayChapter label={slot.chapter} />}
+                {slot?.chapter && <DayChapter id={`day-${msg.id}`} label={slot.chapter} />}
                 {burstTimeRow && (
                   <div className={`pl-[56px] pr-[var(--space-4)] text-[12px] tabular-nums text-muted ${slot?.chapter ? "mt-[4px]" : "mt-[14px]"}`}>{msgTime}</div>
                 )}
@@ -2420,9 +2614,34 @@ export function ChatConversation({
           </div>
         )}
       </div>
+      {!loading && (
+        <ChatRuler
+          scrollRef={scrollContainerRef}
+          marks={rulerMarks}
+          lastReadElementId={firstUnreadId ? `msg-${firstUnreadId}` : null}
+          contentKey={messages}
+        />
+      )}
+      {!loading && awayFromEnd && (
+        <button
+          type="button"
+          onClick={() => {
+            const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+            bottomRef.current?.scrollIntoView({ behavior: reduce ? "auto" : "smooth" });
+          }}
+          className="absolute bottom-[12px] left-1/2 z-[6] flex h-[44px] -translate-x-1/2 items-center gap-[6px] whitespace-nowrap rounded-full bg-[var(--primary)] px-[16px] text-[14px] font-[var(--fw-semibold)] text-[var(--contrast)] shadow-[0_4px_16px_rgba(0,0,0,0.25)]"
+        >
+          <svg aria-hidden viewBox="0 0 24 24" className="size-[16px]" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14" /><path d="m6 13 6 6 6-6" /></svg>
+          Ir a lo último{newWhileAway > 0 ? ` · ${newWhileAway} ${newWhileAway === 1 ? "nuevo" : "nuevos"}` : ""}
+        </button>
+      )}
+      </div>
 
       {/* Input area */}
       <div className="px-[var(--space-3)] pb-[calc(env(safe-area-inset-bottom)+12px)] pt-[var(--space-2)] md:px-[var(--space-4)] md:pb-[var(--space-3)]">
+        {audioError && !isRecording && (
+          <p role="status" className="mb-[var(--space-2)] px-1 text-[13px] text-muted">{audioError}</p>
+        )}
         {replyingTo && (
           <div className="mb-[var(--space-2)] flex items-center gap-[var(--space-2)] rounded-[10px] border-l-2 border-[var(--text-primary)] bg-surface px-3 py-[8px]">
             <div className="min-w-0 flex-1">
@@ -2489,13 +2708,22 @@ export function ChatConversation({
                 <span className="shrink-0 text-body-sm text-red-400">
                   {String(Math.floor(recordingSeconds / 60)).padStart(2, "0")}:{String(recordingSeconds % 60).padStart(2, "0")}
                 </span>
-                <span className="flex-1 px-1 text-body-sm text-muted">Grabando...</span>
-                <ChatIconButton label="Cancelar grabación" size="sm" tone="danger" onClick={handleCancelRecording}>
-                  <X className="size-4" />
-                </ChatIconButton>
-                <ChatIconButton label="Enviar nota de voz" size="sm" tone="primary" onClick={handleSendRecording}>
-                  <SendMsgIcon className="size-4" />
-                </ChatIconButton>
+                {recordHold && !recordHold.locked ? (
+                  <span className="flex min-w-0 flex-1 items-center justify-between gap-2 px-1 text-body-sm text-muted" role="status">
+                    <span className="truncate" style={{ transform: `translateX(${recordHold.dx / 2}px)`, opacity: Math.max(0.3, 1 + recordHold.dx / 120) }}>‹ Desliza para cancelar</span>
+                    <span className="shrink-0" aria-label="Desliza hacia arriba para bloquear">↑ Bloquear</span>
+                  </span>
+                ) : (
+                  <>
+                    <span className="flex-1 px-1 text-body-sm text-muted">Grabando...</span>
+                    <ChatIconButton label="Cancelar grabación" size="sm" tone="danger" onClick={handleCancelRecording}>
+                      <X className="size-4" />
+                    </ChatIconButton>
+                    <ChatIconButton label="Enviar nota de voz" size="sm" tone="primary" onClick={handleSendRecording}>
+                      <SendMsgIcon className="size-4" />
+                    </ChatIconButton>
+                  </>
+                )}
               </>
             ) : (
               <>
@@ -2538,7 +2766,18 @@ export function ChatConversation({
                 />
                 {!text.trim() && (
                   <>
-                    <ChatIconButton label="Grabar nota de voz" size="sm" onClick={() => void handleStartRecording()}>
+                    <ChatIconButton
+                      label="Mantén para grabar una nota de voz"
+                      size="sm"
+                      className="touch-none select-none"
+                      onPointerDown={onMicPointerDown}
+                      onContextMenu={(e) => e.preventDefault()}
+                      onClick={() => {
+                        // Touch already recorded on hold; mouse and keyboard start on click.
+                        if (micPointerTypeRef.current === "touch" || micPointerTypeRef.current === "pen") return;
+                        void handleStartRecording();
+                      }}
+                    >
                       <MicIcon className="size-5" />
                     </ChatIconButton>
                     <div className="relative shrink-0">
