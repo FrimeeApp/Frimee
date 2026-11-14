@@ -77,13 +77,16 @@ process.on("exit", restore);
 process.on("SIGINT", () => { restore(); process.exit(1); });
 process.on("uncaughtException", (e) => { restore(); console.error(e); process.exit(1); });
 
-// Clear Turbopack cache to avoid stale results
-const cacheDir = resolve(root, ".next/cache");
-if (existsSync(cacheDir)) {
-  try {
-    rmSync(cacheDir, { recursive: true, force: true });
-    console.log("→ Cleared .next/cache");
-  } catch { /* non-fatal */ }
+// Clear Turbopack cache and dev-only generated types (they reference the
+// @modal routes this script moves away, which breaks the type check)
+for (const dir of [".next/cache", ".next/dev"]) {
+  const abs = resolve(root, dir);
+  if (existsSync(abs)) {
+    try {
+      rmSync(abs, { recursive: true, force: true });
+      console.log(`→ Cleared ${dir}`);
+    } catch { /* non-fatal */ }
+  }
 }
 
 for (const { file, content } of PATCHES) {
