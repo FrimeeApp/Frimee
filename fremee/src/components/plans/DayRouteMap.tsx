@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Capacitor } from "@capacitor/core";
 import type { SubplanRow } from "@/services/api/endpoints/subplanes.endpoint";
 import { TIPOS_TRANSPORTE } from "@/services/api/endpoints/subplanes.endpoint";
@@ -9,12 +9,17 @@ import { decodePolyline } from "@/lib/polyline";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { buildInternalApiUrl } from "@/config/external";
 import { formatCompactRouteDistance, formatCompactRouteDuration } from "@/lib/route-formatters";
+import RouteMapLoader from "@/components/plans/RouteMapLoader";
 
 type Props = {
   subplanes: SubplanRow[];
   selectedDate: string;
   ubicacionNombre?: string;
   onViajeComputed?: (subplanId: number, duracion: string, distancia: string, polyline: string) => void;
+  /** True while the map is being built and still hidden behind the loader. */
+  onLoadingChange?: (loading: boolean) => void;
+  /** The full-screen map uses the tall loader (board M2). */
+  loaderVariant?: "embedded" | "fullscreen";
   heightClassName?: string;
   containerClassName?: string;
 };
@@ -101,14 +106,32 @@ async function requestDirectionsFromGoogleClient(params: {
   };
 }
 
-/** Route for one leg: shared cache (native), then /api/directions, then Google in the browser. Also used by the itinerary. */
-export async function requestDirections(params: {
+type DirectionsParams = {
   waypoints: string[];
   from: Coord;
   to: Coord;
   travelMode?: string | null;
   accessToken?: string;
-}): Promise<DirectionsResultShape> {
+};
+
+// The itinerary and the map ask for the same missing legs at the same time: share the request.
+const inFlightDirections = new Map<string, Promise<DirectionsResultShape>>();
+
+/** Route for one leg: shared cache (native), then /api/directions, then Google in the browser. Also used by the itinerary. */
+export function requestDirections(params: DirectionsParams): Promise<DirectionsResultShape> {
+  const key = [
+    roundCoord(params.from.lat), roundCoord(params.from.lng),
+    roundCoord(params.to.lat), roundCoord(params.to.lng),
+    params.travelMode ?? "COCHE",
+  ].join("|");
+  const pending = inFlightDirections.get(key);
+  if (pending) return pending;
+  const request = fetchDirections(params).finally(() => inFlightDirections.delete(key));
+  inFlightDirections.set(key, request);
+  return request;
+}
+
+async function fetchDirections(params: DirectionsParams): Promise<DirectionsResultShape> {
   // In the app, try the shared cache first: it saves a round trip to our API.
   // On a miss, fall through to /api/directions like the web does (it accepts the
   // Bearer token since 5d73025), so the route is drawn even if nobody computed it before.
@@ -212,6 +235,19 @@ const renderedRouteMapKeys = new Set<string>();
 const renderedFallbackMapKeys = new Set<string>();
 const MAP_RENDER_CACHE_LIMIT = 24;
 
+// The first map of the session keeps its loader at least this long, so the route animation is
+// seen once instead of flashing. Later maps show up as soon as they are ready.
+const FIRST_LOADER_MIN_MS = 2000;
+let firstLoaderShown = false;
+
+async function holdFirstLoader(startedAt: number) {
+  if (firstLoaderShown) return;
+  firstLoaderShown = true;
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return; // nothing moves to show
+  const remaining = FIRST_LOADER_MIN_MS - (Date.now() - startedAt);
+  if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
+}
+
 function rememberRenderedMap(cache: Set<string>, key: string) {
   if (!key) return;
   cache.delete(key);
@@ -247,20 +283,33 @@ const darkMapStyles = [
   { featureType: "water", elementType: "all", stylers: [{ color: "#aee0f4" }] },
 ];
 
+/** Resolves when the map has drawn its tiles, or after `ms` if they never report it. */
+function waitForTiles(map: google.maps.Map, ms = 1500): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    google.maps.event.addListenerOnce(map, "tilesloaded", () => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
+}
+
 export default function DayRouteMap({
   subplanes,
   selectedDate,
   ubicacionNombre,
   onViajeComputed,
+  onLoadingChange,
+  loaderVariant = "embedded",
   heightClassName = "h-[300px] md:h-[240px]",
   containerClassName = "",
 }: Props) {
   const mapRef = useRef<HTMLDivElement>(null);
   const fallbackMapRef = useRef<HTMLDivElement>(null);
   const renderGenRef = useRef(0);
-  const inFlightRouteKeysRef = useRef(new Set<string>());
-  const computedRouteKeysRef = useRef(new Set<string>());
-  const [loading, setLoading] = useState(false);
+  // Legs this map computed itself, so a redraw (another day, back) does not ask again.
+  const computedPolylinesRef = useRef(new Map<string, string>());
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const daySubplanes = useMemo(
@@ -301,6 +350,9 @@ export default function DayRouteMap({
     return nextPoints;
   }, [daySubplanes]);
 
+  // What the map shows. The saved polyline is left out on purpose: when this map (or the
+  // itinerary) computes a leg and the plan stores it, the map must not rebuild itself.
+  // Changing a leg's transport or a place changes the key, and that does redraw it.
   const mapRenderKey = useMemo(() => {
     const pointKey = points
       .map((point) => [
@@ -315,7 +367,6 @@ export default function DayRouteMap({
       .map((subplan) => [
         subplan.id,
         subplan.transporte_llegada ?? "",
-        subplan.ruta_polyline ?? "",
         subplan.ubicacion_lat ?? "",
         subplan.ubicacion_lng ?? "",
         subplan.ubicacion_fin_lat ?? "",
@@ -329,11 +380,33 @@ export default function DayRouteMap({
   const mapAlreadyRendered = points.length < 2
     ? renderedFallbackMapKeys.has(mapRenderKey)
     : renderedRouteMapKeys.has(mapRenderKey);
+  const showLoader = loading && !mapAlreadyRendered;
 
-  const renderFallbackMap = useCallback(async () => {
-    if (!ubicacionNombre || !fallbackMapRef.current) return;
+  useEffect(() => {
+    onLoadingChange?.(showLoader);
+  }, [onLoadingChange, showLoader]);
+  useEffect(() => () => onLoadingChange?.(false), [onLoadingChange]);
+
+  // The loader fades out (is-ready) and is unmounted afterwards, so its loop stops running.
+  const [loaderMounted, setLoaderMounted] = useState(showLoader);
+  useEffect(() => {
+    if (showLoader) {
+      setLoaderMounted(true);
+      return;
+    }
+    const timer = setTimeout(() => setLoaderMounted(false), 250);
+    return () => clearTimeout(timer);
+  }, [showLoader]);
+  const shellClassName = `map-shell relative w-full bg-surface-inset ${heightClassName}${showLoader ? "" : " is-ready"}`;
+
+  const renderFallbackMap = async () => {
+    if (!ubicacionNombre || !fallbackMapRef.current) {
+      setLoading(false); // nothing to draw: show the hint, not an endless loader
+      return;
+    }
     const gen = ++renderGenRef.current;
     const alreadyRendered = renderedFallbackMapKeys.has(mapRenderKey);
+    const startedAt = Date.now();
     setLoading(!alreadyRendered);
     setError(null);
 
@@ -378,6 +451,10 @@ export default function DayRouteMap({
         map.setCenter(resolvedCoords[0]);
         map.setZoom(13);
       }
+      if (!alreadyRendered) {
+        await waitForTiles(map);
+        await holdFirstLoader(startedAt);
+      }
       rememberRenderedMap(renderedFallbackMapKeys, mapRenderKey);
     } catch (error) {
       logDayRouteMap("Error renderizando mapa fallback", {
@@ -389,15 +466,16 @@ export default function DayRouteMap({
     } finally {
       if (gen === renderGenRef.current) setLoading(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapRenderKey, selectedDate, subplanes, ubicacionNombre]);
+  };
 
-  const renderMap = useCallback(async () => {
+  const renderMap = async () => {
     if (points.length < 2 || !mapRef.current) return;
     const gen = ++renderGenRef.current;
     const alreadyRendered = renderedRouteMapKeys.has(mapRenderKey);
+    const startedAt = Date.now();
     setLoading(!alreadyRendered);
     setError(null);
+    const computedLegs: { subplanId: number; duracion: string; distancia: string; polyline: string }[] = [];
 
     try {
       await loadGoogleMapsScript();
@@ -437,6 +515,25 @@ export default function DayRouteMap({
         });
       });
 
+      const drawPolyline = (encoded: string) => {
+        const path = google.maps.geometry?.encoding
+          ? google.maps.geometry.encoding.decodePath(encoded)
+          : decodePolyline(encoded);
+        new google.maps.Polyline({
+          path,
+          geodesic: true,
+          strokeColor: "#00C9A7",
+          strokeOpacity: 0.85,
+          strokeWeight: 3,
+          map,
+        });
+      };
+
+      // Draw what is already known and ask for every missing leg at once: the map shows up
+      // complete, after the slowest leg, instead of being rebuilt leg by leg.
+      const { data: { session } } = await createBrowserSupabaseClient().auth.getSession();
+      const missing: Promise<void>[] = [];
+
       for (let i = 0; i < points.length - 1; i++) {
         const from = coords[i];
         const to = coords[i + 1];
@@ -463,87 +560,62 @@ export default function DayRouteMap({
         }
 
         const destSubplan = daySubplanes[points[i + 1].subplanIdx];
-        const routeKey = destSubplan?.id
-          ? [
-              destSubplan.id,
-              destSubplan.transporte_llegada ?? "COCHE",
-              `${from.lat},${from.lng}`,
-              `${to.lat},${to.lng}`,
-            ].join("|")
-          : null;
+        const travelMode = destSubplan?.transporte_llegada ?? "COCHE";
+        const routeKey = [
+          destSubplan?.id ?? "",
+          travelMode,
+          `${from.lat},${from.lng}`,
+          `${to.lat},${to.lng}`,
+        ].join("|");
 
-        const drawPolyline = (encoded: string) => {
-          const path = google.maps.geometry?.encoding
-            ? google.maps.geometry.encoding.decodePath(encoded)
-            : decodePolyline(encoded);
-          new google.maps.Polyline({
-            path,
-            geodesic: true,
-            strokeColor: "#00C9A7",
-            strokeOpacity: 0.85,
-            strokeWeight: 3,
-            map,
-          });
-        };
-
-        if (destSubplan?.ruta_polyline) {
-          if (routeKey) computedRouteKeysRef.current.add(routeKey);
-          drawPolyline(destSubplan.ruta_polyline);
+        const saved = destSubplan?.ruta_polyline || computedPolylinesRef.current.get(routeKey);
+        if (saved) {
+          drawPolyline(saved);
           continue;
         }
 
-        if (routeKey && (computedRouteKeysRef.current.has(routeKey) || inFlightRouteKeysRef.current.has(routeKey))) {
-          continue;
-        }
-
-        try {
-          if (routeKey) inFlightRouteKeysRef.current.add(routeKey);
-          const fromCoord = coords[i];
-          const toCoord = coords[i + 1];
-          if (!fromCoord || !toCoord) {
-            continue;
-          }
-          const waypoints = [
-            `${fromCoord.lat},${fromCoord.lng}`,
-            `${toCoord.lat},${toCoord.lng}`,
-          ];
-
-          const { data: { session } } = await createBrowserSupabaseClient().auth.getSession();
-          const data = await requestDirections({
-            waypoints,
-            from: fromCoord,
-            to: toCoord,
-            travelMode: destSubplan?.transporte_llegada ?? "COCHE",
-            accessToken: session?.access_token,
-          });
-
-          if (data.polyline) {
-            if (routeKey) computedRouteKeysRef.current.add(routeKey);
+        missing.push((async () => {
+          try {
+            const data = await requestDirections({
+              waypoints: [`${from.lat},${from.lng}`, `${to.lat},${to.lng}`],
+              from,
+              to,
+              travelMode,
+              accessToken: session?.access_token,
+            });
+            if (!data.polyline) return;
+            computedPolylinesRef.current.set(routeKey, data.polyline);
+            if (gen !== renderGenRef.current) return;
             drawPolyline(data.polyline);
             const leg = data.legs?.[0];
-            if (leg?.duration && destSubplan?.id && onViajeComputed) {
-              onViajeComputed(
-                destSubplan.id,
-                formatCompactRouteDuration(leg.duration),
-                formatCompactRouteDistance(leg.distance),
-                data.polyline,
-              );
+            if (leg?.duration && destSubplan?.id) {
+              computedLegs.push({
+                subplanId: destSubplan.id,
+                duracion: formatCompactRouteDuration(leg.duration),
+                distancia: formatCompactRouteDistance(leg.distance),
+                polyline: data.polyline,
+              });
             }
+          } catch (error) {
+            logDayRouteMap("Excepcion calculando segmento de ruta", {
+              error,
+              routeKey,
+              from,
+              to,
+              destSubplanId: destSubplan?.id ?? null,
+            });
           }
-        } catch (error) {
-          logDayRouteMap("Excepcion calculando segmento de ruta", {
-            error,
-            routeKey,
-            from,
-            to,
-            destSubplanId: destSubplan?.id ?? null,
-          });
-        } finally {
-          if (routeKey) inFlightRouteKeysRef.current.delete(routeKey);
-        }
+        })());
       }
 
+      await Promise.all(missing);
+      if (gen !== renderGenRef.current) return;
+
       map.fitBounds(bounds, 48);
+      if (!alreadyRendered) {
+        await waitForTiles(map);
+        await holdFirstLoader(startedAt);
+      }
       rememberRenderedMap(renderedRouteMapKeys, mapRenderKey);
     } catch (error) {
       logDayRouteMap("Error renderizando mapa diario", {
@@ -555,25 +627,27 @@ export default function DayRouteMap({
       if (gen === renderGenRef.current) setError("No se pudo cargar el mapa");
     } finally {
       if (gen === renderGenRef.current) setLoading(false);
+      // Report after the map is shown: storing them updates the plan, which no longer redraws it.
+      computedLegs.forEach((leg) => onViajeComputed?.(leg.subplanId, leg.duracion, leg.distancia, leg.polyline));
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapRenderKey, selectedDate, subplanes]);
+  };
 
+  // Redraw only when what the map shows changes (mapRenderKey), not on every new subplanes
+  // array: a realtime reload or a saved leg used to rebuild the whole map.
+  const renderRef = useRef<() => Promise<void>>(async () => {});
   useEffect(() => {
-    if (points.length < 2) renderFallbackMap();
-    else renderMap();
-  }, [renderMap, renderFallbackMap, points.length]);
+    renderRef.current = points.length < 2 ? renderFallbackMap : renderMap;
+  });
+  useEffect(() => {
+    void renderRef.current();
+  }, [mapRenderKey]);
 
   if (points.length < 2) {
     return (
       <div className={`overflow-hidden ${containerClassName ?? "rounded-[12px] border border-app"}`} style={containerClassName ? undefined : { clipPath: "inset(0 round 12px)" }}>
-        <div className={`relative w-full bg-surface-inset ${heightClassName}`}>
-          <div ref={fallbackMapRef} className="absolute inset-0" />
-          {loading && !mapAlreadyRendered && (
-            <div className="absolute inset-0 flex items-center justify-center bg-surface-inset text-body-sm text-muted">
-              Cargando mapa...
-            </div>
-          )}
+        <div className={shellClassName} aria-busy={showLoader}>
+          <div ref={fallbackMapRef} className="map-canvas absolute inset-0" />
+          {loaderMounted && <RouteMapLoader variant={loaderVariant} />}
           {!loading && !ubicacionNombre && (
             <div className="absolute inset-0 flex items-center justify-center px-6 text-center text-body-sm text-muted">
               Anade al menos 2 actividades con ubicacion para ver la ruta
@@ -586,15 +660,11 @@ export default function DayRouteMap({
 
   return (
     <div className={`overflow-hidden ${containerClassName ?? "rounded-[12px] border border-app"}`} style={containerClassName ? undefined : { clipPath: "inset(0 round 12px)" }}>
-      <div className={`relative w-full bg-surface-inset ${heightClassName}`}>
-        <div ref={mapRef} className="absolute inset-0" />
-        {loading && !mapAlreadyRendered && (
-          <div className="absolute inset-0 flex items-center justify-center bg-surface-inset text-body-sm text-muted">
-            Calculando ruta...
-          </div>
-        )}
+      <div className={shellClassName} aria-busy={showLoader}>
+        <div ref={mapRef} className="map-canvas absolute inset-0" />
+        {loaderMounted && <RouteMapLoader variant={loaderVariant} />}
         {error && (
-          <div className="absolute inset-0 flex items-center justify-center bg-surface-inset text-body-sm text-[var(--error)]">
+          <div className="absolute inset-0 z-[2] flex items-center justify-center bg-surface-inset text-body-sm text-[var(--error)]">
             {error}
           </div>
         )}
