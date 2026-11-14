@@ -3,7 +3,7 @@
 import { useRef } from "react";
 import { MicOff, Pin, SignalLow } from "lucide-react";
 import type { ParticipantTile } from "@/hooks/useLivekitRoom";
-import { CallAvatar } from "../ui";
+import { CallAvatar, NO_POSTER } from "../ui";
 import { firstName, useElementSize } from "./layout";
 
 /** The track key of a tile in useLivekitRoom. */
@@ -99,6 +99,7 @@ export default function RoomTile({
     >
       <video
         data-tile={tile.id}
+        poster={NO_POSTER}
         autoPlay
         playsInline
         muted

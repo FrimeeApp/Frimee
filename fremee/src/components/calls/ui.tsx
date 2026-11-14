@@ -63,6 +63,12 @@ export function CallControl({
   );
 }
 
+/**
+ * Poster for the call videos: a transparent pixel. Without it, Android's WebView paints its grey
+ * "play" placeholder while a video has no frame yet (joining, flipping the camera).
+ */
+export const NO_POSTER = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+
 /** Stable colour for a person: the same in every call. */
 function colourIndex(id: string) {
   let h = 0;

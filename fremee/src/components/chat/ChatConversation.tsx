@@ -392,6 +392,18 @@ export function ChatConversation({
     observerReadyRef.current = false;
   }, [chat.chat_id]);
 
+  // Phones: the keyboard opens or closes (NativeSystemUi). If you were at the end of the chat, the
+  // last messages stay in view right above it instead of being covered.
+  useEffect(() => {
+    const onKeyboard = () => {
+      const container = scrollContainerRef.current;
+      if (!container || !isNearBottomRef.current) return;
+      requestAnimationFrame(() => { container.scrollTop = container.scrollHeight; });
+    };
+    window.addEventListener("frimee:keyboard", onKeyboard);
+    return () => window.removeEventListener("frimee:keyboard", onKeyboard);
+  }, []);
+
   useEffect(() => {
     if (loading) return;
     if (!observerReadyRef.current) {
@@ -1680,7 +1692,7 @@ export function ChatConversation({
   const showAiHints = Boolean(planId) && !editingMsg && !text && !aiHintsDismissed && !hasAskedFrimee;
 
   return (
-    <div className={containerClassName ?? "flex h-[calc(100dvh-var(--space-20)-env(safe-area-inset-bottom))] flex-col md:h-[calc(100dvh-var(--space-16))]"}>
+    <div className={containerClassName ?? "flex h-[calc(100dvh-var(--space-20)-env(safe-area-inset-bottom))] flex-col md:h-[calc(100dvh-var(--space-16))]"} style={{ paddingBottom: "var(--keyboard-height, 0px)" }}>
       {/* Poll creator modal */}
       {showPollCreator && (
         <PollCreatorModal
@@ -2053,7 +2065,7 @@ export function ChatConversation({
       </div>
 
       {/* Input area */}
-      <div className="px-[var(--space-3)] pb-[max(12px,env(safe-area-inset-bottom))] pt-[var(--space-2)] md:px-[var(--space-4)] md:pb-[var(--space-3)]">
+      <div className="px-[var(--space-3)] pb-[calc(env(safe-area-inset-bottom)+12px)] pt-[var(--space-2)] md:px-[var(--space-4)] md:pb-[var(--space-3)]">
         {replyingTo && (
           <div className="mb-[var(--space-2)] flex items-center gap-[var(--space-2)] rounded-[10px] border-l-2 border-[var(--text-primary)] bg-surface px-3 py-[8px]">
             <div className="min-w-0 flex-1">
