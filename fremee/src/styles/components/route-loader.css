@@ -1,0 +1,147 @@
+/* Frimee · loader of the day route map (SVG + CSS).
+   From the Claude Design canvas "Frimee · Carga del mapa de ruta" (board "Tiempos, curvas y CSS").
+   Loop of 2.2 s; only opacity, transform and stroke-dashoffset are animated. */
+
+@layer components {
+  .route-loader {
+    --rl-primary: var(--primary);
+    --rl-bg: var(--surface-inset);
+    --rl-muted: var(--text-secondary);
+    /* Faint streets behind the route: derived from the app tokens, so both themes work. */
+    --rl-road: color-mix(in srgb, var(--surface-inset) 40%, var(--surface) 60%);
+    --rl-road2: color-mix(in srgb, var(--surface-inset) 93%, var(--text-primary) 7%);
+    --rl-water: color-mix(in srgb, var(--surface-inset) 82%, #4aa3c4 18%);
+    --rl-park: color-mix(in srgb, var(--surface-inset) 86%, var(--primary) 14%);
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    overflow: hidden;
+    border-radius: inherit;
+    background: var(--rl-bg);
+    transition: opacity 200ms cubic-bezier(.4, 0, 1, 1);
+  }
+
+  .rl-bg, .rl-veil { position: absolute; inset: 0; }
+  .rl-bg svg { display: block; width: 100%; height: 100%; }
+  .rl-veil { background: radial-gradient(ellipse 62% 58% at 50% 46%, var(--rl-bg) 30%, transparent 100%); }
+  .rl-bg .bg-water { fill: none; stroke: var(--rl-water); stroke-linecap: round; }
+  .rl-bg .bg-park { fill: var(--rl-park); }
+  .rl-bg .bg-r1 { fill: none; stroke: var(--rl-road); stroke-linecap: round; }
+  .rl-bg .bg-r2 { fill: none; stroke: var(--rl-road2); }
+
+  .rl-inner {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    animation: rl-in 160ms cubic-bezier(.2, 0, 0, 1) both;
+  }
+  .rl-inner svg { overflow: visible; display: block; max-width: calc(100% - 32px); height: auto; }
+  @keyframes rl-in { from { opacity: 0; } to { opacity: 1; } }
+
+  /* Legs: pathLength="100", so the values do not depend on the size */
+  .rl-seg {
+    fill: none; stroke: var(--rl-primary);
+    stroke-width: 3.5; stroke-linecap: round;
+    stroke-dasharray: 100 100; stroke-dashoffset: 100;
+  }
+  .rl-s1 { animation: rl-s1 2.2s linear infinite both; }
+  .rl-s2 { animation: rl-s2 2.2s linear infinite both; }
+  .rl-s3 { animation: rl-s3 2.2s linear infinite both; }
+  @keyframes rl-s1 {
+    0%, 10% { stroke-dashoffset: 100; animation-timing-function: cubic-bezier(.45, 0, .25, 1); }
+    28%, 100% { stroke-dashoffset: 0; }
+  }
+  @keyframes rl-s2 {
+    0%, 32% { stroke-dashoffset: 100; animation-timing-function: cubic-bezier(.45, 0, .25, 1); }
+    50%, 100% { stroke-dashoffset: 0; }
+  }
+  @keyframes rl-s3 {
+    0%, 54% { stroke-dashoffset: 100; animation-timing-function: cubic-bezier(.45, 0, .25, 1); }
+    72%, 100% { stroke-dashoffset: 0; }
+  }
+  /* Flight/ferry leg: dashed arc that is also "drawn" (100 units of dashes + 100 of gap) */
+  .rl-air { stroke-width: 3; stroke-linecap: butt; stroke-dasharray: 3 4 3 4 3 4 3 4 3 4 3 4 3 4 3 4 3 4 3 4 3 4 3 4 3 4 3 4 2 100; }
+
+  /* Numbered stops: same style as the markers on the map */
+  .rl-mk {
+    transform-box: fill-box; transform-origin: center;
+    opacity: 0;
+  }
+  .rl-mk circle { fill: #00C9A7; stroke: #fff; stroke-width: 2; }
+  .rl-mk text { fill: #000; font-weight: 700; }
+  .rl-m1 { animation: rl-m1 2.2s linear infinite both; }
+  .rl-m2 { animation: rl-m2 2.2s linear infinite both; }
+  .rl-m3 { animation: rl-m3 2.2s linear infinite both; }
+  .rl-m4 { animation: rl-m4 2.2s linear infinite both; }
+  @keyframes rl-m1 {
+    0%, 4% { opacity: 0; transform: scale(.4); animation-timing-function: cubic-bezier(.34, 1.56, .64, 1); }
+    12%, 100% { opacity: 1; transform: scale(1); }
+  }
+  @keyframes rl-m2 {
+    0%, 26% { opacity: 0; transform: scale(.4); animation-timing-function: cubic-bezier(.34, 1.56, .64, 1); }
+    34%, 100% { opacity: 1; transform: scale(1); }
+  }
+  @keyframes rl-m3 {
+    0%, 48% { opacity: 0; transform: scale(.4); animation-timing-function: cubic-bezier(.34, 1.56, .64, 1); }
+    56%, 100% { opacity: 1; transform: scale(1); }
+  }
+  @keyframes rl-m4 {
+    0%, 70% { opacity: 0; transform: scale(.4); animation-timing-function: cubic-bezier(.34, 1.56, .64, 1); }
+    78%, 100% { opacity: 1; transform: scale(1); }
+  }
+
+  /* Arrival ripple on the last stop */
+  .rl-ring {
+    fill: none; stroke: var(--rl-primary); stroke-width: 2;
+    transform-box: fill-box; transform-origin: center;
+    opacity: 0; animation: rl-ring 2.2s linear infinite both;
+  }
+  @keyframes rl-ring {
+    0%, 76% { opacity: 0; transform: scale(1); }
+    77% { opacity: .6; transform: scale(1); animation-timing-function: cubic-bezier(.2, 0, 0, 1); }
+    95%, 100% { opacity: 0; transform: scale(2.4); }
+  }
+
+  /* Seamless restart: everything fades and the loop starts empty */
+  .rl-group { animation: rl-out 2.2s linear infinite both; }
+  @keyframes rl-out {
+    0%, 84% { opacity: 1; animation-timing-function: cubic-bezier(.4, 0, 1, 1); }
+    96%, 100% { opacity: 0; }
+  }
+
+  /* Static dotted guide */
+  .rl-ghost {
+    fill: none; stroke: var(--rl-primary); stroke-width: 2;
+    stroke-linecap: round; stroke-dasharray: 0 7; opacity: .22;
+  }
+
+  /* Text: 2 phrases, crossfade every 2.2 s (4.4 s cycle) */
+  .rl-msg { position: relative; margin: 0; width: 100%; height: 18px; font-size: 13px; line-height: 18px; color: var(--rl-muted); }
+  .route-loader--fullscreen .rl-msg { height: 20px; font-size: 15px; line-height: 20px; }
+  .rl-msg span { position: absolute; left: 0; right: 0; text-align: center; white-space: nowrap; }
+  .rl-msg-a { animation: rl-msg-a 4.4s linear infinite both; }
+  .rl-msg-b { animation: rl-msg-b 4.4s linear infinite both; }
+  @keyframes rl-msg-a { 0%, 45% { opacity: 1; } 50%, 95% { opacity: 0; } 100% { opacity: 1; } }
+  @keyframes rl-msg-b { 0%, 45% { opacity: 0; } 50%, 95% { opacity: 1; } 100% { opacity: 0; } }
+
+  /* Exit: the map fades in while the loader fades out */
+  .map-shell .map-canvas { opacity: 0; transition: opacity 250ms cubic-bezier(.2, 0, 0, 1); }
+  .map-shell.is-ready .map-canvas { opacity: 1; }
+  .map-shell.is-ready .route-loader { opacity: 0; pointer-events: none; }
+
+  /* Reduced motion: complete static route + soft opacity pulse */
+  @media (prefers-reduced-motion: reduce) {
+    .rl-seg { animation: none; stroke-dashoffset: 0; }
+    .rl-mk { animation: none; opacity: 1; transform: none; }
+    .rl-ring, .rl-msg-b { display: none; }
+    .rl-msg-a { animation: none; opacity: 1; }
+    .rl-inner { animation: none; }
+    .rl-group { animation: rl-pulse 2.4s ease-in-out infinite; }
+    .route-loader, .map-shell .map-canvas { transition: opacity 150ms linear; }
+  }
+  @keyframes rl-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
+}
