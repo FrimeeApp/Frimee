@@ -235,6 +235,19 @@ const renderedRouteMapKeys = new Set<string>();
 const renderedFallbackMapKeys = new Set<string>();
 const MAP_RENDER_CACHE_LIMIT = 24;
 
+// The first map of the session keeps its loader at least this long, so the route animation is
+// seen once instead of flashing. Later maps show up as soon as they are ready.
+const FIRST_LOADER_MIN_MS = 2000;
+let firstLoaderShown = false;
+
+async function holdFirstLoader(startedAt: number) {
+  if (firstLoaderShown) return;
+  firstLoaderShown = true;
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return; // nothing moves to show
+  const remaining = FIRST_LOADER_MIN_MS - (Date.now() - startedAt);
+  if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
+}
+
 function rememberRenderedMap(cache: Set<string>, key: string) {
   if (!key) return;
   cache.delete(key);
@@ -393,6 +406,7 @@ export default function DayRouteMap({
     }
     const gen = ++renderGenRef.current;
     const alreadyRendered = renderedFallbackMapKeys.has(mapRenderKey);
+    const startedAt = Date.now();
     setLoading(!alreadyRendered);
     setError(null);
 
@@ -437,7 +451,10 @@ export default function DayRouteMap({
         map.setCenter(resolvedCoords[0]);
         map.setZoom(13);
       }
-      if (!alreadyRendered) await waitForTiles(map);
+      if (!alreadyRendered) {
+        await waitForTiles(map);
+        await holdFirstLoader(startedAt);
+      }
       rememberRenderedMap(renderedFallbackMapKeys, mapRenderKey);
     } catch (error) {
       logDayRouteMap("Error renderizando mapa fallback", {
@@ -455,6 +472,7 @@ export default function DayRouteMap({
     if (points.length < 2 || !mapRef.current) return;
     const gen = ++renderGenRef.current;
     const alreadyRendered = renderedRouteMapKeys.has(mapRenderKey);
+    const startedAt = Date.now();
     setLoading(!alreadyRendered);
     setError(null);
     const computedLegs: { subplanId: number; duracion: string; distancia: string; polyline: string }[] = [];
@@ -594,7 +612,10 @@ export default function DayRouteMap({
       if (gen !== renderGenRef.current) return;
 
       map.fitBounds(bounds, 48);
-      if (!alreadyRendered) await waitForTiles(map);
+      if (!alreadyRendered) {
+        await waitForTiles(map);
+        await holdFirstLoader(startedAt);
+      }
       rememberRenderedMap(renderedRouteMapKeys, mapRenderKey);
     } catch (error) {
       logDayRouteMap("Error renderizando mapa diario", {
