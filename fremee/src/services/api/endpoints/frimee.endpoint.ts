@@ -10,7 +10,7 @@ export type FrimeeHistoryEntry = { role: "user" | "assistant"; content: string }
 export async function callFrimeeAssistant(params: {
   message: string;
   members: Array<{ id: string; nombre: string }>;
-  planInfo?: { titulo: string; ubicacion_nombre: string };
+  planInfo?: { titulo: string; ubicacion_nombre: string; inicio_at?: string; fin_at?: string };
   isAdmin?: boolean;
   userId: string;
   planId?: number;
