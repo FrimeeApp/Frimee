@@ -14,9 +14,18 @@ export type ChapterLabel = { title: string; subtitle: string };
 export type TimelineSlot = {
   /** Set when this message opens a new day. */
   chapter: ChapterLabel | null;
-  /** First message of a turn: a new author, a new day or a pause longer than BURST_GAP_MS. */
+  /**
+   * First message of a burst: messages less than BURST_GAP_MS apart, whoever writes them, read as
+   * one exchange with a single time at its start (board «Comprobación · ráfaga»).
+   */
+  startsBurst: boolean;
+  /** Last message of its burst. */
+  endsBurst: boolean;
+  /** The burst has more than one message (a lone message keeps the regular layout). */
+  inBurst: boolean;
+  /** First message of a turn: the burst starts or the author changes inside it. */
   startsTurn: boolean;
-  /** Last message of its turn (spacing below it). */
+  /** Last message of its turn. */
   endsTurn: boolean;
 };
 
@@ -66,27 +75,37 @@ export function buildTimeline<T extends TimelineMessage>(messages: T[], trip?: {
   const dates = messages.map((m) => (m.created_at ? new Date(m.created_at) : null));
   const isCall = (m: T) => Boolean(m.tipo?.startsWith("call_"));
 
-  const startsTurnAt = (i: number) => {
+  const startsBurstAt = (i: number) => {
     if (i === 0) return true;
     const prev = messages[i - 1];
     const cur = messages[i];
+    // A call record is its own moment, not part of an exchange of messages.
+    if (isCall(prev) || isCall(cur)) return true;
     const a = dates[i - 1];
     const b = dates[i];
-    if (!a || !b) return prev.sender_id !== cur.sender_id;
+    if (!a || !b) return true;
     if (dayStart(a).getTime() !== dayStart(b).getTime()) return true;
-    // A call record is its own moment, not part of someone's run of messages.
-    if (isCall(prev) || isCall(cur)) return true;
-    return prev.sender_id !== cur.sender_id || b.getTime() - a.getTime() > BURST_GAP_MS;
+    return b.getTime() - a.getTime() > BURST_GAP_MS;
   };
+  const startsTurnAt = (i: number) => startsBurstAt(i) || messages[i - 1].sender_id !== messages[i].sender_id;
+
+  const n = messages.length;
+  const burstStarts = messages.map((_, i) => startsBurstAt(i));
+  const endsBurstAt = (i: number) => i === n - 1 || burstStarts[i + 1];
 
   return messages.map((_, i) => {
     const d = dates[i];
     const prevD = i > 0 ? dates[i - 1] : null;
     const newDay = d && (!prevD || dayStart(prevD).getTime() !== dayStart(d).getTime());
+    const startsBurst = burstStarts[i];
+    const endsBurst = endsBurstAt(i);
     return {
       chapter: newDay && d ? chapterLabel(d, now, trip) : null,
+      startsBurst,
+      endsBurst,
+      inBurst: !(startsBurst && endsBurst),
       startsTurn: startsTurnAt(i),
-      endsTurn: i === messages.length - 1 || startsTurnAt(i + 1),
+      endsTurn: i === n - 1 || startsTurnAt(i + 1),
     };
   });
 }
