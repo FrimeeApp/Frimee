@@ -15,9 +15,10 @@ export default function AppLayout({ children, modal }: { children: ReactNode; mo
               className="pointer-events-none fixed inset-x-0 top-0 z-[30] bg-app"
               style={{ height: "env(safe-area-inset-top)" }}
             />
+            {/* Before the page: on phones it takes its own space at the top (see GuestBanner). */}
+            <GuestBanner />
             {children}
             {modal}
-            <GuestBanner />
           </div>
         </CallProvider>
       </PushProvider>
