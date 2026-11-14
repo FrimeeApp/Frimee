@@ -214,10 +214,15 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
   const [subplanes, setSubplanes] = useState<SubplanRow[]>(initialCache?.subplanes ?? []);
   const [selectedMapDay, setSelectedMapDay] = useState<string | null>(null);
   const [showMapFullscreen, setShowMapFullscreen] = useState(false);
+  // While a map is still being built its buttons (Google Maps, Waze, full screen) stay hidden.
+  const [mapLoading, setMapLoading] = useState(false);
+  const [fullscreenMapLoading, setFullscreenMapLoading] = useState(false);
   const [collapsedDays, setCollapsedDays] = useState<Set<string>>(
     () => new Set((initialCache?.subplanes?.length ? groupByDay(initialCache.subplanes) : []).map(([dateKey]) => dateKey)),
   );
   const collapsedDaysInitializedRef = useRef(!!initialCache?.subplanes?.length);
+  // Days the itinerary already listed: a reload only collapses days that were not there.
+  const knownDayKeysRef = useRef(new Set(groupByDay(initialCache?.subplanes ?? []).map(([dateKey]) => dateKey)));
   const [collapsedDaysReady, setCollapsedDaysReady] = useState(!!initialCache?.subplanes?.length);
   const [showAddSheet, setShowAddSheet] = useState(false);
   const [addSheetInitialTitulo, setAddSheetInitialTitulo] = useState<string | undefined>();
@@ -290,6 +295,7 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
         setBalances([]);
         setCollapsedDays(new Set());
         collapsedDaysInitializedRef.current = false;
+        knownDayKeysRef.current = new Set();
         setCollapsedDaysReady(false);
       }
       return;
@@ -301,7 +307,9 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
     setPlanChat(cached.planChat);
     setPlanLoading(false);
     if (cached.subplanes.length) {
-      setCollapsedDays(new Set(groupByDay(cached.subplanes).map(([dateKey]) => dateKey)));
+      const cachedDayKeys = groupByDay(cached.subplanes).map(([dateKey]) => dateKey);
+      setCollapsedDays(new Set(cachedDayKeys));
+      knownDayKeysRef.current = new Set(cachedDayKeys);
       collapsedDaysInitializedRef.current = true;
       setCollapsedDaysReady(true);
     } else {
@@ -763,14 +771,13 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
       setCollapsedDays(new Set(dayKeys));
       collapsedDaysInitializedRef.current = true;
     } else {
-      setCollapsedDays((prev) => {
-        const next = new Set(prev);
-        dayKeys.forEach((dateKey) => {
-          if (!next.has(dateKey)) next.add(dateKey);
-        });
-        return next;
-      });
+      // Keep the days the user opened; only a day that appears now starts collapsed.
+      const newDayKeys = dayKeys.filter((dateKey) => !knownDayKeysRef.current.has(dateKey));
+      if (newDayKeys.length > 0) {
+        setCollapsedDays((prev) => new Set([...prev, ...newDayKeys]));
+      }
     }
+    knownDayKeysRef.current = new Set(dayKeys);
 
     setCollapsedDaysReady(true);
     setSubplanes(rows);
@@ -861,14 +868,22 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
     if (!planId) return;
     fetchSubplanes(planId).then(applyLoadedSubplanes).catch(console.error);
 
+    // Saving several legs fires one change each: reload once when they stop arriving.
+    let reloadTimer: ReturnType<typeof setTimeout> | undefined;
     const supabase = createBrowserSupabaseClient();
     const channel = supabase
       .channel(createRealtimeTopic("subplan-changes", planId))
       .on("postgres_changes", { event: "*", schema: "public", table: "subplan", filter: `plan_id=eq.${planId}` }, () => {
-        fetchSubplanes(planId).then(applyLoadedSubplanes).catch(console.error);
+        clearTimeout(reloadTimer);
+        reloadTimer = setTimeout(() => {
+          fetchSubplanes(planId).then(applyLoadedSubplanes).catch(console.error);
+        }, 300);
       })
       .subscribe();
-    return () => { void supabase.removeChannel(channel); };
+    return () => {
+      clearTimeout(reloadTimer);
+      void supabase.removeChannel(channel);
+    };
   }, [id, applyLoadedSubplanes]);
 
   useEffect(() => {
@@ -1583,8 +1598,9 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
                           selectedDate={activeRouteDay}
                           ubicacionNombre={plan.ubicacion_nombre ?? undefined}
                           onViajeComputed={handleViajeComputed}
+                          onLoadingChange={setMapLoading}
                         />
-                        <div className="absolute left-[var(--space-3)] top-[var(--space-3)] z-10 flex items-center gap-[var(--space-2)]">
+                        <div className={`absolute left-[var(--space-3)] top-[var(--space-3)] z-10 ${mapLoading ? "hidden" : "flex"} items-center gap-[var(--space-2)]`}>
                           {routeHasRoute && routeMapsUrl && (
                             <a
                               href={routeMapsUrl}
@@ -1614,7 +1630,7 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
                             </a>
                           )}
                         </div>
-                        <div className="absolute right-[var(--space-3)] top-[var(--space-3)] z-10 flex items-center gap-[var(--space-2)]">
+                        <div className={`absolute right-[var(--space-3)] top-[var(--space-3)] z-10 ${mapLoading ? "hidden" : "flex"} items-center gap-[var(--space-2)]`}>
                           <button
                             type="button"
                             onClick={() => setShowMapFullscreen(true)}
@@ -1914,10 +1930,12 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
               selectedDate={activeRouteDay}
               ubicacionNombre={plan.ubicacion_nombre ?? undefined}
               onViajeComputed={handleViajeComputed}
+              onLoadingChange={setFullscreenMapLoading}
               heightClassName="h-full"
               containerClassName="h-full"
             />
-            <div className="absolute left-[max(var(--space-3),env(safe-area-inset-left))] top-[calc(env(safe-area-inset-top)+var(--space-3))] z-10 flex items-center gap-[var(--space-2)]">
+            {/* The close button and the day chips stay usable while it loads. */}
+            <div className={`absolute left-[max(var(--space-3),env(safe-area-inset-left))] top-[calc(env(safe-area-inset-top)+var(--space-3))] z-10 ${fullscreenMapLoading ? "hidden" : "flex"} items-center gap-[var(--space-2)]`}>
               {routeHasRoute && routeMapsUrl && (
                 <a
                   href={routeMapsUrl}
