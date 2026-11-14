@@ -2,6 +2,9 @@
 
 import NextImage from "next/image";
 import { useEffect, useRef, useState, useCallback, Fragment, type ButtonHTMLAttributes } from "react";
+import { buildTimeline, inTimeOrder, tripRange, tripStatus } from "@/components/chat/bitacora/timeline";
+import Link from "next/link";
+import { DayChapter } from "@/components/chat/bitacora/DayChapter";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import {
   listChats,
@@ -1691,6 +1694,21 @@ export function ChatConversation({
   );
   const showAiHints = Boolean(planId) && !editingMsg && !text && !aiHintsDismissed && !hasAskedFrimee;
 
+  // Bitácora: chapters per day and turns per person (see bitacora/timeline.ts).
+  // In a plan's chat the days count towards the trip («faltan 14 días», «Día 2»).
+  const trip = planInfo ? { start: new Date(planInfo.inicio_at), end: new Date(planInfo.fin_at) } : null;
+  // Shown in time order: a message created out of order (the plan's welcome before the guest demo's
+  // backdated ones) would otherwise open the same day twice.
+  const timelineMessages = inTimeOrder(messages);
+  const timeline = buildTimeline(timelineMessages, trip);
+  const otherMembers = chat.miembros.filter((m) => m.id !== currentUserId).map((m) => m.nombre.split(" ")[0]);
+  const headerSubtitle = trip
+    ? `${chat.miembros.length} personas · ${tripStatus(trip)}`
+    : chat.tipo === "GRUPO"
+      ? `Grupo · ${otherMembers.length > 3 ? `${otherMembers.slice(0, 3).join(", ")} y ${otherMembers.length - 3} más` : `${otherMembers.join(", ")} y tú`}`
+      : null;
+  const isDirectChat = chat.tipo === "DIRECTO";
+
   return (
     <div className={containerClassName ?? "flex h-[calc(100dvh-var(--space-20)-env(safe-area-inset-bottom))] flex-col md:h-[calc(100dvh-var(--space-16))]"} style={{ paddingBottom: "var(--keyboard-height, 0px)" }}>
       {/* Poll creator modal */}
@@ -1812,27 +1830,45 @@ export function ChatConversation({
         </div>
       )}
 
-      {/* Header */}
+      {/* Header (Bitácora): who, in serif; in a plan's chat, its date and where the trip stands */}
       {!embedded && (
-        <div className="flex min-w-0 items-center gap-[var(--space-3)] border-b border-app px-[var(--space-3)] pb-[var(--space-3)] pt-mobile-safe-top md:px-[var(--space-4)] md:py-[var(--space-3)]">
-          <button type="button" onClick={onBack} className="flex size-[32px] shrink-0 items-center justify-center rounded-full transition-colors hover:bg-surface" aria-label="Volver">
-            <BackIcon className="size-[18px]" />
-          </button>
-          <button type="button" onClick={() => setShowInfo(true)} className="flex min-w-0 flex-1 items-center gap-[var(--space-3)] rounded-[8px] px-1 py-1 text-left transition-colors hover:bg-surface">
-            <div className="avatar-md flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">
-              {avatar ? <NextImage src={avatar} alt={name} width={40} height={40} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" /> : chat.tipo === "GRUPO" ? <GroupIcon className="size-[16px] text-muted" /> : (name[0] ?? "?").toUpperCase()}
+        <div className="border-b border-app bg-app pt-mobile-safe-top md:pt-0">
+          <div className="flex min-h-[56px] min-w-0 items-center gap-[4px] px-[4px] md:min-h-[64px] md:px-[var(--space-2)]">
+            <button type="button" onClick={onBack} className="flex size-[44px] shrink-0 items-center justify-center rounded-[8px] text-app transition-colors hover:bg-surface" aria-label="Volver">
+              <BackIcon className="size-[22px]" />
+            </button>
+            <button type="button" onClick={() => setShowInfo(true)} className="flex min-h-[44px] min-w-0 flex-1 items-center gap-[var(--space-3)] rounded-[8px] px-1 text-left transition-colors hover:bg-surface">
+              {trip ? (
+                <span aria-hidden className="flex size-[36px] shrink-0 flex-col items-center justify-center rounded-[8px] border border-[var(--chat-me-border)] bg-[var(--chat-me)] leading-none">
+                  <span className="[font-family:var(--font-display-face)] text-[18px] tabular-nums text-app">{trip.start.getDate()}</span>
+                  <span className="mt-[2px] text-[9px] font-[var(--fw-semibold)] uppercase tracking-[0.04em] text-muted">{trip.start.toLocaleDateString("es-ES", { month: "short" }).replace(".", "")}</span>
+                </span>
+              ) : (
+                <span className="flex size-[36px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-[var(--surface-2)] text-[14px] font-[var(--fw-semibold)] text-app">
+                  {avatar ? <NextImage src={avatar} alt="" width={36} height={36} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" /> : chat.tipo === "GRUPO" ? <GroupIcon className="size-[16px] text-muted" /> : (name[0] ?? "?").toUpperCase()}
+                </span>
+              )}
+              <span className="min-w-0">
+                <span className="block truncate [font-family:var(--font-display-face)] text-[23px] leading-[26px] text-app">{name}</span>
+                {headerSubtitle && <span className="block truncate text-[12px] text-muted">{headerSubtitle}</span>}
+              </span>
+            </button>
+            <ChatIconButton label="Iniciar llamada de voz" onClick={() => onStartCall?.("audio")}>
+              <PhoneCallIcon className="size-[22px]" />
+            </ChatIconButton>
+            <ChatIconButton label="Iniciar videollamada" onClick={() => onStartCall?.("video")}>
+              <VideoCallIcon className="size-[23px]" />
+            </ChatIconButton>
+          </div>
+          {trip && planId && (
+            <div className="flex min-h-[36px] items-center gap-[var(--space-2)] border-t border-app px-[var(--space-4)] text-[13px]">
+              <span className="tabular-nums text-app">{tripRange(trip)}</span>
+              {planInfo?.ubicacion_nombre && <span className="min-w-0 truncate text-muted">· {planInfo.ubicacion_nombre}</span>}
+              <Link href={`/plans/${planId}`} className="ml-auto flex min-h-[36px] shrink-0 items-center font-[var(--fw-semibold)] text-primary-token hover:underline">
+                Ver plan
+              </Link>
             </div>
-            <div className="min-w-0">
-              <p className="truncate text-body-sm font-[var(--fw-semibold)] text-app">{name}</p>
-              {chat.tipo === "GRUPO" && <p className="text-[14px] text-muted">{chat.miembros.length} miembros</p>}
-            </div>
-          </button>
-          <ChatIconButton label="Iniciar llamada de voz" onClick={() => onStartCall?.("audio")}>
-            <PhoneCallIcon className="size-[22px]" />
-          </ChatIconButton>
-          <ChatIconButton label="Iniciar videollamada" onClick={() => onStartCall?.("video")}>
-            <VideoCallIcon className="size-[23px]" />
-          </ChatIconButton>
+          )}
         </div>
       )}
 
@@ -1881,13 +1917,15 @@ export function ChatConversation({
       )}
 
       {/* Messages */}
-      <div ref={scrollContainerRef} className="scrollbar-thin min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-[var(--space-3)] pb-[var(--space-2)] pt-[var(--space-4)] md:px-[var(--space-4)]" onClick={closeOverlays}>
+      <div ref={scrollContainerRef} className="scrollbar-thin min-h-0 flex-1 overflow-x-hidden overflow-y-auto pb-[var(--space-2)] pt-[var(--space-2)]" onClick={closeOverlays}>
         {loading ? (
           <div className="flex h-full items-center justify-center text-body-sm text-muted">Cargando...</div>
         ) : messages.length === 0 ? (
           <div className="flex h-full items-center justify-center text-body-sm text-muted">Sé el primero en escribir</div>
         ) : (
-          <div className="flex min-h-full flex-col justify-end space-y-[1px]">
+          <div className="relative flex min-h-full flex-col justify-end">
+            {/* The spine of the Bitácora: one line that holds the whole conversation */}
+            <div aria-hidden className="pointer-events-none absolute bottom-0 left-[27px] top-0 w-px bg-[var(--border)]" />
             {/* Sentinel para infinite scroll hacia arriba */}
             <div ref={topSentinelRef} className="h-px" />
             {loadingMore && (
@@ -1895,24 +1933,25 @@ export function ChatConversation({
                 <div className="size-5 animate-spin rounded-full border-2 border-app border-t-transparent" />
               </div>
             )}
-            {messages.map((msg, idx) => {
+            {timelineMessages.map((msg, idx) => {
               const isMe = msg.sender_id === currentUserId;
               const isBot = msg.tipo === "bot";
-              const prevMsg = messages[idx - 1];
-              const nextMsg = messages[idx + 1];
-              const isFirstInGroup = !prevMsg || prevMsg.sender_id !== msg.sender_id;
-              const isLastInGroup = !nextMsg || nextMsg.sender_id !== msg.sender_id;
-              const time = formatChatTime(msg.created_at);
+              const slot = timeline[idx];
+              const startsTurn = slot?.startsTurn ?? true;
+              const endsTurn = slot?.endsTurn ?? true;
+              const startsBurst = slot?.startsBurst ?? true;
+              const endsBurst = slot?.endsBurst ?? true;
+              // An exchange of quick messages: one time at its start, no repeated headers inside it.
+              const inBurst = slot?.inBurst ?? false;
+              const timeHere = inBurst ? endsBurst : endsTurn;
               const msgDate = msg.created_at ? new Date(msg.created_at) : null;
-              const prevMsgDate = prevMsg?.created_at ? new Date(prevMsg.created_at) : null;
-              const showDateSep = msgDate && (!prevMsgDate || !isSameDay(msgDate, prevMsgDate));
-              const dateLabel = showDateSep ? formatDateLabel(msgDate) : null;
-              const msgTime = msgDate ? msgDate.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", hour12: false }) : time;
-              const prevMsgTime = prevMsgDate ? prevMsgDate.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", hour12: false }) : null;
-              const showMsgTime = prevMsgTime !== msgTime;
-              const isMediaMessage = Boolean(msg.image_url) || isResumenViaje(msg.texto);
+              const msgTime = msgDate ? msgDate.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", hour12: false }) : formatChatTime(msg.created_at);
+              const isCallRecord = Boolean(msg.tipo?.startsWith("call_"));
+              const isRichContent = isCallRecord || Boolean(msg.audio_url || msg.document_url || msg.image_url) || isResumenViaje(msg.texto) || isPollMessage(msg.texto);
               const reaction = localReactions[msg.id];
               const isStarred = starredIds.has(msg.id);
+              // In 1 a 1 the avatar on the spine is enough; groups and plans name each turn.
+              const showName = startsTurn && (isBot || !isDirectChat);
               const openMsgMenu = (e: React.MouseEvent<HTMLButtonElement>) => {
                 e.stopPropagation();
                 const rect = e.currentTarget.getBoundingClientRect();
@@ -1960,102 +1999,135 @@ export function ChatConversation({
                   swipeRef.current = null;
                 }
               };
+              const menuButton = !isBot && (
+                <button type="button" onClick={openMsgMenu} className="flex size-[20px] items-center justify-center rounded-full text-muted opacity-0 transition-opacity group-hover/msg:opacity-100 focus-visible:opacity-100 hover:text-app" aria-label="Opciones del mensaje"><ChevronDownIcon className="size-[13px]" /></button>
+              );
+              const replyQuote = msg.reply_texto && msg.reply_to_id ? (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); scrollToMessage(msg.reply_to_id!); }}
+                  className="mb-[6px] w-full rounded-[6px] border-l-[3px] border-[var(--primary)] bg-[var(--surface-2)] px-2 py-[4px] text-left transition-opacity hover:opacity-80"
+                >
+                  <p className="truncate text-[13px] font-[var(--fw-semibold)] text-app">{msg.reply_sender_nombre ?? "Usuario"}</p>
+                  <p className="truncate text-[13px] text-muted">
+                    {msg.reply_texto && isPollMessage(msg.reply_texto)
+                      ? `📊 ${(JSON.parse(msg.reply_texto) as { question: string }).question}`
+                      : msg.reply_texto}
+                  </p>
+                </button>
+              ) : null;
+              const content = msg.tipo?.startsWith("call_") ? (
+                <CallBubble tipo={msg.tipo} duracion={parseInt(msg.texto) || 0} />
+              ) : msg.audio_url ? (
+                <AudioPlayer src={msg.audio_url} sending={msg.id < 0} />
+              ) : msg.document_url ? (
+                <DocumentBubble url={msg.document_url} name={msg.document_name ?? "Documento"} sending={msg.id < 0} />
+              ) : msg.image_url ? (
+                <MediaBubble url={msg.image_url} type={msg.image_type ?? "image/jpeg"} sending={msg.id < 0} time={isMe && timeHere ? msgTime : ""} isMe={isMe} onOpenLightbox={!msg.image_type?.startsWith("video/") ? () => setLightboxUrl(msg.image_url!) : undefined} />
+              ) : isResumenViaje(msg.texto) ? (
+                <ResumenViajeBubble texto={msg.texto} />
+              ) : isPollMessage(msg.texto) ? (
+                <PollBubble msg={msg} isMe={isMe} onVote={(idx) => {
+                  emitPollVote(msg.id);
+                  void channelRef.current?.send({ type: "broadcast", event: "poll_vote", payload: { mensaje_id: msg.id, option_index: idx } });
+                }} />
+              ) : (
+                <p className={`break-words text-[15px] leading-[1.45] text-app${isBot ? " whitespace-pre-line" : ""}`}>{msg.texto}</p>
+              );
+              // Rich content keeps its own look until phase 2: framed on a surface for the others.
+              const richFrame = isRichContent && !msg.image_url ? "rounded-[8px] border border-app bg-[var(--surface)] px-3 py-2" : "";
+              const gestureProps = {
+                onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
+                onTouchStart: onBubbleTouchStart,
+                onTouchMove: onBubbleTouchMove,
+                onTouchEnd: onBubbleTouchEnd,
+                onTouchCancel: onBubbleTouchEnd,
+              };
+              const reactionChip = reaction ? (
+                <span className="mt-[4px] inline-flex items-center rounded-full border border-app bg-[var(--surface)] px-[6px] py-px text-[13px]">{reaction}</span>
+              ) : null;
+              const highlight = highlightedId === msg.id ? "bg-[var(--text-primary)]/10 transition-colors" : "";
+              const burstTimeRow = inBurst && startsBurst;
+              const gapAbove = burstTimeRow ? "mt-[6px]"
+                : slot?.chapter ? ""
+                : startsBurst ? "mt-[14px]"
+                : startsTurn ? "mt-[8px]"
+                : "mt-[2px]";
+              // Others: name and time on top of a turn; inside a burst only the name, and only in groups.
+              const showHeader = startsTurn && (!inBurst || showName || isBot);
+              const compactMine = inBurst && !isRichContent && !replyQuote;
               return (
                 <Fragment key={(msg)._key ?? msg.id}>
-                {dateLabel && (
-                  <div className="flex justify-center py-3">
-                    <span className="text-[11px] text-muted">{dateLabel}</span>
-                  </div>
+                {slot?.chapter && <DayChapter label={slot.chapter} />}
+                {burstTimeRow && (
+                  <div className={`pl-[56px] pr-[var(--space-4)] text-[12px] tabular-nums text-muted ${slot?.chapter ? "mt-[4px]" : "mt-[14px]"}`}>{msgTime}</div>
                 )}
-                <div id={`msg-${msg.id}`} className={`group/msg flex ${isMe ? "justify-end" : "justify-start"} ${isFirstInGroup ? "mt-[var(--space-3)]" : "mt-[2px]"} ${reaction ? "mb-[20px]" : ""} ${highlightedId === msg.id ? "rounded-card bg-[var(--text-primary)]/10 transition-colors" : ""}`}>
-                  {!isMe && (chat.tipo === "GRUPO" || chat.tipo === "PLAN" || isBot) && (
-                    <div className="mr-[var(--space-2)] w-[24px] shrink-0">
-                      {isFirstInGroup && (
-                        <div className={`flex size-[24px] items-center justify-center overflow-hidden rounded-full text-[14px] font-[var(--fw-semibold)] ${isBot ? "bg-[#b0b0b0]" : "border border-app bg-surface-inset text-app"}`}>
-                          {isBot ? <NextImage src="/Frimee_personaje.png" alt="Frimee" width={24} height={24} className="h-full w-full object-cover" /> : msg.sender_profile_image ? <NextImage src={msg.sender_profile_image} alt={msg.sender_nombre} width={24} height={24} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" /> : (msg.sender_nombre[0] ?? "?").toUpperCase()}
-                        </div>
-                      )}
+                {isMe ? (
+                  <article id={`msg-${msg.id}`} aria-label={`Tú, ${msgTime}`} className={`group/msg relative pl-[56px] pr-[var(--space-4)] ${gapAbove} ${highlight}`}>
+                    {startsTurn && <span aria-hidden className="absolute left-[24px] top-[12px] size-[7px] rounded-full bg-[var(--primary)]" />}
+                    <div className="flex flex-col items-end">
+                      <div className={`relative max-w-[min(286px,100%)] md:max-w-[min(520px,100%)] ${contextMenu?.msg.id === msg.id ? "opacity-75" : ""}`} {...gestureProps}>
+                        {compactMine ? (
+                          <div className="flex items-end gap-[8px] rounded-[8px] bg-[var(--chat-me)] px-[10px] py-[4px]">
+                            {content}
+                            {(timeHere || isStarred) && (
+                              <span className="flex shrink-0 items-center gap-[4px] pb-[2px] text-[12px] tabular-nums text-muted">
+                                {isStarred && <span aria-label="Destacado">★</span>}
+                                {timeHere && msgTime}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <div className={msg.image_url ? "" : `rounded-[8px] bg-[var(--chat-me)] ${isRichContent ? "px-3 py-2" : "px-[12px] py-[8px]"}`}>
+                            {replyQuote}
+                            {content}
+                            {!msg.image_url && (timeHere || isStarred) && (
+                              <div className="mt-[2px] flex items-center justify-end gap-[4px] text-[12px] text-muted">
+                                {isStarred && <span aria-label="Destacado">★</span>}
+                                {timeHere && <span className="tabular-nums">{msgTime}</span>}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        <span className="absolute -left-[26px] top-[4px]">{menuButton}</span>
+                      </div>
+                      {reactionChip}
                     </div>
-                  )}
-                  <div
-                    className="relative max-w-[75%]"
-                    onContextMenu={(e) => e.preventDefault()}
-                    onTouchStart={onBubbleTouchStart}
-                    onTouchMove={onBubbleTouchMove}
-                    onTouchEnd={onBubbleTouchEnd}
-                    onTouchCancel={onBubbleTouchEnd}
-                  >
-                    <div
-                      className={`relative break-words ${isMediaMessage ? "bg-transparent p-0" : "px-3 py-2"} ${!isMediaMessage ? (isMe ? "bg-[var(--primary)] dark:bg-[color-mix(in_srgb,var(--primary)_80%,#000)] text-white" : isBot ? "bg-surface text-app" : "bg-surface-inset text-app") : ""} ${contextMenu?.msg.id === msg.id ? "opacity-75" : ""}`}
-                      style={isMediaMessage ? undefined : {
-                        borderRadius: isMe
-                          ? `${isFirstInGroup ? "18px" : "8px"} 18px ${isLastInGroup ? "4px" : "8px"} 18px`
-                          : `18px ${isFirstInGroup ? "18px" : "8px"} 18px ${isLastInGroup ? "4px" : "8px"}`,
-                      }}
-                    >
-                      {!isMe && (chat.tipo === "GRUPO" || chat.tipo === "PLAN" || isBot) && isFirstInGroup && (
-                        <p className={`mb-[2px] text-[14px] font-[var(--fw-semibold)] ${isBot ? "text-primary-token" : "text-muted"}`}>{isBot ? "Frimee" : msg.sender_nombre}</p>
-                      )}
-                      {msg.reply_texto && msg.reply_to_id && (
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); scrollToMessage(msg.reply_to_id!); }}
-                          className={`mb-[6px] w-full rounded-card border-l-[3px] px-2 py-[4px] text-left transition-opacity hover:opacity-80 ${isMe ? "border-white/50 bg-black/20" : "border-[var(--primary)] bg-black/8"}`}
-                        >
-                          <p className={`truncate text-[14px] font-[var(--fw-semibold)] ${isMe ? "text-white/80" : "text-[var(--text-primary)]"}`}>
-                            {msg.reply_sender_nombre ?? "Usuario"}
-                          </p>
-                          <p className={`truncate text-[14px] ${isMe ? "text-white/70" : "text-muted"}`}>
-                            {msg.reply_texto && isPollMessage(msg.reply_texto)
-                              ? `📊 ${(JSON.parse(msg.reply_texto) as { question: string }).question}`
-                              : msg.reply_texto}
-                          </p>
-                        </button>
-                      )}
-                      {msg.tipo?.startsWith("call_") ? (
-                        <CallBubble tipo={msg.tipo} duracion={parseInt(msg.texto) || 0} />
-                      ) : msg.audio_url ? (
-                        <AudioPlayer src={msg.audio_url} sending={msg.id < 0} />
-                      ) : msg.document_url ? (
-                        <DocumentBubble url={msg.document_url} name={msg.document_name ?? "Documento"} sending={msg.id < 0} />
-                      ) : msg.image_url ? (
-                        <MediaBubble url={msg.image_url} type={msg.image_type ?? "image/jpeg"} sending={msg.id < 0} time={showMsgTime ? msgTime : ""} isMe={isMe} onOpenLightbox={!msg.image_type?.startsWith("video/") ? () => setLightboxUrl(msg.image_url!) : undefined} />
-                      ) : isResumenViaje(msg.texto) ? (
-                        <ResumenViajeBubble texto={msg.texto} />
-                      ) : isPollMessage(msg.texto) ? (
-                        <PollBubble msg={msg} isMe={isMe} onVote={(idx) => {
-                          emitPollVote(msg.id);
-                          void channelRef.current?.send({ type: "broadcast", event: "poll_vote", payload: { mensaje_id: msg.id, option_index: idx } });
-                        }} />
+                  </article>
+                ) : (
+                  <article id={`msg-${msg.id}`} aria-label={`${isBot ? "Frimee, asistente" : msg.sender_nombre}, ${msgTime}`} className={`group/msg relative pl-[56px] pr-[var(--space-4)] ${gapAbove} ${highlight}`}>
+                    {startsTurn && (
+                      isBot ? (
+                        <span aria-hidden className="absolute left-[13px] top-0 flex size-[28px] items-center justify-center overflow-hidden rounded-[8px] border border-[var(--chat-me-border)] bg-[var(--chat-me)]">
+                          <NextImage src="/Frimee_personaje.png" alt="" width={28} height={28} className="h-full w-full object-cover" />
+                        </span>
                       ) : (
-                        <p className={`text-body-sm${isBot ? " whitespace-pre-line" : ""}`}>
-                          {msg.texto}
-                          <span aria-hidden className="pointer-events-none inline-block select-none align-bottom" style={{ width: isStarred ? 62 : 46, height: 1 }} />
-                        </p>
-                      )}
-                      {!isMediaMessage && (
-                        msg.tipo?.startsWith("call_") || msg.audio_url || msg.document_url || isResumenViaje(msg.texto) || isPollMessage(msg.texto) ? (
-                          <div className={`mt-[2px] flex items-center justify-end gap-[4px] text-[11px] ${isMe ? "text-white/60" : "text-muted"}`}>
-                            {isStarred && <span>★</span>}
-                            <span>{msgTime}</span>
-                            {!isBot && <button type="button" onClick={openMsgMenu} className="flex items-center justify-center rounded-full opacity-0 transition-opacity group-hover/msg:opacity-100 hover:opacity-70" aria-label="Opciones del mensaje"><ChevronDownIcon className="size-[11px]" /></button>}
-                          </div>
-                        ) : !msg.image_url && !isResumenViaje(msg.texto) && (
-                          <div className={`pointer-events-none absolute bottom-[4px] right-[4px] flex items-center gap-[3px] text-[11px] ${isMe ? "text-white/55" : "text-muted"}`}>
-                            {isStarred && <span>★</span>}
-                            <span>{msgTime}</span>
-                            {!isBot && <button type="button" onClick={openMsgMenu} className="pointer-events-auto flex items-center justify-center rounded-full opacity-0 transition-opacity group-hover/msg:opacity-100 hover:opacity-70" aria-label="Opciones del mensaje"><ChevronDownIcon className="size-[11px]" /></button>}
-                          </div>
-                        )
-                      )}
-                    </div>
-                    {reaction && (
-                      <div className={`absolute -bottom-[18px] ${isMe ? "right-[8px]" : "left-[8px]"} rounded-full border border-app bg-app px-[6px] py-[2px] text-[14px] shadow-sm`}>
-                        {reaction}
+                        <span aria-hidden className="absolute left-[13px] top-0 flex size-[28px] items-center justify-center overflow-hidden rounded-full border border-app bg-[var(--surface-2)] text-[12px] font-[var(--fw-semibold)] text-app">
+                          {msg.sender_profile_image ? <NextImage src={msg.sender_profile_image} alt="" width={28} height={28} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" /> : (msg.sender_nombre[0] ?? "?").toUpperCase()}
+                        </span>
+                      )
+                    )}
+                    {showHeader && (
+                      <div className="flex min-h-[20px] items-baseline gap-[8px] pt-[4px]">
+                        {showName && <span className={`text-[13px] font-[var(--fw-semibold)] ${isBot ? "text-primary-token" : "text-app"}`}>{isBot ? "Frimee" : msg.sender_nombre}</span>}
+                        {isBot && <span className="rounded-[4px] border border-app px-[6px] py-px text-[11px] font-[var(--fw-semibold)] text-muted">Asistente</span>}
+                        {!inBurst && <span className="text-[12px] tabular-nums text-muted">{msgTime}</span>}
+                        {isStarred && <span className="text-[12px] text-muted" aria-label="Destacado">★</span>}
+                        {menuButton}
                       </div>
                     )}
-                  </div>
-                </div>
+                    <div className={`relative max-w-[640px] ${showHeader ? "mt-[4px]" : startsTurn ? "pt-[3px]" : ""} ${contextMenu?.msg.id === msg.id ? "opacity-75" : ""}`} {...gestureProps}>
+                      <div className={`${isBot ? "rounded-[8px] border border-dashed border-[var(--chat-me-border)] bg-[var(--surface-inset)] p-[12px]" : richFrame} ${msg.image_url ? "max-w-[min(286px,100%)]" : isRichContent ? "inline-block max-w-full" : ""}`}>
+                        {replyQuote}
+                        {content}
+                      </div>
+                      {!showHeader && !isBot && (
+                        <span className={`absolute ${startsTurn ? "right-0" : "-left-[28px]"} top-[2px]`}>{menuButton}</span>
+                      )}
+                    </div>
+                    {reactionChip}
+                  </article>
+                )}
                 </Fragment>
               );
             })}
@@ -2127,7 +2199,7 @@ export function ChatConversation({
           <input ref={audioFileInputRef} type="file" className="hidden" accept="audio/*,.mp3,.m4a,.ogg,.wav,.aac,.flac" onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleSendAudioFile(f); e.target.value = ""; }} />
 
           {/* Single input container */}
-          <div className="flex min-w-0 flex-1 items-center gap-1 rounded-full border border-app bg-surface px-2">
+          <div className="flex min-h-[44px] min-w-0 flex-1 items-center gap-1 rounded-full bg-[var(--surface-2)] px-2">
             {isRecording ? (
               <>
                 <span className="mx-1 size-2 shrink-0 animate-pulse rounded-full bg-red-500" />
@@ -2179,7 +2251,7 @@ export function ChatConversation({
                   onKeyDown={onKeyDown}
                   placeholder={editingMsg ? "Editar mensaje..." : planId ? "Escribe un mensaje o pregunta a @frimee..." : "Escribe un mensaje..."}
                   aria-label={editingMsg ? "Editar mensaje" : "Escribir mensaje"}
-                  className="min-w-0 flex-1 bg-transparent py-[10px] text-body-sm text-app outline-none placeholder:text-muted"
+                  className="min-w-0 flex-1 bg-transparent py-[10px] text-[15px] text-app outline-none placeholder:text-muted"
                 />
                 {!text.trim() && (
                   <>
@@ -2754,9 +2826,11 @@ function MediaBubble({ url, type, sending, time, isMe, onOpenLightbox }: { url: 
           />
         </button>
       )}
-      <div className={`pointer-events-none absolute bottom-2 right-2 rounded-chip bg-black/58 px-2 py-1 text-[14px] leading-none text-white backdrop-blur-sm ${isMe ? "border border-white/10" : "border border-black/10"}`}>
-        {time}
-      </div>
+      {time && (
+        <div className={`pointer-events-none absolute bottom-2 right-2 rounded-chip bg-black/58 px-2 py-1 text-[14px] leading-none text-white backdrop-blur-sm ${isMe ? "border border-white/10" : "border border-black/10"}`}>
+          {time}
+        </div>
+      )}
       {sending && (
         <div className="absolute inset-0 rounded-card overflow-hidden pointer-events-none">
           <div
