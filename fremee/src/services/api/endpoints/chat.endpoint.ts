@@ -134,9 +134,13 @@ export async function sendMensajeEndpoint(params: {
   documentName?: string | null;
   imageUrl?: string | null;
   imageType?: string | null;
+  /** Bytes of a document («184 KB» in «En el chat → Archivos»). */
+  documentSize?: number | null;
 }): Promise<number> {
   const supabase = createBrowserSupabaseClient();
   const { data, error } = await supabase.rpc("fn_mensaje_send", {
+    // Only when there is one: the named argument has to exist in the database (migration 0007).
+    ...(params.documentSize ? { p_document_size: params.documentSize } : {}),
     p_chat_id: params.chatId,
     p_texto: params.texto,
     p_reply_to_id: params.replyToId ?? null,
@@ -604,7 +608,8 @@ export type ChatInfo = {
   silenciado: boolean;
   creador_id: string | null;
   admins: string[];
-  recuentos: { fotos: number; sitios: number; enlaces: number; decisiones: number };
+  /** fotos = photos and videos; archivos = documents. */
+  recuentos: { fotos: number; archivos: number; sitios: number; enlaces: number; decisiones: number };
   /** Plans made from this chat («Planes de este grupo»). */
   planes: ChatInfoPlan[];
   /** 1 a 1: plans you are both in («Planes en común»). */
@@ -623,7 +628,7 @@ export async function getChatInfoEndpoint(chatId: string): Promise<ChatInfo> {
     silenciado: Boolean(d.silenciado),
     creador_id: d.creador_id ?? null,
     admins: d.admins ?? [],
-    recuentos: d.recuentos ?? { fotos: 0, sitios: 0, enlaces: 0, decisiones: 0 },
+    recuentos: { fotos: 0, archivos: 0, sitios: 0, enlaces: 0, decisiones: 0, ...d.recuentos },
     planes: d.planes ?? [],
     comun: d.comun ?? [],
     amigos_desde: d.amigos_desde ?? null,
@@ -671,7 +676,7 @@ export async function eliminarMensajeEndpoint(mensajeId: number, paraTodos: bool
   if (error) throw error;
 }
 
-export type ContenidoTipo = "fotos" | "sitios" | "enlaces" | "decisiones";
+export type ContenidoTipo = "fotos" | "archivos" | "sitios" | "enlaces" | "decisiones";
 export type ContenidoRow = {
   id: number;
   created_at: string;
@@ -680,6 +685,9 @@ export type ContenidoRow = {
   texto: string;
   image_url: string | null;
   image_type: string | null;
+  document_url: string | null;
+  document_name: string | null;
+  document_size: number | null;
 };
 
 /** The lists of «En el chat», newest first, by pages (antesId = the last id of the previous page). */

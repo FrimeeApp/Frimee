@@ -77,6 +77,7 @@ import { promoteToAdminEndpoint, demoteAdminEndpoint, kickMemberEndpoint, leaveP
 import { callFrimeeAssistant, type FrimeeHistoryEntry } from "@/services/api/endpoints/frimee.endpoint";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
 import { ImageLightbox } from "@/components/ui/ImageLightbox";
+import { LinkifiedText } from "@/components/chat/bitacora/LinkifiedText";
 import dynamic from "next/dynamic";
 
 const EmojiMartPicker = dynamic(() => import("@emoji-mart/react"), { ssr: false });
@@ -271,6 +272,8 @@ export function ChatConversation({
   const [deleting, setDeleting] = useState<MensajeRow | null>(null);
   // A notice arriving now (someone renamed, added, removed or left): the panel and the list catch up.
   const lastSeenIdRef = useRef<number | null>(null);
+  // The newest message that belongs to «En el chat»: an open list there adds what is newer.
+  const [inChatNewest, setInChatNewest] = useState(0);
   useEffect(() => { lastSeenIdRef.current = null; }, [chat.chat_id]);
   // The message menu: where it opens (over the action bar, or at the pointer) and whether it is only the reactions.
   const router = useRouter();
@@ -1052,9 +1055,10 @@ export function ChatConversation({
   const scrollToMessage = (msgId: number) => {
     const el = document.getElementById(`msg-${msgId}`);
     if (!el) return;
-    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    el.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "center" });
     setHighlightedId(msgId);
-    setTimeout(() => setHighlightedId(null), 1500);
+    setTimeout(() => setHighlightedId(null), 2000);
   };
 
   // Opened from a search result: once the first page is in, go to that message (loading its
@@ -2036,7 +2040,14 @@ export function ChatConversation({
     lastSeenIdRef.current = Math.max(seen ?? 0, last.id);
     if (seen === null || last.id <= seen) return;
     const mo = parseMoment(last.texto);
-    if (mo?.type !== "aviso") return;
+    if (mo?.type !== "aviso") {
+      // Something for «En el chat» (photo, video, file, place, link, decision): the counts and the
+      // open list catch up without reloading (board gi-40).
+      const content = Boolean(last.image_url || last.document_url) || mo?.type === "lugar" || mo?.type === "hito_plan"
+        || mo?.type === "plan_creado" || (!mo && /https?:\/\//i.test(last.texto ?? ""));
+      if (content) { loadChatInfo(); setInChatNewest(last.id); }
+      return;
+    }
     // The new name at once (header and list); the full list reload comes after.
     if (mo.clase === "renombrado" && mo.nombre) onRenamed?.(mo.nombre);
     loadChatInfo();
@@ -2217,7 +2228,7 @@ export function ChatConversation({
     setShowAttachMenu(false);
     try {
       const { downloadUrl } = await uploadDocumentFile({ file, userId: currentUserId });
-      const newId = await sendMensaje({ chatId: chat.chat_id, texto: "", replyToId: null, documentUrl: downloadUrl, documentName: file.name });
+      const newId = await sendMensaje({ chatId: chat.chat_id, texto: "", replyToId: null, documentUrl: downloadUrl, documentName: file.name, documentSize: file.size });
       const realMsg: MensajeRow = { ...tempMsg, id: newId, document_url: downloadUrl };
       void channelRef.current?.send({ type: "broadcast", event: "new_message", payload: realMsg });
       setMessages((prev) => prev.map((m) => (m.id === tempId ? realMsg : m)));
@@ -2360,6 +2371,12 @@ export function ChatConversation({
       }}
       onCreatePlan={() => { if (isPhone) setShowInfo(false); closeOverlays(); setCreatePlan({ guarda: null }); }}
       onWriteTo={onWriteTo}
+      inChatNewest={inChatNewest}
+      onJumpTo={(id) => {
+        // Phone: the info covers the chat, so back to it first; desktop: the panel stays open.
+        if (isPhone) setShowInfo(false);
+        setTimeout(() => jumpToMessageRef.current(id), isPhone ? 150 : 0);
+      }}
       onNotice={(n) => showMyServerMessage(n.mensaje_id, n.texto)}
       onMemberAdded={(p) => { void channelRef.current?.send({ type: "broadcast", event: "member_added", payload: { user_id: p.id, nombre: p.nombre, profile_image: p.profile_image } }); }}
     />
@@ -2467,7 +2484,7 @@ export function ChatConversation({
       setDetached(last.id < latestKnown ? { start: rows[0].orden, endId: last.id } : null);
       await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
       setHighlightedId(id);
-      setTimeout(() => setHighlightedId(null), 1500);
+      setTimeout(() => setHighlightedId(null), 2000);
     } catch (e) {
       console.error("[chat] Error saltando al mensaje:", (e as { message?: string })?.message ?? String(e));
     } finally {
@@ -2976,7 +2993,7 @@ export function ChatConversation({
                   onDismiss={() => resolveProposal(msg, moment, false)}
                 />
               ) : (
-                <p className={`break-words text-[15px] leading-[1.45] text-app${isBot ? " whitespace-pre-line" : ""}`}>{msg.texto}</p>
+                <p className={`break-words text-[15px] leading-[1.45] text-app${isBot ? " whitespace-pre-line" : ""}`}><LinkifiedText text={msg.texto} /></p>
               );
               // Rich content keeps its own look until phase 2: framed on a surface for the others.
               const richFrame = isRichContent && !msg.image_url && !moment ? "rounded-[8px] border border-app bg-[var(--surface)] px-3 py-2" : "";
@@ -3119,7 +3136,7 @@ export function ChatConversation({
                   )}
                 </div>
               ) : null;
-              const highlight = highlightedId === msg.id ? "bg-[var(--text-primary)]/10 transition-colors" : "";
+              const highlight = highlightedId === msg.id ? "bg-[var(--text-primary)]/10 transition-colors motion-reduce:transition-none" : "";
               const burstTimeRow = inBurst && startsBurst;
               const gapAbove = burstTimeRow ? "mt-[6px]"
                 : slot?.chapter ? ""
