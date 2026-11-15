@@ -37,6 +37,8 @@ import {
   getChatIndiceEndpoint,
   getChatLecturasEndpoint,
   getSugerenciasEndpoint,
+  registrarGastoChatEndpoint,
+  aceptarPropuestaEndpoint,
   type Sugerencia,
   listMensajesTramoEndpoint,
   listMensajesDespuesEndpoint,
@@ -46,7 +48,6 @@ import {
   resolverPropuestaEndpoint,
   type ReaccionResumen,
 } from "@/services/api/endpoints/chat.endpoint";
-import { createSubplan } from "@/services/api/endpoints/subplanes.endpoint";
 import { parseMoment, momentPreview, momentAsAssistantText, formatEuros, type Moment, type ProposalMoment } from "@/components/chat/bitacora/moments";
 import { PollMoment, emitPollVote } from "@/components/chat/bitacora/PollMoment";
 import { CallLine } from "@/components/chat/bitacora/CallLine";
@@ -64,7 +65,7 @@ import { CameraModal } from "@/components/chat/CameraModal";
 import { PollCreatorModal } from "@/components/chat/PollCreatorModal";
 import { PLAN_WRITE_COMMANDS, VALID_TASK_CATEGORIES } from "@/components/chat/chat.constants";
 import { crearTareaEndpoint, misTareasEndpoint, todasTareasEndpoint, updateEstadoTareaEndpoint, recordarEndpoint, type TareaRow } from "@/services/api/endpoints/tareas.endpoint";
-import { createGastoEndpoint, getBalancesForPlanEndpoint } from "@/services/api/endpoints/gastos.endpoint";
+import { getBalancesForPlanEndpoint } from "@/services/api/endpoints/gastos.endpoint";
 import { promoteToAdminEndpoint, demoteAdminEndpoint, kickMemberEndpoint, leavePlanEndpoint } from "@/services/api/endpoints/plans.endpoint";
 import { callFrimeeAssistant, type FrimeeHistoryEntry } from "@/services/api/endpoints/frimee.endpoint";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
@@ -208,7 +209,8 @@ export function ChatConversation({
   const topSentinelRef = useRef<HTMLDivElement | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const pendingTaskListRef = useRef<TareaRow[]>([]);
-  type PendingGasto = { planId: number; titulo: string; total: number; pagadoPorId: string; pagadoPorNombre: string; participantes: { user_id: string; nombre: string }[] };
+  // clientId: one per confirmation, so a retry never registers it twice.
+  type PendingGasto = { clientId: string; planId: number; titulo: string; total: number; pagadoPorId: string; pagadoPorNombre: string; participantes: { user_id: string; nombre: string }[] };
   const pendingGastoRef = useRef<PendingGasto | null>(null);
   type PendingPollWinner = { planId: number; winnerOption: string; question: string };
   const pendingPollWinnerRef = useRef<PendingPollWinner | null>(null);
@@ -803,6 +805,23 @@ export function ChatConversation({
     }
   };
 
+  /** Shows a message the server created for me (same as a sent one: local, broadcast, list). */
+  const showMyServerMessage = (id: number, texto: string) => {
+    const me = chat.miembros.find((m) => m.id === currentUserId);
+    const msg: LocalMsg = { id, _key: id, sender_id: currentUserId, sender_nombre: me?.nombre ?? "", sender_profile_image: me?.profile_image ?? null, texto, created_at: new Date().toISOString() };
+    sentMsgIdsRef.current.add(id);
+    void channelRef.current?.send({ type: "broadcast", event: "new_message", payload: msg });
+    setMessages((prev) => (prev.some((m) => m.id === id) ? prev : [...prev, msg]));
+    onNewMessageRef.current(msg);
+    requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }));
+  };
+
+  /** An expense and its card, in one transaction (never one without the other, never twice). */
+  const registerChatExpense = async (input: { clientId: string; planId: number; titulo: string; total: number; pagadoPor: string; participantes: string[]; texto?: string }) => {
+    const r = await registrarGastoChatEndpoint({ ...input, chatId: chat.chat_id });
+    showMyServerMessage(r.mensaje_id, r.texto);
+  };
+
   // ── @frimee proposals: the plan changes only when someone accepts ──
   /** tarea and actividad create plan items, which only admins may do (checked again in the DB). */
   const proposalNeedsAdmin = (p: ProposalMoment) => p.kind === "tarea" || p.kind === "actividad";
@@ -829,52 +848,25 @@ export function ChatConversation({
     return null;
   };
 
-  const runProposal = async (p: ProposalMoment) => {
-    const pl = p.payload ?? {};
-    if (p.kind === "gasto") {
-      if (!planId) throw new Error("no_plan");
-      await createGastoEndpoint({
-        plan_id: planId,
-        titulo: String(pl.titulo),
-        pagado_por_user_id: String(pl.pagado_por_id),
-        fecha_gasto: new Date().toISOString(),
-        total: Number(pl.total),
-        metodo_reparto: "IGUAL",
-        participantes: (pl.participantes as string[]).map((user_id) => ({ user_id })),
-      });
-      return;
-    }
-    if (p.kind === "encuesta") {
-      await handleCreatePoll(String(pl.question), pl.options as string[]);
-      return;
-    }
-    if (p.kind === "tarea") {
-      if (!planId) throw new Error("no_plan");
-      await crearTareaEndpoint({ planId, titulo: String(pl.titulo), asignadoUserId: String(pl.asignado_id), categoria: String(pl.categoria) });
-      return;
-    }
-    if (p.kind === "actividad") {
-      if (!planId) throw new Error("no_plan");
-      const start = new Date(String(pl.inicio));
-      await createSubplan({
-        planId,
-        titulo: String(pl.titulo),
-        descripcion: String(pl.detalle ?? ""),
-        inicioAt: start.toISOString(),
-        // A two-hour block in the itinerary; it can be changed in the plan.
-        finAt: new Date(start.getTime() + 2 * 3_600_000).toISOString(),
-        tipo: "ACTIVIDAD",
-        ubicacionNombre: String(pl.lugar ?? ""),
-      });
-    }
-  };
-
   const resolveProposal = async (msg: MensajeRow, p: ProposalMoment, accept: boolean) => {
     const meName = (chat.miembros.find((m) => m.id === currentUserId)?.nombre ?? "").split(" ")[0] || "Alguien";
     const resultado = accept ? proposalResult(p) : null;
+    if (accept) {
+      // Accept and do it in one transaction (fn_propuesta_aceptar): if anything fails, it stays pending.
+      try {
+        const r = await aceptarPropuestaEndpoint(msg.id, resultado);
+        replaceMsgTexto(msg.id, r.texto);
+        if (r.claimed && r.poll_id && r.poll_texto) showMyServerMessage(r.poll_id, r.poll_texto);
+      } catch (e) {
+        logError("Error aplicando propuesta", e);
+        const local: LocalMsg = { id: -Date.now(), _key: -Date.now(), sender_id: "frimee", sender_nombre: "Frimee", sender_profile_image: null, texto: "No pude aplicarlo al plan. Inténtalo de nuevo.", created_at: new Date().toISOString(), tipo: "bot" };
+        setMessages((prev) => [...prev, local]);
+      }
+      return;
+    }
     let claimed: boolean;
     try {
-      claimed = await resolverPropuestaEndpoint(msg.id, accept ? "aceptada" : "descartada", resultado ?? undefined);
+      claimed = await resolverPropuestaEndpoint(msg.id, "descartada");
     } catch (e) {
       logError("Error resolviendo propuesta", e);
       return;
@@ -886,21 +878,8 @@ export function ChatConversation({
       if (updated) setMessages((prev) => prev.map((m) => (m.id === msg.id ? { ...m, texto: updated.texto } : m)));
       return;
     }
-    const resolved: ProposalMoment = { ...p, estado: accept ? "aceptada" : "descartada", resuelta_por: currentUserId, resuelta_por_nombre: meName, resuelta_at: new Date().toISOString(), resultado };
-    if (!accept) {
-      replaceMsgTexto(msg.id, JSON.stringify(resolved));
-      return;
-    }
-    try {
-      await runProposal(p);
-      replaceMsgTexto(msg.id, JSON.stringify(resolved));
-    } catch (e) {
-      logError("Error aplicando propuesta", e);
-      // Give it back so someone can try again.
-      await resolverPropuestaEndpoint(msg.id, "pendiente").catch(() => undefined);
-      const local: LocalMsg = { id: -Date.now(), _key: -Date.now(), sender_id: "frimee", sender_nombre: "Frimee", sender_profile_image: null, texto: "No pude aplicarlo al plan. Inténtalo de nuevo.", created_at: new Date().toISOString(), tipo: "bot" };
-      setMessages((prev) => [...prev, local]);
-    }
+    const resolved: ProposalMoment = { ...p, estado: "descartada", resuelta_por: currentUserId, resuelta_por_nombre: meName, resuelta_at: new Date().toISOString(), resultado: null };
+    replaceMsgTexto(msg.id, JSON.stringify(resolved));
   };
 
   /**
@@ -1238,7 +1217,7 @@ export function ChatConversation({
       const porPersona = (total / participantes.length).toFixed(2);
       const nombresParticipantes = participantes.map((p) => p.nombre).join(", ");
 
-      pendingGastoRef.current = { planId, titulo: concepto, total, pagadoPorId: pagador.user_id, pagadoPorNombre: pagador.nombre, participantes };
+      pendingGastoRef.current = { clientId: crypto.randomUUID(), planId, titulo: concepto, total, pagadoPorId: pagador.user_id, pagadoPorNombre: pagador.nombre, participantes };
 
       return [
         `Confirmar gasto:`,
@@ -1642,22 +1621,16 @@ export function ChatConversation({
       }
       setText("");
       try {
-        await createGastoEndpoint({
-          plan_id: pending.planId,
+        // The expense and the message in one transaction; the id is the pending one's.
+        await registerChatExpense({
+          clientId: pending.clientId,
+          planId: pending.planId,
           titulo: pending.titulo,
-          pagado_por_user_id: pending.pagadoPorId,
-          fecha_gasto: new Date().toISOString(),
           total: pending.total,
-          metodo_reparto: "IGUAL",
-          participantes: pending.participantes.map((p) => ({ user_id: p.user_id })),
+          pagadoPor: pending.pagadoPorId,
+          participantes: pending.participantes.map((p) => p.user_id),
+          texto: `Gasto registrado: ${pending.titulo} ${pending.total}€ (pagado por ${pending.pagadoPorNombre}, dividido entre ${pending.participantes.length})`,
         });
-        const textoPublico = `Gasto registrado: ${pending.titulo} ${pending.total}€ (pagado por ${pending.pagadoPorNombre}, dividido entre ${pending.participantes.length})`;
-        const newId = await sendMensaje({ chatId: chat.chat_id, texto: textoPublico });
-        const me = chat.miembros.find((m) => m.id === currentUserId);
-        const confirmMsg: LocalMsg = { id: newId, _key: newId, sender_id: currentUserId, sender_nombre: me?.nombre ?? "", sender_profile_image: me?.profile_image ?? null, texto: textoPublico, created_at: new Date().toISOString() };
-        void channelRef.current?.send({ type: "broadcast", event: "new_message", payload: confirmMsg });
-        setMessages((prev) => prev.some((m) => m.id === newId) ? prev : [...prev, confirmMsg]);
-        onNewMessageRef.current(confirmMsg);
       } catch {
         const botMsg: LocalMsg = { id: -Date.now(), _key: -Date.now(), sender_id: "frimee", sender_nombre: "Frimee", sender_profile_image: null, texto: "No pude registrar el gasto, inténtalo de nuevo.", created_at: new Date().toISOString(), tipo: "bot" };
         setMessages((prev) => [...prev, botMsg]);
@@ -2403,12 +2376,11 @@ export function ChatConversation({
       {attachSheet === "lugar" && <PlaceSheet onClose={() => setAttachSheet(null)} onSend={(place) => sendMoment(place)} />}
       {attachSheet === "gasto" && planId && (
         <ExpenseSheet
-          planId={planId}
           members={chat.miembros.map((m) => ({ id: m.id, nombre: m.nombre }))}
           currentUserId={currentUserId}
           initial={expensePrefill ?? undefined}
           onClose={() => { setAttachSheet(null); setExpensePrefill(null); }}
-          onSent={(moment) => sendMoment(moment)}
+          onRegister={(input) => registerChatExpense({ ...input, planId })}
         />
       )}
       {attachSheet === "plan" && !planId && (
