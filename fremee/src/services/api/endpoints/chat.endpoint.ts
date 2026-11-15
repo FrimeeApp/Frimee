@@ -459,3 +459,83 @@ export async function deshacerAnadirEndpoint(mensajeId: number): Promise<void> {
   const { error } = await supabase.rpc("fn_chat_deshacer_anadir", { p_mensaje_id: mensajeId });
   if (error) throw new Error(error.message || error.code || "Error deshaciendo");
 }
+
+/** How many messages a plan made from this chat would start with (all, or from one message). */
+export async function copiaRecuentoEndpoint(chatId: string, desdeId: number | null = null): Promise<{ total: number; desde_at: string | null; primer_id: number | null }> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_chat_copia_recuento", { p_chat_id: chatId, p_desde_id: desdeId });
+  if (error) throw new Error(error.message || error.code || "Error contando mensajes");
+  return data as { total: number; desde_at: string | null; primer_id: number | null };
+}
+
+/**
+ * Creates a plan from this chat: the plan, its chat (starting with a copy of this conversation), its
+ * members and the «Plan creado» mark in both chats, in one transaction. Same clientId twice → same plan.
+ */
+export async function planDesdeChatEndpoint(params: {
+  clientId: string;
+  chatId: string;
+  titulo: string;
+  inicioAt: string;
+  finAt: string;
+  ubicacion: string;
+  miembros: string[];
+  desdeId: number | null;
+  /** false: «Nada, empezar de cero» (the plan's chat starts empty). */
+  copiar?: boolean;
+  /** The message whose diamond opened the sheet: it loses its diamond for everyone. */
+  origenId?: number | null;
+}): Promise<PlanDesdeChatResult> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_plan_desde_chat", {
+    p_client_id: params.clientId,
+    p_chat_id: params.chatId,
+    p_titulo: params.titulo,
+    p_inicio_at: params.inicioAt,
+    p_fin_at: params.finAt,
+    p_ubicacion: params.ubicacion,
+    p_miembros: params.miembros,
+    p_desde_id: params.desdeId,
+    p_copiar: params.copiar ?? true,
+    p_origen_id: params.origenId ?? null,
+  });
+  if (error) throw new Error(error.message || error.code || "Error creando el plan");
+  return data as PlanDesdeChatResult;
+}
+
+export type PlanDesdeChatResult = {
+  plan_id: number;
+  chat_id: string;
+  copiados: number;
+  /** The «Plan creado» mark in the original chat, to send to whoever has it open. */
+  hito_id: number;
+  hito_texto: string;
+  /** Who was added (besides you). */
+  miembros: string[];
+};
+
+export type PlanNuevoSugerido = { titulo: string; destino: string; fecha_inicio: string; fecha_fin: string; primer_id: number };
+
+/** «Crear plan» from a chat: @frimee reads the latest conversation and suggests name, place and dates. */
+export async function sugerirPlanNuevoEndpoint(chatId: string): Promise<PlanNuevoSugerido | null> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.functions.invoke("chat-sugerencias", { body: { chat_id: chatId, plan_nuevo: true } });
+  if (error) throw new Error(error.message || "Error leyendo la conversación");
+  return ((data as { plan?: PlanNuevoSugerido | null })?.plan) ?? null;
+}
+
+/** «Pedir unirme» on the «Plan creado» mark: the plan's admins get a request. */
+export async function pedirUnirmeEndpoint(planId: number, chatId: string): Promise<"ok" | "ya_miembro" | "ya_pedido"> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_plan_pedir_unirme", { p_plan_id: planId, p_chat_id: chatId });
+  if (error) throw new Error(error.message || error.code || "Error pidiendo unirse");
+  return data as "ok" | "ya_miembro" | "ya_pedido";
+}
+
+/** An admin answers a request to join (it goes away for every admin). */
+export async function responderSolicitudEndpoint(planId: number, userId: string, aceptar: boolean): Promise<string> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_plan_responder_solicitud", { p_plan_id: planId, p_user_id: userId, p_aceptar: aceptar });
+  if (error) throw new Error(error.message || error.code || "Error respondiendo la solicitud");
+  return data as string;
+}

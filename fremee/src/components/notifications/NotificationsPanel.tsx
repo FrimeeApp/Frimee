@@ -16,6 +16,7 @@ import {
   rejectPlanInvite,
   type NotificacionDto,
 } from "@/services/api/repositories/notifications.repository";
+import { responderSolicitudEndpoint } from "@/services/api/endpoints/chat.endpoint";
 import { createRealtimeTopic } from "@/lib/realtime";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -55,6 +56,20 @@ function normalizeNotificationText(text: string): string {
       const normalized = N_TILDE_WORDS[match.toLowerCase()];
       return normalized ? preserveWordCase(match, normalized) : match;
     });
+}
+
+/**
+ * plan_added: «te ha añadido a Finde en Cercedilla.»; plan_join_request: «pide unirse a …» (to the
+ * plan's admins). entity_id = {plan_id, destino, user_id?}.
+ */
+function planChatMeta(tipo: string, entityId: string | null): { planId: string | null; userId: string | null; label: string } {
+  const verb = tipo === "plan_join_request" ? "pide unirse a" : "te ha añadido a";
+  try {
+    const meta = JSON.parse(entityId ?? "") as { plan_id?: string; destino?: string; user_id?: string };
+    return { planId: meta.plan_id ?? null, userId: meta.user_id ?? null, label: `${verb} ${meta.destino ?? "tu plan"}.` };
+  } catch {
+    return { planId: null, userId: null, label: `${verb} un plan.` };
+  }
 }
 
 function recordatorioLabel(entityId: string | null): string {
@@ -149,6 +164,23 @@ export function NotifItem({
   const [acting, setActing] = useState(false);
   const isFriendRequest = n.tipo === "friend_request" && n.actor_id;
   const isPlanInvite = n.tipo === "plan_invite" && n.entity_id;
+  const added = n.tipo === "plan_added" || n.tipo === "plan_join_request" ? planChatMeta(n.tipo, n.entity_id) : null;
+  const isJoinRequest = n.tipo === "plan_join_request" && Boolean(added?.planId && added.userId);
+  const [joinError, setJoinError] = useState(false);
+  const handleJoinRequest = async (accept: boolean) => {
+    if (!added?.planId || !added.userId || acting) return;
+    setActing(true);
+    setJoinError(false);
+    try {
+      await responderSolicitudEndpoint(Number(added.planId), added.userId, accept);
+      onAction(n.id);
+    } catch (e) {
+      console.error("[notificaciones] responder solicitud:", e);
+      setJoinError(true);
+    } finally {
+      setActing(false);
+    }
+  };
 
   const handleFriend = async (accept: boolean) => {
     if (!n.actor_id || acting) return;
@@ -213,14 +245,39 @@ export function NotifItem({
                   <span className="font-[var(--fw-semibold)]">{n.actor_nombre ?? "Alguien"}</span>
                   {" "}
                   <span className="text-muted">
-                    {normalizeNotificationText(n.tipo === "recordatorio" ? recordatorioLabel(n.entity_id) : (TIPO_LABELS[n.tipo] ?? n.tipo))}
+                    {added ? added.label : normalizeNotificationText(n.tipo === "recordatorio" ? recordatorioLabel(n.entity_id) : (TIPO_LABELS[n.tipo] ?? n.tipo))}
                   </span>
                 </>
               )}
             </p>
             <p className="mt-0.5 text-caption text-muted">{timeAgo(n.created_at)}</p>
+            {joinError && <p role="alert" className="mt-0.5 text-caption text-[var(--error)]">No se pudo responder. Inténtalo otra vez.</p>}
           </div>
 
+          {n.tipo === "plan_added" && added?.planId && onPlanAccepted && (
+            <button
+              type="button"
+              onClick={() => onPlanAccepted(added.planId!)}
+              className="shrink-0 rounded-full border border-app px-3 py-1 text-[14px] font-[var(--fw-semibold)] text-app transition-opacity hover:opacity-80"
+            >
+              Ver plan
+            </button>
+          )}
+          {isJoinRequest && (
+            <div className="flex shrink-0 items-center gap-1.5 pt-0.5">
+              <button
+                type="button"
+                disabled={acting}
+                onClick={() => void handleJoinRequest(true)}
+                className="rounded-full bg-[var(--primary)] px-3 py-1 text-[14px] font-[var(--fw-semibold)] text-[var(--contrast)] transition-opacity hover:opacity-80 disabled:opacity-50"
+              >
+                Aceptar
+              </button>
+              <IconButton disabled={acting} onClick={() => void handleJoinRequest(false)} aria-label="Rechazar">
+                <X className="size-5" aria-hidden />
+              </IconButton>
+            </div>
+          )}
           {(isFriendRequest || isPlanInvite) && (
             <div className="flex shrink-0 items-center gap-1.5 pt-0.5">
               <button

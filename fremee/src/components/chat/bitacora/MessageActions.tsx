@@ -7,9 +7,10 @@ import { Drawer } from "vaul";
 import { Copy, Forward, Pencil, Pin, PinOff, Receipt, Reply, Star, StarOff, Trash2 } from "lucide-react";
 
 /** The milestone diamond (Bitácora): what the group decides and goes to the plan. */
-export function DiamondIcon({ className = "size-[18px]" }: { className?: string }) {
+/** The diamond: outlined = something to add; filled = already in a plan (sealed). */
+export function DiamondIcon({ className = "size-[18px]", filled = false }: { className?: string; filled?: boolean }) {
   return (
-    <svg aria-hidden viewBox="0 0 24 24" className={`${className} text-primary-token`} fill="none" stroke="currentColor" strokeWidth={2} strokeLinejoin="round">
+    <svg aria-hidden viewBox="0 0 24 24" className={`${className} text-primary-token`} fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth={2} strokeLinejoin="round">
       <path d="M12 3.5 20.5 12 12 20.5 3.5 12Z" />
     </svg>
   );
@@ -49,6 +50,10 @@ export type MessageActionsProps = {
   onDelete: () => void;
   /** «Añadir al plan» (P): only where @frimee saw an activity, in a plan's chat, for its admins. */
   onAddToPlan?: () => void;
+  /** Its label («Crear plan con esto» in a chat without a plan; «En «X» · Abrir» once sealed). */
+  addToPlanLabel?: string;
+  /** The message a plan was made from: filled diamond. */
+  addToPlanSealed?: boolean;
   /** «Registrar como gasto» (G): only where @frimee saw an expense. */
   onRegisterExpense?: () => void;
 };
@@ -63,7 +68,7 @@ export function MessageActions(props: MessageActionsProps) {
 
   const actions: Action[] = [
     { key: "reply", label: "Responder", icon: <Reply className="size-[18px]" />, shortcut: "R", run: props.onReply },
-    ...(props.onAddToPlan ? [{ key: "plan", label: "Añadir al plan", icon: <DiamondIcon />, shortcut: "P", run: props.onAddToPlan }] : []),
+    ...(props.onAddToPlan ? [{ key: "plan", label: props.addToPlanLabel ?? "Añadir al plan", icon: <DiamondIcon filled={props.addToPlanSealed} />, shortcut: "P", run: props.onAddToPlan }] : []),
     ...(props.onRegisterExpense ? [{ key: "gasto", label: "Registrar como gasto", icon: <Receipt className="size-[18px]" />, shortcut: "G", run: props.onRegisterExpense }] : []),
     ...(props.canEdit ? [{ key: "edit", label: "Editar", icon: <Pencil className="size-[18px]" />, shortcut: "E", run: props.onEdit }] : []),
     { key: "forward", label: "Reenviar", icon: <Forward className="size-[18px]" />, shortcut: "F", run: props.onForward },

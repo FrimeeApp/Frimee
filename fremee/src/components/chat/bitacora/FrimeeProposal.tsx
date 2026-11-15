@@ -85,8 +85,10 @@ export function FrimeeProposal({
         ) : (
           <p className="mt-[10px] flex items-center gap-[8px] text-[12px] text-muted">
             <span aria-hidden className={`size-[7px] rotate-45 ${data.estado === "aceptada" ? "bg-[var(--primary)]" : "border border-[var(--text-secondary)]"}`} />
-            {data.estado === "aceptada"
-              ? `${data.resuelta_por_nombre ?? "Alguien"} ${DONE_VERB[data.kind]}${data.kind === "actividad" ? ` «${data.titulo}» al plan` : ""}${data.resultado ? ` · ${data.resultado}` : ""}`
+            {data.copia
+              ? "Propuesta copiada · se quedó sin decidir en el otro chat"
+              : data.estado === "aceptada"
+              ?`${data.resuelta_por_nombre ?? "Alguien"} ${DONE_VERB[data.kind]}${data.kind === "actividad" ? ` «${data.titulo}» al plan` : ""}${data.resultado ? ` · ${data.resultado}` : ""}`
               : `${data.resuelta_por_nombre ?? "Alguien"} lo dejó para otro momento`}
           </p>
         )}

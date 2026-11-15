@@ -52,7 +52,7 @@ import {
   resolverPropuestaEndpoint,
   type ReaccionResumen,
 } from "@/services/api/endpoints/chat.endpoint";
-import { parseMoment, momentPreview, momentAsAssistantText, formatEuros, type Moment, type ProposalMoment } from "@/components/chat/bitacora/moments";
+import { parseMoment, momentPreview, momentAsAssistantText, formatEuros, type Moment, type ProposalMoment, type PlanCreatedMoment } from "@/components/chat/bitacora/moments";
 import { PollMoment, emitPollVote } from "@/components/chat/bitacora/PollMoment";
 import { CallLine } from "@/components/chat/bitacora/CallLine";
 import { TripSummaryCard, ExpenseCard, PlanItemCard } from "@/components/chat/bitacora/MomentCards";
@@ -63,6 +63,7 @@ import { useRouter } from "next/navigation";
 import { PlaceSheet, ExpenseSheet, InvitePlanSheet } from "@/components/chat/bitacora/AttachSheets";
 import { AddToPlanPanel, type PanelPrefill } from "@/components/chat/bitacora/AddToPlanPanel";
 import { PlanMarkLine } from "@/components/chat/bitacora/PlanMarkLine";
+import { CreatePlanFlow, CopySeparator, PlanCreatedMark, type Guarda } from "@/components/chat/bitacora/PlanFromChat";
 import { isSuggestionCandidate } from "@/components/chat/bitacora/sugerencias";
 import { uploadPlanCoverFile, uploadAudioBlob, uploadAudioFile, uploadDocumentFile, uploadMediaFile } from "@/services/firebase/upload";
 import { createRealtimeTopic } from "@/lib/realtime";
@@ -92,7 +93,7 @@ import {
   Trash2, Ban, AlertTriangle, LogOut,
   Smile, Pin, Camera, Send as LucideSend, PlusCircle, Mic,
   File, Video, Music, BarChart2, Edit, ChevronLeft, Users,
-  Phone, Download, Plus, X, Sparkles, MapPin, Receipt, CalendarDays,
+  Phone, Download, Plus, X, Sparkles, MapPin, Receipt, CalendarDays, CalendarPlus,
 } from "lucide-react";
 
 const CHAT_ICON_BUTTON_BASE =
@@ -187,6 +188,7 @@ export function ChatConversation({
   onAbrirActividad,
   onLeave,
   onMembersChanged,
+  onOpenChat,
 }: {
   chat: ChatListItem;
   currentUserId: string;
@@ -205,6 +207,8 @@ export function ChatConversation({
   onAbrirActividad?: (titulo: string, extra?: PlanPrefill) => void;
   onLeave?: () => void;
   onMembersChanged?: () => void;
+  /** Opens another chat (the plan made from this one, or the original from its copy). */
+  onOpenChat?: (chatId: string) => void;
 }) {
   type LocalMsg = MensajeRow & { _key?: number };
   const [messages, setMessages] = useState<LocalMsg[]>([]);
@@ -252,6 +256,14 @@ export function ChatConversation({
   const [addPanel, setAddPanel] = useState<{
     msg: MensajeRow; anchor: { x: number; y: number } | null; clientId: string;
     ctx: { status: "loading" } | { status: "done"; plan: PlanCompletado | null } | { status: "failed" } | null;
+  } | null>(null);
+  // «Crear plan» from this chat (chats without a plan); `guarda` = what was being added, if anything.
+  // From the diamond: the message (to fall back to «añadir a un plan que ya tienes») and what it says.
+  const [createPlan, setCreatePlan] = useState<{
+    guarda: Guarda | null;
+    msg?: MensajeRow;
+    anchor?: { x: number; y: number } | null;
+    inicial?: { titulo?: string; fecha?: string; lugar?: string } | null;
   } | null>(null);
   // After adding: «Añadido a «Plan» · Ver · Deshacer» for a few seconds.
   const [addedToast, setAddedToast] = useState<{ planId: number; planTitulo: string; mensajeId: number } | null>(null);
@@ -746,6 +758,23 @@ export function ChatConversation({
   };
   // In a plan's chat, its admins; in a chat without a plan, «¿Dónde la guardo?» (each plan checks its role).
   const canPlan = planId ? Boolean(isAdmin) : true;
+  // A chat without a plan only makes plans (activities are talked about in the plan's chat), and a
+  // message a plan was already made from loses its diamond for everyone («Plan creado» links to it).
+  // The message a plan was made from is sealed for everyone: filled diamond, «En «X» · Abrir».
+  const sellados = new Map<number, { plan: PlanCreatedMoment; hitoId: number }>();
+  for (const x of messages) {
+    const mo = parseMoment(x.texto);
+    if (mo?.type === "plan_creado" && mo.origen_mensaje_id) sellados.set(mo.origen_mensaje_id, { plan: mo, hitoId: x.id });
+  }
+  const puedePlan = (m: MensajeRow) => canPlan && !sellados.has(m.id);
+  /** A sealed diamond: its plan (members) or its «Plan creado» mark, where «Pedir unirme» is. */
+  const abrirSellado = (s: { plan: PlanCreatedMoment; hitoId: number }) => {
+    closeOverlays();
+    if (s.plan.miembros.some((x) => x.id === currentUserId)) { router.push(`/plans/${s.plan.plan_id}`); return; }
+    document.getElementById(`msg-${s.hitoId}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+  };
+  const selladoLabel = (s: { plan: PlanCreatedMoment }) =>
+    `En «${s.plan.titulo}» · ${s.plan.miembros.some((x) => x.id === currentUserId) ? "Abrir" : "Pedir unirme"}`;
   const goAddToPlan = (targetPlanId: number, p: { titulo: string } & PlanPrefill) => {
     const q = new URLSearchParams({ tab: "itinerario", nuevaActividad: p.titulo.trim().slice(0, 80) });
     if (p.fecha) q.set("fecha", p.fecha);
@@ -755,8 +784,21 @@ export function ChatConversation({
     if (p.lat != null && p.lng != null) { q.set("lat", String(p.lat)); q.set("lng", String(p.lng)); }
     router.push(`/plans/${targetPlanId}?${q.toString()}`);
   };
-  /** Opens the «Añadir al plan» panel (it fills in with what @frimee read, or waits for it). */
+  /**
+   * The diamond. In a chat without a plan, what @frimee marks is a trip being proposed: it opens
+   * «Crear plan» filled from the message (board m-grupo-plan: new plan first, an existing one below).
+   */
   const addToPlan = (m: MensajeRow, anchor: { x: number; y: number } | null = null) => {
+    if (!planId) {
+      closeOverlays();
+      const p = planFrom(m);
+      setCreatePlan({ guarda: null, msg: m, anchor, inicial: p ? { titulo: p.titulo, fecha: p.fecha, lugar: p.lugar } : null });
+      return;
+    }
+    openAddPanel(m, anchor);
+  };
+  /** Opens the «Añadir al plan» panel (it fills in with what @frimee read, or waits for it). */
+  const openAddPanel = (m: MensajeRow, anchor: { x: number; y: number } | null = null) => {
     closeOverlays();
     // A shared place or plan card is already exact; a text is read again with its conversation.
     const mo = parseMoment(m.texto);
@@ -844,6 +886,19 @@ export function ChatConversation({
     setMessages((prev) => (prev.some((m) => m.id === id) ? prev : [...prev, msg]));
     onNewMessageRef.current(msg);
     requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }));
+  };
+
+  /** Tells each person their chat list changed (same channel the «añadir miembro» flow uses). */
+  const notifyChatAdded = (userIds: string[], chatId: string) => {
+    const supabase = createBrowserSupabaseClient();
+    for (const uid of userIds) {
+      const ch = supabase.channel(`user-join:${uid}`);
+      ch.subscribe((status) => {
+        if (status !== "SUBSCRIBED") return;
+        void ch.send({ type: "broadcast", event: "chat_added", payload: { chat_id: chatId } });
+        setTimeout(() => void supabase.removeChannel(ch), 2000);
+      });
+    }
   };
 
   /** An expense and its card, in one transaction (never one without the other, never twice). */
@@ -2274,6 +2329,7 @@ export function ChatConversation({
       if (mo?.type === "poll") rulerMarks.push({ kind: "hito", id: m.id, ord, label: mo.question, decided: pollDecided(mo) });
       else if (mo?.type === "propuesta" && mo.estado !== "descartada") rulerMarks.push({ kind: "hito", id: m.id, ord, label: mo.titulo, decided: mo.estado === "aceptada" });
       else if (mo?.type === "hito_plan") rulerMarks.push({ kind: "hito", id: m.id, ord, label: mo.titulo, decided: true });
+      else if (mo?.type === "plan_creado") rulerMarks.push({ kind: "hito", id: m.id, ord, label: `Plan creado: ${mo.titulo}`, decided: true });
     });
   }
   rulerMarks.sort((a, b) => a.ord - b.ord);
@@ -2389,7 +2445,10 @@ export function ChatConversation({
             onPin={() => { togglePin(m.id); closeOverlays(); }}
             onStar={() => { toggleStar(m.id); closeOverlays(); }}
             onDelete={() => { void handleDeleteMsg(m); closeOverlays(); }}
-            onAddToPlan={canPlan && (planFrom(m) || reading.has(m.id)) ? () => addToPlan(m, { x: contextMenu.x, y: contextMenu.y }) : undefined}
+            onAddToPlan={sellados.has(m.id) ? () => abrirSellado(sellados.get(m.id)!)
+              : puedePlan(m) && (planFrom(m) || reading.has(m.id)) ? () => addToPlan(m, { x: contextMenu.x, y: contextMenu.y }) : undefined}
+            addToPlanLabel={sellados.has(m.id) ? selladoLabel(sellados.get(m.id)!) : planId ? undefined : "Crear plan con esto"}
+            addToPlanSealed={sellados.has(m.id)}
             onRegisterExpense={planId && gastoFrom(m) ? () => registerExpense(m) : undefined}
           />
         );
@@ -2428,6 +2487,7 @@ export function ChatConversation({
               const mark = parseMoment(r.texto);
               setAddedToast({ planId: v.planId, planTitulo: mark?.type === "hito_plan" ? mark.plan_titulo ?? "el plan" : "el plan", mensajeId: r.mensaje_id });
             }}
+            onCreatePlan={planId ? undefined : (g) => { setAddPanel(null); setCreatePlan({ guarda: g }); }}
             onMoreOptions={(targetId, p: PanelPrefill) => {
               setAddPanel(null);
               const full = { titulo: p.titulo ?? "", fecha: p.fecha, hora: p.hora, tipo: p.tipo, lugar: p.lugar, lat: p.lat, lng: p.lng };
@@ -2437,6 +2497,38 @@ export function ChatConversation({
           />
         );
       })()}
+      {createPlan && (
+        <CreatePlanFlow
+          chat={chat}
+          currentUserId={currentUserId}
+          guarda={createPlan.guarda}
+          inicial={createPlan.inicial ?? null}
+          origenId={createPlan.msg?.id ?? null}
+          onClose={() => setCreatePlan(null)}
+          onCreated={(r, g) => {
+            setCreatePlan(null);
+            // Realtime here is a broadcast from the app: the mark reaches whoever has this chat open,
+            // and the people added see the plan's chat in their list without reloading.
+            showMyServerMessage(r.hito_id, r.hito_texto);
+            notifyChatAdded(r.miembros, r.chat_id);
+            // What was being added goes into the new plan (its mark lands in the plan's chat).
+            const save = g?.fecha && g.hora
+              ? (() => {
+                  const start = new Date(`${g.fecha}T${g.hora}:00`);
+                  return anadirAlPlanEndpoint({
+                    clientId: crypto.randomUUID(), chatId: r.chat_id, planId: r.plan_id, titulo: g.titulo, tipo: g.tipo ?? "ACTIVIDAD",
+                    inicio: start.toISOString(), fin: new Date(start.getTime() + (g.durMin && g.durMin > 0 ? g.durMin : 60) * 60_000).toISOString(),
+                    ubicacionNombre: g.lugar ?? "", lat: g.lat ?? null, lng: g.lng ?? null,
+                  }).catch((e) => console.error("[chat] guardar en el plan nuevo:", e));
+                })()
+              : Promise.resolve();
+            void save.finally(() => {
+              if (onOpenChat) onOpenChat(r.chat_id);
+              else router.push(`/messages?chat=${r.chat_id}`);
+            });
+          }}
+        />
+      )}
       {attachSheet === "lugar" && <PlaceSheet onClose={() => setAttachSheet(null)} onSend={(place) => sendMoment(place)} />}
       {attachSheet === "gasto" && planId && (
         <ExpenseSheet
@@ -2521,6 +2613,11 @@ export function ChatConversation({
                 {headerSubtitle && <span className="block truncate text-[12px] text-muted">{headerSubtitle}</span>}
               </span>
             </button>
+            {!planId && chat.tipo !== "PLAN" && (
+              <ChatIconButton label="Crear plan con este chat" onClick={() => { closeOverlays(); setCreatePlan({ guarda: null }); }}>
+                <CalendarPlus className="size-[21px]" />
+              </ChatIconButton>
+            )}
             <ChatIconButton label="Iniciar llamada de voz" onClick={() => onStartCall?.("audio")}>
               <PhoneCallIcon className="size-[22px]" />
             </ChatIconButton>
@@ -2703,13 +2800,18 @@ export function ChatConversation({
                   <button type="button" aria-label="Responder" title="Responder · R" onClick={(e) => { e.stopPropagation(); setReplyingTo(msg); setTimeout(() => inputRef.current?.focus(), 0); }} className="flex size-[36px] items-center justify-center rounded-[6px] text-muted transition-colors hover:bg-[var(--surface-2)] hover:text-app">
                     <svg aria-hidden viewBox="0 0 24 24" className="size-[18px]" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M9 14 4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></svg>
                   </button>
-                  {canPlan && !planFrom(msg) && reading.has(msg.id) && (
+                  {puedePlan(msg) && !planFrom(msg) && reading.has(msg.id) && (
                     <button type="button" aria-label="Añadir al plan (Frimee está leyendo el mensaje)" title="Frimee está leyendo este mensaje…" onClick={(e) => { e.stopPropagation(); addToPlan(msg, barAnchor(e)); }} className="flex size-[36px] items-center justify-center rounded-[6px] opacity-60 hover:bg-[var(--surface-2)]">
                       <span className="animate-pulse motion-reduce:animate-none"><DiamondIcon /></span>
                     </button>
                   )}
-                  {canPlan && planFrom(msg) && (
-                    <button type="button" aria-label="Añadir al plan" title="Añadir al plan · P" onClick={(e) => { e.stopPropagation(); addToPlan(msg, barAnchor(e)); }} className="flex size-[36px] items-center justify-center rounded-[6px] transition-colors hover:bg-[var(--surface-2)]">
+                  {sellados.has(msg.id) && (
+                    <button type="button" aria-label={selladoLabel(sellados.get(msg.id)!)} title={`${selladoLabel(sellados.get(msg.id)!)} · P`} onClick={(e) => { e.stopPropagation(); abrirSellado(sellados.get(msg.id)!); }} className="flex size-[36px] items-center justify-center rounded-[6px] transition-colors hover:bg-[var(--surface-2)]">
+                      <DiamondIcon filled />
+                    </button>
+                  )}
+                  {puedePlan(msg) && planFrom(msg) && (
+                    <button type="button" aria-label={planId ? "Añadir al plan" : "Crear plan con esto"} title={planId ? "Añadir al plan · P" : "Crear plan con esto · P"} onClick={(e) => { e.stopPropagation(); addToPlan(msg, barAnchor(e)); }} className="flex size-[36px] items-center justify-center rounded-[6px] transition-colors hover:bg-[var(--surface-2)]">
                       <DiamondIcon />
                     </button>
                   )}
@@ -2811,7 +2913,10 @@ export function ChatConversation({
                 } else if (key === "g" && !e.shiftKey && planId && gastoFrom(msg)) {
                   e.preventDefault();
                   registerExpense(msg);
-                } else if (key === "p" && !e.shiftKey && canPlan && (planFrom(msg) || reading.has(msg.id))) {
+                } else if (key === "p" && !e.shiftKey && sellados.has(msg.id)) {
+                  e.preventDefault();
+                  abrirSellado(sellados.get(msg.id)!);
+                } else if (key === "p" && !e.shiftKey && puedePlan(msg) && (planFrom(msg) || reading.has(msg.id))) {
                   e.preventDefault();
                   const r = e.currentTarget.getBoundingClientRect();
                   addToPlan(msg, { x: r.right, y: r.top });
@@ -2924,6 +3029,25 @@ export function ChatConversation({
                         otherName={msg.sender_nombre.split(" ")[0] || "Alguien"}
                         onCallBack={onStartCall && !inCall ? () => onStartCall(callTipo.includes("video") ? "video" : "audio") : undefined}
                       />
+                    </div>
+                  </Fragment>
+                );
+              }
+              if (moment?.type === "copia_chat") {
+                return (
+                  <Fragment key={(msg)._key ?? msg.id}>
+                    <div id={`msg-${msg.id}`} className={highlight}>
+                      <CopySeparator data={moment} onOpenChat={onOpenChat} />
+                    </div>
+                  </Fragment>
+                );
+              }
+              if (moment?.type === "plan_creado") {
+                return (
+                  <Fragment key={(msg)._key ?? msg.id}>
+                    {slot?.chapter && <DayChapter id={`day-${msg.id}`} label={slot.chapter} />}
+                    <div id={`msg-${msg.id}`} className={highlight}>
+                      <PlanCreatedMark data={moment} currentUserId={currentUserId} inPlanChat={planId === moment.plan_id} chatId={chat.chat_id} onOpenChat={onOpenChat} />
                     </div>
                   </Fragment>
                 );
