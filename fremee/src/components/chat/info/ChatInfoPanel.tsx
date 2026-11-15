@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Ban, Bell, BellOff, CalendarPlus, Camera, Check, ChevronLeft, ChevronRight, FileText, Image as ImageIcon, Link2, LogOut,
-  MapPin, MessageCircle, MoreHorizontal, Pencil, Plus, Trash2, User, UserMinus, Users,
+  MapPin, MessageCircle, MoreHorizontal, Pencil, Plus, Star, Trash2, User, UserMinus, Users,
 } from "lucide-react";
 import {
   addChatMember, leaveChat, resolveChatAvatar, resolveChatName, updateChatFoto,
@@ -12,8 +12,11 @@ import {
 } from "@/services/api/repositories/chat.repository";
 import {
   eliminarChatEndpoint, quitarMiembroEndpoint, renombrarChatEndpoint, silenciarChatEndpoint, vaciarChatEndpoint,
-  type ChatInfo, type ChatInfoPlan, type ChatNotice, type ContenidoTipo,
+  contenidoChatEndpoint, type ChatInfo, type ChatInfoPlan, type ChatNotice, type ContenidoRow, type ContenidoTipo,
 } from "@/services/api/endpoints/chat.endpoint";
+import { listGastosForPlanEndpoint, type GastoRow } from "@/services/api/endpoints/gastos.endpoint";
+import { formatMoney } from "@/lib/formatters";
+import { parseMoment } from "@/components/chat/bitacora/moments";
 import { eliminarPlanEndpoint, leavePlanEndpoint } from "@/services/api/endpoints/plans.endpoint";
 import { fetchActiveFriends, type PublicUserProfileRow } from "@/services/api/endpoints/users.endpoint";
 import { uploadPlanCoverFile } from "@/services/firebase/upload";
@@ -128,6 +131,8 @@ export type ChatInfoPanelProps = {
   inChatNewest?: number;
   /** A row of «En el chat» was pressed: go to that message in the conversation. */
   onJumpTo: (mensajeId: number) => void;
+  /** Open straight on a list (e.g. «Ver destacados» after starring a message). */
+  initialView?: ContenidoTipo;
   /** People added here, for the other members' panels (broadcast «member_added»). */
   onMemberAdded?: (person: Member) => void;
   /** The notice the database wrote («Ana cambió el nombre…»): shown here and shared with the others. */
@@ -154,7 +159,7 @@ export function ChatInfoPanel(props: ChatInfoPanelProps) {
     setMembers(dedupeMembers(chat.miembros, currentUserId));
   }
 
-  const [view, setView] = useState<"info" | "add" | ContenidoTipo>("info");
+  const [view, setView] = useState<"info" | "add" | ContenidoTipo>(props.initialView ?? "info");
   const isList = view !== "info" && view !== "add";
   // «‹ Fotos · 24»: the subview's name and how many there are.
   const subTitle = view === "add" ? "Añadir personas"
@@ -186,7 +191,16 @@ export function ChatInfoPanel(props: ChatInfoPanelProps) {
       <Header {...props} name={name} other={other} memberCount={members.length} />
 
       {isPlan ? (
-        <PlanBlock planId={props.planId} chat={chat} />
+        <TripBlock
+          planId={props.planId}
+          chat={chat}
+          currentUserId={currentUserId}
+          members={members}
+          decisiones={info?.recuentos.decisiones}
+          refreshKey={props.inChatNewest}
+          onJumpTo={props.onJumpTo}
+          onOpenDecisiones={() => setView("decisiones")}
+        />
       ) : (
         <PlansSection
           title={isDirecto ? "Planes en común" : "Planes de este grupo"}
@@ -431,9 +445,9 @@ function Header(props: ChatInfoPanelProps & { name: string; other: Member | null
 
 /* ── Planes de este grupo / Planes en común ── */
 
-function SectionTitle({ children, count }: { children: React.ReactNode; count?: number }) {
+function SectionTitle({ children, count, flush }: { children: React.ReactNode; count?: number; flush?: boolean }) {
   return (
-    <h3 className="mb-[4px] flex items-baseline gap-[8px] px-[8px] text-[12px] font-[var(--fw-semibold)] tracking-[.02em] text-muted">
+    <h3 className={`${flush ? "" : "mb-[4px] px-[8px] "}flex items-baseline gap-[8px] text-[12px] font-[var(--fw-semibold)] tracking-[.02em] text-muted`}>
       {children}
       {count !== undefined && <span className="font-normal tabular-nums">{count}</span>}
     </h3>
@@ -496,29 +510,157 @@ function DateChip({ iso }: { iso: string }) {
   );
 }
 
-/** A plan's chat: until «El viaje» (dates, milestones, expenses) arrives, the dates and «Abrir el plan». */
-function PlanBlock({ planId, chat }: { planId?: number; chat: ChatListItem }) {
+/* ── El viaje (board gi-d-plan): dates, milestones and expenses of a plan's chat ── */
+
+const HITOS_SHOWN = 3;
+const WEEKDAYS_SHORT = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+
+/** «Hoy», «Ayer», «12 nov». */
+function dayLabel(iso: string): string {
+  const d = new Date(iso);
+  const diff = Math.round((startOfDay(new Date()) - startOfDay(d)) / 86400000);
+  if (diff === 0) return "Hoy";
+  if (diff === 1) return "Ayer";
+  return `${d.getDate()} ${MONTHS[d.getMonth()]}${d.getFullYear() !== new Date().getFullYear() ? ` ${d.getFullYear()}` : ""}`;
+}
+
+/** A decided moment as a milestone row: «Calzada Romana · Dom 29 · en el plan», «Plan creado · Hoy · desde «Grupo»». */
+function hitoText(row: ContenidoRow): { title: string; detail: string } | null {
+  const m = parseMoment(row.texto);
+  if (m?.type === "hito_plan") {
+    const d = new Date(m.inicio_at);
+    return { title: m.titulo, detail: `${WEEKDAYS_SHORT[d.getDay()]} ${d.getDate()} · en el plan` };
+  }
+  if (m?.type === "plan_creado") return { title: "Plan creado", detail: `${dayLabel(row.created_at)} · desde «${m.origen_nombre}»` };
+  if (m?.type === "propuesta") return { title: m.titulo, detail: `${dayLabel(row.created_at)} · ${m.detalle || "propuesta aceptada"}` };
+  if (m?.type === "poll") return { title: m.question, detail: `${dayLabel(row.created_at)} · encuesta cerrada` };
+  return null;
+}
+
+type TripData = { hitos: ContenidoRow[]; gastos: GastoRow[] };
+
+function TripBlock({ planId, chat, currentUserId, members, decisiones, refreshKey, onJumpTo, onOpenDecisiones }: {
+  planId?: number;
+  chat: ChatListItem;
+  currentUserId: string;
+  members: Member[];
+  /** fn_chat_info's count of decisions: more than shown → «Ver los N hitos». */
+  decisiones?: number;
+  /** Changes when a milestone or an expense arrives in the chat: the block reloads. */
+  refreshKey?: number;
+  onJumpTo: (mensajeId: number) => void;
+  onOpenDecisiones: () => void;
+}) {
   const router = useRouter();
+  const [data, setData] = useState<TripData | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const chatId = chat.chat_id;
+
+  useEffect(() => {
+    if (!planId) return;
+    let alive = true;
+    Promise.all([contenidoChatEndpoint(chatId, "decisiones", null, HITOS_SHOWN), listGastosForPlanEndpoint(planId)])
+      .then(([hitos, gastos]) => {
+        if (!alive) return;
+        setFailed(false);
+        // Oldest first, like the board: the trip reads in order.
+        setData({ hitos: [...hitos].reverse(), gastos: gastos.filter((g) => g.estado === "CONFIRMADO") });
+      })
+      .catch((e) => {
+        if (!alive) return;
+        logError("Error cargando el viaje", e);
+        setFailed(true);
+      });
+    return () => { alive = false; };
+  }, [chatId, planId, refreshKey, attempt]);
+
   if (!planId) return null;
+  const hasDates = Boolean(chat.plan_inicio_at && chat.plan_fin_at);
+  const planHref = `/plans/${planId}`;
+
+  return (
+    <div className="flex flex-col gap-[24px]">
+      <section className="px-[8px]">
+        <SectionTitle flush>El viaje</SectionTitle>
+        <p className="mt-[4px] [font-family:var(--font-display-face)] text-[36px] leading-[40px] tabular-nums text-app">
+          {hasDates ? planRange(chat.plan_inicio_at!, chat.plan_fin_at!) : chat.plan_titulo}
+        </p>
+        {hasDates && (
+          <p className="text-[12px] text-muted">
+            {[tripDays(chat.plan_inicio_at!, chat.plan_fin_at!), tripWhen(chat.plan_inicio_at!, chat.plan_fin_at!), chat.plan_ubicacion].filter(Boolean).join(" · ")}
+          </p>
+        )}
+        <button type="button" onClick={() => router.push(planHref)} className="-ml-[4px] flex min-h-[44px] items-center gap-[4px] rounded-[8px] px-[4px] text-[14px] font-[var(--fw-semibold)] text-[var(--chat-accent-text)] hover:bg-[var(--surface-2)]">
+          Abrir el plan <ChevronRight className="size-[16px]" aria-hidden />
+        </button>
+      </section>
+
+      {failed ? (
+        <p role="alert" className="flex items-center gap-[8px] px-[8px] text-[13px] text-muted">
+          No se han cargado los hitos ni los gastos.
+          <button type="button" onClick={() => { setFailed(false); setData(null); setAttempt((n) => n + 1); }} className="min-h-[44px] font-[var(--fw-semibold)] text-[var(--chat-accent-text)]">Reintentar</button>
+        </p>
+      ) : data === null ? (
+        <div aria-hidden className="mx-[8px] h-[96px] animate-pulse rounded-[8px] bg-[var(--surface-2)] motion-reduce:animate-none" />
+      ) : (
+        <>
+          <HitosList hitos={data.hitos} total={decisiones} onJumpTo={onJumpTo} onOpenAll={onOpenDecisiones} />
+          <GastosSummary gastos={data.gastos} currentUserId={currentUserId} members={members} onOpen={() => router.push(`${planHref}?tab=gastos`)} />
+        </>
+      )}
+    </div>
+  );
+}
+
+function HitosList({ hitos, total, onJumpTo, onOpenAll }: { hitos: ContenidoRow[]; total?: number; onJumpTo: (id: number) => void; onOpenAll: () => void }) {
+  const rows = hitos.map((h) => ({ id: h.id, text: hitoText(h) })).filter((r): r is { id: number; text: { title: string; detail: string } } => r.text !== null);
+  // Nothing decided yet: no section (like the empty rows of «En el chat»).
+  if (rows.length === 0) return null;
   return (
     <section>
-      <SectionTitle>El viaje</SectionTitle>
-      {/* Board gi-d-plan: the dates big, the days and when underneath, «Abrir el plan». */}
-      <div className="flex items-end gap-[12px] px-[8px]">
-        <div className="min-w-0 flex-1">
-          <p className="[font-family:var(--font-display-face)] text-[24px] leading-[28px] tabular-nums text-app">
-            {chat.plan_inicio_at && chat.plan_fin_at ? planRange(chat.plan_inicio_at, chat.plan_fin_at) : chat.plan_titulo}
-          </p>
-          {chat.plan_inicio_at && chat.plan_fin_at && (
-            <p className="text-[13px] text-muted">
-              {[tripDays(chat.plan_inicio_at, chat.plan_fin_at), tripWhen(chat.plan_inicio_at, chat.plan_fin_at), chat.plan_ubicacion].filter(Boolean).join(" · ")}
-            </p>
-          )}
-        </div>
-        <button type="button" onClick={() => router.push(`/plans/${planId}`)} className="flex min-h-[44px] shrink-0 items-center rounded-[8px] px-[8px] text-[14px] font-[var(--fw-semibold)] text-[var(--chat-accent-text)] hover:bg-[var(--surface-2)]">
-          Abrir el plan
+      <SectionTitle>Hitos</SectionTitle>
+      {rows.map(({ id, text }) => (
+        <button key={id} type="button" onClick={() => onJumpTo(id)} className="flex min-h-[44px] w-full items-center rounded-[8px] py-[4px] pl-[8px] pr-[4px] text-left hover:bg-[var(--surface-2)]">
+          <span aria-hidden className="ml-[4px] mr-[12px] size-[10px] shrink-0 rotate-45 rounded-[2px] border-2 border-[var(--primary)] bg-[var(--primary)]" />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[14px] font-[var(--fw-medium)] text-app">{text.title}</span>
+            <span className="block truncate text-[12px] text-muted">{text.detail}</span>
+          </span>
         </button>
-      </div>
+      ))}
+      {total !== undefined && total > rows.length && (
+        <button type="button" onClick={onOpenAll} className="flex min-h-[44px] items-center rounded-[8px] px-[8px] text-[14px] font-[var(--fw-semibold)] tabular-nums text-[var(--chat-accent-text)] hover:bg-[var(--surface-2)]">
+          Ver los {total} hitos
+        </button>
+      )}
+    </section>
+  );
+}
+
+/** «240,00 €» and «Pagado por Marcos · te tocan 60,00 €» (several payers: «4 gastos · …»). */
+function GastosSummary({ gastos, currentUserId, members, onOpen }: { gastos: GastoRow[]; currentUserId: string; members: Member[]; onOpen: () => void }) {
+  if (gastos.length === 0) return null;
+  // Plans keep one currency; a stray one is left out of the sum instead of mixing them.
+  const moneda = gastos[0].moneda || "EUR";
+  const same = gastos.filter((g) => (g.moneda || "EUR") === moneda);
+  const total = same.reduce((s, g) => s + Number(g.total), 0);
+  const mine = same.reduce((s, g) => s + (g.partes ?? []).filter((p) => p.user_id === currentUserId).reduce((a, p) => a + Number(p.importe), 0), 0);
+  const payers = new Set(same.map((g) => g.pagado_por_user_id));
+  const payerId = same[0].pagado_por_user_id;
+  const payerName = payerId === currentUserId ? "ti"
+    : firstName(same[0].pagado_por_nombre ?? members.find((m) => m.id === payerId)?.nombre ?? "") || "alguien";
+  const who = payers.size === 1 ? `Pagado por ${payerName}` : plural(same.length, "gasto", "gastos");
+  const line = mine > 0 ? `${who} · te tocan ${formatMoney(mine, moneda)}` : who;
+
+  return (
+    <section className="px-[8px]">
+      <SectionTitle flush>Gastos</SectionTitle>
+      <p className="mt-[4px] text-[22px] font-[var(--fw-semibold)] tabular-nums text-app">{formatMoney(total, moneda)}</p>
+      <p className="text-[12px] tabular-nums text-muted">{line}</p>
+      <button type="button" onClick={onOpen} className="-ml-[4px] flex min-h-[44px] items-center rounded-[8px] px-[4px] text-[14px] font-[var(--fw-semibold)] text-[var(--chat-accent-text)] hover:bg-[var(--surface-2)]">
+        Ver cuentas
+      </button>
     </section>
   );
 }
@@ -666,6 +808,7 @@ const IN_CHAT: Array<{ tipo: ContenidoTipo; label: string; icon: React.ReactNode
   { tipo: "enlaces", label: "Enlaces", icon: <Link2 className="size-[18px]" aria-hidden /> },
   { tipo: "sitios", label: "Sitios", icon: <MapPin className="size-[18px]" aria-hidden /> },
   { tipo: "decisiones", label: "Decisiones", icon: <span aria-hidden className="inline-block size-[10px] rotate-45 rounded-[2px] border-2 border-[var(--primary)] bg-[var(--primary)]" /> },
+  { tipo: "destacados", label: "Destacados", icon: <Star className="size-[18px]" aria-hidden /> },
 ];
 
 function InChatSection({ info, infoError, onRetry, onOpenList }: { info: ChatInfo | null; infoError?: boolean; onRetry: () => void; onOpenList: (tipo: ContenidoTipo) => void }) {

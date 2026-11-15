@@ -475,7 +475,11 @@ begin
       'archivos', (select count(*) from vis where document_url is not null),
       'sitios', (select count(*) from vis where j->>'type' = 'lugar'),
       'enlaces', (select count(*) from vis where j is null and tipo = 'text' and texto ~* 'https?://'),
-      'decisiones', (select count(*) from vis where public.fn_momento_decidido(j))
+      'decisiones', (select count(*) from vis where public.fn_momento_decidido(j)),
+      -- Destacados (chat-20): solo los míos (mensaje_destacado es por persona), sin los eliminados.
+      'destacados', (select count(*) from vis
+                      where exists (select 1 from mensaje_destacado d where d.mensaje_id = vis.id and d.user_id = v_me)
+                        and coalesce(j->>'type', '') <> 'eliminado')
     ),
     -- Planes creados desde este chat (marca «Plan creado»), los que siguen activos.
     'planes', coalesce((
@@ -525,7 +529,7 @@ declare
   v_corte bigint;
 begin
   perform public.assert_allowed(public.is_chat_member(p_chat_id));
-  if p_tipo not in ('fotos', 'archivos', 'sitios', 'enlaces', 'decisiones') then
+  if p_tipo not in ('fotos', 'archivos', 'sitios', 'enlaces', 'decisiones', 'destacados') then
     raise exception 'Tipo desconocido: %', p_tipo using errcode = '22023';
   end if;
   v_corte := public.fn_chat_vaciado_hasta(p_chat_id);
@@ -544,6 +548,9 @@ begin
            when 'archivos' then m.document_url is not null
            when 'sitios' then left(m.texto, 1) = '{' and public.try_jsonb(m.texto)->>'type' = 'lugar'
            when 'enlaces' then left(m.texto, 1) <> '{' and m.tipo = 'text' and m.texto ~* 'https?://'
+           -- Solo mis estrellas: nadie ve lo que destacan los demás.
+           when 'destacados' then exists (select 1 from mensaje_destacado d where d.mensaje_id = m.id and d.user_id = auth.uid())
+                                  and coalesce(public.try_jsonb(m.texto)->>'type', '') <> 'eliminado'
            else left(m.texto, 1) = '{' and public.fn_momento_decidido(public.try_jsonb(m.texto))
          end
    order by m.id desc

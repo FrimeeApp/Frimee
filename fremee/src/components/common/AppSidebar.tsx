@@ -780,6 +780,8 @@ export default function AppSidebar({ onCreatePlan, onCreateGroup, hideMobileNav 
         ref={searchPanelRef}
         role="dialog"
         aria-label="Buscar usuarios"
+        aria-hidden={!searchPopoverOpen}
+        inert={!searchPopoverOpen}
         className={`fixed left-0 top-0 z-50 hidden h-dvh w-full max-w-[360px] flex-col bg-[var(--bg)] shadow-elev-3 transition-transform duration-300 [transition-timing-function:var(--ease-standard)] md:flex ${
           searchPopoverOpen ? "translate-x-0" : "-translate-x-full"
         }`}

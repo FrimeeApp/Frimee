@@ -94,8 +94,20 @@ import {
   Ban,
   Smile, Pin, Camera, Send as LucideSend, PlusCircle, Mic,
   File, Video, Music, BarChart2, Edit, ChevronLeft, Users,
-  Phone, Download, X, Sparkles, MapPin, Receipt, CalendarDays, CalendarPlus, Info,
+  Phone, Download, X, Sparkles, MapPin, Receipt, CalendarDays, CalendarPlus, Info, Image as ImageIcon,
 } from "lucide-react";
+
+/** What the pinned bar says for a message without text (chat-19): a small icon and what it is. */
+function pinnedSummary(m: MensajeRow): { icon: React.ReactNode; text: string } {
+  const cls = "size-[14px] shrink-0 text-muted";
+  if (m.audio_url) return { icon: <Mic className={cls} aria-hidden />, text: "Nota de voz" };
+  if (m.image_url) {
+    const video = Boolean(m.image_type?.startsWith("video/"));
+    return { icon: video ? <Video className={cls} aria-hidden /> : <ImageIcon className={cls} aria-hidden />, text: m.texto?.trim() || (video ? "Vídeo" : "Foto") };
+  }
+  if (m.document_url) return { icon: <File className={cls} aria-hidden />, text: m.document_name || "Documento" };
+  return { icon: null, text: momentPreview(m.texto) ?? m.texto };
+}
 
 const CHAT_ICON_BUTTON_BASE =
   "inline-flex shrink-0 items-center justify-center rounded-full transition-[background-color,color,opacity,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-color)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg)] disabled:pointer-events-none disabled:opacity-40 active:scale-95";
@@ -258,6 +270,15 @@ export function ChatConversation({
   };
   // Chat information (boards gi-*): a 320 px panel next to the chat on desktop, full screen on phones.
   const [showInfo, setShowInfo] = useState(false);
+  // The panel opened straight on a list («Ver destacados»); null = the usual information.
+  const [infoStart, setInfoStart] = useState<"destacados" | null>(null);
+  const [infoKey, setInfoKey] = useState(0);
+  const [starToast, setStarToast] = useState(false);
+  useEffect(() => {
+    if (!starToast) return;
+    const t = setTimeout(() => setStarToast(false), 5000);
+    return () => clearTimeout(t);
+  }, [starToast]);
   const isPhone = useIsPhone();
   const [chatInfo, setChatInfo] = useState<ChatInfo | null>(null);
   const [chatInfoError, setChatInfoError] = useState(false);
@@ -342,6 +363,10 @@ export function ChatConversation({
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [audioError, setAudioError] = useState<string | null>(null);
+  // A send that failed (chat-27): said above the composer, with «Reintentar» when it can be redone.
+  const [sendError, setSendError] = useState<{ text: string; retry?: () => void } | null>(null);
+  const sendFail = (what: string) =>
+    typeof navigator !== "undefined" && !navigator.onLine ? `Sin conexión: ${what}.` : `${what.charAt(0).toUpperCase()}${what.slice(1)}. Inténtalo de nuevo.`;
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -886,8 +911,13 @@ export function ChatConversation({
 
   const toggleStar = (msgId: number) => {
     const flip = (set: Set<number>) => { const n = new Set(set); if (n.has(msgId)) n.delete(msgId); else n.add(msgId); return n; };
+    const adding = !starredIds.has(msgId);
     setStarredIds(flip);
-    void destacarMensajeEndpoint(msgId).catch((e) => { setStarredIds(flip); logError("Error destacando mensaje", e); });
+    // chat-20: starring says where they go, so it does not look like nothing happened.
+    if (adding) { setAddedToast(null); setStarToast(true); } else setStarToast(false);
+    void destacarMensajeEndpoint(msgId)
+      .then(() => loadChatInfo())
+      .catch((e) => { setStarredIds(flip); setStarToast(false); logError("Error destacando mensaje", e); });
   };
 
   /** Sends a moment (place, card, expense) as one of my messages; throws so the sheet can say so. */
@@ -1739,6 +1769,7 @@ export function ChatConversation({
     if (detachedRef.current) await goToLatest();
     const trimmed = (override ?? text).trim();
     if (!trimmed || sending) return;
+    setSendError(null);
 
     if (pendingGastoRef.current && (isConfirm(trimmed) || isCancel(trimmed))) {
       const pending = pendingGastoRef.current;
@@ -1974,8 +2005,9 @@ export function ChatConversation({
         void channelRef.current?.send({ type: "broadcast", event: "edit_message", payload: { id: editingMsg.id, texto: trimmed } });
         setEditingMsg(null);
       } catch (e) {
-        console.error("[chat] Error editando:", e);
+        console.error("[chat] Error editando:", (e as { message?: string })?.message ?? String(e));
         setText(trimmed);
+        setSendError({ text: sendFail("no se ha guardado el cambio") });
       } finally {
         setSending(false);
       }
@@ -2009,6 +2041,7 @@ export function ChatConversation({
     } catch (e) {
       console.error("[chat] Error enviando:", (e as { message?: string })?.message ?? String(e));
       setText(trimmed);
+      setSendError({ text: sendFail("no se ha enviado el mensaje"), retry: () => void onSend(trimmed) });
     } finally {
       setSending(false);
     }
@@ -2044,7 +2077,7 @@ export function ChatConversation({
       // Something for «En el chat» (photo, video, file, place, link, decision): the counts and the
       // open list catch up without reloading (board gi-40).
       const content = Boolean(last.image_url || last.document_url) || mo?.type === "lugar" || mo?.type === "hito_plan"
-        || mo?.type === "plan_creado" || (!mo && /https?:\/\//i.test(last.texto ?? ""));
+        || mo?.type === "plan_creado" || mo?.type === "gasto" || (!mo && /https?:\/\//i.test(last.texto ?? ""));
       if (content) { loadChatInfo(); setInChatNewest(last.id); }
       return;
     }
@@ -2210,6 +2243,7 @@ export function ChatConversation({
   };
 
   const handleSendDocument = async (file: File) => {
+    setSendError(null);
     const tempId = -Date.now();
     const me = chat.miembros.find((m) => m.id === currentUserId);
     const tempMsg: LocalMsg = {
@@ -2234,12 +2268,14 @@ export function ChatConversation({
       setMessages((prev) => prev.map((m) => (m.id === tempId ? realMsg : m)));
       onNewMessageRef.current(realMsg);
     } catch (e) {
-      console.error("[chat] Error enviando documento:", e);
+      console.error("[chat] Error enviando documento:", (e as { message?: string })?.message ?? String(e));
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
+      setSendError({ text: sendFail(`no se ha enviado «${file.name}»`), retry: () => void handleSendDocument(file) });
     }
   };
 
   const handleSendMedia = async (file: File) => {
+    setSendError(null);
     const localUrl = URL.createObjectURL(file);
     const tempId = -Date.now();
     const me = chat.miembros.find((m) => m.id === currentUserId);
@@ -2266,8 +2302,9 @@ export function ChatConversation({
       onNewMessageRef.current(realMsg);
       URL.revokeObjectURL(localUrl);
     } catch (e) {
-      console.error("[chat] Error enviando media:", e);
+      console.error("[chat] Error enviando media:", (e as { message?: string })?.message ?? String(e));
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
+      setSendError({ text: sendFail(file.type.startsWith("video") ? "no se ha enviado el vídeo" : "no se ha enviado la foto"), retry: () => void handleSendMedia(file) });
       URL.revokeObjectURL(localUrl);
     }
   };
@@ -2344,15 +2381,26 @@ export function ChatConversation({
   };
 
   const infoLabel = chat.tipo === "GRUPO" ? "Información del grupo" : chat.tipo === "PLAN" ? "Información del plan" : "Información del chat";
+  /** «Ver destacados» (the notice, or the ★ of a message): the panel open on my starred messages. */
+  const openStarred = () => {
+    closeOverlays();
+    setStarToast(false);
+    setInfoStart("destacados");
+    setInfoKey((k) => k + 1);
+    setShowInfo(true);
+  };
+
   const infoPanel = (variant: "aside" | "screen") => (
     <ChatInfoPanel
+      key={infoKey}
+      initialView={infoStart ?? undefined}
       chat={chat}
       currentUserId={currentUserId}
       info={chatInfo}
       infoError={chatInfoError}
       onRetryInfo={loadChatInfo}
       variant={variant}
-      onClose={() => setShowInfo(false)}
+      onClose={() => { setShowInfo(false); setInfoStart(null); }}
       planId={planId}
       isPlanAdmin={isAdmin}
       onChanged={() => { loadChatInfo(); onChatChanged?.(); }}
@@ -2731,7 +2779,7 @@ export function ChatConversation({
             <button type="button" onClick={onBack} className="flex size-[44px] shrink-0 items-center justify-center rounded-[8px] text-app transition-colors hover:bg-surface" aria-label="Volver">
               <BackIcon className="size-[22px]" />
             </button>
-            <button type="button" onClick={() => setShowInfo((v) => (isPhone ? true : !v))} aria-label={`${name}. ${infoLabel}`} className="flex min-h-[44px] min-w-0 flex-1 items-center gap-[var(--space-3)] rounded-[8px] px-1 text-left transition-colors hover:bg-surface">
+            <button type="button" onClick={() => { setInfoStart(null); setShowInfo((v) => (isPhone ? true : !v)); }} aria-label={`${name}. ${infoLabel}`} className="flex min-h-[44px] min-w-0 flex-1 items-center gap-[var(--space-3)] rounded-[8px] px-1 text-left transition-colors hover:bg-surface">
               {trip ? (
                 <span aria-hidden className="flex size-[36px] shrink-0 flex-col items-center justify-center rounded-[8px] border border-[var(--chat-me-border)] bg-[var(--chat-me)] leading-none">
                   <span className="[font-family:var(--font-display-face)] text-[18px] tabular-nums text-app">{trip.start.getDate()}</span>
@@ -2758,7 +2806,7 @@ export function ChatConversation({
             <ChatIconButton label="Iniciar videollamada" onClick={() => onStartCall?.("video")}>
               <VideoCallIcon className="size-[23px]" />
             </ChatIconButton>
-            <ChatIconButton label={infoLabel} aria-pressed={showInfo} onClick={() => setShowInfo((v) => !v)} className="hidden md:inline-flex">
+            <ChatIconButton label={infoLabel} aria-pressed={showInfo} onClick={() => { setInfoStart(null); setShowInfo((v) => !v); }} className="hidden md:inline-flex">
               <Info className="size-[21px]" />
             </ChatIconButton>
           </div>
@@ -2802,7 +2850,15 @@ export function ChatConversation({
           <button type="button" onClick={() => scrollToMessage(pinnedMsg.id)} className="flex min-h-[44px] min-w-0 flex-1 items-center gap-[8px] text-left">
             <PinIcon className="size-[13px] shrink-0 text-[var(--chat-accent-text)]" aria-hidden />
             <span className="shrink-0 text-[12px] font-[var(--fw-semibold)] text-[var(--chat-accent-text)]">Fijado</span>
-            <span className="min-w-0 flex-1 truncate text-[14px] text-app">{momentPreview(pinnedMsg.texto) ?? pinnedMsg.texto}</span>
+            {(() => {
+              const p = pinnedSummary(pinnedMsg);
+              return (
+                <span className="flex min-w-0 flex-1 items-center gap-[6px]">
+                  {p.icon}
+                  <span className="min-w-0 flex-1 truncate text-[14px] text-app">{p.text}</span>
+                </span>
+              );
+            })()}
           </button>
           <button type="button" onClick={() => togglePin(pinnedMsg.id)} aria-label="Desfijar" className="flex size-[44px] shrink-0 items-center justify-center rounded-full text-muted hover:bg-[var(--surface-2)]">
             <X className="size-[14px]" />
@@ -3249,7 +3305,7 @@ export function ChatConversation({
                             {content}
                             {(timeHere || isStarred) && (
                               <span className="flex shrink-0 items-center gap-[4px] pb-[2px] text-[12px] tabular-nums text-muted">
-                                {isStarred && <span aria-label="Destacado">★</span>}
+                                {isStarred && <button type="button" onClick={(e) => { e.stopPropagation(); openStarred(); }} onPointerDown={(e) => e.stopPropagation()} aria-label="Ver tus destacados" title="Ver tus destacados" className="-m-[6px] rounded-[4px] p-[6px] hover:text-app">★</button>}
                                 {timeHere && msgTime}
                                 {timeHere && readMark}
                               </span>
@@ -3261,7 +3317,7 @@ export function ChatConversation({
                             {content}
                             {!msg.image_url && (timeHere || isStarred) && (
                               <div className="mt-[2px] flex items-center justify-end gap-[4px] text-[12px] text-muted">
-                                {isStarred && <span aria-label="Destacado">★</span>}
+                                {isStarred && <button type="button" onClick={(e) => { e.stopPropagation(); openStarred(); }} onPointerDown={(e) => e.stopPropagation()} aria-label="Ver tus destacados" title="Ver tus destacados" className="-m-[6px] rounded-[4px] p-[6px] hover:text-app">★</button>}
                                 {timeHere && <span className="tabular-nums">{msgTime}</span>}
                                 {timeHere && readMark}
                               </div>
@@ -3292,7 +3348,7 @@ export function ChatConversation({
                         {showName && <span className={`text-[13px] font-[var(--fw-semibold)] ${isBot ? "text-primary-token" : "text-app"}`}>{isBot ? "Frimee" : msg.sender_nombre}</span>}
                         {isBot && <span className="rounded-[4px] border border-app px-[6px] py-px text-[11px] font-[var(--fw-semibold)] text-muted">Asistente</span>}
                         {!inBurst && <span className="text-[12px] tabular-nums text-muted">{msgTime}</span>}
-                        {isStarred && <span className="text-[12px] text-muted" aria-label="Destacado">★</span>}
+                        {isStarred && <span className="text-[12px] text-muted"><button type="button" onClick={(e) => { e.stopPropagation(); openStarred(); }} onPointerDown={(e) => e.stopPropagation()} aria-label="Ver tus destacados" title="Ver tus destacados" className="-m-[6px] rounded-[4px] p-[6px] hover:text-app">★</button></span>}
                       </div>
                     )}
                     <div className={`relative max-w-[640px] ${showHeader ? "mt-[4px]" : startsTurn ? "pt-[3px]" : ""} transition-transform duration-200 ease-[cubic-bezier(.2,0,0,1)] ${lifted} outline-none`} {...gestureProps}>
@@ -3344,6 +3400,12 @@ export function ChatConversation({
           </div>
         </div>
       )}
+      {starToast && !addedToast && (
+        <div role="status" className="absolute bottom-[12px] left-1/2 z-[7] flex max-w-[calc(100%-32px)] -translate-x-1/2 items-center gap-[14px] rounded-[8px] border border-app bg-[var(--bg)] pl-[16px] pr-[8px] shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
+          <span className="min-w-0 flex-1 truncate py-[12px] text-[14px] text-app">Mensaje destacado</span>
+          <button type="button" onClick={openStarred} className="min-h-[44px] shrink-0 px-[4px] text-[14px] font-[var(--fw-semibold)] text-app underline underline-offset-[3px]">Ver destacados</button>
+        </div>
+      )}
       {addedToast && (
         <div role="status" className="absolute bottom-[12px] left-1/2 z-[7] flex max-w-[calc(100%-32px)] -translate-x-1/2 items-center gap-[14px] rounded-[8px] border border-app bg-[var(--bg)] pl-[16px] pr-[8px] shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
           <span className="min-w-0 flex-1 truncate py-[12px] text-[14px] text-app">Añadido a «{addedToast.planTitulo}»</span>
@@ -3381,6 +3443,15 @@ export function ChatConversation({
 
       {/* Input area */}
       <div className="px-[var(--space-3)] pb-[calc(env(safe-area-inset-bottom)+12px)] pt-[var(--space-2)] md:px-[var(--space-4)] md:pb-[var(--space-3)]">
+        {sendError && (
+          <div role="alert" className="mb-[var(--space-2)] flex items-center gap-[8px] px-1 text-[13px] text-[var(--error)]">
+            <span className="min-w-0 flex-1">{sendError.text}</span>
+            {sendError.retry && (
+              <button type="button" onClick={() => { const r = sendError.retry; setSendError(null); r?.(); }} className="min-h-[44px] shrink-0 px-[4px] font-[var(--fw-semibold)] text-app underline underline-offset-[3px]">Reintentar</button>
+            )}
+            <button type="button" onClick={() => setSendError(null)} aria-label="Cerrar el aviso" className="flex size-[44px] shrink-0 items-center justify-center rounded-[8px] text-muted hover:bg-[var(--surface-2)]"><X className="size-[16px]" aria-hidden /></button>
+          </div>
+        )}
         {audioError && !isRecording && (
           <p role="status" className="mb-[var(--space-2)] px-1 text-[13px] text-muted">{audioError}</p>
         )}
