@@ -86,9 +86,25 @@ export type ProposalMoment = {
   resultado?: string | null;
 };
 
-export type Moment = PollMoment | TripSummaryMoment | ExpenseMoment | PlaceMoment | CardMoment | ProposalMoment;
+/**
+ * The mark something added to the plan from the chat leaves on the spine (board g-proponer «Añadir
+ * directo»): «Añadiste «Taberna da Rua» al plan · Día 2, 21:00». A decided milestone of the ruler.
+ */
+export type PlanMarkMoment = {
+  type: "hito_plan";
+  subplan_id: number;
+  plan_id: number;
+  plan_titulo: string | null;
+  titulo: string;
+  tipo?: string | null;
+  inicio_at: string;
+  lugar?: string | null;
+  origen_id?: number | null;
+};
 
-const TYPES = new Set(["poll", "resumen_viaje", "gasto", "lugar", "tarjeta", "propuesta"]);
+export type Moment = PollMoment | TripSummaryMoment | ExpenseMoment | PlaceMoment | CardMoment | ProposalMoment | PlanMarkMoment;
+
+const TYPES = new Set(["poll", "resumen_viaje", "gasto", "lugar", "tarjeta", "propuesta", "hito_plan"]);
 
 /** The moment inside a message's texto, or null for plain text. Never throws. */
 export function parseMoment(texto: string | null | undefined): Moment | null {
@@ -127,6 +143,7 @@ export function momentPreview(texto: string | null | undefined): string | null {
     case "lugar": return `Sitio · ${m.nombre}`;
     case "tarjeta": return m.kind === "plan" ? `Invitación · ${m.titulo}` : `${cardLabel(m.kind)} · ${m.titulo}`;
     case "propuesta": return `Frimee propone · ${m.titulo}`;
+    case "hito_plan": return `Añadido al plan · ${m.titulo}`;
   }
 }
 

@@ -39,6 +39,8 @@ import {
   getSugerenciasEndpoint,
   registrarGastoChatEndpoint,
   aceptarPropuestaEndpoint,
+  anadirAlPlanEndpoint,
+  deshacerAnadirEndpoint,
   type Sugerencia,
   listMensajesTramoEndpoint,
   listMensajesDespuesEndpoint,
@@ -56,7 +58,9 @@ import { PlaceCard } from "@/components/chat/bitacora/PlaceCard";
 import { FrimeeProposal } from "@/components/chat/bitacora/FrimeeProposal";
 import { MessageActions, DiamondIcon } from "@/components/chat/bitacora/MessageActions";
 import { useRouter } from "next/navigation";
-import { PlaceSheet, ExpenseSheet, InvitePlanSheet, ChoosePlanSheet } from "@/components/chat/bitacora/AttachSheets";
+import { PlaceSheet, ExpenseSheet, InvitePlanSheet } from "@/components/chat/bitacora/AttachSheets";
+import { AddToPlanPanel, type PanelPrefill } from "@/components/chat/bitacora/AddToPlanPanel";
+import { PlanMarkLine } from "@/components/chat/bitacora/PlanMarkLine";
 import { isSuggestionCandidate } from "@/components/chat/bitacora/sugerencias";
 import { uploadPlanCoverFile, uploadAudioBlob, uploadAudioFile, uploadDocumentFile, uploadMediaFile } from "@/services/firebase/upload";
 import { createRealtimeTopic } from "@/lib/realtime";
@@ -241,8 +245,15 @@ export function ChatConversation({
   const askedRef = useRef<Set<number>>(new Set());
   // Messages @frimee is reading right now (the model is working: seconds, more the first time).
   const [reading, setReading] = useState<Set<number>>(new Set());
-  // A chat without a plan: what «Añadir al plan» is saving while you pick the plan.
-  const [choosePlanFor, setChoosePlanFor] = useState<({ titulo: string } & PlanPrefill) | null>(null);
+  // «Añadir al plan» panel: the message, where it opens (desktop) and one id per opening (no duplicates).
+  const [addPanel, setAddPanel] = useState<{ msg: MensajeRow; anchor: { x: number; y: number } | null; clientId: string } | null>(null);
+  // After adding: «Añadido a «Plan» · Ver · Deshacer» for a few seconds.
+  const [addedToast, setAddedToast] = useState<{ planId: number; planTitulo: string; mensajeId: number } | null>(null);
+  useEffect(() => {
+    if (!addedToast) return;
+    const t = setTimeout(() => setAddedToast(null), 8000);
+    return () => clearTimeout(t);
+  }, [addedToast]);
   const [expensePrefill, setExpensePrefill] = useState<{ titulo: string; importe: number; pagador: string | null } | null>(null);
   // How far the others have read (fn_chat_lecturas): «visto» when all of them read past a message.
   const [lecturas, setLecturas] = useState<Array<{ user_id: string; last_read_at: string | null }>>([]);
@@ -738,13 +749,14 @@ export function ChatConversation({
     if (p.lat != null && p.lng != null) { q.set("lat", String(p.lat)); q.set("lng", String(p.lng)); }
     router.push(`/plans/${targetPlanId}?${q.toString()}`);
   };
-  const addToPlan = (m: MensajeRow) => {
-    const p = planFrom(m);
-    if (!p) return;
+  /** Opens the «Añadir al plan» panel (it fills in with what @frimee read, or waits for it). */
+  const addToPlan = (m: MensajeRow, anchor: { x: number; y: number } | null = null) => {
     closeOverlays();
-    if (!planId) { setChoosePlanFor(p); return; }
-    if (onAbrirActividad) onAbrirActividad(p.titulo.trim().slice(0, 80), p);
-    else goAddToPlan(planId, p);
+    setAddPanel({ msg: m, anchor, clientId: crypto.randomUUID() });
+  };
+  const barAnchor = (e: React.MouseEvent<HTMLElement>) => {
+    const r = (e.currentTarget.closest<HTMLElement>("[role=toolbar]") ?? e.currentTarget).getBoundingClientRect();
+    return { x: r.right, y: r.top };
   };
   const registerExpense = (m: MensajeRow) => {
     const g = gastoFrom(m);
@@ -2243,6 +2255,7 @@ export function ChatConversation({
       const mo = parseMoment(m.texto);
       if (mo?.type === "poll") rulerMarks.push({ kind: "hito", id: m.id, ord, label: mo.question, decided: pollDecided(mo) });
       else if (mo?.type === "propuesta" && mo.estado !== "descartada") rulerMarks.push({ kind: "hito", id: m.id, ord, label: mo.titulo, decided: mo.estado === "aceptada" });
+      else if (mo?.type === "hito_plan") rulerMarks.push({ kind: "hito", id: m.id, ord, label: mo.titulo, decided: true });
     });
   }
   rulerMarks.sort((a, b) => a.ord - b.ord);
@@ -2358,21 +2371,47 @@ export function ChatConversation({
             onPin={() => { togglePin(m.id); closeOverlays(); }}
             onStar={() => { toggleStar(m.id); closeOverlays(); }}
             onDelete={() => { void handleDeleteMsg(m); closeOverlays(); }}
-            onAddToPlan={canPlan && planFrom(m) ? () => addToPlan(m) : undefined}
+            onAddToPlan={canPlan && (planFrom(m) || reading.has(m.id)) ? () => addToPlan(m, { x: contextMenu.x, y: contextMenu.y }) : undefined}
             onRegisterExpense={planId && gastoFrom(m) ? () => registerExpense(m) : undefined}
           />
         );
       })()}
 
       {/* Adjuntar: sitio, gasto y del plan */}
-      {choosePlanFor && (
-        <ChoosePlanSheet
-          currentUserId={currentUserId}
-          activity={[choosePlanFor.titulo, choosePlanFor.fecha ? new Date(`${choosePlanFor.fecha}T12:00:00`).toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "short" }) : null, choosePlanFor.hora].filter(Boolean).join(" · ")}
-          onClose={() => setChoosePlanFor(null)}
-          onChoose={(id) => { const p = choosePlanFor; setChoosePlanFor(null); goAddToPlan(id, p); }}
-        />
-      )}
+      {addPanel && (() => {
+        const m = addPanel.msg;
+        const prefill = planFrom(m);
+        const mo = parseMoment(m.texto);
+        const status: "thinking" | "ready" | "failed" = prefill ? "ready" : reading.has(m.id) ? "thinking" : "failed";
+        const personas = isDirectChat ? `2 · ${otherName} y tú` : `${chat.miembros.length} · todo el grupo`;
+        return (
+          <AddToPlanPanel
+            status={status}
+            prefill={prefill}
+            suggested={mo?.type !== "lugar" && mo?.type !== "tarjeta"}
+            plan={planId && planInfo ? { id: planId, titulo: planInfo.titulo, inicio_at: planInfo.inicio_at, fin_at: planInfo.fin_at, ubicacion_nombre: planInfo.ubicacion_nombre } : null}
+            currentUserId={currentUserId}
+            personas={personas}
+            anchor={addPanel.anchor}
+            onClose={() => setAddPanel(null)}
+            onAdd={async (v) => {
+              const r = await anadirAlPlanEndpoint({
+                clientId: addPanel.clientId, chatId: chat.chat_id, planId: v.planId, titulo: v.titulo, tipo: v.tipo,
+                inicio: v.inicio, fin: v.fin, ubicacionNombre: v.ubicacionNombre, lat: v.lat, lng: v.lng, origenId: m.id,
+              });
+              showMyServerMessage(r.mensaje_id, r.texto);
+              const mark = parseMoment(r.texto);
+              setAddedToast({ planId: v.planId, planTitulo: mark?.type === "hito_plan" ? mark.plan_titulo ?? "el plan" : "el plan", mensajeId: r.mensaje_id });
+            }}
+            onMoreOptions={(targetId, p: PanelPrefill) => {
+              setAddPanel(null);
+              const full = { titulo: p.titulo ?? "", fecha: p.fecha, hora: p.hora, tipo: p.tipo, lugar: p.lugar, lat: p.lat, lng: p.lng };
+              if (targetId === planId && onAbrirActividad) onAbrirActividad(full.titulo.slice(0, 80), full);
+              else goAddToPlan(targetId, full);
+            }}
+          />
+        );
+      })()}
       {attachSheet === "lugar" && <PlaceSheet onClose={() => setAttachSheet(null)} onSend={(place) => sendMoment(place)} />}
       {attachSheet === "gasto" && planId && (
         <ExpenseSheet
@@ -2640,12 +2679,12 @@ export function ChatConversation({
                     <svg aria-hidden viewBox="0 0 24 24" className="size-[18px]" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M9 14 4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></svg>
                   </button>
                   {canPlan && !planFrom(msg) && reading.has(msg.id) && (
-                    <span role="img" aria-label="Frimee está leyendo este mensaje" title="Frimee está leyendo este mensaje…" className="flex size-[36px] items-center justify-center rounded-[6px] opacity-50">
+                    <button type="button" aria-label="Añadir al plan (Frimee está leyendo el mensaje)" title="Frimee está leyendo este mensaje…" onClick={(e) => { e.stopPropagation(); addToPlan(msg, barAnchor(e)); }} className="flex size-[36px] items-center justify-center rounded-[6px] opacity-60 hover:bg-[var(--surface-2)]">
                       <span className="animate-pulse motion-reduce:animate-none"><DiamondIcon /></span>
-                    </span>
+                    </button>
                   )}
                   {canPlan && planFrom(msg) && (
-                    <button type="button" aria-label="Añadir al plan" title="Añadir al plan · P" onClick={(e) => { e.stopPropagation(); addToPlan(msg); }} className="flex size-[36px] items-center justify-center rounded-[6px] transition-colors hover:bg-[var(--surface-2)]">
+                    <button type="button" aria-label="Añadir al plan" title="Añadir al plan · P" onClick={(e) => { e.stopPropagation(); addToPlan(msg, barAnchor(e)); }} className="flex size-[36px] items-center justify-center rounded-[6px] transition-colors hover:bg-[var(--surface-2)]">
                       <DiamondIcon />
                     </button>
                   )}
@@ -2747,9 +2786,10 @@ export function ChatConversation({
                 } else if (key === "g" && !e.shiftKey && planId && gastoFrom(msg)) {
                   e.preventDefault();
                   registerExpense(msg);
-                } else if (key === "p" && !e.shiftKey && canPlan && planFrom(msg)) {
+                } else if (key === "p" && !e.shiftKey && canPlan && (planFrom(msg) || reading.has(msg.id))) {
                   e.preventDefault();
-                  addToPlan(msg);
+                  const r = e.currentTarget.getBoundingClientRect();
+                  addToPlan(msg, { x: r.right, y: r.top });
                 } else if (key === "f" && !e.shiftKey) {
                   e.preventDefault();
                   setForwardMsg(msg);
@@ -2859,6 +2899,16 @@ export function ChatConversation({
                         otherName={msg.sender_nombre.split(" ")[0] || "Alguien"}
                         onCallBack={onStartCall && !inCall ? () => onStartCall(callTipo.includes("video") ? "video" : "audio") : undefined}
                       />
+                    </div>
+                  </Fragment>
+                );
+              }
+              if (moment?.type === "hito_plan") {
+                return (
+                  <Fragment key={(msg)._key ?? msg.id}>
+                    {slot?.chapter && <DayChapter id={`day-${msg.id}`} label={slot.chapter} />}
+                    <div id={`msg-${msg.id}`} className={`mt-[6px] ${highlight}`}>
+                      <PlanMarkLine data={moment} isMe={isMe} who={msg.sender_nombre.split(" ")[0] || "Alguien"} tripStart={planId === moment.plan_id ? planInfo?.inicio_at : null} />
                     </div>
                   </Fragment>
                 );
@@ -3002,7 +3052,30 @@ export function ChatConversation({
           </div>
         </div>
       )}
-      {!loading && (awayFromEnd || detached) && (
+      {addedToast && (
+        <div role="status" className="absolute bottom-[12px] left-1/2 z-[7] flex max-w-[calc(100%-32px)] -translate-x-1/2 items-center gap-[14px] rounded-[8px] border border-app bg-[var(--bg)] pl-[16px] pr-[8px] shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
+          <span className="min-w-0 flex-1 truncate py-[12px] text-[14px] text-app">Añadido a «{addedToast.planTitulo}»</span>
+          <button type="button" onClick={() => router.push(`/plans/${addedToast.planId}?tab=itinerario`)} className="min-h-[44px] shrink-0 px-[4px] text-[14px] font-[var(--fw-semibold)] text-app underline underline-offset-[3px]">Ver</button>
+          <button
+            type="button"
+            onClick={async () => {
+              const t = addedToast;
+              setAddedToast(null);
+              try {
+                await deshacerAnadirEndpoint(t.mensajeId);
+                setMessages((prev) => prev.filter((x) => x.id !== t.mensajeId));
+                void channelRef.current?.send({ type: "broadcast", event: "delete_message", payload: { id: t.mensajeId } });
+              } catch (e) {
+                logError("Error deshaciendo", e);
+              }
+            }}
+            className="min-h-[44px] shrink-0 px-[4px] text-[14px] font-[var(--fw-semibold)] text-app underline underline-offset-[3px]"
+          >
+            Deshacer
+          </button>
+        </div>
+      )}
+      {!loading && !addedToast && (awayFromEnd || detached) && (
         <button
           type="button"
           onClick={() => void goToLatest()}
@@ -3031,16 +3104,6 @@ export function ChatConversation({
               <X className="size-[16px]" />
             </button>
           </div>
-        )}
-        {reading.size > 0 && (
-          <p role="status" className="mb-[var(--space-2)] flex items-center gap-[8px] px-1 text-[13px] text-muted">
-            <span aria-hidden className="flex gap-[3px]">
-              <span className="size-[5px] animate-pulse rounded-full bg-[var(--primary)] motion-reduce:animate-none" />
-              <span className="size-[5px] animate-pulse rounded-full bg-[var(--primary)] [animation-delay:150ms] motion-reduce:animate-none" />
-              <span className="size-[5px] animate-pulse rounded-full bg-[var(--primary)] [animation-delay:300ms] motion-reduce:animate-none" />
-            </span>
-            Frimee está repasando los mensajes para proponer planes y gastos…
-          </p>
         )}
         {showAiHints && (
           <div
