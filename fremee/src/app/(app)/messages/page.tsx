@@ -131,7 +131,7 @@ export default function MessagesPage() {
       const data = await listChats();
       setChats(data);
     } catch (e) {
-      console.error("[messages] Error cargando chats:", e);
+      console.error("[messages] Error cargando chats:", (e as { message?: string })?.message || String(e));
     } finally {
       setChatsLoading(false);
     }
