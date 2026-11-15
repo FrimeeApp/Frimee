@@ -403,3 +403,45 @@ export async function aceptarPropuestaEndpoint(mensajeId: number, resultado?: st
   if (error) throw new Error(error.message || error.code || "Error aceptando la propuesta");
   return data as { claimed: boolean; texto: string; poll_id: number | null; poll_texto: string | null };
 }
+
+/**
+ * Add an activity to a plan from the chat: the activity AND its mark on the spine, in one
+ * transaction (fn_chat_anadir_al_plan). clientId, one per opened panel: never added twice.
+ */
+export async function anadirAlPlanEndpoint(params: {
+  clientId: string;
+  chatId: string;
+  planId: number;
+  titulo: string;
+  tipo: string;
+  inicio: string;
+  fin: string;
+  ubicacionNombre?: string;
+  lat?: number | null;
+  lng?: number | null;
+  origenId?: number | null;
+}): Promise<{ subplan_id: number; mensaje_id: number; texto: string }> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_chat_anadir_al_plan", {
+    p_client_id: params.clientId,
+    p_chat_id: params.chatId,
+    p_plan_id: params.planId,
+    p_titulo: params.titulo,
+    p_tipo: params.tipo,
+    p_inicio: params.inicio,
+    p_fin: params.fin,
+    p_ubicacion_nombre: params.ubicacionNombre ?? "",
+    p_lat: params.lat ?? null,
+    p_lng: params.lng ?? null,
+    p_origen_id: params.origenId ?? null,
+  });
+  if (error) throw new Error(error.message || error.code || "Error añadiendo al plan");
+  return data as { subplan_id: number; mensaje_id: number; texto: string };
+}
+
+/** «Deshacer» right after adding: removes the activity and its mark (only who added it, minutes after). */
+export async function deshacerAnadirEndpoint(mensajeId: number): Promise<void> {
+  const supabase = createBrowserSupabaseClient();
+  const { error } = await supabase.rpc("fn_chat_deshacer_anadir", { p_mensaje_id: mensajeId });
+  if (error) throw new Error(error.message || error.code || "Error deshaciendo");
+}
