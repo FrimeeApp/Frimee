@@ -524,6 +524,27 @@ export async function sugerirPlanNuevoEndpoint(chatId: string): Promise<PlanNuev
   return ((data as { plan?: PlanNuevoSugerido | null })?.plan) ?? null;
 }
 
+/**
+ * Whether you are in a chat (RLS on chat only returns it to its members). «Ir al chat original» in a
+ * plan made from a chat is only shown to who is still in that chat. Remembered per chat.
+ */
+const veChatCache = new Map<string, Promise<boolean>>();
+export function puedoVerChatEndpoint(chatId: string): Promise<boolean> {
+  let p = veChatCache.get(chatId);
+  if (!p) {
+    p = (async () => {
+      const supabase = createBrowserSupabaseClient();
+      const { data, error } = await supabase.from("chat").select("id").eq("id", chatId).maybeSingle();
+      if (error) throw new Error(error.message || "Error comprobando el chat");
+      return Boolean(data);
+    })();
+    // A failure is not remembered: the next mark asks again.
+    p.catch(() => veChatCache.delete(chatId));
+    veChatCache.set(chatId, p);
+  }
+  return p;
+}
+
 /** «Pedir unirme» on the «Plan creado» mark: the plan's admins get a request. */
 export async function pedirUnirmeEndpoint(planId: number, chatId: string): Promise<"ok" | "ya_miembro" | "ya_pedido"> {
   const supabase = createBrowserSupabaseClient();
