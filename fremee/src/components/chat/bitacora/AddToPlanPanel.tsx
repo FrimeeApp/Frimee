@@ -7,6 +7,7 @@ import LocationAutocomplete, { type Coords } from "@/components/plans/LocationAu
 import { fetchPlanUserRol, fetchUserRelatedPlans } from "@/services/api/endpoints/plans.endpoint";
 import { resolvePlace } from "@/lib/places";
 import { Sheet, useIsPhone } from "./Sheet";
+import { Sugerido, TimePicker } from "@/components/ui/TimePicker";
 
 /**
  * «Añadir al plan» from the chat (boards m-anadir, d-anadir, e-anadir, g-proponer): a panel that
@@ -18,7 +19,7 @@ import { Sheet, useIsPhone } from "./Sheet";
  * A popover over the message's bar on desktop, a bottom sheet on phones.
  */
 export type PanelPlan = { id: number; titulo: string; inicio_at: string; fin_at: string; ubicacion_nombre?: string | null };
-export type PanelPrefill = { titulo?: string; fecha?: string; hora?: string; tipo?: string; lugar?: string; lat?: number; lng?: number };
+export type PanelPrefill = { titulo?: string; fecha?: string; hora?: string; horaFin?: string; tipo?: string; lugar?: string; lat?: number; lng?: number };
 export type PanelValues = { planId: number; titulo: string; tipo: string; inicio: string; fin: string; ubicacionNombre: string; lat: number | null; lng: number | null };
 
 const TIPOS: Array<[string, string]> = [
@@ -73,8 +74,11 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
     </div>
   );
 }
+const toM = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+/** Minutes from the start day's 00:00 → «HH:MM» and whether it falls the next day. */
+const fromAbs = (m: number) => ({ v: `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`, nd: m >= 1440 });
+const durTxt = (m: number) => (m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60}` : ""}`);
 const Skel = ({ w }: { w: string }) => <span aria-hidden className="skel-live block h-[16px]" style={{ width: w }} />;
-const Sugerido = () => <span className="ml-[8px] shrink-0 text-[11px] font-[var(--fw-semibold)] text-primary-token">Sugerido</span>;
 const fieldCls = "h-[40px] w-full min-w-0 bg-transparent text-[15px] text-app outline-none placeholder:text-muted";
 
 export function AddToPlanPanel({
@@ -130,6 +134,8 @@ export function AddToPlanPanel({
   const [tipo, setTipo] = useState("ACTIVIDAD");
   const [dia, setDia] = useState("");
   const [hora, setHora] = useState("");
+  // End: null = an hour after the start; set by hand, it keeps its duration when the start moves.
+  const [fin, setFin] = useState<{ v: string; nd: boolean } | null>(null);
   const [sitio, setSitio] = useState("");
   const [coords, setCoords] = useState<Coords | null>(null);
   const filledRef = useRef(false);
@@ -139,6 +145,8 @@ export function AddToPlanPanel({
     setTitulo(prefill.titulo ?? "");
     if (prefill.tipo && TIPOS.some(([k]) => k === prefill.tipo)) setTipo(prefill.tipo);
     if (prefill.hora && /^\d{2}:\d{2}$/.test(prefill.hora)) setHora(prefill.hora);
+    // An end said in the conversation («de 10 a 12»); earlier than the start = the next day.
+    if (prefill.hora && prefill.horaFin && /^\d{2}:\d{2}$/.test(prefill.horaFin)) setFin({ v: prefill.horaFin, nd: prefill.horaFin <= prefill.hora });
     if (prefill.lugar) setSitio(prefill.lugar);
     if (prefill.lat != null && prefill.lng != null) setCoords({ lat: prefill.lat, lng: prefill.lng });
     else if (prefill.lugar) {
@@ -168,7 +176,16 @@ export function AddToPlanPanel({
   const ready = !waiting;
   const mark = (k: string) => setEdited((s) => new Set(s).add(k));
   const sug = (k: string) => suggested && status === "ready" && !manual && !edited.has(k);
-  const valid = ready && Boolean(target) && titulo.trim().length > 0 && Boolean(dia) && /^\d{2}:\d{2}$/.test(hora);
+  const hasHora = /^\d{2}:\d{2}$/.test(hora);
+  const finEf = fin ?? (hasHora ? fromAbs(toM(hora) + 60) : null);
+  const durMin = hasHora && finEf ? toM(finEf.v) + (finEf.nd ? 1440 : 0) - toM(hora) : 0;
+  const finMal = hasHora && finEf !== null && durMin <= 0;
+  const cambiarHora = (v: string) => {
+    if (fin && durMin > 0) setFin(fromAbs(toM(v) + durMin));
+    setHora(v);
+    if (v !== prefill?.hora) mark("hora");
+  };
+  const valid = ready && Boolean(target) && titulo.trim().length > 0 && Boolean(dia) && hasHora && !finMal;
 
   const add = async () => {
     if (!valid || !target || busy) return;
@@ -176,8 +193,7 @@ export function AddToPlanPanel({
     setError(null);
     try {
       const start = new Date(`${dia}T${hora}:00`);
-      // An hour by default, within the day; it can be changed in the plan.
-      const end = new Date(Math.min(start.getTime() + 3_600_000, new Date(`${dia}T23:59:00`).getTime()));
+      const end = new Date(start.getTime() + durMin * 60_000);
       await onAdd({ planId: target.id, titulo: titulo.trim(), tipo, inicio: start.toISOString(), fin: end.toISOString(), ubicacionNombre: sitio.trim(), lat: coords?.lat ?? null, lng: coords?.lng ?? null });
       onClose();
     } catch (e) {
@@ -187,6 +203,8 @@ export function AddToPlanPanel({
       setBusy(false);
     }
   };
+
+  const horaSub = [days.find((d) => d.key === dia)?.label, sitio].filter(Boolean).join(" · ") || undefined;
 
   const phrase = placeBusy ? "Buscando el sitio…" : status === "thinking" ? "Leyendo el mensaje…" : "Poniendo día y hora…";
   const header = (
@@ -234,8 +252,29 @@ export function AddToPlanPanel({
             </select>{sug("fecha") && prefill?.fecha === dia && <Sugerido />}
           </span>
         )}</Row>
-        <Row label="Hora">{waiting ? <Skel w="30%" /> : (
-          <span className="flex items-center"><input aria-label="Hora" type="time" className={fieldCls} value={hora} onChange={(e) => { setHora(e.target.value); mark("hora"); }} />{sug("hora") && hora && <Sugerido />}</span>
+        <Row label="Inicio">{waiting ? <Skel w="30%" /> : (
+          <TimePicker
+            label="Hora de inicio"
+            subtitle={horaSub}
+            value={hora}
+            suggested={sug("hora") ? prefill?.hora ?? null : null}
+            onChange={cambiarHora}
+          />
+        )}</Row>
+        <Row label="Fin">{waiting ? <Skel w="30%" /> : (
+          <div className="flex items-center gap-[8px]">
+            <TimePicker
+              label="Hora de fin"
+              subtitle={horaSub}
+              value={finEf?.v ?? ""}
+              invalid={finMal}
+              nextDayBefore={hasHora ? hora : undefined}
+              onChange={(v, o) => setFin({ v, nd: Boolean(o?.nextDay) })}
+            />
+            {finMal ? <span role="alert" className="shrink-0 text-[12px] text-[var(--error)]">Antes del inicio</span>
+              : finEf?.nd ? <span className="shrink-0 text-[12px] text-muted">día siguiente</span>
+              : durMin > 0 && <span className="shrink-0 text-[12px] text-muted">{durTxt(durMin)}</span>}
+          </div>
         )}</Row>
         <Row label="Personas">{waiting ? <Skel w="45%" /> : <span className="text-[15px]">{personas}</span>}</Row>
         <Row label="Plan">
