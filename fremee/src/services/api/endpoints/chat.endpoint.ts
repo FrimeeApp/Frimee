@@ -359,3 +359,47 @@ export async function getSugerenciasEndpoint(chatId: string, ids: number[], onAs
   if (fnError) throw new Error(fnError.message || "Error pidiendo sugerencias");
   return [...stored, ...(((fn as { sugerencias?: Sugerencia[] })?.sugerencias) ?? [])];
 }
+
+/**
+ * An expense AND its message in the chat, in one transaction (fn_chat_registrar_gasto): never one
+ * without the other. `clientId` is made when the sheet opens: the same request again (a retry after
+ * a dropped connection) returns the first result instead of creating the expense twice.
+ */
+export async function registrarGastoChatEndpoint(params: {
+  clientId: string;
+  chatId: string;
+  planId: number;
+  titulo: string;
+  total: number;
+  pagadoPor: string;
+  participantes: string[];
+  /** The message to send instead of the expense card (e.g. @frimee's confirmation text). */
+  texto?: string;
+}): Promise<{ gasto_id: number; mensaje_id: number; texto: string }> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_chat_registrar_gasto", {
+    p_client_id: params.clientId,
+    p_chat_id: params.chatId,
+    p_plan_id: params.planId,
+    p_titulo: params.titulo,
+    p_total: params.total,
+    p_pagado_por: params.pagadoPor,
+    p_participantes: params.participantes,
+    p_texto: params.texto ?? null,
+  });
+  if (error) throw new Error(error.message || error.code || "Error registrando el gasto");
+  return data as { gasto_id: number; mensaje_id: number; texto: string };
+}
+
+/**
+ * Accept a proposal of @frimee AND do what it proposes, in one transaction (fn_propuesta_aceptar).
+ * claimed false: someone accepted or dismissed it first (texto is how it is now).
+ */
+export async function aceptarPropuestaEndpoint(mensajeId: number, resultado?: string | null): Promise<{
+  claimed: boolean; texto: string; poll_id: number | null; poll_texto: string | null;
+}> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_propuesta_aceptar", { p_mensaje_id: mensajeId, p_resultado: resultado ?? null });
+  if (error) throw new Error(error.message || error.code || "Error aceptando la propuesta");
+  return data as { claimed: boolean; texto: string; poll_id: number | null; poll_texto: string | null };
+}

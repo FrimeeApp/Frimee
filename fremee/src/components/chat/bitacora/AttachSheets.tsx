@@ -3,9 +3,8 @@
 import { useEffect, useState } from "react";
 import { CalendarDays, LocateFixed } from "lucide-react";
 import LocationAutocomplete, { type Coords } from "@/components/plans/LocationAutocomplete";
-import { createGastoEndpoint } from "@/services/api/endpoints/gastos.endpoint";
 import { fetchPlanUserRol, fetchUserRelatedPlans, type PlanByIdRow } from "@/services/api/endpoints/plans.endpoint";
-import type { CardMoment, ExpenseMoment, PlaceMoment } from "./moments";
+import type { CardMoment, PlaceMoment } from "./moments";
 import { formatEuros } from "./moments";
 import { Sheet, sheetField, sheetLabel, sheetPrimaryButton } from "./Sheet";
 
@@ -85,13 +84,13 @@ type Member = { id: string; nombre: string };
 
 /** Records a plan expense split in equal parts and leaves it as a moment in the chat. */
 export function ExpenseSheet({
-  planId, members, currentUserId, onClose, onSent, initial,
+  members, currentUserId, onClose, onRegister, initial,
 }: {
-  planId: number;
   members: Member[];
   currentUserId: string;
   onClose: () => void;
-  onSent: (moment: ExpenseMoment) => Promise<void>;
+  /** Registers the expense and its card in the chat, in one go (fn_chat_registrar_gasto). */
+  onRegister: (input: { clientId: string; titulo: string; total: number; pagadoPor: string; participantes: string[] }) => Promise<void>;
   /** From a message («Registrar como gasto»): what @frimee read in it, to review before saving. */
   initial?: { titulo?: string; importe?: number; pagador?: string | null };
 }) {
@@ -101,6 +100,8 @@ export function ExpenseSheet({
   const [entre, setEntre] = useState<Set<string>>(() => new Set(members.map((m) => m.id)));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // One id per opened sheet: trying again after an error never registers it twice.
+  const [clientId] = useState(() => crypto.randomUUID());
 
   const total = parseFloat(importe.replace(",", "."));
   const valid = titulo.trim().length > 0 && Number.isFinite(total) && total > 0 && entre.size > 0;
@@ -111,17 +112,7 @@ export function ExpenseSheet({
     setBusy(true);
     setError(null);
     try {
-      await createGastoEndpoint({
-        plan_id: planId,
-        titulo: titulo.trim(),
-        pagado_por_user_id: pagador,
-        fecha_gasto: new Date().toISOString(),
-        total: Math.round(total * 100) / 100,
-        metodo_reparto: "IGUAL",
-        participantes: [...entre].map((user_id) => ({ user_id })),
-      });
-      const pagadorNombre = members.find((m) => m.id === pagador)?.nombre.split(" ")[0] ?? "Alguien";
-      await onSent({ type: "gasto", titulo: titulo.trim(), total: Math.round(total * 100) / 100, pagado_por_nombre: pagadorNombre, participantes: entre.size });
+      await onRegister({ clientId, titulo: titulo.trim(), total: Math.round(total * 100) / 100, pagadoPor: pagador, participantes: [...entre] });
       onClose();
     } catch (e) {
       console.error("[chat] Error registrando gasto:", errMsg(e));
