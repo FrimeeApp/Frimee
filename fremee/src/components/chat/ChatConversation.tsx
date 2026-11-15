@@ -2,9 +2,10 @@
 
 import NextImage from "next/image";
 import { useEffect, useRef, useState, useCallback, Fragment, type ButtonHTMLAttributes } from "react";
-import { buildTimeline, inTimeOrder, tripRange, tripStatus } from "@/components/chat/bitacora/timeline";
+import { buildTimeline, chapterLabel, inTimeOrder, tripRange, tripStatus, type ChapterLabel } from "@/components/chat/bitacora/timeline";
 import Link from "next/link";
 import { DayChapter } from "@/components/chat/bitacora/DayChapter";
+import { ChatRuler, type RulerMark } from "@/components/chat/bitacora/ChatRuler";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import {
   listChats,
@@ -33,20 +34,34 @@ import {
   getReaccionesEndpoint,
   pinMensajeEndpoint,
   getPinnedEndpoint,
+  getChatIndiceEndpoint,
+  getChatLecturasEndpoint,
+  getSugerenciasEndpoint,
+  registrarGastoChatEndpoint,
+  aceptarPropuestaEndpoint,
+  anadirAlPlanEndpoint,
+  deshacerAnadirEndpoint,
+  type Sugerencia,
+  listMensajesTramoEndpoint,
+  listMensajesDespuesEndpoint,
+  type ChatIndice,
   destacarMensajeEndpoint,
   getMisDestacadosEndpoint,
   resolverPropuestaEndpoint,
   type ReaccionResumen,
 } from "@/services/api/endpoints/chat.endpoint";
-import { createSubplan } from "@/services/api/endpoints/subplanes.endpoint";
 import { parseMoment, momentPreview, momentAsAssistantText, formatEuros, type Moment, type ProposalMoment } from "@/components/chat/bitacora/moments";
 import { PollMoment, emitPollVote } from "@/components/chat/bitacora/PollMoment";
 import { CallLine } from "@/components/chat/bitacora/CallLine";
 import { TripSummaryCard, ExpenseCard, PlanItemCard } from "@/components/chat/bitacora/MomentCards";
 import { PlaceCard } from "@/components/chat/bitacora/PlaceCard";
 import { FrimeeProposal } from "@/components/chat/bitacora/FrimeeProposal";
-import { MessageActions } from "@/components/chat/bitacora/MessageActions";
+import { MessageActions, DiamondIcon } from "@/components/chat/bitacora/MessageActions";
+import { useRouter } from "next/navigation";
 import { PlaceSheet, ExpenseSheet, InvitePlanSheet } from "@/components/chat/bitacora/AttachSheets";
+import { AddToPlanPanel, type PanelPrefill } from "@/components/chat/bitacora/AddToPlanPanel";
+import { PlanMarkLine } from "@/components/chat/bitacora/PlanMarkLine";
+import { isSuggestionCandidate } from "@/components/chat/bitacora/sugerencias";
 import { uploadPlanCoverFile, uploadAudioBlob, uploadAudioFile, uploadDocumentFile, uploadMediaFile } from "@/services/firebase/upload";
 import { createRealtimeTopic } from "@/lib/realtime";
 import AudioPlayer from "@/components/common/AudioPlayer";
@@ -54,7 +69,7 @@ import { CameraModal } from "@/components/chat/CameraModal";
 import { PollCreatorModal } from "@/components/chat/PollCreatorModal";
 import { PLAN_WRITE_COMMANDS, VALID_TASK_CATEGORIES } from "@/components/chat/chat.constants";
 import { crearTareaEndpoint, misTareasEndpoint, todasTareasEndpoint, updateEstadoTareaEndpoint, recordarEndpoint, type TareaRow } from "@/services/api/endpoints/tareas.endpoint";
-import { createGastoEndpoint, getBalancesForPlanEndpoint } from "@/services/api/endpoints/gastos.endpoint";
+import { getBalancesForPlanEndpoint } from "@/services/api/endpoints/gastos.endpoint";
 import { promoteToAdminEndpoint, demoteAdminEndpoint, kickMemberEndpoint, leavePlanEndpoint } from "@/services/api/endpoints/plans.endpoint";
 import { callFrimeeAssistant, type FrimeeHistoryEntry } from "@/services/api/endpoints/frimee.endpoint";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
@@ -72,7 +87,7 @@ const AI_SUGGESTIONS = [
   { label: "Ideas para cenar", prompt: "@frimee proponnos 3 sitios para cenar y haz una encuesta para votar" },
 ];
 import {
-  Trash2, Ban, AlertTriangle, LogOut, ChevronDown,
+  Trash2, Ban, AlertTriangle, LogOut,
   Smile, Pin, Camera, Send as LucideSend, PlusCircle, Mic,
   File, Video, Music, BarChart2, Edit, ChevronLeft, Users,
   Phone, Download, Plus, X, Sparkles, MapPin, Receipt, CalendarDays,
@@ -95,6 +110,18 @@ type ChatIconButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "type">
   size?: keyof typeof CHAT_ICON_BUTTON_SIZE;
   tone?: keyof typeof CHAT_ICON_BUTTON_TONE;
 };
+
+/** What «Añadir al plan» hands to the add-activity sheet (read from the message or its card). */
+export type PlanPrefill = { fecha?: string; hora?: string; tipo?: string; lugar?: string; lat?: number; lng?: number };
+
+/** Plan card kind → activity type. */
+const CARD_TIPO: Record<string, string> = {
+  vuelo: "VUELO", tren: "TREN", bus: "BUS", barco: "BARCO", alojamiento: "HOTEL", restaurante: "RESTAURANTE", actividad: "ACTIVIDAD",
+};
+
+/** Long press opens reactions and actions (board s-sistema · Gestos). */
+const LONG_PRESS_MS = 350;
+const LAST_REACTION_KEY = "frimee:ultima-reaccion";
 
 function ChatIconButton({
   label,
@@ -173,7 +200,7 @@ export function ChatConversation({
   planInfo?: { titulo: string; inicio_at: string; fin_at: string; ubicacion_nombre: string };
   planId?: number;
   isAdmin?: boolean;
-  onAbrirActividad?: (titulo: string) => void;
+  onAbrirActividad?: (titulo: string, extra?: PlanPrefill) => void;
   onLeave?: () => void;
   onMembersChanged?: () => void;
 }) {
@@ -186,7 +213,8 @@ export function ChatConversation({
   const topSentinelRef = useRef<HTMLDivElement | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const pendingTaskListRef = useRef<TareaRow[]>([]);
-  type PendingGasto = { planId: number; titulo: string; total: number; pagadoPorId: string; pagadoPorNombre: string; participantes: { user_id: string; nombre: string }[] };
+  // clientId: one per confirmation, so a retry never registers it twice.
+  type PendingGasto = { clientId: string; planId: number; titulo: string; total: number; pagadoPorId: string; pagadoPorNombre: string; participantes: { user_id: string; nombre: string }[] };
   const pendingGastoRef = useRef<PendingGasto | null>(null);
   type PendingPollWinner = { planId: number; winnerOption: string; question: string };
   const pendingPollWinnerRef = useRef<PendingPollWinner | null>(null);
@@ -210,7 +238,40 @@ export function ChatConversation({
     }
   };
   const [showInfo, setShowInfo] = useState(false);
-  const [contextMenu, setContextMenu] = useState<{ msg: MensajeRow; x: number; y: number } | null>(null);
+  // The message menu: where it opens (over the action bar, or at the pointer) and whether it is only the reactions.
+  const router = useRouter();
+  // What @frimee saw in each message (activity / expense), and which ones were already asked about.
+  const [sugerencias, setSugerencias] = useState<Record<number, Sugerencia>>({});
+  const askedRef = useRef<Set<number>>(new Set());
+  // Messages @frimee is reading right now (the model is working: seconds, more the first time).
+  const [reading, setReading] = useState<Set<number>>(new Set());
+  // «Añadir al plan» panel: the message, where it opens (desktop) and one id per opening (no duplicates).
+  const [addPanel, setAddPanel] = useState<{ msg: MensajeRow; anchor: { x: number; y: number } | null; clientId: string } | null>(null);
+  // After adding: «Añadido a «Plan» · Ver · Deshacer» for a few seconds.
+  const [addedToast, setAddedToast] = useState<{ planId: number; planTitulo: string; mensajeId: number } | null>(null);
+  useEffect(() => {
+    if (!addedToast) return;
+    const t = setTimeout(() => setAddedToast(null), 8000);
+    return () => clearTimeout(t);
+  }, [addedToast]);
+  const [expensePrefill, setExpensePrefill] = useState<{ titulo: string; importe: number; pagador: string | null } | null>(null);
+  // How far the others have read (fn_chat_lecturas): «visto» when all of them read past a message.
+  const [lecturas, setLecturas] = useState<Array<{ user_id: string; last_read_at: string | null }>>([]);
+  const loadLecturasRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    let alive = true;
+    const load = () => {
+      void getChatLecturasEndpoint(chat.chat_id)
+        .then((rows) => { if (alive) setLecturas(rows); })
+        .catch((e) => console.error("[chat] Error leyendo lecturas:", (e as { message?: string })?.message ?? String(e)));
+    };
+    loadLecturasRef.current = load;
+    load();
+    return () => { alive = false; };
+  }, [chat.chat_id]);
+  // The one message in the tab order (roving focus); the latest one until you move.
+  const [focusMsgId, setFocusMsgId] = useState<number | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ msg: MensajeRow; x: number; y: number; place?: "above" | "cursor"; reactionsOnly?: boolean } | null>(null);
   const [replyingTo, setReplyingTo] = useState<MensajeRow | null>(null);
   const [editingMsg, setEditingMsg] = useState<MensajeRow | null>(null);
   // Everyone's reactions per message: emoji, count and whether one of them is mine.
@@ -231,7 +292,7 @@ export function ChatConversation({
   const [showPollCreator, setShowPollCreator] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
-  const [, setAudioError] = useState<string | null>(null);
+  const [audioError, setAudioError] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -239,7 +300,12 @@ export function ChatConversation({
   const mediaInputRef = useRef<HTMLInputElement | null>(null);
   const audioFileInputRef = useRef<HTMLInputElement | null>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const swipeRef = useRef<{ startX: number; startY: number; el: HTMLElement; triggered: boolean } | null>(null);
+  const swipeRef = useRef<{ startX: number; startY: number; el: HTMLElement; triggered: boolean; moved: boolean; t0: number } | null>(null);
+  const lastTapRef = useRef<{ id: number; t: number } | null>(null);
+  const lastTouchAtRef = useRef(0);
+  // Hold the mic to record: release sends, slide left cancels, slide up locks.
+  const [recordHold, setRecordHold] = useState<{ dx: number; locked: boolean } | null>(null);
+  const micPointerTypeRef = useRef<string | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const sentMsgIdsRef = useRef<Set<number>>(new Set());
@@ -303,6 +369,10 @@ export function ChatConversation({
   }, [chat.chat_id, registerCallReload]);
 
   useEffect(() => {
+    // The index first: it reads your last read before markChatRead moves it.
+    const indicePromise = getChatIndiceEndpoint(chat.chat_id)
+      .then(setIndice)
+      .catch((e) => console.error("[chat] Error leyendo el índice:", (e as { message?: string })?.message ?? String(e)));
     void (async () => {
       try {
         const data = await listMensajes({ chatId: chat.chat_id, limit: 50 });
@@ -319,7 +389,7 @@ export function ChatConversation({
         setLoading(false);
       }
     })();
-    void markChatRead(chat.chat_id);
+    void indicePromise.finally(() => markChatRead(chat.chat_id).then(() => { void channelRef.current?.send({ type: "broadcast", event: "read", payload: { user_id: currentUserId } }); }));
   }, [chat.chat_id, currentUserId, onLeave]);
 
   useEffect(() => {
@@ -349,7 +419,7 @@ export function ChatConversation({
           return [...prev, msg];
         });
         onNewMessageRef.current(msg);
-        void markChatRead(chat.chat_id);
+        void markChatRead(chat.chat_id).then(() => { void channelRef.current?.send({ type: "broadcast", event: "read", payload: { user_id: currentUserId } }); });
       })
       .on("broadcast", { event: "edit_message" }, ({ payload }) => {
         const { id, texto } = payload as { id: number; texto: string };
@@ -368,6 +438,8 @@ export function ChatConversation({
         emitPollVote(mensaje_id);
       })
       .on("broadcast", { event: "reactions_changed" }, () => { void loadReactionsRef.current(); })
+      // Someone read the chat: refresh the «visto» checks.
+      .on("broadcast", { event: "read" }, () => { loadLecturasRef.current(); })
       .on("broadcast", { event: "pin_changed" }, ({ payload }) => {
         const { mensaje_id } = payload as { mensaje_id: number | null };
         setPinnedId(mensaje_id);
@@ -400,6 +472,20 @@ export function ChatConversation({
 
   const isNearBottomRef = useRef(true);
   const observerReadyRef = useRef(false);
+  // «Ir a lo último» (board m-recorrer): away from the end, and how many arrived meanwhile.
+  const [awayFromEnd, setAwayFromEnd] = useState(false);
+  const [newWhileAway, setNewWhileAway] = useState(0);
+  const lastMsgIdRef = useRef<number | null>(null);
+  // The whole chat for the ruler (fn_chat_indice), and the loaded stretch when it is not the latest
+  // one (after jumping to an old milestone): its position and last message.
+  const [indice, setIndice] = useState<ChatIndice | null>(null);
+  const [detached, setDetached] = useState<{ start: number; endId: number } | null>(null);
+  const detachedRef = useRef(detached);
+  useEffect(() => { detachedRef.current = detached; }, [detached]);
+  // While an old stretch loads: the day it belongs to, for the loading rows.
+  const [jumping, setJumping] = useState<ChapterLabel | null>(null);
+  const [loadingNewer, setLoadingNewer] = useState(false);
+  const bottomSentinelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -409,7 +495,67 @@ export function ChatConversation({
     oldestIdRef.current = null;
     isNearBottomRef.current = true;
     observerReadyRef.current = false;
+    setAwayFromEnd(false);
+    setNewWhileAway(0);
+    lastMsgIdRef.current = null;
+    setIndice(null);
+    setDetached(null);
+    setJumping(null);
   }, [chat.chat_id]);
+
+  // Follow the reader: new messages only pull the view down when you are at the end.
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const onScroll = () => {
+      const fromEnd = container.scrollHeight - container.scrollTop - container.clientHeight;
+      isNearBottomRef.current = fromEnd < 120;
+      setAwayFromEnd(fromEnd > container.clientHeight / 2);
+      if (fromEnd < 120) setNewWhileAway(0);
+    };
+    container.addEventListener("scroll", onScroll, { passive: true });
+    return () => container.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // @frimee reads the loaded text messages once, in batches, after the chat settles.
+  useEffect(() => {
+    if (loading) return;
+    const t = setTimeout(() => {
+      const ids = messages
+        .filter((m) => isSuggestionCandidate(m) && !askedRef.current.has(m.id))
+        .map((m) => m.id)
+        .slice(-60);
+      if (ids.length === 0) return;
+      ids.forEach((id) => askedRef.current.add(id));
+      void getSugerenciasEndpoint(chat.chat_id, ids, (asking) => setReading((prev) => new Set([...prev, ...asking])))
+        .then((rows) => setSugerencias((prev) => {
+          const next = { ...prev };
+          for (const r of rows) next[r.mensaje_id] = r;
+          return next;
+        }))
+        .catch((e) => {
+          ids.forEach((id) => askedRef.current.delete(id));
+          console.error("[chat] Error leyendo sugerencias:", (e as { message?: string })?.message ?? String(e));
+        })
+        .finally(() => setReading((prev) => {
+          const next = new Set(prev);
+          ids.forEach((id) => next.delete(id));
+          return next;
+        }));
+    }, 800);
+    return () => clearTimeout(t);
+  }, [messages, loading, chat.chat_id]);
+
+  // Count what others send while you read further up.
+  useEffect(() => {
+    const last = messages[messages.length - 1];
+    if (!last) return;
+    const prevId = lastMsgIdRef.current;
+    lastMsgIdRef.current = last.id;
+    if (prevId === null || last.id === prevId || last.id < 0) return;
+    if (!isNearBottomRef.current && last.sender_id !== currentUserId) setNewWhileAway((n) => n + 1);
+  }, [messages, currentUserId]);
+
 
   // Phones: the keyboard opens or closes (NativeSystemUi). If you were at the end of the chat, the
   // last messages stay in view right above it instead of being covered.
@@ -431,10 +577,37 @@ export function ChatConversation({
       if (container) container.scrollTop = container.scrollHeight;
       // Activar observer después de un tick para que el scroll esté asentado
       setTimeout(() => { observerReadyRef.current = true; }, 100);
-    } else if (isNearBottomRef.current) {
+    } else if (isNearBottomRef.current && !detachedRef.current) {
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages, loading]);
+
+  // In an old stretch: load newer messages when its end comes into view, until the latest.
+  useEffect(() => {
+    const sentinel = bottomSentinelRef.current;
+    if (!sentinel || !detached) return;
+    const observer = new IntersectionObserver(async ([entry]) => {
+      const d = detachedRef.current;
+      if (!entry.isIntersecting || loadingNewer || !d) return;
+      setLoadingNewer(true);
+      try {
+        const newer = await listMensajesDespuesEndpoint(chat.chat_id, d.endId, 50);
+        isNearBottomRef.current = false;
+        setMessages((prev) => {
+          const seen = new Set(prev.map((m) => m.id));
+          const real = [...prev.filter((m) => m.id > 0), ...newer.filter((m) => !seen.has(m.id))].sort((a, b) => a.id - b.id);
+          return [...real, ...prev.filter((m) => m.id < 0)];
+        });
+        setDetached(newer.length < 50 ? null : { ...d, endId: newer[newer.length - 1].id });
+      } catch (e) {
+        console.error("[chat] Error cargando mensajes nuevos:", (e as { message?: string })?.message ?? String(e));
+      } finally {
+        setLoadingNewer(false);
+      }
+    }, { root: scrollContainerRef.current, threshold: 0 });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [chat.chat_id, detached, loadingNewer]);
 
   // Load more (older) messages when sentinel enters viewport
   useEffect(() => {
@@ -453,6 +626,7 @@ export function ChatConversation({
         const prevScrollHeight = container?.scrollHeight ?? 0;
         setMessages((prev) => [...older, ...prev]);
         oldestIdRef.current = older[0].id;
+        setDetached((d) => (d ? { ...d, start: Math.max(0, d.start - older.length) } : d));
         if (older.length < 50) setHasMore(false);
         requestAnimationFrame(() => {
           if (container) container.scrollTop = container.scrollHeight - prevScrollHeight;
@@ -497,7 +671,14 @@ export function ChatConversation({
     });
   }, []);
 
-  const closeOverlays = () => { setContextMenu(null); setShowAttachMenu(false); setShowEmojiPicker(false); };
+  const closeOverlays = () => {
+    setContextMenu(null);
+    setShowAttachMenu(false);
+    setShowEmojiPicker(false);
+    // Let go of the focus a message's bar or menu took, so nothing stays highlighted.
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && active.closest("article")) active.blur();
+  };
   const logError = (what: string, e: unknown) => console.error(`[chat] ${what}:`, (e as { message?: string })?.message ?? String(e));
 
   // ── Reactions, pin and stars (phase 2: stored, and the pin is shared by the whole chat) ──
@@ -519,6 +700,9 @@ export function ChatConversation({
   /** emoji "" removes mine. One reaction per person, as before. */
   const reactTo = (msgId: number, emoji: string) => {
     if (msgId < 0) return;
+    if (emoji) {
+      try { localStorage.setItem(LAST_REACTION_KEY, emoji); } catch { /* storage blocked: keep the default */ }
+    }
     const prev = reactions;
     setReactions((all) => {
       const list = (all[msgId] ?? [])
@@ -533,6 +717,61 @@ export function ChatConversation({
     void reactMensaje(msgId, emoji)
       .then(() => channelRef.current?.send({ type: "broadcast", event: "reactions_changed", payload: { mensaje_id: msgId } }))
       .catch((e) => { setReactions(prev); logError("Error guardando reacción", e); });
+  };
+
+  /**
+   * «Añadir al plan» (rombo, P) and «Registrar como gasto» (G) only where they make sense: a shared
+   * place or plan card, or a text where @frimee saw an activity or an expense (mensaje_sugerencias,
+   * filled by the chat-sugerencias function). The sheet opens with what was read, to review.
+   */
+  const planFrom = (m: MensajeRow): ({ titulo: string } & PlanPrefill) | null => {
+    const mo = parseMoment(m.texto);
+    // A shared place: its name and coordinates as they are.
+    if (mo?.type === "lugar") return { titulo: mo.nombre, lugar: mo.nombre, lat: mo.lat, lng: mo.lng };
+    if (mo?.type === "tarjeta") return { titulo: mo.titulo, tipo: CARD_TIPO[mo.kind], lugar: mo.lugar ?? undefined };
+    const s = sugerencias[m.id]?.plan;
+    return s?.es_plan && s.titulo
+      ? { titulo: s.titulo, fecha: s.fecha || undefined, hora: s.hora || undefined, tipo: s.tipo || undefined, lugar: s.lugar || undefined }
+      : null;
+  };
+  const gastoFrom = (m: MensajeRow) => {
+    const g = sugerencias[m.id]?.gasto;
+    return g?.es_gasto && g.importe ? { titulo: g.concepto ?? "", importe: g.importe, pagador: m.sender_id } : null;
+  };
+  // In a plan's chat, its admins; in a chat without a plan, «¿Dónde la guardo?» (each plan checks its role).
+  const canPlan = planId ? Boolean(isAdmin) : true;
+  const goAddToPlan = (targetPlanId: number, p: { titulo: string } & PlanPrefill) => {
+    const q = new URLSearchParams({ tab: "itinerario", nuevaActividad: p.titulo.trim().slice(0, 80) });
+    if (p.fecha) q.set("fecha", p.fecha);
+    if (p.hora) q.set("hora", p.hora);
+    if (p.tipo) q.set("tipo", p.tipo);
+    if (p.lugar) q.set("lugar", p.lugar);
+    if (p.lat != null && p.lng != null) { q.set("lat", String(p.lat)); q.set("lng", String(p.lng)); }
+    router.push(`/plans/${targetPlanId}?${q.toString()}`);
+  };
+  /** Opens the «Añadir al plan» panel (it fills in with what @frimee read, or waits for it). */
+  const addToPlan = (m: MensajeRow, anchor: { x: number; y: number } | null = null) => {
+    closeOverlays();
+    setAddPanel({ msg: m, anchor, clientId: crypto.randomUUID() });
+  };
+  const barAnchor = (e: React.MouseEvent<HTMLElement>) => {
+    const r = (e.currentTarget.closest<HTMLElement>("[role=toolbar]") ?? e.currentTarget).getBoundingClientRect();
+    return { x: r.right, y: r.top };
+  };
+  const registerExpense = (m: MensajeRow) => {
+    const g = gastoFrom(m);
+    if (!planId || !g) return;
+    closeOverlays();
+    setExpensePrefill(g);
+    setAttachSheet("gasto");
+  };
+
+  /** Double tap (board s-sistema · Gestos): react with the last emoji used; again removes it. */
+  const reactWithLast = (msgId: number) => {
+    let emoji = "❤️";
+    try { emoji = localStorage.getItem(LAST_REACTION_KEY) || emoji; } catch { /* storage blocked */ }
+    reactTo(msgId, myReactionOf(msgId) === emoji ? "" : emoji);
+    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10);
   };
 
   const togglePin = (msgId: number) => {
@@ -578,6 +817,23 @@ export function ChatConversation({
     }
   };
 
+  /** Shows a message the server created for me (same as a sent one: local, broadcast, list). */
+  const showMyServerMessage = (id: number, texto: string) => {
+    const me = chat.miembros.find((m) => m.id === currentUserId);
+    const msg: LocalMsg = { id, _key: id, sender_id: currentUserId, sender_nombre: me?.nombre ?? "", sender_profile_image: me?.profile_image ?? null, texto, created_at: new Date().toISOString() };
+    sentMsgIdsRef.current.add(id);
+    void channelRef.current?.send({ type: "broadcast", event: "new_message", payload: msg });
+    setMessages((prev) => (prev.some((m) => m.id === id) ? prev : [...prev, msg]));
+    onNewMessageRef.current(msg);
+    requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }));
+  };
+
+  /** An expense and its card, in one transaction (never one without the other, never twice). */
+  const registerChatExpense = async (input: { clientId: string; planId: number; titulo: string; total: number; pagadoPor: string; participantes: string[]; texto?: string }) => {
+    const r = await registrarGastoChatEndpoint({ ...input, chatId: chat.chat_id });
+    showMyServerMessage(r.mensaje_id, r.texto);
+  };
+
   // ── @frimee proposals: the plan changes only when someone accepts ──
   /** tarea and actividad create plan items, which only admins may do (checked again in the DB). */
   const proposalNeedsAdmin = (p: ProposalMoment) => p.kind === "tarea" || p.kind === "actividad";
@@ -604,52 +860,25 @@ export function ChatConversation({
     return null;
   };
 
-  const runProposal = async (p: ProposalMoment) => {
-    const pl = p.payload ?? {};
-    if (p.kind === "gasto") {
-      if (!planId) throw new Error("no_plan");
-      await createGastoEndpoint({
-        plan_id: planId,
-        titulo: String(pl.titulo),
-        pagado_por_user_id: String(pl.pagado_por_id),
-        fecha_gasto: new Date().toISOString(),
-        total: Number(pl.total),
-        metodo_reparto: "IGUAL",
-        participantes: (pl.participantes as string[]).map((user_id) => ({ user_id })),
-      });
-      return;
-    }
-    if (p.kind === "encuesta") {
-      await handleCreatePoll(String(pl.question), pl.options as string[]);
-      return;
-    }
-    if (p.kind === "tarea") {
-      if (!planId) throw new Error("no_plan");
-      await crearTareaEndpoint({ planId, titulo: String(pl.titulo), asignadoUserId: String(pl.asignado_id), categoria: String(pl.categoria) });
-      return;
-    }
-    if (p.kind === "actividad") {
-      if (!planId) throw new Error("no_plan");
-      const start = new Date(String(pl.inicio));
-      await createSubplan({
-        planId,
-        titulo: String(pl.titulo),
-        descripcion: String(pl.detalle ?? ""),
-        inicioAt: start.toISOString(),
-        // A two-hour block in the itinerary; it can be changed in the plan.
-        finAt: new Date(start.getTime() + 2 * 3_600_000).toISOString(),
-        tipo: "ACTIVIDAD",
-        ubicacionNombre: String(pl.lugar ?? ""),
-      });
-    }
-  };
-
   const resolveProposal = async (msg: MensajeRow, p: ProposalMoment, accept: boolean) => {
     const meName = (chat.miembros.find((m) => m.id === currentUserId)?.nombre ?? "").split(" ")[0] || "Alguien";
     const resultado = accept ? proposalResult(p) : null;
+    if (accept) {
+      // Accept and do it in one transaction (fn_propuesta_aceptar): if anything fails, it stays pending.
+      try {
+        const r = await aceptarPropuestaEndpoint(msg.id, resultado);
+        replaceMsgTexto(msg.id, r.texto);
+        if (r.claimed && r.poll_id && r.poll_texto) showMyServerMessage(r.poll_id, r.poll_texto);
+      } catch (e) {
+        logError("Error aplicando propuesta", e);
+        const local: LocalMsg = { id: -Date.now(), _key: -Date.now(), sender_id: "frimee", sender_nombre: "Frimee", sender_profile_image: null, texto: "No pude aplicarlo al plan. Inténtalo de nuevo.", created_at: new Date().toISOString(), tipo: "bot" };
+        setMessages((prev) => [...prev, local]);
+      }
+      return;
+    }
     let claimed: boolean;
     try {
-      claimed = await resolverPropuestaEndpoint(msg.id, accept ? "aceptada" : "descartada", resultado ?? undefined);
+      claimed = await resolverPropuestaEndpoint(msg.id, "descartada");
     } catch (e) {
       logError("Error resolviendo propuesta", e);
       return;
@@ -661,21 +890,8 @@ export function ChatConversation({
       if (updated) setMessages((prev) => prev.map((m) => (m.id === msg.id ? { ...m, texto: updated.texto } : m)));
       return;
     }
-    const resolved: ProposalMoment = { ...p, estado: accept ? "aceptada" : "descartada", resuelta_por: currentUserId, resuelta_por_nombre: meName, resuelta_at: new Date().toISOString(), resultado };
-    if (!accept) {
-      replaceMsgTexto(msg.id, JSON.stringify(resolved));
-      return;
-    }
-    try {
-      await runProposal(p);
-      replaceMsgTexto(msg.id, JSON.stringify(resolved));
-    } catch (e) {
-      logError("Error aplicando propuesta", e);
-      // Give it back so someone can try again.
-      await resolverPropuestaEndpoint(msg.id, "pendiente").catch(() => undefined);
-      const local: LocalMsg = { id: -Date.now(), _key: -Date.now(), sender_id: "frimee", sender_nombre: "Frimee", sender_profile_image: null, texto: "No pude aplicarlo al plan. Inténtalo de nuevo.", created_at: new Date().toISOString(), tipo: "bot" };
-      setMessages((prev) => [...prev, local]);
-    }
+    const resolved: ProposalMoment = { ...p, estado: "descartada", resuelta_por: currentUserId, resuelta_por_nombre: meName, resuelta_at: new Date().toISOString(), resultado: null };
+    replaceMsgTexto(msg.id, JSON.stringify(resolved));
   };
 
   /**
@@ -1013,7 +1229,7 @@ export function ChatConversation({
       const porPersona = (total / participantes.length).toFixed(2);
       const nombresParticipantes = participantes.map((p) => p.nombre).join(", ");
 
-      pendingGastoRef.current = { planId, titulo: concepto, total, pagadoPorId: pagador.user_id, pagadoPorNombre: pagador.nombre, participantes };
+      pendingGastoRef.current = { clientId: crypto.randomUUID(), planId, titulo: concepto, total, pagadoPorId: pagador.user_id, pagadoPorNombre: pagador.nombre, participantes };
 
       return [
         `Confirmar gasto:`,
@@ -1401,6 +1617,8 @@ export function ChatConversation({
 
   // override: send this text instead of the input's (the @frimee suggestions use it).
   const onSend = async (override?: string) => {
+    // Writing from an old stretch: back to the latest messages first.
+    if (detachedRef.current) await goToLatest();
     const trimmed = (override ?? text).trim();
     if (!trimmed || sending) return;
 
@@ -1415,22 +1633,16 @@ export function ChatConversation({
       }
       setText("");
       try {
-        await createGastoEndpoint({
-          plan_id: pending.planId,
+        // The expense and the message in one transaction; the id is the pending one's.
+        await registerChatExpense({
+          clientId: pending.clientId,
+          planId: pending.planId,
           titulo: pending.titulo,
-          pagado_por_user_id: pending.pagadoPorId,
-          fecha_gasto: new Date().toISOString(),
           total: pending.total,
-          metodo_reparto: "IGUAL",
-          participantes: pending.participantes.map((p) => ({ user_id: p.user_id })),
+          pagadoPor: pending.pagadoPorId,
+          participantes: pending.participantes.map((p) => p.user_id),
+          texto: `Gasto registrado: ${pending.titulo} ${pending.total}€ (pagado por ${pending.pagadoPorNombre}, dividido entre ${pending.participantes.length})`,
         });
-        const textoPublico = `Gasto registrado: ${pending.titulo} ${pending.total}€ (pagado por ${pending.pagadoPorNombre}, dividido entre ${pending.participantes.length})`;
-        const newId = await sendMensaje({ chatId: chat.chat_id, texto: textoPublico });
-        const me = chat.miembros.find((m) => m.id === currentUserId);
-        const confirmMsg: LocalMsg = { id: newId, _key: newId, sender_id: currentUserId, sender_nombre: me?.nombre ?? "", sender_profile_image: me?.profile_image ?? null, texto: textoPublico, created_at: new Date().toISOString() };
-        void channelRef.current?.send({ type: "broadcast", event: "new_message", payload: confirmMsg });
-        setMessages((prev) => prev.some((m) => m.id === newId) ? prev : [...prev, confirmMsg]);
-        onNewMessageRef.current(confirmMsg);
       } catch {
         const botMsg: LocalMsg = { id: -Date.now(), _key: -Date.now(), sender_id: "frimee", sender_nombre: "Frimee", sender_profile_image: null, texto: "No pude registrar el gasto, inténtalo de nuevo.", created_at: new Date().toISOString(), tipo: "bot" };
         setMessages((prev) => [...prev, botMsg]);
@@ -1725,6 +1937,7 @@ export function ChatConversation({
   };
 
   const handleCancelRecording = () => {
+    setRecordHold(null);
     mediaRecorderRef.current?.stream.getTracks().forEach((t) => t.stop());
     mediaRecorderRef.current?.stop();
     mediaRecorderRef.current = null;
@@ -1732,6 +1945,59 @@ export function ChatConversation({
     if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
     setIsRecording(false);
     setRecordingSeconds(0);
+  };
+
+  /** Touch: hold to record. A mouse click (or the keyboard) keeps the old tap-to-start. */
+  const onMicPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    micPointerTypeRef.current = e.pointerType;
+    if (e.pointerType === "mouse") return;
+    e.preventDefault();
+    const hold = { x: e.clientX, y: e.clientY, t0: Date.now(), released: false, locked: false, cancelled: false };
+    setAudioError(null);
+    setRecordHold({ dx: 0, locked: false });
+    // On window: the mic button is replaced by the recording bar while the finger stays down.
+    const stop = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+    };
+    const onMove = (ev: PointerEvent) => {
+      if (hold.locked || hold.cancelled) return;
+      const dx = ev.clientX - hold.x;
+      const dy = ev.clientY - hold.y;
+      if (dx < -80) {
+        hold.cancelled = true;
+        stop();
+        handleCancelRecording();
+        if (navigator.vibrate) navigator.vibrate(20);
+      } else if (dy < -60) {
+        hold.locked = true;
+        stop();
+        setRecordHold({ dx: 0, locked: true });
+        if (navigator.vibrate) navigator.vibrate(15);
+      } else {
+        setRecordHold({ dx: Math.min(0, dx), locked: false });
+      }
+    };
+    const onUp = () => {
+      stop();
+      hold.released = true;
+      if (hold.cancelled || hold.locked) return;
+      if (Date.now() - hold.t0 < 350) {
+        handleCancelRecording();
+        setAudioError("Mantén pulsado para grabar");
+        return;
+      }
+      if (mediaRecorderRef.current) handleSendRecording();
+    };
+    const onCancel = () => { stop(); hold.cancelled = true; handleCancelRecording(); };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
+    void handleStartRecording().then(() => {
+      // Let go (or cancelled) while the microphone was still opening: nothing to send.
+      if (hold.cancelled || (hold.released && !hold.locked)) handleCancelRecording();
+    });
   };
 
   const handleSendRecording = () => {
@@ -1747,6 +2013,7 @@ export function ChatConversation({
       if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
       setIsRecording(false);
       setRecordingSeconds(0);
+      setRecordHold(null);
       setAudioError(null);
       if (blob.size < 100) { setAudioError("Grabación demasiado corta"); return; }
 
@@ -1910,6 +2177,12 @@ export function ChatConversation({
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void onSend(); }
+    // ↑ on an empty composer edits your last message (board s-sistema · Gestos).
+    if (e.key === "ArrowUp" && !text && !editingMsg) {
+      const last = [...messages].reverse().find((m) => m.sender_id === currentUserId && m.id > 0 && !m.tipo?.startsWith("call_")
+        && !parseMoment(m.texto) && !m.audio_url && !m.document_url && !m.image_url);
+      if (last) { e.preventDefault(); setEditingMsg(last); setText(last.texto); }
+    }
     if (e.key === "Escape") { cancelEdit(); cancelReply(); closeOverlays(); }
   };
 
@@ -1929,8 +2202,119 @@ export function ChatConversation({
   const trip = planInfo ? { start: new Date(planInfo.inicio_at), end: new Date(planInfo.fin_at) } : null;
   // Shown in time order: a message created out of order (the plan's welcome before the guest demo's
   // backdated ones) would otherwise open the same day twice.
-  const timelineMessages = inTimeOrder(messages);
+  // In an old stretch, what arrives meanwhile waits below it until you go back to the latest.
+  const timelineMessages = inTimeOrder(detached ? messages.filter((m) => m.id > 0 && m.id <= detached.endId) : messages);
   const timeline = buildTimeline(timelineMessages, trip);
+  const tabStopId = focusMsgId != null && timelineMessages.some((m) => m.id === focusMsgId)
+    ? focusMsgId
+    : [...timelineMessages].reverse().find((m) => m.id > 0)?.id ?? null;
+  // Who reacted. The backend gives totals and whether yours is in: names only in 1 a 1.
+  const otherName = chat.miembros.find((m) => m.id !== currentUserId)?.nombre?.split(" ")[0] || "Alguien";
+  const reactionWho = (r: { total: number; mia: boolean }) => {
+    if (r.mia) return r.total === 1 ? "Tú" : isDirectChat ? `Tú y ${otherName}` : `Tú y ${r.total - 1} más`;
+    return isDirectChat ? otherName : `${r.total} ${r.total === 1 ? "persona" : "personas"}`;
+  };
+  const reactionLabel = (r: { emoji: string; total: number; mia: boolean }) => {
+    if (r.mia && r.total === 1) return `Reaccionaste con ${r.emoji}. Toca para quitarla`;
+    if (r.mia) return `${reactionWho(r)} reaccionasteis con ${r.emoji}. Toca para quitar la tuya`;
+    return `${reactionWho(r)} ${r.total === 1 ? "reaccionó" : "reaccionaron"} con ${r.emoji}. Toca para reaccionar igual`;
+  };
+  // The ruler covers the whole chat (fn_chat_indice) plus what arrived after reading it.
+  const loadedReal = messages.filter((m) => m.id > 0);
+  const indexMaxId = indice?.max_id ?? 0;
+  const arrived = indice ? loadedReal.filter((m) => m.id > indexMaxId).sort((a, b) => a.id - b.id) : [];
+  const rulerTotal = indice ? indice.total + arrived.length : loadedReal.length;
+  const dayFromString = (d: string) => {
+    const [y, mo, day] = d.split("-").map(Number);
+    return new Date(y, mo - 1, day);
+  };
+  const pollDecided = (p: { closed?: boolean; expires_at?: string }) => Boolean(p.closed || (p.expires_at && new Date(p.expires_at) < new Date()));
+  const rulerMarks: RulerMark[] = [];
+  if (indice) {
+    for (const d of indice.dias) {
+      rulerMarks.push({ kind: "day", id: d.primer_id, ord: d.desde, label: chapterLabel(dayFromString(d.dia), new Date(), trip) });
+    }
+    for (const h of indice.hitos) {
+      // A loaded message knows its current state (a poll closed, a proposal accepted or dismissed).
+      const loaded = loadedReal.find((m) => m.id === h.id);
+      const mo = loaded ? parseMoment(loaded.texto) : null;
+      if (mo?.type === "propuesta" && mo.estado === "descartada") continue;
+      const decided = mo?.type === "poll" ? pollDecided(mo) : mo?.type === "propuesta" ? mo.estado === "aceptada" : h.estado === "decidido";
+      rulerMarks.push({ kind: "hito", id: h.id, ord: h.ord, label: h.titulo ?? (h.tipo === "poll" ? "Encuesta" : "Propuesta de Frimee"), decided });
+    }
+    // New since the index (realtime): their days and milestones join the ruler without reloading.
+    let lastDay = indice.dias.length > 0 ? indice.dias[indice.dias.length - 1].dia : null;
+    arrived.forEach((m, k) => {
+      const ord = indice.total + k;
+      const at = m.created_at ? new Date(m.created_at) : new Date();
+      const key = `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, "0")}-${String(at.getDate()).padStart(2, "0")}`;
+      if (key !== lastDay) {
+        lastDay = key;
+        rulerMarks.push({ kind: "day", id: m.id, ord, label: chapterLabel(at, new Date(), trip) });
+      }
+      const mo = parseMoment(m.texto);
+      if (mo?.type === "poll") rulerMarks.push({ kind: "hito", id: m.id, ord, label: mo.question, decided: pollDecided(mo) });
+      else if (mo?.type === "propuesta" && mo.estado !== "descartada") rulerMarks.push({ kind: "hito", id: m.id, ord, label: mo.titulo, decided: mo.estado === "aceptada" });
+      else if (mo?.type === "hito_plan") rulerMarks.push({ kind: "hito", id: m.id, ord, label: mo.titulo, decided: true });
+    });
+  }
+  rulerMarks.sort((a, b) => a.ord - b.ord);
+  // Where the loaded stretch sits among all the messages.
+  const loadedCount = detached ? loadedReal.filter((m) => m.id <= detached.endId).length : loadedReal.length;
+  const loadedFrom = detached ? detached.start : Math.max(0, rulerTotal - loadedCount);
+
+  const dayLabelFor = (id: number) => {
+    const d = indice ? [...indice.dias].reverse().find((x) => x.primer_id <= id) : null;
+    return d ? chapterLabel(dayFromString(d.dia), new Date(), trip) : null;
+  };
+
+  /** Jump to an old message: load only the stretch around it, not everything in between. */
+  const revealMessage = async (id: number) => {
+    setJumping(dayLabelFor(id) ?? { title: "Cargando", subtitle: "" });
+    try {
+      const rows = await listMensajesTramoEndpoint(chat.chat_id, id, 25, 25);
+      if (rows.length === 0) return;
+      const latestKnown = Math.max(indexMaxId, ...loadedReal.map((m) => m.id));
+      const last = rows[rows.length - 1];
+      isNearBottomRef.current = false;
+      setMessages(rows.map((r) => {
+        const { orden, ...m } = r;
+        void orden;
+        return m;
+      }));
+      oldestIdRef.current = rows[0].id;
+      setHasMore(rows[0].orden > 0);
+      setDetached(last.id < latestKnown ? { start: rows[0].orden, endId: last.id } : null);
+      await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      setHighlightedId(id);
+      setTimeout(() => setHighlightedId(null), 1500);
+    } catch (e) {
+      console.error("[chat] Error saltando al mensaje:", (e as { message?: string })?.message ?? String(e));
+    } finally {
+      setJumping(null);
+    }
+  };
+
+  /** «Ir a lo último»: from an old stretch, load the latest messages again. */
+  const goToLatest = async () => {
+    const wasDetached = Boolean(detachedRef.current);
+    if (wasDetached) {
+      try {
+        const data = await listMensajes({ chatId: chat.chat_id, limit: 50 });
+        setMessages(data);
+        if (data.length > 0) oldestIdRef.current = data[0].id;
+        setHasMore(data.length === 50);
+        setDetached(null);
+      } catch (e) {
+        console.error("[chat] Error volviendo a lo último:", (e as { message?: string })?.message ?? String(e));
+        return;
+      }
+    }
+    isNearBottomRef.current = true;
+    setNewWhileAway(0);
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    requestAnimationFrame(() => requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: reduce || wasDetached ? "auto" : "smooth" })));
+  };
   const otherMembers = chat.miembros.filter((m) => m.id !== currentUserId).map((m) => m.nombre.split(" ")[0]);
   const headerSubtitle = trip
     ? `${chat.miembros.length} personas · ${tripStatus(trip)}`
@@ -1976,7 +2360,8 @@ export function ChatConversation({
             isPinned={pinnedId === m.id}
             isStarred={starredIds.has(m.id)}
             myReaction={myReactionOf(m.id)}
-            anchor={{ x: contextMenu.x, y: contextMenu.y }}
+            anchor={{ x: contextMenu.x, y: contextMenu.y, place: contextMenu.place }}
+            reactionsOnly={contextMenu.reactionsOnly}
             onClose={closeOverlays}
             onReact={(emoji) => { reactTo(m.id, emoji); closeOverlays(); }}
             onReply={() => { setReplyingTo(m); closeOverlays(); setTimeout(() => inputRef.current?.focus(), 50); }}
@@ -1986,19 +2371,55 @@ export function ChatConversation({
             onPin={() => { togglePin(m.id); closeOverlays(); }}
             onStar={() => { toggleStar(m.id); closeOverlays(); }}
             onDelete={() => { void handleDeleteMsg(m); closeOverlays(); }}
+            onAddToPlan={canPlan && (planFrom(m) || reading.has(m.id)) ? () => addToPlan(m, { x: contextMenu.x, y: contextMenu.y }) : undefined}
+            onRegisterExpense={planId && gastoFrom(m) ? () => registerExpense(m) : undefined}
           />
         );
       })()}
 
       {/* Adjuntar: sitio, gasto y del plan */}
+      {addPanel && (() => {
+        const m = addPanel.msg;
+        const prefill = planFrom(m);
+        const mo = parseMoment(m.texto);
+        const status: "thinking" | "ready" | "failed" = prefill ? "ready" : reading.has(m.id) ? "thinking" : "failed";
+        const personas = isDirectChat ? `2 · ${otherName} y tú` : `${chat.miembros.length} · todo el grupo`;
+        return (
+          <AddToPlanPanel
+            status={status}
+            prefill={prefill}
+            suggested={mo?.type !== "lugar" && mo?.type !== "tarjeta"}
+            plan={planId && planInfo ? { id: planId, titulo: planInfo.titulo, inicio_at: planInfo.inicio_at, fin_at: planInfo.fin_at, ubicacion_nombre: planInfo.ubicacion_nombre } : null}
+            currentUserId={currentUserId}
+            personas={personas}
+            anchor={addPanel.anchor}
+            onClose={() => setAddPanel(null)}
+            onAdd={async (v) => {
+              const r = await anadirAlPlanEndpoint({
+                clientId: addPanel.clientId, chatId: chat.chat_id, planId: v.planId, titulo: v.titulo, tipo: v.tipo,
+                inicio: v.inicio, fin: v.fin, ubicacionNombre: v.ubicacionNombre, lat: v.lat, lng: v.lng, origenId: m.id,
+              });
+              showMyServerMessage(r.mensaje_id, r.texto);
+              const mark = parseMoment(r.texto);
+              setAddedToast({ planId: v.planId, planTitulo: mark?.type === "hito_plan" ? mark.plan_titulo ?? "el plan" : "el plan", mensajeId: r.mensaje_id });
+            }}
+            onMoreOptions={(targetId, p: PanelPrefill) => {
+              setAddPanel(null);
+              const full = { titulo: p.titulo ?? "", fecha: p.fecha, hora: p.hora, tipo: p.tipo, lugar: p.lugar, lat: p.lat, lng: p.lng };
+              if (targetId === planId && onAbrirActividad) onAbrirActividad(full.titulo.slice(0, 80), full);
+              else goAddToPlan(targetId, full);
+            }}
+          />
+        );
+      })()}
       {attachSheet === "lugar" && <PlaceSheet onClose={() => setAttachSheet(null)} onSend={(place) => sendMoment(place)} />}
       {attachSheet === "gasto" && planId && (
         <ExpenseSheet
-          planId={planId}
           members={chat.miembros.map((m) => ({ id: m.id, nombre: m.nombre }))}
           currentUserId={currentUserId}
-          onClose={() => setAttachSheet(null)}
-          onSent={(moment) => sendMoment(moment)}
+          initial={expensePrefill ?? undefined}
+          onClose={() => { setAttachSheet(null); setExpensePrefill(null); }}
+          onRegister={(input) => registerChatExpense({ ...input, planId })}
         />
       )}
       {attachSheet === "plan" && !planId && (
@@ -2140,13 +2561,14 @@ export function ChatConversation({
       )}
 
       {/* Messages */}
-      <div ref={scrollContainerRef} className="scrollbar-thin min-h-0 flex-1 overflow-x-hidden overflow-y-auto pb-[var(--space-2)] pt-[var(--space-2)]" onClick={closeOverlays}>
+      <div className="relative flex min-h-0 flex-1 flex-col">
+      <div ref={scrollContainerRef} tabIndex={-1} className="outline-none scrollbar-thin min-h-0 flex-1 pr-[8px] md:pr-[48px] overflow-x-hidden overflow-y-auto pb-[var(--space-2)] pt-[var(--space-2)]" onClick={closeOverlays}>
         {loading ? (
           <div className="flex h-full items-center justify-center text-body-sm text-muted">Cargando...</div>
         ) : messages.length === 0 ? (
           <div className="flex h-full items-center justify-center text-body-sm text-muted">Sé el primero en escribir</div>
         ) : (
-          <div className="relative flex min-h-full flex-col justify-end">
+          <div className="relative mx-auto flex min-h-full w-full max-w-[780px] flex-col justify-end">
             {/* The spine of the Bitácora: one line that holds the whole conversation */}
             <div aria-hidden className="pointer-events-none absolute bottom-0 left-[27px] top-0 w-px bg-[var(--border)]" />
             {/* Sentinel para infinite scroll hacia arriba */}
@@ -2178,30 +2600,36 @@ export function ChatConversation({
               const isStarred = starredIds.has(msg.id);
               // In 1 a 1 the avatar on the spine is enough; groups and plans name each turn.
               const showName = startsTurn && (isBot || !isDirectChat);
-              const openMsgMenu = (e: React.MouseEvent<HTMLButtonElement>) => {
+              // Desktop: the menu opens over the action bar, right-aligned to it.
+              const openFromBar = (e: React.MouseEvent<HTMLButtonElement>, reactionsOnly = false) => {
                 e.stopPropagation();
-                const rect = e.currentTarget.getBoundingClientRect();
-                setContextMenu({ msg, x: rect.left + rect.width / 2, y: rect.bottom + 4 });
+                const bar = e.currentTarget.closest<HTMLElement>("[role=toolbar]") ?? e.currentTarget;
+                const rect = bar.getBoundingClientRect();
+                setContextMenu({ msg, x: rect.right, y: rect.top, place: "above", reactionsOnly });
               };
               const onBubbleTouchStart = (e: React.TouchEvent) => {
                 const t = e.touches[0];
-                swipeRef.current = { startX: t.clientX, startY: t.clientY, el: e.currentTarget as HTMLElement, triggered: false };
+                lastTouchAtRef.current = Date.now();
+                swipeRef.current = { startX: t.clientX, startY: t.clientY, el: e.currentTarget as HTMLElement, triggered: false, moved: false, t0: Date.now() };
                 longPressTimerRef.current = setTimeout(() => {
                   setContextMenu({ msg, x: t.clientX, y: t.clientY + 4 });
                   if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(40);
-                }, 500);
+                }, LONG_PRESS_MS);
               };
               const onBubbleTouchMove = (e: React.TouchEvent) => {
-                if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }
                 const s = swipeRef.current;
                 if (!s) return;
                 const t = e.touches[0];
                 const dx = t.clientX - s.startX;
                 const dy = Math.abs(t.clientY - s.startY);
+                // A finger that barely moves is still a tap or a long press.
+                if (Math.abs(dx) < 8 && dy < 8) return;
+                s.moved = true;
+                if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }
                 if (dy > Math.abs(dx) + 8) { swipeRef.current = null; return; }
-                const validSwipe = isMe ? dx < 0 : dx > 0;
-                if (!validSwipe) return;
-                const clamped = isMe ? Math.max(dx, -80) : Math.min(dx, 80);
+                // Right on any message replies (board s-sistema · Gestos), mine included.
+                if (dx <= 0) return;
+                const clamped = Math.min(dx, 80);
                 s.el.style.transform = `translateX(${clamped}px)`;
                 s.el.style.transition = "none";
                 if (Math.abs(dx) >= 64 && !s.triggered) {
@@ -2215,25 +2643,70 @@ export function ChatConversation({
               const onBubbleTouchEnd = () => {
                 if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }
                 const s = swipeRef.current;
+                // Two quick taps on the same message: react with the last emoji.
+                if (s && !s.moved && Date.now() - s.t0 < 300 && msg.id > 0) {
+                  const prev = lastTapRef.current;
+                  if (prev && prev.id === msg.id && Date.now() - prev.t < 320) {
+                    lastTapRef.current = null;
+                    reactWithLast(msg.id);
+                  } else {
+                    lastTapRef.current = { id: msg.id, t: Date.now() };
+                  }
+                }
                 if (s) {
                   s.el.style.transition = "transform 0.25s ease";
                   s.el.style.transform = "translateX(0)";
                   swipeRef.current = null;
                 }
               };
-              const menuButton = !isBot && (
-                <button type="button" onClick={openMsgMenu} className="flex size-[20px] items-center justify-center rounded-full text-muted opacity-0 transition-opacity group-hover/msg:opacity-100 focus-visible:opacity-100 hover:text-app" aria-label="Opciones del mensaje"><ChevronDownIcon className="size-[13px]" /></button>
-              );
+              // Desktop action bar (board d-acciones): on hover, or with the keyboard focus (:focus-visible,
+              // so a click never leaves it showing). Inside the row, 4 px from its top, so it never covers the
+              // message above. Mine: 8 px left of the block, at its top (on the right it would cover it).
+              const barBesideBlock = isMe && moment?.type !== "poll";
+              const menuOpenHere = contextMenu?.msg.id === msg.id;
+              const hoverBar = !isBot && msg.id > 0 ? (
+                <div
+                  role="toolbar"
+                  aria-label="Acciones"
+                  // Inside my block: a double click here is not «react with the last emoji».
+                  onDoubleClick={(e) => e.stopPropagation()}
+                  className={`absolute z-[3] hidden gap-[2px] rounded-[8px] border border-app bg-[var(--bg)] p-[2px] shadow-[0_2px_8px_rgba(0,0,0,0.12)] md:group-hover/msg:flex md:group-has-[:focus-visible]/msg:flex ${barBesideBlock ? "right-full top-0 mr-[8px]" : "right-[16px] top-[4px]"} ${menuOpenHere ? "md:flex" : ""}`}
+                >
+                  <button type="button" aria-label="Reaccionar" title="Reaccionar" onClick={(e) => openFromBar(e, true)} className="flex size-[36px] items-center justify-center rounded-[6px] text-muted transition-colors hover:bg-[var(--surface-2)] hover:text-app">
+                    <svg aria-hidden viewBox="0 0 24 24" className="size-[18px]" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M8 14s1.5 2 4 2 4-2 4-2" /><path d="M9 9h.01M15 9h.01" /></svg>
+                  </button>
+                  <button type="button" aria-label="Responder" title="Responder · R" onClick={(e) => { e.stopPropagation(); setReplyingTo(msg); setTimeout(() => inputRef.current?.focus(), 0); }} className="flex size-[36px] items-center justify-center rounded-[6px] text-muted transition-colors hover:bg-[var(--surface-2)] hover:text-app">
+                    <svg aria-hidden viewBox="0 0 24 24" className="size-[18px]" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M9 14 4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></svg>
+                  </button>
+                  {canPlan && !planFrom(msg) && reading.has(msg.id) && (
+                    <button type="button" aria-label="Añadir al plan (Frimee está leyendo el mensaje)" title="Frimee está leyendo este mensaje…" onClick={(e) => { e.stopPropagation(); addToPlan(msg, barAnchor(e)); }} className="flex size-[36px] items-center justify-center rounded-[6px] opacity-60 hover:bg-[var(--surface-2)]">
+                      <span className="animate-pulse motion-reduce:animate-none"><DiamondIcon /></span>
+                    </button>
+                  )}
+                  {canPlan && planFrom(msg) && (
+                    <button type="button" aria-label="Añadir al plan" title="Añadir al plan · P" onClick={(e) => { e.stopPropagation(); addToPlan(msg, barAnchor(e)); }} className="flex size-[36px] items-center justify-center rounded-[6px] transition-colors hover:bg-[var(--surface-2)]">
+                      <DiamondIcon />
+                    </button>
+                  )}
+                  <button type="button" aria-label="Más acciones" title="Más acciones" aria-haspopup="menu" aria-pressed={menuOpenHere && !contextMenu?.reactionsOnly} onClick={(e) => openFromBar(e)} className={`flex size-[36px] items-center justify-center rounded-[6px] text-muted transition-colors hover:bg-[var(--surface-2)] hover:text-app ${menuOpenHere && !contextMenu?.reactionsOnly ? "bg-[var(--surface-2)] text-app" : ""}`}>
+                    <svg aria-hidden viewBox="0 0 24 24" className="size-[18px]" fill="currentColor"><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></svg>
+                  </button>
+                </div>
+              ) : null;
+              // Phones: the long press lifts the message while its actions are open.
+              const lifted = menuOpenHere ? "z-[2] scale-[1.02] drop-shadow-[0_8px_16px_rgba(0,0,0,0.35)] md:scale-100 md:drop-shadow-none" : "";
+              // Desktop (board d-acciones): the whole message darkens a little on hover, and while its menu is open.
+              const rowHover = `isolate before:pointer-events-none before:absolute before:inset-y-0 before:left-[8px] before:right-[8px] before:-z-10 before:rounded-[8px] before:transition-colors before:content-[''] md:hover:before:bg-[var(--chat-surface)] ${menuOpenHere ? "md:before:bg-[var(--chat-surface)]" : ""}`;
               const replyQuote = msg.reply_texto && msg.reply_to_id ? (
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); scrollToMessage(msg.reply_to_id!); }}
-                  className="mb-[6px] w-full rounded-[6px] border-l-[3px] border-[var(--primary)] bg-[var(--surface-2)] px-2 py-[4px] text-left transition-opacity hover:opacity-80"
+                  aria-label={`Respuesta a ${msg.reply_sender_nombre ?? "un mensaje"}: ${momentPreview(msg.reply_texto) ?? msg.reply_texto}. Ir al mensaje`}
+                  className="mb-[4px] flex w-fit max-w-full items-center gap-[6px] rounded-[6px] bg-[var(--chat-surface)] px-[8px] py-[4px] text-left text-[13px] transition-opacity hover:opacity-80"
                 >
-                  <p className="truncate text-[13px] font-[var(--fw-semibold)] text-app">{msg.reply_sender_nombre ?? "Usuario"}</p>
-                  <p className="truncate text-[13px] text-muted">
-                    {momentPreview(msg.reply_texto) ?? msg.reply_texto}
-                  </p>
+                  <svg aria-hidden viewBox="0 0 24 24" className="size-[14px] shrink-0 text-muted" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M9 14 4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></svg>
+                  <span className="shrink-0 font-[var(--fw-semibold)] text-primary-token">{msg.reply_sender_nombre ?? "Usuario"}</span>
+                  <span className="min-w-0 truncate text-muted">{momentPreview(msg.reply_texto) ?? msg.reply_texto}</span>
                 </button>
               ) : null;
               // Calls never get here: they are drawn as a line on the spine (CallLine) below.
@@ -2264,28 +2737,140 @@ export function ChatConversation({
               );
               // Rich content keeps its own look until phase 2: framed on a surface for the others.
               const richFrame = isRichContent && !msg.image_url && !moment ? "rounded-[8px] border border-app bg-[var(--surface)] px-3 py-2" : "";
+              // Sending (clock), sent (one check) or seen by everyone else (two checks, accent).
+              const seen = Boolean(msg.created_at) && lecturas.length > 0
+                && lecturas.every((l) => l.last_read_at && new Date(l.last_read_at) >= new Date(msg.created_at));
+              const readMark = !isMe ? null : msg.id < 0 ? (
+                <svg role="img" aria-label="Enviando" viewBox="0 0 24 24" className="size-[14px] shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><circle cx="12" cy="12" r="8" /><path d="M12 8v4l2.5 2" /></svg>
+              ) : seen ? (
+                <svg role="img" aria-label="Visto" viewBox="0 0 24 24" className="size-[16px] shrink-0 text-primary-token" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="m2 12.5 4.5 4.5L15 8.5" /><path d="m11 16 1 1 8.5-8.5" /></svg>
+              ) : (
+                <svg role="img" aria-label="Enviado" viewBox="0 0 24 24" className="size-[14px] shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>
+              );
+              const isPlainText = !moment && !msg.audio_url && !msg.document_url && !msg.image_url && !isCallRecord;
+              // Desktop keyboard (board s-sistema · Gestos): R reply, E edit mine, Supr delete mine, Enter actions.
+              const onMessageKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+                if (e.target !== e.currentTarget || msg.id < 0) return;
+                const key = e.key.toLowerCase();
+                if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+                  e.preventDefault();
+                  const all = [...(scrollContainerRef.current?.querySelectorAll<HTMLElement>("[data-msg-focus]") ?? [])];
+                  const at = all.indexOf(e.currentTarget);
+                  const next = all[at + (e.key === "ArrowUp" ? -1 : 1)];
+                  if (next) { next.focus(); next.scrollIntoView({ block: "nearest" }); }
+                  return;
+                }
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  scrollContainerRef.current?.focus();
+                  return;
+                }
+                if ((e.ctrlKey || e.metaKey) && key === "c" && isPlainText && !window.getSelection()?.toString()) {
+                  e.preventDefault();
+                  void navigator.clipboard.writeText(msg.texto);
+                  return;
+                }
+                if (e.ctrlKey || e.metaKey || e.altKey) return;
+                if (key === "r") {
+                  e.preventDefault();
+                  setReplyingTo(msg);
+                  setTimeout(() => inputRef.current?.focus(), 0);
+                } else if (key === "e" && isMe && isPlainText) {
+                  e.preventDefault();
+                  setEditingMsg(msg);
+                  setText(msg.texto);
+                  setTimeout(() => inputRef.current?.focus(), 0);
+                } else if (e.key === "Delete" && isMe) {
+                  e.preventDefault();
+                  void handleDeleteMsg(msg);
+                } else if (key === "g" && !e.shiftKey && planId && gastoFrom(msg)) {
+                  e.preventDefault();
+                  registerExpense(msg);
+                } else if (key === "p" && !e.shiftKey && canPlan && (planFrom(msg) || reading.has(msg.id))) {
+                  e.preventDefault();
+                  const r = e.currentTarget.getBoundingClientRect();
+                  addToPlan(msg, { x: r.right, y: r.top });
+                } else if (key === "f" && !e.shiftKey) {
+                  e.preventDefault();
+                  setForwardMsg(msg);
+                } else if (key === "s" && !e.shiftKey) {
+                  e.preventDefault();
+                  toggleStar(msg.id);
+                } else if ((e.key === "Enter" || e.key === "ContextMenu" || (e.key === "F10" && e.shiftKey)) && !isBot) {
+                  // Menu key or Shift+F10: the same menu, over the message.
+                  e.preventDefault();
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  setContextMenu({ msg, x: rect.right, y: rect.top, place: "above" });
+                }
+              };
               const gestureProps = {
-                onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
+                // Roving focus: only one message is in the tab order; ↑ ↓ move between them.
+                tabIndex: msg.id === tabStopId ? 0 : -1,
+                "data-msg-focus": msg.id,
+                onFocus: () => setFocusMsgId(msg.id),
+                "aria-keyshortcuts": isMe ? "R E F S Delete Shift+F10" : "R F S Shift+F10",
+                onKeyDown: onMessageKeyDown,
+                // Right click: the same menu at the pointer (a long press on phones already opens it).
+                onContextMenu: (e: React.MouseEvent) => {
+                  e.preventDefault();
+                  if (isBot || msg.id < 0 || Date.now() - lastTouchAtRef.current < 1000) return;
+                  setContextMenu({ msg, x: e.clientX, y: e.clientY, place: "cursor" });
+                },
+                onDoubleClick: (e: React.MouseEvent) => {
+                  // Phones already handled the double tap on touchend.
+                  if (Date.now() - lastTouchAtRef.current < 800 || msg.id < 0) return;
+                  e.preventDefault();
+                  window.getSelection()?.removeAllRanges();
+                  reactWithLast(msg.id);
+                },
                 onTouchStart: onBubbleTouchStart,
                 onTouchMove: onBubbleTouchMove,
                 onTouchEnd: onBubbleTouchEnd,
                 onTouchCancel: onBubbleTouchEnd,
               };
               // Everyone's reactions; tapping one toggles mine.
+              // Reactions right under the message (boards m-1a1, d-racha): a 28 px chip with emoji and
+              // count inside a 40 px target, tinted when yours is in it; on desktop, «Añadir reacción» and
+              // who reacted on hover.
               const reactionChip = msgReactions.length > 0 ? (
-                <div className="mt-[4px] flex flex-wrap gap-[4px]">
-                  {msgReactions.map((r) => (
+                <div className={`-mb-[6px] flex flex-wrap items-center gap-[6px] ${isMe ? "justify-end" : ""}`}>
+                  {msgReactions.map((r) => {
+                    const who = reactionWho(r);
+                    return (
+                      <button
+                        key={r.emoji}
+                        type="button"
+                        aria-pressed={r.mia}
+                        aria-label={reactionLabel(r)}
+                        onClick={(e) => { e.stopPropagation(); reactTo(msg.id, r.mia ? "" : r.emoji); }}
+                        className="group/r relative inline-flex h-[40px] items-center outline-none"
+                      >
+                        <span className={`inline-flex h-[28px] items-center gap-[4px] rounded-[8px] border px-[8px] text-[13px] font-[var(--fw-medium)] tabular-nums text-app group-focus-visible/r:ring-2 group-focus-visible/r:ring-[var(--primary)] ${r.mia ? "border-[var(--chat-me-border)] bg-[var(--chat-tint)]" : "border-app"}`}>
+                          <span>{r.emoji}</span><span>{r.total}</span>
+                        </span>
+                        <span role="tooltip" className="pointer-events-none absolute bottom-[40px] left-1/2 z-10 hidden -translate-x-1/2 whitespace-nowrap rounded-[6px] border border-app bg-[var(--bg)] px-[10px] py-[6px] text-[12px] font-[var(--fw-semibold)] text-app shadow-[0_8px_32px_rgba(0,0,0,0.3)] md:group-hover/r:block md:group-focus-visible/r:block">
+                          {who}
+                        </span>
+                      </button>
+                    );
+                  })}
+                  {!isBot && (
                     <button
-                      key={r.emoji}
                       type="button"
-                      aria-pressed={r.mia}
-                      aria-label={`${r.emoji} ${r.total}${r.mia ? ", tu reacción" : ""}`}
-                      onClick={(e) => { e.stopPropagation(); reactTo(msg.id, r.mia ? "" : r.emoji); }}
-                      className={`inline-flex min-h-[28px] items-center gap-[4px] rounded-full border px-[8px] text-[13px] tabular-nums ${r.mia ? "border-[var(--chat-me-border)] bg-[var(--chat-tint)] text-app" : "border-app bg-[var(--surface)] text-muted"}`}
+                      aria-label="Añadir reacción"
+                      title="Añadir reacción"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        setContextMenu({ msg, x: rect.right, y: rect.top, place: "above", reactionsOnly: true });
+                      }}
+                      className="hidden size-[40px] items-center justify-center rounded-full text-muted transition-colors hover:bg-[var(--surface-2)] hover:text-app md:inline-flex"
                     >
-                      <span>{r.emoji}</span>{r.total > 1 && <span>{r.total}</span>}
+                      <svg aria-hidden viewBox="0 0 24 24" className="size-[18px]" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M20.9 11.2A9 9 0 1 1 12.8 3.04" /><path d="M8 14s1.5 2 4 2 4-2 4-2" /><path d="M9 9h.01M15 9h.01" /><path d="M19 2v6M16 5h6" />
+                      </svg>
                     </button>
-                  ))}
+                  )}
                 </div>
               ) : null;
               const highlight = highlightedId === msg.id ? "bg-[var(--text-primary)]/10 transition-colors" : "";
@@ -2293,16 +2878,18 @@ export function ChatConversation({
               const gapAbove = burstTimeRow ? "mt-[6px]"
                 : slot?.chapter ? ""
                 : startsBurst ? "mt-[14px]"
-                : startsTurn ? "mt-[8px]"
+                : startsTurn ? "mt-[6px]"
                 : "mt-[2px]";
               // Others: name and time on top of a turn; inside a burst only the name, and only in groups.
               const showHeader = startsTurn && (!inBurst || showName || isBot);
+              // The header adds 4 px on top: 14 between people (system board), less inside a quick exchange.
+              const gapAboveHeader = burstTimeRow ? "mt-[6px]" : slot?.chapter ? "" : startsBurst ? "mt-[10px]" : startsTurn ? "mt-[2px]" : "mt-[2px]";
               const compactMine = inBurst && !isRichContent && !replyQuote;
               if (isCallRecord && msg.tipo) {
                 const callTipo = msg.tipo;
                 return (
                   <Fragment key={(msg)._key ?? msg.id}>
-                    {slot?.chapter && <DayChapter label={slot.chapter} />}
+                    {slot?.chapter && <DayChapter id={`day-${msg.id}`} label={slot.chapter} />}
                     <div id={`msg-${msg.id}`} className={`mt-[8px] ${highlight}`}>
                       <CallLine
                         tipo={callTipo}
@@ -2316,14 +2903,25 @@ export function ChatConversation({
                   </Fragment>
                 );
               }
+              if (moment?.type === "hito_plan") {
+                return (
+                  <Fragment key={(msg)._key ?? msg.id}>
+                    {slot?.chapter && <DayChapter id={`day-${msg.id}`} label={slot.chapter} />}
+                    <div id={`msg-${msg.id}`} className={`mt-[6px] ${highlight}`}>
+                      <PlanMarkLine data={moment} isMe={isMe} who={msg.sender_nombre.split(" ")[0] || "Alguien"} tripStart={planId === moment.plan_id ? planInfo?.inicio_at : null} />
+                    </div>
+                  </Fragment>
+                );
+              }
               if (moment?.type === "poll") {
                 const pollDecided = Boolean(moment.closed || (moment.expires_at && new Date(moment.expires_at) < new Date()));
                 return (
                   <Fragment key={(msg)._key ?? msg.id}>
-                    {slot?.chapter && <DayChapter label={slot.chapter} />}
-                    <article id={`msg-${msg.id}`} aria-label={`Encuesta, ${msgTime}`} className={`group/msg relative pl-[56px] pr-[var(--space-4)] ${slot?.chapter ? "mt-[4px]" : "mt-[14px]"} ${highlight}`}>
+                    {slot?.chapter && <DayChapter id={`day-${msg.id}`} label={slot.chapter} />}
+                    <article id={`msg-${msg.id}`} aria-label={`Encuesta, ${msgTime}`} className={`group/msg relative pl-[56px] pr-[var(--space-4)] ${slot?.chapter ? "mt-[4px]" : "mt-[14px]"} ${highlight} ${rowHover}`}>
+                      {hoverBar}
                       <span aria-hidden className={`absolute left-[23px] top-[18px] size-[9px] rotate-45 ${pollDecided ? "bg-[var(--primary)]" : "border border-[var(--primary)] bg-[var(--bg)]"}`} />
-                      <div className={`relative max-w-[460px] ${contextMenu?.msg.id === msg.id ? "opacity-75" : ""}`} {...gestureProps}>
+                      <div className={`relative max-w-[460px] transition-transform duration-200 ease-[cubic-bezier(.2,0,0,1)] ${lifted} outline-none`} {...gestureProps}>
                         <PollMoment
                           mensajeId={msg.id}
                           poll={moment}
@@ -2334,7 +2932,6 @@ export function ChatConversation({
                             void channelRef.current?.send({ type: "broadcast", event: "poll_vote", payload: { mensaje_id: msg.id, option_index: idx } });
                           }}
                         />
-                        <span className="absolute right-[8px] top-[8px]">{menuButton}</span>
                       </div>
                       {reactionChip}
                     </article>
@@ -2343,44 +2940,50 @@ export function ChatConversation({
               }
               return (
                 <Fragment key={(msg)._key ?? msg.id}>
-                {slot?.chapter && <DayChapter label={slot.chapter} />}
+                {slot?.chapter && <DayChapter id={`day-${msg.id}`} label={slot.chapter} />}
                 {burstTimeRow && (
                   <div className={`pl-[56px] pr-[var(--space-4)] text-[12px] tabular-nums text-muted ${slot?.chapter ? "mt-[4px]" : "mt-[14px]"}`}>{msgTime}</div>
                 )}
                 {isMe ? (
-                  <article id={`msg-${msg.id}`} aria-label={`Tú, ${msgTime}`} className={`group/msg relative pl-[56px] pr-[var(--space-4)] ${gapAbove} ${highlight}`}>
+                  <article id={`msg-${msg.id}`} aria-label={`Tú, ${msgTime}`} className={`group/msg relative pl-[56px] pr-[var(--space-4)] ${gapAbove} ${highlight} ${rowHover}`}>
                     {startsTurn && <span aria-hidden className="absolute left-[24px] top-[12px] size-[7px] rounded-full bg-[var(--primary)]" />}
                     <div className="flex flex-col items-end">
-                      <div className={`relative max-w-[min(286px,100%)] md:max-w-[min(520px,100%)] ${contextMenu?.msg.id === msg.id ? "opacity-75" : ""}`} {...gestureProps}>
+                      {/* Block and its reactions, aligned to the right edge. */}
+                      <div className="flex max-w-full flex-col items-end">
+                      <div className={`relative max-w-[min(286px,100%)] md:max-w-[min(420px,100%)] transition-transform duration-200 ease-[cubic-bezier(.2,0,0,1)] ${lifted} outline-none`} {...gestureProps}>
+                        {hoverBar}
                         {compactMine ? (
-                          <div className="flex items-end gap-[8px] rounded-[8px] bg-[var(--chat-me)] px-[10px] py-[4px]">
+                          <div className="flex items-end gap-[8px] rounded-[8px] bg-[var(--chat-me-block)] px-[10px] py-[4px]">
                             {content}
                             {(timeHere || isStarred) && (
                               <span className="flex shrink-0 items-center gap-[4px] pb-[2px] text-[12px] tabular-nums text-muted">
                                 {isStarred && <span aria-label="Destacado">★</span>}
                                 {timeHere && msgTime}
+                                {timeHere && readMark}
                               </span>
                             )}
                           </div>
                         ) : (
-                          <div className={msg.image_url || isCard ? "" : `rounded-[8px] bg-[var(--chat-me)] ${isRichContent ? "px-3 py-2" : "px-[12px] py-[8px]"}`}>
+                          <div className={isCard ? "" : `rounded-[8px] bg-[var(--chat-me-block)] ${msg.image_url ? "p-[4px]" : msg.audio_url ? "p-[8px]" : isRichContent ? "px-3 py-2" : "px-[12px] py-[8px]"}`}>
                             {replyQuote}
                             {content}
                             {!msg.image_url && (timeHere || isStarred) && (
                               <div className="mt-[2px] flex items-center justify-end gap-[4px] text-[12px] text-muted">
                                 {isStarred && <span aria-label="Destacado">★</span>}
                                 {timeHere && <span className="tabular-nums">{msgTime}</span>}
+                                {timeHere && readMark}
                               </div>
                             )}
                           </div>
                         )}
-                        <span className="absolute -left-[26px] top-[4px]">{menuButton}</span>
                       </div>
                       {reactionChip}
+                      </div>
                     </div>
                   </article>
                 ) : (
-                  <article id={`msg-${msg.id}`} aria-label={`${isBot ? "Frimee, asistente" : msg.sender_nombre}, ${msgTime}`} className={`group/msg relative pl-[56px] pr-[var(--space-4)] ${gapAbove} ${highlight}`}>
+                  <article id={`msg-${msg.id}`} aria-label={`${isBot ? "Frimee, asistente" : msg.sender_nombre}, ${msgTime}`} className={`group/msg relative pl-[56px] pr-[var(--space-4)] ${showHeader ? gapAboveHeader : gapAbove} ${highlight} ${rowHover}`}>
+                    {hoverBar}
                     {startsTurn && (
                       isBot ? (
                         <span aria-hidden className="absolute left-[13px] top-0 flex size-[28px] items-center justify-center overflow-hidden rounded-[8px] border border-[var(--chat-me-border)] bg-[var(--chat-me)]">
@@ -2398,17 +3001,13 @@ export function ChatConversation({
                         {isBot && <span className="rounded-[4px] border border-app px-[6px] py-px text-[11px] font-[var(--fw-semibold)] text-muted">Asistente</span>}
                         {!inBurst && <span className="text-[12px] tabular-nums text-muted">{msgTime}</span>}
                         {isStarred && <span className="text-[12px] text-muted" aria-label="Destacado">★</span>}
-                        {menuButton}
                       </div>
                     )}
-                    <div className={`relative max-w-[640px] ${showHeader ? "mt-[4px]" : startsTurn ? "pt-[3px]" : ""} ${contextMenu?.msg.id === msg.id ? "opacity-75" : ""}`} {...gestureProps}>
+                    <div className={`relative max-w-[640px] ${showHeader ? "mt-[4px]" : startsTurn ? "pt-[3px]" : ""} transition-transform duration-200 ease-[cubic-bezier(.2,0,0,1)] ${lifted} outline-none`} {...gestureProps}>
                       <div className={`${isBot ? "rounded-[8px] border border-dashed border-[var(--chat-me-border)] bg-[var(--surface-inset)] p-[12px]" : richFrame} ${msg.image_url ? "max-w-[min(286px,100%)]" : isRichContent ? "inline-block max-w-full" : ""}`}>
                         {replyQuote}
                         {content}
                       </div>
-                      {!showHeader && !isBot && (
-                        <span className={`absolute ${startsTurn ? "right-0" : "-left-[28px]"} top-[2px]`}>{menuButton}</span>
-                      )}
                     </div>
                     {reactionChip}
                   </article>
@@ -2416,13 +3015,83 @@ export function ChatConversation({
                 </Fragment>
               );
             })}
+            {detached && <div ref={bottomSentinelRef} className="h-px" />}
+            {loadingNewer && (
+              <div className="flex justify-center py-2">
+                <div className="size-5 animate-spin rounded-full border-2 border-app border-t-transparent" />
+              </div>
+            )}
             <div ref={bottomRef} />
           </div>
         )}
       </div>
+      {!loading && (
+        <ChatRuler
+          scrollRef={scrollContainerRef}
+          marks={rulerMarks}
+          total={rulerTotal}
+          loadedFrom={loadedFrom}
+          loadedCount={loadedCount}
+          readOrd={indice?.primer_no_leido?.ord ?? null}
+          onReveal={revealMessage}
+        />
+      )}
+      {/* Jumping to an old stretch: loading rows on the spine, the day already titled. */}
+      {jumping && (
+        <div role="status" aria-label={`Cargando ${jumping.title}`} className="absolute inset-0 z-[5] overflow-hidden bg-[var(--bg)]">
+          <div className="relative mx-auto h-full w-full max-w-[780px]">
+            <div aria-hidden className="absolute bottom-0 left-[27px] top-0 w-px bg-[var(--border)]" />
+            <DayChapter label={jumping} />
+            {[72, 48, 88, 56, 64, 40].map((w, i) => (
+              <div key={i} aria-hidden className={`relative pl-[56px] pr-[var(--space-4)] ${i === 0 ? "mt-[4px]" : "mt-[14px]"}`}>
+                <span className="absolute left-[13px] top-0 size-[28px] rounded-full bg-[var(--surface-2)]" />
+                <div className="h-[12px] w-[80px] animate-pulse rounded-[4px] bg-[var(--surface-2)] motion-reduce:animate-none" />
+                <div className="mt-[8px] h-[14px] animate-pulse rounded-[4px] bg-[var(--surface-2)] motion-reduce:animate-none" style={{ width: `${w}%` }} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {addedToast && (
+        <div role="status" className="absolute bottom-[12px] left-1/2 z-[7] flex max-w-[calc(100%-32px)] -translate-x-1/2 items-center gap-[14px] rounded-[8px] border border-app bg-[var(--bg)] pl-[16px] pr-[8px] shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
+          <span className="min-w-0 flex-1 truncate py-[12px] text-[14px] text-app">Añadido a «{addedToast.planTitulo}»</span>
+          <button type="button" onClick={() => router.push(`/plans/${addedToast.planId}?tab=itinerario`)} className="min-h-[44px] shrink-0 px-[4px] text-[14px] font-[var(--fw-semibold)] text-app underline underline-offset-[3px]">Ver</button>
+          <button
+            type="button"
+            onClick={async () => {
+              const t = addedToast;
+              setAddedToast(null);
+              try {
+                await deshacerAnadirEndpoint(t.mensajeId);
+                setMessages((prev) => prev.filter((x) => x.id !== t.mensajeId));
+                void channelRef.current?.send({ type: "broadcast", event: "delete_message", payload: { id: t.mensajeId } });
+              } catch (e) {
+                logError("Error deshaciendo", e);
+              }
+            }}
+            className="min-h-[44px] shrink-0 px-[4px] text-[14px] font-[var(--fw-semibold)] text-app underline underline-offset-[3px]"
+          >
+            Deshacer
+          </button>
+        </div>
+      )}
+      {!loading && !addedToast && (awayFromEnd || detached) && (
+        <button
+          type="button"
+          onClick={() => void goToLatest()}
+          className="absolute bottom-[12px] left-1/2 z-[6] flex h-[44px] -translate-x-1/2 items-center gap-[6px] whitespace-nowrap rounded-full bg-[var(--primary)] px-[16px] text-[14px] font-[var(--fw-semibold)] text-[var(--contrast)] shadow-[0_4px_16px_rgba(0,0,0,0.25)]"
+        >
+          <svg aria-hidden viewBox="0 0 24 24" className="size-[16px]" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14" /><path d="m6 13 6 6 6-6" /></svg>
+          Ir a lo último{newWhileAway > 0 ? ` · ${newWhileAway} ${newWhileAway === 1 ? "nuevo" : "nuevos"}` : ""}
+        </button>
+      )}
+      </div>
 
       {/* Input area */}
       <div className="px-[var(--space-3)] pb-[calc(env(safe-area-inset-bottom)+12px)] pt-[var(--space-2)] md:px-[var(--space-4)] md:pb-[var(--space-3)]">
+        {audioError && !isRecording && (
+          <p role="status" className="mb-[var(--space-2)] px-1 text-[13px] text-muted">{audioError}</p>
+        )}
         {replyingTo && (
           <div className="mb-[var(--space-2)] flex items-center gap-[var(--space-2)] rounded-[10px] border-l-2 border-[var(--text-primary)] bg-surface px-3 py-[8px]">
             <div className="min-w-0 flex-1">
@@ -2489,13 +3158,22 @@ export function ChatConversation({
                 <span className="shrink-0 text-body-sm text-red-400">
                   {String(Math.floor(recordingSeconds / 60)).padStart(2, "0")}:{String(recordingSeconds % 60).padStart(2, "0")}
                 </span>
-                <span className="flex-1 px-1 text-body-sm text-muted">Grabando...</span>
-                <ChatIconButton label="Cancelar grabación" size="sm" tone="danger" onClick={handleCancelRecording}>
-                  <X className="size-4" />
-                </ChatIconButton>
-                <ChatIconButton label="Enviar nota de voz" size="sm" tone="primary" onClick={handleSendRecording}>
-                  <SendMsgIcon className="size-4" />
-                </ChatIconButton>
+                {recordHold && !recordHold.locked ? (
+                  <span className="flex min-w-0 flex-1 items-center justify-between gap-2 px-1 text-body-sm text-muted" role="status">
+                    <span className="truncate" style={{ transform: `translateX(${recordHold.dx / 2}px)`, opacity: Math.max(0.3, 1 + recordHold.dx / 120) }}>‹ Desliza para cancelar</span>
+                    <span className="shrink-0" aria-label="Desliza hacia arriba para bloquear">↑ Bloquear</span>
+                  </span>
+                ) : (
+                  <>
+                    <span className="flex-1 px-1 text-body-sm text-muted">Grabando...</span>
+                    <ChatIconButton label="Cancelar grabación" size="sm" tone="danger" onClick={handleCancelRecording}>
+                      <X className="size-4" />
+                    </ChatIconButton>
+                    <ChatIconButton label="Enviar nota de voz" size="sm" tone="primary" onClick={handleSendRecording}>
+                      <SendMsgIcon className="size-4" />
+                    </ChatIconButton>
+                  </>
+                )}
               </>
             ) : (
               <>
@@ -2538,7 +3216,18 @@ export function ChatConversation({
                 />
                 {!text.trim() && (
                   <>
-                    <ChatIconButton label="Grabar nota de voz" size="sm" onClick={() => void handleStartRecording()}>
+                    <ChatIconButton
+                      label="Mantén para grabar una nota de voz"
+                      size="sm"
+                      className="touch-none select-none"
+                      onPointerDown={onMicPointerDown}
+                      onContextMenu={(e) => e.preventDefault()}
+                      onClick={() => {
+                        // Touch already recorded on hold; mouse and keyboard start on click.
+                        if (micPointerTypeRef.current === "touch" || micPointerTypeRef.current === "pen") return;
+                        void handleStartRecording();
+                      }}
+                    >
                       <MicIcon className="size-5" />
                     </ChatIconButton>
                     <div className="relative shrink-0">
@@ -2967,7 +3656,6 @@ const TrashIcon = Trash2;
 const BlockIcon = Ban;
 const ReportIcon = AlertTriangle;
 const LeaveIcon = LogOut;
-const ChevronDownIcon = ChevronDown;
 const EmojiIcon = Smile;
 const PinIcon = Pin;
 const CameraIcon = Camera;

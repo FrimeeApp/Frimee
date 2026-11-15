@@ -290,3 +290,158 @@ export async function resolverPropuestaEndpoint(
   if (error) throw error;
   return Boolean(data);
 }
+
+/** The light index of a chat for the ruler (fn_chat_indice): positions are the order among all messages. */
+export type ChatIndice = {
+  total: number;
+  /** Last message in the index: anything newer arrived later (realtime) and is added on the client. */
+  max_id: number | null;
+  dias: Array<{ dia: string; primer_id: number; desde: number; n: number }>;
+  hitos: Array<{ id: number; ord: number; created_at: string; tipo: "poll" | "propuesta"; titulo: string | null; estado: "decidido" | "abierto" }>;
+  primer_no_leido: { id: number; ord: number } | null;
+};
+
+export async function getChatIndiceEndpoint(chatId: string): Promise<ChatIndice> {
+  const supabase = createBrowserSupabaseClient();
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const { data, error } = await supabase.rpc("fn_chat_indice", { p_chat_id: chatId, p_tz: tz });
+  if (error) throw new Error(error.message || error.code || "Error leyendo el índice del chat");
+  return data as ChatIndice;
+}
+
+/** The messages around one (a jump to an old milestone), oldest first, each with its position. */
+export async function listMensajesTramoEndpoint(chatId: string, mensajeId: number, antes = 25, despues = 25): Promise<Array<MensajeRow & { orden: number }>> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_mensajes_tramo", { p_chat_id: chatId, p_mensaje_id: mensajeId, p_antes: antes, p_despues: despues });
+  if (error) throw new Error(error.message || error.code || "Error cargando el tramo del chat");
+  return (data ?? []) as Array<MensajeRow & { orden: number }>;
+}
+
+/** Newer messages after a cursor, oldest first (scrolling down from an old stretch). */
+export async function listMensajesDespuesEndpoint(chatId: string, cursorId: number, limit = 50): Promise<MensajeRow[]> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_mensajes_list_despues", { p_chat_id: chatId, p_cursor_id: cursorId, p_limit: limit });
+  if (error) throw new Error(error.message || error.code || "Error cargando mensajes");
+  return (data ?? []) as MensajeRow[];
+}
+
+/** How far the other members of a chat have read (fn_chat_lecturas): for the «visto» checks. */
+export async function getChatLecturasEndpoint(chatId: string): Promise<Array<{ user_id: string; last_read_at: string | null }>> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_chat_lecturas", { p_chat_id: chatId });
+  if (error) throw new Error(error.message || error.code || "Error leyendo las lecturas del chat");
+  return (data ?? []) as Array<{ user_id: string; last_read_at: string | null }>;
+}
+
+/** What @frimee saw in a message (mensaje_sugerencias): an activity for the plan and/or an expense. */
+export type Sugerencia = {
+  mensaje_id: number;
+  plan: { es_plan: boolean; titulo?: string; fecha?: string; hora?: string; lugar?: string; tipo?: string };
+  gasto: { es_gasto: boolean; concepto?: string; importe?: number };
+};
+
+/**
+ * Suggestions for some messages: the stored ones are read directly (RLS: members); only the missing
+ * ones go to the chat-sugerencias function, which asks Claude and stores them for everybody.
+ */
+export async function getSugerenciasEndpoint(chatId: string, ids: number[], onAskingAI?: (ids: number[]) => void): Promise<Sugerencia[]> {
+  if (ids.length === 0) return [];
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.from("mensaje_sugerencias").select("mensaje_id, plan, gasto").in("mensaje_id", ids);
+  if (error) throw new Error(error.message || "Error leyendo sugerencias");
+  const stored = (data ?? []) as Sugerencia[];
+  const have = new Set(stored.map((r) => r.mensaje_id));
+  const missing = ids.filter((id) => !have.has(id)).slice(0, 60);
+  if (missing.length === 0) return stored;
+  // Only now the model is involved (seconds, more on a cold start): let the chat say so.
+  onAskingAI?.(missing);
+  const { data: fn, error: fnError } = await supabase.functions.invoke("chat-sugerencias", { body: { chat_id: chatId, mensaje_ids: missing } });
+  if (fnError) throw new Error(fnError.message || "Error pidiendo sugerencias");
+  return [...stored, ...(((fn as { sugerencias?: Sugerencia[] })?.sugerencias) ?? [])];
+}
+
+/**
+ * An expense AND its message in the chat, in one transaction (fn_chat_registrar_gasto): never one
+ * without the other. `clientId` is made when the sheet opens: the same request again (a retry after
+ * a dropped connection) returns the first result instead of creating the expense twice.
+ */
+export async function registrarGastoChatEndpoint(params: {
+  clientId: string;
+  chatId: string;
+  planId: number;
+  titulo: string;
+  total: number;
+  pagadoPor: string;
+  participantes: string[];
+  /** The message to send instead of the expense card (e.g. @frimee's confirmation text). */
+  texto?: string;
+}): Promise<{ gasto_id: number; mensaje_id: number; texto: string }> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_chat_registrar_gasto", {
+    p_client_id: params.clientId,
+    p_chat_id: params.chatId,
+    p_plan_id: params.planId,
+    p_titulo: params.titulo,
+    p_total: params.total,
+    p_pagado_por: params.pagadoPor,
+    p_participantes: params.participantes,
+    p_texto: params.texto ?? null,
+  });
+  if (error) throw new Error(error.message || error.code || "Error registrando el gasto");
+  return data as { gasto_id: number; mensaje_id: number; texto: string };
+}
+
+/**
+ * Accept a proposal of @frimee AND do what it proposes, in one transaction (fn_propuesta_aceptar).
+ * claimed false: someone accepted or dismissed it first (texto is how it is now).
+ */
+export async function aceptarPropuestaEndpoint(mensajeId: number, resultado?: string | null): Promise<{
+  claimed: boolean; texto: string; poll_id: number | null; poll_texto: string | null;
+}> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_propuesta_aceptar", { p_mensaje_id: mensajeId, p_resultado: resultado ?? null });
+  if (error) throw new Error(error.message || error.code || "Error aceptando la propuesta");
+  return data as { claimed: boolean; texto: string; poll_id: number | null; poll_texto: string | null };
+}
+
+/**
+ * Add an activity to a plan from the chat: the activity AND its mark on the spine, in one
+ * transaction (fn_chat_anadir_al_plan). clientId, one per opened panel: never added twice.
+ */
+export async function anadirAlPlanEndpoint(params: {
+  clientId: string;
+  chatId: string;
+  planId: number;
+  titulo: string;
+  tipo: string;
+  inicio: string;
+  fin: string;
+  ubicacionNombre?: string;
+  lat?: number | null;
+  lng?: number | null;
+  origenId?: number | null;
+}): Promise<{ subplan_id: number; mensaje_id: number; texto: string }> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_chat_anadir_al_plan", {
+    p_client_id: params.clientId,
+    p_chat_id: params.chatId,
+    p_plan_id: params.planId,
+    p_titulo: params.titulo,
+    p_tipo: params.tipo,
+    p_inicio: params.inicio,
+    p_fin: params.fin,
+    p_ubicacion_nombre: params.ubicacionNombre ?? "",
+    p_lat: params.lat ?? null,
+    p_lng: params.lng ?? null,
+    p_origen_id: params.origenId ?? null,
+  });
+  if (error) throw new Error(error.message || error.code || "Error añadiendo al plan");
+  return data as { subplan_id: number; mensaje_id: number; texto: string };
+}
+
+/** «Deshacer» right after adding: removes the activity and its mark (only who added it, minutes after). */
+export async function deshacerAnadirEndpoint(mensajeId: number): Promise<void> {
+  const supabase = createBrowserSupabaseClient();
+  const { error } = await supabase.rpc("fn_chat_deshacer_anadir", { p_mensaje_id: mensajeId });
+  if (error) throw new Error(error.message || error.code || "Error deshaciendo");
+}
