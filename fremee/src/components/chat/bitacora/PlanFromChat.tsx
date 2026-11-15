@@ -755,6 +755,32 @@ function CopyFromPicker({
   );
 }
 
+/**
+ * The plans you are in now. The «Plan creado» mark keeps who entered at creation; whoever joined
+ * later (an accepted «Pedir unirme», an invite) must see «Abrir el plan» too. Remembered for 30 s
+ * so the marks of one chat ask once.
+ */
+let misPlanesCache: { userId: string; at: number; p: Promise<Set<number>> } | null = null;
+function misPlanIds(userId: string): Promise<Set<number>> {
+  if (misPlanesCache && misPlanesCache.userId === userId && Date.now() - misPlanesCache.at < 30_000) return misPlanesCache.p;
+  const p = fetchUserRelatedPlans({ userId }).then((ps) => new Set(ps.map((x) => x.id)));
+  p.catch(() => { misPlanesCache = null; });
+  misPlanesCache = { userId, at: Date.now(), p };
+  return p;
+}
+export function useMisPlanIds(userId: string, enabled = true) {
+  const [ids, setIds] = useState<Set<number> | null>(null);
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    misPlanIds(userId)
+      .then((v) => { if (!cancelled) setIds(v); })
+      .catch((e) => console.error("[chat] mis planes:", errText(e)));
+    return () => { cancelled = true; };
+  }, [userId, enabled]);
+  return ids;
+}
+
 /** Whether you are still in the original chat (null while asking, or if asking failed). */
 function useVeChat(chatId: string, enabled = true) {
   const [ve, setVe] = useState<boolean | null>(null);
@@ -825,7 +851,8 @@ export function PlanCreatedMark({
     ...data.miembros.filter((m) => m.id !== currentUserId).map((m) => m.nombre),
     ...(data.miembros.some((m) => m.id === currentUserId) ? ["tú"] : []),
   ]);
-  const dentro = data.miembros.some((m) => m.id === currentUserId);
+  const misPlanes = useMisPlanIds(currentUserId, !inPlanChat);
+  const dentro = data.miembros.some((m) => m.id === currentUserId) || Boolean(misPlanes?.has(data.plan_id));
   const sinCopia = inPlanChat && data.copiados === 0;
   const ve = useVeChat(data.origen_chat_id, sinCopia);
   const titulo = inPlanChat
