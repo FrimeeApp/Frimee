@@ -75,7 +75,7 @@ export function MessageActions(props: MessageActionsProps) {
     ...(props.canCopy ? [{ key: "copy", label: "Copiar", icon: <Copy className="size-[18px]" />, shortcut: "Ctrl C", run: props.onCopy }] : []),
     { key: "pin", label: props.isPinned ? "Desfijar" : "Fijar", icon: props.isPinned ? <PinOff className="size-[18px]" /> : <Pin className="size-[18px]" />, run: props.onPin },
     { key: "star", label: props.isStarred ? "Quitar destacado" : "Destacar", icon: props.isStarred ? <StarOff className="size-[18px]" /> : <Star className="size-[18px]" />, shortcut: "S", run: props.onStar },
-    ...(props.isMe ? [{ key: "delete", label: "Eliminar", icon: <Trash2 className="size-[18px]" />, danger: true, shortcut: "Supr", run: props.onDelete }] : []),
+    { key: "delete", label: "Eliminar", icon: <Trash2 className="size-[18px]" />, danger: true, shortcut: "Supr", run: props.onDelete },
   ];
 
   const reactions = (
