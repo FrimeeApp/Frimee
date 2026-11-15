@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowRight, Download, ExternalLink, ImagePlus, MapPin, Play } from "lucide-react";
 import { contenidoChatEndpoint, type ContenidoRow, type ContenidoTipo } from "@/services/api/endpoints/chat.endpoint";
-import { parseMoment, type Moment } from "@/components/chat/bitacora/moments";
+import { momentPreview, parseMoment, type Moment } from "@/components/chat/bitacora/moments";
 import { mapsUrl } from "@/components/chat/bitacora/MomentCards";
 import { ImageLightbox, LightboxAction } from "@/components/ui/ImageLightbox";
 import { savePlanFotoFromChat } from "@/services/api/endpoints/plan-fotos.endpoint";
@@ -17,6 +17,7 @@ export const IN_CHAT_LABEL: Record<ContenidoTipo, string> = {
   sitios: "Sitios",
   enlaces: "Enlaces",
   decisiones: "Decisiones",
+  destacados: "Destacados",
 };
 
 const EMPTY: Record<ContenidoTipo, string> = {
@@ -25,6 +26,7 @@ const EMPTY: Record<ContenidoTipo, string> = {
   sitios: "Aún no habéis compartido sitios.",
   enlaces: "Aún no habéis compartido enlaces.",
   decisiones: "Aún no habéis decidido nada.",
+  destacados: "No tienes mensajes destacados en este chat.",
 };
 
 /** «hoy», «ayer», «12 nov», another year «12 nov 2024». */
@@ -389,6 +391,21 @@ function Row({ row, tipo, onJumpTo }: { row: ContenidoRow; tipo: ContenidoTipo; 
           <ExternalLink className="size-[18px]" aria-hidden />
         </a>
       </div>
+    );
+  }
+
+  if (tipo === "destacados") {
+    // Like a link row: what it says, and who and when (chat-20).
+    const what = row.image_url ? (row.texto?.trim() || (row.image_type?.startsWith("video/") ? "Vídeo" : "Foto"))
+      : row.document_url ? (row.document_name || "Documento")
+      : momentPreview(row.texto) ?? (row.texto?.trim() || "Nota de voz");
+    return (
+      <button type="button" onClick={() => onJumpTo(row.id)} className={`${rowClass} w-full`}>
+        <span className="min-w-0 flex-1">
+          <span className="line-clamp-2 text-[15px] text-app">{what}</span>
+          <span className="block truncate text-[12px] text-muted">{meta}</span>
+        </span>
+      </button>
     );
   }
 

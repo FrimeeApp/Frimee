@@ -609,7 +609,8 @@ export type ChatInfo = {
   creador_id: string | null;
   admins: string[];
   /** fotos = photos and videos; archivos = documents. */
-  recuentos: { fotos: number; archivos: number; sitios: number; enlaces: number; decisiones: number };
+  /** destacados: only mine (stars are per person). */
+  recuentos: { fotos: number; archivos: number; sitios: number; enlaces: number; decisiones: number; destacados: number };
   /** Plans made from this chat («Planes de este grupo»). */
   planes: ChatInfoPlan[];
   /** 1 a 1: plans you are both in («Planes en común»). */
@@ -628,7 +629,7 @@ export async function getChatInfoEndpoint(chatId: string): Promise<ChatInfo> {
     silenciado: Boolean(d.silenciado),
     creador_id: d.creador_id ?? null,
     admins: d.admins ?? [],
-    recuentos: { fotos: 0, archivos: 0, sitios: 0, enlaces: 0, decisiones: 0, ...d.recuentos },
+    recuentos: { fotos: 0, archivos: 0, sitios: 0, enlaces: 0, decisiones: 0, destacados: 0, ...d.recuentos },
     planes: d.planes ?? [],
     comun: d.comun ?? [],
     amigos_desde: d.amigos_desde ?? null,
@@ -676,7 +677,7 @@ export async function eliminarMensajeEndpoint(mensajeId: number, paraTodos: bool
   if (error) throw error;
 }
 
-export type ContenidoTipo = "fotos" | "archivos" | "sitios" | "enlaces" | "decisiones";
+export type ContenidoTipo = "fotos" | "archivos" | "sitios" | "enlaces" | "decisiones" | "destacados";
 export type ContenidoRow = {
   id: number;
   created_at: string;
