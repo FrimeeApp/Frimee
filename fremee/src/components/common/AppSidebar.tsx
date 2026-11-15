@@ -14,7 +14,7 @@ import { countNotificacionesNoLeidas, insertNotificacion } from "@/services/api/
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import NotificationsPanel from "@/components/notifications/NotificationsPanel";
 import UserSearchSurface from "@/components/search/UserSearchSurface";
-import { Map, CreditCard, Send, Plus, Search, Bell } from "lucide-react";
+import { Map, CreditCard, Send, Plus, Search, Bell, UserPlus } from "lucide-react";
 import { ActiveExpensesIcon, ActiveMessagesIcon, ActivePlansIcon, ActiveSearchIcon } from "@/components/common/active-nav-icons";
 import { CloseButton } from "@/components/ui/IconButton";
 import { DraggableBottomSheet } from "@/components/ui/DraggableBottomSheet";
@@ -51,7 +51,8 @@ const NAV_ICON_STROKE = 2;
 
 type AppSidebarProps = {
   onCreatePlan?: () => void;
-  onCreateConversation?: () => void;
+  /** Messages: the FAB's «Nuevo grupo» (1 a 1 chats start from the Messages search). */
+  onCreateGroup?: () => void;
   hideMobileNav?: boolean;
 };
 type MobileNavStyle = CSSProperties & { "--mobile-nav-base-height": string };
@@ -61,7 +62,7 @@ function dateInputToIso(dateInput: string, hour = 12) {
   return new Date(year ?? 0, (month ?? 1) - 1, day ?? 1, hour, 0, 0).toISOString();
 }
 
-export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMobileNav }: AppSidebarProps) {
+export default function AppSidebar({ onCreatePlan, onCreateGroup, hideMobileNav }: AppSidebarProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [modalOpen, setModalOpen] = useState(false);
@@ -284,9 +285,9 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
     }
   };
 
-  const openCreateConversation = () => {
+  const openCreateGroup = () => {
     setMobileFabOpen(false);
-    onCreateConversation?.();
+    onCreateGroup?.();
   };
 
   const openExpenseForPlan = (planId: number) => {
@@ -499,18 +500,18 @@ export default function AppSidebar({ onCreatePlan, onCreateConversation, hideMob
                 <CardIcon className="size-5" />
               </span>
             </button>
-            {onCreateConversation && (
+            {onCreateGroup && (
               <button
                 type="button"
-                onClick={openCreateConversation}
-                aria-label="Crear conversación"
+                onClick={openCreateGroup}
+                aria-label="Nuevo grupo"
                 className="pointer-events-auto flex min-h-12 min-w-[150px] max-w-[calc(100vw-32px)] items-center justify-between gap-2.5 rounded-full border border-app bg-app py-[7px] pl-5 pr-4 text-app shadow-[0_0_0_1px_rgba(0,0,0,0.10),0_2px_6px_rgba(0,0,0,0.12)]"
               >
                 <span className="whitespace-nowrap text-caption font-[var(--fw-semibold)] leading-none">
-                  Crear conversación
+                  Nuevo grupo
                 </span>
                 <span className="flex size-7 shrink-0 items-center justify-center">
-                  <SendIcon className="size-5" />
+                  <UserPlus className="size-5" aria-hidden />
                 </span>
               </button>
             )}
