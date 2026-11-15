@@ -7,6 +7,7 @@ import Link from "next/link";
 import { DayChapter } from "@/components/chat/bitacora/DayChapter";
 import { ChatRuler, type RulerMark } from "@/components/chat/bitacora/ChatRuler";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
+import { notifyChatAdded } from "@/components/chat/notifyChatAdded";
 import {
   listChats,
   addChatMember,
@@ -189,6 +190,7 @@ export function ChatConversation({
   onLeave,
   onMembersChanged,
   onOpenChat,
+  initialMessageId,
 }: {
   chat: ChatListItem;
   currentUserId: string;
@@ -209,6 +211,8 @@ export function ChatConversation({
   onMembersChanged?: () => void;
   /** Opens another chat (the plan made from this one, or the original from its copy). */
   onOpenChat?: (chatId: string) => void;
+  /** Open at this message (a result of the Messages search) instead of at the bottom. */
+  initialMessageId?: number;
 }) {
   type LocalMsg = MensajeRow & { _key?: number };
   const [messages, setMessages] = useState<LocalMsg[]>([]);
@@ -892,19 +896,6 @@ export function ChatConversation({
     requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }));
   };
 
-  /** Tells each person their chat list changed (same channel the «añadir miembro» flow uses). */
-  const notifyChatAdded = (userIds: string[], chatId: string) => {
-    const supabase = createBrowserSupabaseClient();
-    for (const uid of userIds) {
-      const ch = supabase.channel(`user-join:${uid}`);
-      ch.subscribe((status) => {
-        if (status !== "SUBSCRIBED") return;
-        void ch.send({ type: "broadcast", event: "chat_added", payload: { chat_id: chatId } });
-        setTimeout(() => void supabase.removeChannel(ch), 2000);
-      });
-    }
-  };
-
   /** An expense and its card, in one transaction (never one without the other, never twice). */
   const registerChatExpense = async (input: { clientId: string; planId: number; titulo: string; total: number; pagadoPor: string; participantes: string[]; texto?: string }) => {
     const r = await registrarGastoChatEndpoint({ ...input, chatId: chat.chat_id });
@@ -1035,6 +1026,22 @@ export function ChatConversation({
     setHighlightedId(msgId);
     setTimeout(() => setHighlightedId(null), 1500);
   };
+
+  // Opened from a search result: once the first page is in, go to that message (loading its
+  // stretch if it is older than what came in). After the open-at-the-bottom scroll.
+  const jumpToMessageRef = useRef<(id: number) => void>(() => {});
+  jumpToMessageRef.current = (id: number) => {
+    if (document.getElementById(`msg-${id}`)) scrollToMessage(id);
+    else void revealMessageRef.current(id);
+  };
+  const revealMessageRef = useRef<(id: number) => Promise<void>>(async () => {});
+  const initialJumpDoneRef = useRef(false);
+  useEffect(() => {
+    if (!initialMessageId || loading || initialJumpDoneRef.current) return;
+    initialJumpDoneRef.current = true;
+    const t = setTimeout(() => jumpToMessageRef.current(initialMessageId), 150);
+    return () => clearTimeout(t);
+  }, [initialMessageId, loading]);
   const cancelEdit = () => { setEditingMsg(null); setText(""); };
   const cancelReply = () => setReplyingTo(null);
 
@@ -2372,6 +2379,7 @@ export function ChatConversation({
       setJumping(null);
     }
   };
+  revealMessageRef.current = revealMessage;
 
   /** «Ir a lo último»: from an old stretch, load the latest messages again. */
   const goToLatest = async () => {

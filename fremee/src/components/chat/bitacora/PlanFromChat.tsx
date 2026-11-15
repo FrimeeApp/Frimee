@@ -305,7 +305,7 @@ export function CreatePlanFlow({
       <div className="flex flex-col">
         <FieldRow label="Nombre" htmlFor="cp-nombre">
           <input id="cp-nombre" className={`${rowField} text-[17px] font-[var(--fw-semibold)]`} value={titulo} maxLength={80} disabled={busy}
-            placeholder="Finde en la sierra" onChange={(e) => { setTitulo(e.target.value); touch("titulo"); }} />
+            placeholder="Ponle nombre al plan" onChange={(e) => { setTitulo(e.target.value); touch("titulo"); }} />
           {sug.has("titulo") && <Sugerido />}
         </FieldRow>
         <FieldRow label="Fechas">

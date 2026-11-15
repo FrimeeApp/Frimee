@@ -70,6 +70,31 @@ export async function getOrCreateDirectoChatEndpoint(otherUserId: string): Promi
   return data as string;
 }
 
+export type MensajeEncontrado = {
+  mensaje_id: number;
+  chat_id: string;
+  texto: string;
+  created_at: string;
+  sender_id: string | null;
+  sender_nombre: string | null;
+};
+
+/** The «Mensajes» block of the Messages search: text written by people in my chats (2+ letters). */
+export async function buscarMensajesEndpoint(query: string, limit = 20): Promise<MensajeEncontrado[]> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_chat_buscar_mensajes", { p_q: query, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as MensajeEncontrado[];
+}
+
+/** «Amigos con los que hablar»: friends without a 1 a 1 chat, those I share most plans/groups with first. */
+export async function amigosSugeridosEndpoint(limit = 5): Promise<Array<{ id: string; nombre: string; username: string | null; profile_image: string | null }>> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_chat_amigos_sugeridos", { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as Array<{ id: string; nombre: string; username: string | null; profile_image: string | null }>;
+}
+
 export async function createGrupoChatEndpoint(params: {
   nombre: string;
   foto?: string | null;
