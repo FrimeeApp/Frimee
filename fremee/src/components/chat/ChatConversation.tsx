@@ -37,6 +37,8 @@ import {
   getChatIndiceEndpoint,
   getChatLecturasEndpoint,
   getSugerenciasEndpoint,
+  completarSugerenciaEndpoint,
+  type PlanCompletado,
   registrarGastoChatEndpoint,
   aceptarPropuestaEndpoint,
   anadirAlPlanEndpoint,
@@ -112,7 +114,7 @@ type ChatIconButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "type">
 };
 
 /** What «Añadir al plan» hands to the add-activity sheet (read from the message or its card). */
-export type PlanPrefill = { fecha?: string; hora?: string; tipo?: string; lugar?: string; lat?: number; lng?: number };
+export type PlanPrefill = { fecha?: string; hora?: string; horaFin?: string; tipo?: string; lugar?: string; lat?: number; lng?: number };
 
 /** Plan card kind → activity type. */
 const CARD_TIPO: Record<string, string> = {
@@ -246,7 +248,11 @@ export function ChatConversation({
   // Messages @frimee is reading right now (the model is working: seconds, more the first time).
   const [reading, setReading] = useState<Set<number>>(new Set());
   // «Añadir al plan» panel: the message, where it opens (desktop) and one id per opening (no duplicates).
-  const [addPanel, setAddPanel] = useState<{ msg: MensajeRow; anchor: { x: number; y: number } | null; clientId: string } | null>(null);
+  // `ctx`: @frimee re-reading that message with the conversation around it (chat-sugerencias · completar).
+  const [addPanel, setAddPanel] = useState<{
+    msg: MensajeRow; anchor: { x: number; y: number } | null; clientId: string;
+    ctx: { status: "loading" } | { status: "done"; plan: PlanCompletado | null } | { status: "failed" } | null;
+  } | null>(null);
   // After adding: «Añadido a «Plan» · Ver · Deshacer» for a few seconds.
   const [addedToast, setAddedToast] = useState<{ planId: number; planTitulo: string; mensajeId: number } | null>(null);
   useEffect(() => {
@@ -752,7 +758,19 @@ export function ChatConversation({
   /** Opens the «Añadir al plan» panel (it fills in with what @frimee read, or waits for it). */
   const addToPlan = (m: MensajeRow, anchor: { x: number; y: number } | null = null) => {
     closeOverlays();
-    setAddPanel({ msg: m, anchor, clientId: crypto.randomUUID() });
+    // A shared place or plan card is already exact; a text is read again with its conversation.
+    const mo = parseMoment(m.texto);
+    const conContexto = mo?.type !== "lugar" && mo?.type !== "tarjeta";
+    setAddPanel({ msg: m, anchor, clientId: crypto.randomUUID(), ctx: conContexto ? { status: "loading" } : null });
+    if (!conContexto) return;
+    const settle = (ctx: { status: "done"; plan: PlanCompletado | null } | { status: "failed" }) =>
+      setAddPanel((p) => (p && p.msg.id === m.id && p.ctx?.status === "loading" ? { ...p, ctx } : p));
+    // Never keep the panel waiting: after 8 s it opens with what was read from the message alone.
+    const timer = setTimeout(() => settle({ status: "failed" }), 8000);
+    completarSugerenciaEndpoint(chat.chat_id, m.id)
+      .then((plan) => settle({ status: "done", plan }))
+      .catch((e) => { console.error("[chat] completar sugerencia:", e); settle({ status: "failed" }); })
+      .finally(() => clearTimeout(timer));
   };
   const barAnchor = (e: React.MouseEvent<HTMLElement>) => {
     const r = (e.currentTarget.closest<HTMLElement>("[role=toolbar]") ?? e.currentTarget).getBoundingClientRect();
@@ -2380,9 +2398,16 @@ export function ChatConversation({
       {/* Adjuntar: sitio, gasto y del plan */}
       {addPanel && (() => {
         const m = addPanel.msg;
-        const prefill = planFrom(m);
+        const base = planFrom(m);
+        // With the conversation it wins field by field (an empty field there means «not clear»).
+        const ctxPlan = addPanel.ctx?.status === "done" ? addPanel.ctx.plan : null;
+        const prefill: ({ titulo: string } & PlanPrefill) | null = ctxPlan
+          ? { titulo: ctxPlan.titulo || base?.titulo || "", fecha: ctxPlan.fecha || undefined, hora: ctxPlan.hora || undefined,
+              horaFin: ctxPlan.hora_fin || undefined, tipo: ctxPlan.tipo || base?.tipo, lugar: ctxPlan.lugar || undefined }
+          : base;
         const mo = parseMoment(m.texto);
-        const status: "thinking" | "ready" | "failed" = prefill ? "ready" : reading.has(m.id) ? "thinking" : "failed";
+        const status: "thinking" | "ready" | "failed" =
+          addPanel.ctx?.status === "loading" ? "thinking" : prefill ? "ready" : reading.has(m.id) ? "thinking" : "failed";
         const personas = isDirectChat ? `2 · ${otherName} y tú` : `${chat.miembros.length} · todo el grupo`;
         return (
           <AddToPlanPanel
