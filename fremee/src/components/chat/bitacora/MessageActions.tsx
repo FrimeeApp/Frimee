@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useIsPhone } from "./Sheet";
 import { Drawer } from "vaul";
-import { Copy, Forward, Pencil, Pin, PinOff, Reply, Star, StarOff, Trash2 } from "lucide-react";
+import { Copy, Forward, Pencil, Pin, PinOff, Receipt, Reply, Star, StarOff, Trash2 } from "lucide-react";
 
 /** The milestone diamond (Bitácora): what the group decides and goes to the plan. */
 export function DiamondIcon({ className = "size-[18px]" }: { className?: string }) {
@@ -47,8 +47,10 @@ export type MessageActionsProps = {
   onPin: () => void;
   onStar: () => void;
   onDelete: () => void;
-  /** «Añadir al plan» (P): only in a plan's chat, for its admins. */
+  /** «Añadir al plan» (P): only where @frimee saw an activity, in a plan's chat, for its admins. */
   onAddToPlan?: () => void;
+  /** «Registrar como gasto» (G): only where @frimee saw an expense. */
+  onRegisterExpense?: () => void;
 };
 
 /**
@@ -62,6 +64,7 @@ export function MessageActions(props: MessageActionsProps) {
   const actions: Action[] = [
     { key: "reply", label: "Responder", icon: <Reply className="size-[18px]" />, shortcut: "R", run: props.onReply },
     ...(props.onAddToPlan ? [{ key: "plan", label: "Añadir al plan", icon: <DiamondIcon />, shortcut: "P", run: props.onAddToPlan }] : []),
+    ...(props.onRegisterExpense ? [{ key: "gasto", label: "Registrar como gasto", icon: <Receipt className="size-[18px]" />, shortcut: "G", run: props.onRegisterExpense }] : []),
     ...(props.canEdit ? [{ key: "edit", label: "Editar", icon: <Pencil className="size-[18px]" />, shortcut: "E", run: props.onEdit }] : []),
     { key: "forward", label: "Reenviar", icon: <Forward className="size-[18px]" />, shortcut: "F", run: props.onForward },
     ...(props.canCopy ? [{ key: "copy", label: "Copiar", icon: <Copy className="size-[18px]" />, shortcut: "Ctrl C", run: props.onCopy }] : []),

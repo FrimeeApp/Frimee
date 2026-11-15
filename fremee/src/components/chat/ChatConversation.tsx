@@ -36,6 +36,8 @@ import {
   getPinnedEndpoint,
   getChatIndiceEndpoint,
   getChatLecturasEndpoint,
+  getSugerenciasEndpoint,
+  type Sugerencia,
   listMensajesTramoEndpoint,
   listMensajesDespuesEndpoint,
   type ChatIndice,
@@ -53,7 +55,8 @@ import { PlaceCard } from "@/components/chat/bitacora/PlaceCard";
 import { FrimeeProposal } from "@/components/chat/bitacora/FrimeeProposal";
 import { MessageActions, DiamondIcon } from "@/components/chat/bitacora/MessageActions";
 import { useRouter } from "next/navigation";
-import { PlaceSheet, ExpenseSheet, InvitePlanSheet } from "@/components/chat/bitacora/AttachSheets";
+import { PlaceSheet, ExpenseSheet, InvitePlanSheet, ChoosePlanSheet } from "@/components/chat/bitacora/AttachSheets";
+import { isSuggestionCandidate } from "@/components/chat/bitacora/sugerencias";
 import { uploadPlanCoverFile, uploadAudioBlob, uploadAudioFile, uploadDocumentFile, uploadMediaFile } from "@/services/firebase/upload";
 import { createRealtimeTopic } from "@/lib/realtime";
 import AudioPlayer from "@/components/common/AudioPlayer";
@@ -101,6 +104,14 @@ type ChatIconButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "type">
   label: string;
   size?: keyof typeof CHAT_ICON_BUTTON_SIZE;
   tone?: keyof typeof CHAT_ICON_BUTTON_TONE;
+};
+
+/** What «Añadir al plan» hands to the add-activity sheet (read from the message or its card). */
+export type PlanPrefill = { fecha?: string; hora?: string; tipo?: string; lugar?: string; lat?: number; lng?: number };
+
+/** Plan card kind → activity type. */
+const CARD_TIPO: Record<string, string> = {
+  vuelo: "VUELO", tren: "TREN", bus: "BUS", barco: "BARCO", alojamiento: "HOTEL", restaurante: "RESTAURANTE", actividad: "ACTIVIDAD",
 };
 
 /** Long press opens reactions and actions (board s-sistema · Gestos). */
@@ -184,7 +195,7 @@ export function ChatConversation({
   planInfo?: { titulo: string; inicio_at: string; fin_at: string; ubicacion_nombre: string };
   planId?: number;
   isAdmin?: boolean;
-  onAbrirActividad?: (titulo: string) => void;
+  onAbrirActividad?: (titulo: string, extra?: PlanPrefill) => void;
   onLeave?: () => void;
   onMembersChanged?: () => void;
 }) {
@@ -223,6 +234,14 @@ export function ChatConversation({
   const [showInfo, setShowInfo] = useState(false);
   // The message menu: where it opens (over the action bar, or at the pointer) and whether it is only the reactions.
   const router = useRouter();
+  // What @frimee saw in each message (activity / expense), and which ones were already asked about.
+  const [sugerencias, setSugerencias] = useState<Record<number, Sugerencia>>({});
+  const askedRef = useRef<Set<number>>(new Set());
+  // Messages @frimee is reading right now (the model is working: seconds, more the first time).
+  const [reading, setReading] = useState<Set<number>>(new Set());
+  // A chat without a plan: what «Añadir al plan» is saving while you pick the plan.
+  const [choosePlanFor, setChoosePlanFor] = useState<({ titulo: string } & PlanPrefill) | null>(null);
+  const [expensePrefill, setExpensePrefill] = useState<{ titulo: string; importe: number; pagador: string | null } | null>(null);
   // How far the others have read (fn_chat_lecturas): «visto» when all of them read past a message.
   const [lecturas, setLecturas] = useState<Array<{ user_id: string; last_read_at: string | null }>>([]);
   const loadLecturasRef = useRef<() => void>(() => {});
@@ -485,6 +504,35 @@ export function ChatConversation({
     return () => container.removeEventListener("scroll", onScroll);
   }, []);
 
+  // @frimee reads the loaded text messages once, in batches, after the chat settles.
+  useEffect(() => {
+    if (loading) return;
+    const t = setTimeout(() => {
+      const ids = messages
+        .filter((m) => isSuggestionCandidate(m) && !askedRef.current.has(m.id))
+        .map((m) => m.id)
+        .slice(-60);
+      if (ids.length === 0) return;
+      ids.forEach((id) => askedRef.current.add(id));
+      void getSugerenciasEndpoint(chat.chat_id, ids, (asking) => setReading((prev) => new Set([...prev, ...asking])))
+        .then((rows) => setSugerencias((prev) => {
+          const next = { ...prev };
+          for (const r of rows) next[r.mensaje_id] = r;
+          return next;
+        }))
+        .catch((e) => {
+          ids.forEach((id) => askedRef.current.delete(id));
+          console.error("[chat] Error leyendo sugerencias:", (e as { message?: string })?.message ?? String(e));
+        })
+        .finally(() => setReading((prev) => {
+          const next = new Set(prev);
+          ids.forEach((id) => next.delete(id));
+          return next;
+        }));
+    }, 800);
+    return () => clearTimeout(t);
+  }, [messages, loading, chat.chat_id]);
+
   // Count what others send while you read further up.
   useEffect(() => {
     const last = messages[messages.length - 1];
@@ -659,18 +707,49 @@ export function ChatConversation({
   };
 
   /**
-   * «Añadir al plan» (rombo, P): the add-activity sheet with the message as its title (a shared place
-   * keeps its name). In the plan page it opens right there; from Mensajes it goes to the plan.
+   * «Añadir al plan» (rombo, P) and «Registrar como gasto» (G) only where they make sense: a shared
+   * place or plan card, or a text where @frimee saw an activity or an expense (mensaje_sugerencias,
+   * filled by the chat-sugerencias function). The sheet opens with what was read, to review.
    */
-  const canAddToPlan = Boolean(planId) && Boolean(isAdmin);
-  const addToPlan = (m: MensajeRow) => {
-    if (!planId) return;
+  const planFrom = (m: MensajeRow): ({ titulo: string } & PlanPrefill) | null => {
     const mo = parseMoment(m.texto);
-    const titulo = (mo?.type === "lugar" ? mo.nombre : mo?.type === "tarjeta" ? mo.titulo : mo ? momentPreview(m.texto) ?? "" : m.texto)
-      .trim().slice(0, 80);
+    // A shared place: its name and coordinates as they are.
+    if (mo?.type === "lugar") return { titulo: mo.nombre, lugar: mo.nombre, lat: mo.lat, lng: mo.lng };
+    if (mo?.type === "tarjeta") return { titulo: mo.titulo, tipo: CARD_TIPO[mo.kind], lugar: mo.lugar ?? undefined };
+    const s = sugerencias[m.id]?.plan;
+    return s?.es_plan && s.titulo
+      ? { titulo: s.titulo, fecha: s.fecha || undefined, hora: s.hora || undefined, tipo: s.tipo || undefined, lugar: s.lugar || undefined }
+      : null;
+  };
+  const gastoFrom = (m: MensajeRow) => {
+    const g = sugerencias[m.id]?.gasto;
+    return g?.es_gasto && g.importe ? { titulo: g.concepto ?? "", importe: g.importe, pagador: m.sender_id } : null;
+  };
+  // In a plan's chat, its admins; in a chat without a plan, «¿Dónde la guardo?» (each plan checks its role).
+  const canPlan = planId ? Boolean(isAdmin) : true;
+  const goAddToPlan = (targetPlanId: number, p: { titulo: string } & PlanPrefill) => {
+    const q = new URLSearchParams({ tab: "itinerario", nuevaActividad: p.titulo.trim().slice(0, 80) });
+    if (p.fecha) q.set("fecha", p.fecha);
+    if (p.hora) q.set("hora", p.hora);
+    if (p.tipo) q.set("tipo", p.tipo);
+    if (p.lugar) q.set("lugar", p.lugar);
+    if (p.lat != null && p.lng != null) { q.set("lat", String(p.lat)); q.set("lng", String(p.lng)); }
+    router.push(`/plans/${targetPlanId}?${q.toString()}`);
+  };
+  const addToPlan = (m: MensajeRow) => {
+    const p = planFrom(m);
+    if (!p) return;
     closeOverlays();
-    if (onAbrirActividad) onAbrirActividad(titulo);
-    else router.push(`/plans/${planId}?tab=itinerario&nuevaActividad=${encodeURIComponent(titulo)}`);
+    if (!planId) { setChoosePlanFor(p); return; }
+    if (onAbrirActividad) onAbrirActividad(p.titulo.trim().slice(0, 80), p);
+    else goAddToPlan(planId, p);
+  };
+  const registerExpense = (m: MensajeRow) => {
+    const g = gastoFrom(m);
+    if (!planId || !g) return;
+    closeOverlays();
+    setExpensePrefill(g);
+    setAttachSheet("gasto");
   };
 
   /** Double tap (board s-sistema · Gestos): react with the last emoji used; again removes it. */
@@ -2306,19 +2385,29 @@ export function ChatConversation({
             onPin={() => { togglePin(m.id); closeOverlays(); }}
             onStar={() => { toggleStar(m.id); closeOverlays(); }}
             onDelete={() => { void handleDeleteMsg(m); closeOverlays(); }}
-            onAddToPlan={canAddToPlan && m.tipo !== "bot" ? () => addToPlan(m) : undefined}
+            onAddToPlan={canPlan && planFrom(m) ? () => addToPlan(m) : undefined}
+            onRegisterExpense={planId && gastoFrom(m) ? () => registerExpense(m) : undefined}
           />
         );
       })()}
 
       {/* Adjuntar: sitio, gasto y del plan */}
+      {choosePlanFor && (
+        <ChoosePlanSheet
+          currentUserId={currentUserId}
+          activity={[choosePlanFor.titulo, choosePlanFor.fecha ? new Date(`${choosePlanFor.fecha}T12:00:00`).toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "short" }) : null, choosePlanFor.hora].filter(Boolean).join(" · ")}
+          onClose={() => setChoosePlanFor(null)}
+          onChoose={(id) => { const p = choosePlanFor; setChoosePlanFor(null); goAddToPlan(id, p); }}
+        />
+      )}
       {attachSheet === "lugar" && <PlaceSheet onClose={() => setAttachSheet(null)} onSend={(place) => sendMoment(place)} />}
       {attachSheet === "gasto" && planId && (
         <ExpenseSheet
           planId={planId}
           members={chat.miembros.map((m) => ({ id: m.id, nombre: m.nombre }))}
           currentUserId={currentUserId}
-          onClose={() => setAttachSheet(null)}
+          initial={expensePrefill ?? undefined}
+          onClose={() => { setAttachSheet(null); setExpensePrefill(null); }}
           onSent={(moment) => sendMoment(moment)}
         />
       )}
@@ -2578,7 +2667,12 @@ export function ChatConversation({
                   <button type="button" aria-label="Responder" title="Responder · R" onClick={(e) => { e.stopPropagation(); setReplyingTo(msg); setTimeout(() => inputRef.current?.focus(), 0); }} className="flex size-[36px] items-center justify-center rounded-[6px] text-muted transition-colors hover:bg-[var(--surface-2)] hover:text-app">
                     <svg aria-hidden viewBox="0 0 24 24" className="size-[18px]" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M9 14 4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></svg>
                   </button>
-                  {canAddToPlan && (
+                  {canPlan && !planFrom(msg) && reading.has(msg.id) && (
+                    <span role="img" aria-label="Frimee está leyendo este mensaje" title="Frimee está leyendo este mensaje…" className="flex size-[36px] items-center justify-center rounded-[6px] opacity-50">
+                      <span className="animate-pulse motion-reduce:animate-none"><DiamondIcon /></span>
+                    </span>
+                  )}
+                  {canPlan && planFrom(msg) && (
                     <button type="button" aria-label="Añadir al plan" title="Añadir al plan · P" onClick={(e) => { e.stopPropagation(); addToPlan(msg); }} className="flex size-[36px] items-center justify-center rounded-[6px] transition-colors hover:bg-[var(--surface-2)]">
                       <DiamondIcon />
                     </button>
@@ -2678,7 +2772,10 @@ export function ChatConversation({
                 } else if (e.key === "Delete" && isMe) {
                   e.preventDefault();
                   void handleDeleteMsg(msg);
-                } else if (key === "p" && !e.shiftKey && canAddToPlan) {
+                } else if (key === "g" && !e.shiftKey && planId && gastoFrom(msg)) {
+                  e.preventDefault();
+                  registerExpense(msg);
+                } else if (key === "p" && !e.shiftKey && canPlan && planFrom(msg)) {
                   e.preventDefault();
                   addToPlan(msg);
                 } else if (key === "f" && !e.shiftKey) {
@@ -2962,6 +3059,16 @@ export function ChatConversation({
               <X className="size-[16px]" />
             </button>
           </div>
+        )}
+        {reading.size > 0 && (
+          <p role="status" className="mb-[var(--space-2)] flex items-center gap-[8px] px-1 text-[13px] text-muted">
+            <span aria-hidden className="flex gap-[3px]">
+              <span className="size-[5px] animate-pulse rounded-full bg-[var(--primary)] motion-reduce:animate-none" />
+              <span className="size-[5px] animate-pulse rounded-full bg-[var(--primary)] [animation-delay:150ms] motion-reduce:animate-none" />
+              <span className="size-[5px] animate-pulse rounded-full bg-[var(--primary)] [animation-delay:300ms] motion-reduce:animate-none" />
+            </span>
+            Frimee está repasando los mensajes para proponer planes y gastos…
+          </p>
         )}
         {showAiHints && (
           <div

@@ -332,3 +332,30 @@ export async function getChatLecturasEndpoint(chatId: string): Promise<Array<{ u
   if (error) throw new Error(error.message || error.code || "Error leyendo las lecturas del chat");
   return (data ?? []) as Array<{ user_id: string; last_read_at: string | null }>;
 }
+
+/** What @frimee saw in a message (mensaje_sugerencias): an activity for the plan and/or an expense. */
+export type Sugerencia = {
+  mensaje_id: number;
+  plan: { es_plan: boolean; titulo?: string; fecha?: string; hora?: string; lugar?: string; tipo?: string };
+  gasto: { es_gasto: boolean; concepto?: string; importe?: number };
+};
+
+/**
+ * Suggestions for some messages: the stored ones are read directly (RLS: members); only the missing
+ * ones go to the chat-sugerencias function, which asks Claude and stores them for everybody.
+ */
+export async function getSugerenciasEndpoint(chatId: string, ids: number[], onAskingAI?: (ids: number[]) => void): Promise<Sugerencia[]> {
+  if (ids.length === 0) return [];
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.from("mensaje_sugerencias").select("mensaje_id, plan, gasto").in("mensaje_id", ids);
+  if (error) throw new Error(error.message || "Error leyendo sugerencias");
+  const stored = (data ?? []) as Sugerencia[];
+  const have = new Set(stored.map((r) => r.mensaje_id));
+  const missing = ids.filter((id) => !have.has(id)).slice(0, 60);
+  if (missing.length === 0) return stored;
+  // Only now the model is involved (seconds, more on a cold start): let the chat say so.
+  onAskingAI?.(missing);
+  const { data: fn, error: fnError } = await supabase.functions.invoke("chat-sugerencias", { body: { chat_id: chatId, mensaje_ids: missing } });
+  if (fnError) throw new Error(fnError.message || "Error pidiendo sugerencias");
+  return [...stored, ...(((fn as { sugerencias?: Sugerencia[] })?.sugerencias) ?? [])];
+}
