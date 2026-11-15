@@ -23,6 +23,10 @@ export type DateRangePickerProps = {
   invalid?: boolean;
   disabled?: boolean;
   label?: string;
+  /** @frimee is still reading the chat: a bar where the dates will go (the field still opens). */
+  leyendo?: boolean;
+  /** Text of the empty field instead of «Elige las fechas» (e.g. Frimee found no dates). */
+  vacio?: string;
 };
 
 // ── dates ─────────────────────────────────────────────────────────────────────
@@ -37,7 +41,7 @@ const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const dayShort = (s: string) => parse(s).toLocaleDateString("es-ES", { weekday: "short", day: "numeric" }).replace(".", "");
 const mon = (s: string) => parse(s).toLocaleDateString("es-ES", { month: "short" }).replace(".", "");
 /** «noviembre 2026» */
-const monthTitle = (y: number, m: number) => `${new Date(y, m, 1).toLocaleDateString("es-ES", { month: "long" })} ${y}`;
+const monthTitle = (y: number, m: number) => `${cap(new Date(y, m, 1).toLocaleDateString("es-ES", { month: "long" }))} ${y}`;
 
 /** «Vie 27 nov» */
 export const dayLabel = (s: string) => `${cap(dayShort(s))} ${mon(s)}`;
@@ -61,7 +65,7 @@ export function DateRangePicker(props: DateRangePickerProps) {
   const phone = useIsPhone();
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const { inicio, fin, invalid, disabled, label = "Fechas del plan" } = props;
+  const { inicio, fin, invalid, disabled, leyendo, vacio, label = "Fechas del plan" } = props;
   const has = Boolean(inicio && fin);
 
   const trigger = (
@@ -81,12 +85,14 @@ export function DateRangePicker(props: DateRangePickerProps) {
           <CircleAlert aria-hidden className="size-[18px] shrink-0 text-[var(--error)]" />
           <span className="min-w-0 flex-1 truncate text-[var(--error)]">Elige las fechas del plan</span>
         </>
+      ) : leyendo && !has ? (
+        <span aria-hidden className="skel-live mr-auto block h-[16px] w-[60%]" />
       ) : has ? (
         <span className="min-w-0 flex-1 truncate tabular-nums text-app">{rangeWithCount(inicio, fin)}</span>
       ) : (
         <>
           <CalendarDays aria-hidden className="size-[18px] shrink-0 text-[var(--text-secondary)]" />
-          <span className="min-w-0 flex-1 truncate text-[var(--text-secondary)]">Elige las fechas</span>
+          <span className="min-w-0 flex-1 truncate text-[var(--text-secondary)]">{vacio ?? "Elige las fechas"}</span>
         </>
       )}
       <ChevronDown aria-hidden className="size-[18px] shrink-0 text-[var(--text-secondary)]" />
@@ -159,6 +165,11 @@ function Calendar({ a, b, first, sugerido, hover, onPick, onEscape }: CalProps) 
     const n = new Date(view.y, view.m + delta, 1);
     if (delta < 0 && isCurrentMonth) return;
     setView({ y: n.getFullYear(), m: n.getMonth() });
+    // The arrows keep a day of the shown month focusable (Tab into the grid lands on it).
+    const p = parse(focusDay);
+    const last = new Date(n.getFullYear(), n.getMonth() + 1, 0).getDate();
+    const d = iso(new Date(n.getFullYear(), n.getMonth(), Math.min(p.getDate(), last)));
+    setFocusDay(d < today ? today : d);
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
@@ -281,8 +292,12 @@ function DesktopMenu({ inicio, fin, sugerido, onChange, anchor, onClose, label =
     document.addEventListener("pointerdown", onDown);
     return () => document.removeEventListener("pointerdown", onDown);
   }, [anchor, onClose]);
-  // Focus the calendar on open.
-  useEffect(() => { ref.current?.querySelector<HTMLButtonElement>('[role="gridcell"][tabindex="0"]')?.focus(); }, []);
+  // Focus the calendar on open, once it is placed: while hidden (no position yet) focus() does
+  // nothing, and the keyboard (arrows, Re Pág / Av Pág, Inicio / Fin, Intro, Escape) needs it there.
+  const placed = pos !== null;
+  useEffect(() => {
+    if (placed) ref.current?.querySelector<HTMLButtonElement>('[role="gridcell"][tabindex="0"]')?.focus();
+  }, [placed]);
 
   const pick = (d: string) => {
     if (!first || d < first) { setFirst(d); return; }
