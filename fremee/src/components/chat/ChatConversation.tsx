@@ -63,7 +63,7 @@ import { useRouter } from "next/navigation";
 import { PlaceSheet, ExpenseSheet, InvitePlanSheet } from "@/components/chat/bitacora/AttachSheets";
 import { AddToPlanPanel, type PanelPrefill } from "@/components/chat/bitacora/AddToPlanPanel";
 import { PlanMarkLine } from "@/components/chat/bitacora/PlanMarkLine";
-import { CreatePlanFlow, CopySeparator, PlanCreatedMark, type Guarda } from "@/components/chat/bitacora/PlanFromChat";
+import { CreatePlanFlow, CopySeparator, PlanCreatedMark, useMisPlanIds, type Guarda } from "@/components/chat/bitacora/PlanFromChat";
 import { isSuggestionCandidate } from "@/components/chat/bitacora/sugerencias";
 import { uploadPlanCoverFile, uploadAudioBlob, uploadAudioFile, uploadDocumentFile, uploadMediaFile } from "@/services/firebase/upload";
 import { createRealtimeTopic } from "@/lib/realtime";
@@ -767,14 +767,18 @@ export function ChatConversation({
     if (mo?.type === "plan_creado" && mo.origen_mensaje_id) sellados.set(mo.origen_mensaje_id, { plan: mo, hitoId: x.id });
   }
   const puedePlan = (m: MensajeRow) => canPlan && !sellados.has(m.id);
+  // Who joined a plan after it was made is not in its mark: ask which plans you are in now.
+  const misPlanes = useMisPlanIds(currentUserId, !planId && sellados.size > 0);
+  const enSellado = (s: { plan: PlanCreatedMoment }) =>
+    s.plan.miembros.some((x) => x.id === currentUserId) || Boolean(misPlanes?.has(s.plan.plan_id));
   /** A sealed diamond: its plan (members) or its «Plan creado» mark, where «Pedir unirme» is. */
   const abrirSellado = (s: { plan: PlanCreatedMoment; hitoId: number }) => {
     closeOverlays();
-    if (s.plan.miembros.some((x) => x.id === currentUserId)) { router.push(`/plans/${s.plan.plan_id}`); return; }
+    if (enSellado(s)) { router.push(`/plans/${s.plan.plan_id}`); return; }
     document.getElementById(`msg-${s.hitoId}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
   };
   const selladoLabel = (s: { plan: PlanCreatedMoment }) =>
-    `En «${s.plan.titulo}» · ${s.plan.miembros.some((x) => x.id === currentUserId) ? "Abrir" : "Pedir unirme"}`;
+    `En «${s.plan.titulo}» · ${enSellado(s) ? "Abrir" : "Pedir unirme"}`;
   const goAddToPlan = (targetPlanId: number, p: { titulo: string } & PlanPrefill) => {
     const q = new URLSearchParams({ tab: "itinerario", nuevaActividad: p.titulo.trim().slice(0, 80) });
     if (p.fecha) q.set("fecha", p.fecha);
