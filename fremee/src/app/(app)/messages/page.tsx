@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useRef, useState, useCallback } from "react";
 import AppSidebar from "@/components/common/AppSidebar";
 import LoadingScreen from "@/components/common/LoadingScreen";
@@ -11,19 +10,20 @@ import {
   listChats,
   getOrCreateDirectoChat,
   createGrupoChat,
+  sendMensaje,
   resolveChatName,
   resolveChatAvatar,
-  formatChatTime,
   type ChatListItem,
 } from "@/services/api/repositories/chat.repository";
-import { fetchActiveFriends, type PublicUserProfileRow } from "@/services/api/endpoints/users.endpoint";
 import { useToast } from "@/components/ui/Toaster";
-import { createGrupoEndpoint } from "@/services/api/endpoints/grupos.endpoint";
-import { ChatConversation, BackIcon, GroupIcon } from "@/components/chat/ChatConversation";
-import { SearchInput } from "@/components/ui/SearchInput";
-import { BarChart2, CalendarDays, FileText, Image as ImageIcon, MapPin, Mic, Phone, Receipt, Video } from "lucide-react";
-import { momentPreview } from "@/components/chat/bitacora/moments";
-import { tripStatus } from "@/components/chat/bitacora/timeline";
+import { ChatConversation, GroupIcon } from "@/components/chat/ChatConversation";
+import { ChatSearch } from "@/components/chat/nuevo/ChatSearch";
+import { DraftDirectChat } from "@/components/chat/nuevo/DraftDirectChat";
+import { NewGroupPicker, NewGroupPreview, useNewGroup } from "@/components/chat/nuevo/NewGroup";
+import { useFriends, type Friend } from "@/components/chat/nuevo/people";
+import { notifyChatAdded } from "@/components/chat/notifyChatAdded";
+import { UserPlus } from "lucide-react";
+import { ChatList, ChatListSkeleton, type ChatFilter } from "@/components/chat/lista/ChatList";
 import { fetchPlanUserRol } from "@/services/api/endpoints/plans.endpoint";
 
 export default function MessagesPage() {
@@ -42,87 +42,89 @@ export default function MessagesPage() {
   const [chats, setChats] = useState<ChatListItem[]>([]);
   const [chatsLoading, setChatsLoading] = useState(true);
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
-  const [searchValue, setSearchValue] = useState("");
+  /** A search result in the middle of a chat: open it at that message. */
+  const [jumpTo, setJumpTo] = useState<{ chatId: string; mensajeId: number } | null>(null);
   const feedSupabaseRef = useRef(createBrowserSupabaseClient());
 
-  // Nueva conversación
-  const [showFriendPicker, setShowFriendPicker] = useState(false);
-  const [friends, setFriends] = useState<PublicUserProfileRow[]>([]);
-  const [friendsLoading, setFriendsLoading] = useState(false);
-  const [startingChatWith, setStartingChatWith] = useState<string | null>(null);
+  // Buscador, chat 1 a 1 que aún no existe y «Nuevo grupo» (tableros nc-*).
+  const [searchActive, setSearchActive] = useState(false);
+  const [listFilter, setListFilter] = useState<ChatFilter>("todos");
+  const [draftFriend, setDraftFriend] = useState<Friend | null>(null);
+  const [newGroupOpen, setNewGroupOpen] = useState(false);
+  const { state: friends, load: loadFriends } = useFriends();
+  const newGroup = useNewGroup();
+  const creatingGroupRef = useRef(false);
 
-  // Crear grupo
-  const [showGroupCreator, setShowGroupCreator] = useState(false);
-  const [groupName, setGroupName] = useState("");
-  const [selectedMemberIds, setSelectedMemberIds] = useState<Set<string>>(new Set());
-  const [creatingGroup, setCreatingGroup] = useState(false);
+  const openChat = (chatId: string, mensajeId?: number) => {
+    setDraftFriend(null);
+    setJumpTo(mensajeId ? { chatId, mensajeId } : null);
+    setSelectedChatId(chatId);
+    setChats((prev) => prev.map((c) => (c.chat_id !== chatId ? c : { ...c, unread_count: 0 })));
+  };
 
-  const openFriendPicker = async () => {
-    setShowFriendPicker(true);
-    setShowGroupCreator(false);
-    setGroupName("");
-    setSelectedMemberIds(new Set());
-    setFriendsLoading(true);
+  const openNewGroup = () => {
+    newGroup.reset();
+    setSearchActive(false);
+    setDraftFriend(null);
+    setSelectedChatId(null);
+    setNewGroupOpen(true);
+    void loadFriends();
+  };
+
+  /** A friend from the search: their chat if it exists, else an empty one that is created on the first message. */
+  const startChatWith = (friend: Friend) => {
+    const existing = chats.find((c) => c.tipo === "DIRECTO" && c.miembros.some((m) => m.id === friend.id));
+    if (existing) { openChat(existing.chat_id); return; }
+    setSelectedChatId(null);
+    setJumpTo(null);
+    setDraftFriend(friend);
+  };
+
+  const sendFirstMessage = async (friend: Friend, texto: string) => {
     try {
-      const data = await fetchActiveFriends();
-      setFriends(data);
+      const chatId = await getOrCreateDirectoChat(friend.id);
+      await sendMensaje({ chatId, texto });
+      notifyChatAdded([friend.id], chatId);
+      await loadChats();
+      setDraftFriend(null);
+      setJumpTo(null);
+      setSelectedChatId(chatId);
     } catch (e) {
-      console.error("[messages] Error cargando amigos:", e);
-      toastError("No se pudieron cargar tus amigos.");
-    } finally {
-      setFriendsLoading(false);
+      console.error("[mensajes] Error empezando el chat:", (e as { message?: string })?.message ?? String(e));
+      // Said by the composer, in one line above the box; the text stays there to retry.
+      throw new Error(failMessage(e, "El mensaje no se ha enviado"));
     }
   };
 
-  const handleStartChat = async (friendId: string) => {
-    if (startingChatWith) return;
-    setStartingChatWith(friendId);
+  /** Chat + group + members in one go (fn_chat_create_grupo); then the first message, if any. */
+  const createGroup = async (primerMensaje?: string) => {
+    if (creatingGroupRef.current || !newGroup.valid) return;
+    creatingGroupRef.current = true;
+    newGroup.setCreating(true);
+    const miembros = newGroup.selected.map((p) => p.id);
     try {
-      const chatId = await getOrCreateDirectoChat(friendId);
-      setShowFriendPicker(false);
+      const chatId = await createGrupoChat({ nombre: newGroup.nombre.trim(), miembros });
+      if (primerMensaje) {
+        try {
+          await sendMensaje({ chatId, texto: primerMensaje });
+        } catch (e) {
+          console.error("[mensajes] Error enviando el primer mensaje del grupo:", (e as { message?: string })?.message ?? String(e));
+          toastError("El grupo se ha creado, pero el mensaje no se pudo enviar.");
+        }
+      }
+      notifyChatAdded(miembros, chatId);
       await loadChats();
-      setSelectedChatId(chatId);
+      setNewGroupOpen(false);
+      newGroup.reset();
+      openChat(chatId);
     } catch (e) {
-      console.error("[messages] Error iniciando chat:", e);
-      toastError("No se pudo iniciar la conversación.");
+      console.error("[mensajes] Error creando el grupo:", (e as { message?: string })?.message ?? String(e));
+      // Next to the create button; the composer (if it came from there) keeps its text quietly.
+      newGroup.setError(failMessage(e, "No se ha creado el grupo"));
+      newGroup.setCreating(false);
+      throw new Error("");
     } finally {
-      setStartingChatWith(null);
-    }
-  };
-
-  const toggleMember = (id: string) => {
-    setSelectedMemberIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const handleCreateGroup = async () => {
-    const nombre = groupName.trim();
-    if (!nombre || selectedMemberIds.size === 0 || creatingGroup) return;
-    setCreatingGroup(true);
-    try {
-      const miembros = Array.from(selectedMemberIds);
-
-      // Crear chat de grupo y registro social en paralelo
-      const [chatId] = await Promise.all([
-        createGrupoChat({ nombre, miembros }),
-        createGrupoEndpoint({ nombre, miembros }),
-      ]);
-
-      setShowFriendPicker(false);
-      setShowGroupCreator(false);
-      setGroupName("");
-      setSelectedMemberIds(new Set());
-      await loadChats();
-      setSelectedChatId(chatId);
-    } catch (e) {
-      console.error("[messages] Error creando grupo:", e);
-      toastError("No se pudo crear el grupo.");
-    } finally {
-      setCreatingGroup(false);
+      creatingGroupRef.current = false;
     }
   };
 
@@ -175,281 +177,100 @@ export default function MessagesPage() {
     return () => { cancelled = true; };
   }, [selectedPlanId, user]);
 
+  // «Nuevo grupo» on desktop: Escape goes back to Messages without creating anything.
+  useEffect(() => {
+    if (!newGroupOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !e.defaultPrevented) setNewGroupOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [newGroupOpen]);
+
   if (loading) return <LoadingScreen />;
 
   const selectedChat = chats.find((c) => c.chat_id === selectedChatId) ?? null;
-  const trimmedSearch = searchValue.trim().toLowerCase();
-  const filteredChats = trimmedSearch
-    ? chats.filter((c) => {
-        const name = resolveChatName(c, user?.id ?? "").toLowerCase();
-        return name.includes(trimmedSearch) || (c.last_message ?? "").toLowerCase().includes(trimmedSearch);
-      })
-    : chats;
 
-  const isInChat = !!(selectedChat && user);
-  const hideMobileChrome = isInChat || showFriendPicker;
+  const isInChat = !!((selectedChat || draftFriend) && user);
+  // Searching on a phone: no bottom bar nor bell (it would sit over «Cancelar»).
+  const hideMobileChrome = isInChat || newGroupOpen || searchActive;
 
   /* ── Shared chat list panel content (used in both mobile & desktop) ── */
-  const chatListContent = showFriendPicker ? (
-    <div className="flex h-full flex-col">
-      {/* Header */}
-      <div className="flex items-center gap-[var(--space-3)] px-[var(--space-4)] pb-[var(--space-3)] pt-mobile-safe-top md:py-[var(--space-3)]">
-        <button
-          type="button"
-          onClick={() => {
-            if (showGroupCreator) setShowGroupCreator(false);
-            else setShowFriendPicker(false);
-          }}
-          className="flex size-[36px] items-center justify-center rounded-full transition-colors hover:bg-surface"
-          aria-label="Volver"
-        >
-          <BackIcon className="size-[18px]" />
-        </button>
-        <h1 className="text-[var(--font-h2)] font-[var(--fw-regular)] leading-[1.15] text-app md:text-[var(--font-h1)]">
-          {showGroupCreator ? "Nuevo grupo" : "Nueva conversación"}
-        </h1>
-      </div>
-
-      <div className="flex-1 overflow-y-auto overscroll-contain px-[var(--space-3)]">
-        {friendsLoading ? (
-          <div className="flex justify-center py-[var(--space-12)]">
-            <div className="size-5 animate-spin rounded-full border-2 border-current border-t-transparent opacity-40" />
-          </div>
-        ) : showGroupCreator ? (
-          /* ── Creador de grupo ── */
-          <div className="space-y-[var(--space-4)]">
-            <div>
-              <label className="mb-[var(--space-2)] block text-[14px] font-[var(--fw-semibold)] uppercase tracking-wide text-muted">Nombre del grupo</label>
-              <input
-                type="text"
-                value={groupName}
-                onChange={(e) => setGroupName(e.target.value)}
-                placeholder="Ej: Viaje a Roma"
-                className="h-[44px] w-full rounded-[12px] border border-app bg-surface-inset px-[14px] text-[15px] text-app outline-none transition-colors focus:border-[var(--border-strong)] placeholder:text-muted"
-                autoFocus
-              />
-            </div>
-
-            {selectedMemberIds.size > 0 && (
-              <div className="flex flex-wrap gap-[6px]">
-                {friends
-                  .filter((f) => selectedMemberIds.has(f.id))
-                  .map((friend) => (
-                    <button
-                      key={friend.id}
-                      type="button"
-                      onClick={() => toggleMember(friend.id)}
-                      className="flex items-center gap-[6px] rounded-full border border-app bg-surface px-[10px] py-[5px] text-[14px] font-[var(--fw-medium)] text-app transition-colors hover:bg-surface-inset"
-                    >
-                      <span>{friend.nombre?.split(" ")[0]}</span>
-                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[12px] text-muted">
-                        <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-                      </svg>
-                    </button>
-                  ))}
-              </div>
-            )}
-
-            <div>
-              <p className="mb-[var(--space-2)] text-[14px] font-[var(--fw-semibold)] uppercase tracking-wide text-muted">Añadir miembros</p>
-              {friends.length === 0 ? (
-                <p className="py-[var(--space-6)] text-center text-body-sm text-muted">No tienes amigos aún</p>
-              ) : (
-                <div className="space-y-[1px]">
-                  {friends.map((friend) => {
-                    const avatarLabel = (friend.nombre.trim()[0] || "U").toUpperCase();
-                    const selected = selectedMemberIds.has(friend.id);
-                    return (
-                      <button
-                        key={friend.id}
-                        type="button"
-                        onClick={() => toggleMember(friend.id)}
-                        className={`flex w-full items-center gap-[var(--space-3)] rounded-[10px] px-[10px] py-[10px] text-left transition-colors hover:bg-surface ${selected ? "bg-surface" : ""}`}
-                      >
-                        <div className="avatar-md flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">
-                          {friend.profile_image ? (
-                            <Image src={friend.profile_image} alt={friend.nombre} width={34} height={34} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
-                          ) : avatarLabel}
-                        </div>
-                        <p className="min-w-0 flex-1 truncate text-body-sm font-[var(--fw-medium)] text-app">{friend.nombre}</p>
-                        <div className={`flex size-[22px] shrink-0 items-center justify-center rounded-[6px] border-2 transition-colors ${selected ? "border-[var(--text-primary)] bg-[var(--text-primary)]" : "border-[var(--border-strong)]"}`}>
-                          {selected && (
-                            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-[13px] text-contrast-token">
-                              <path d="M5 12l5 5L19 7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
-                          )}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            <div className="sticky bottom-0 bg-app pb-[var(--space-3)] pt-[var(--space-2)]">
-              <button
-                type="button"
-                onClick={() => void handleCreateGroup()}
-                disabled={!groupName.trim() || selectedMemberIds.size === 0 || creatingGroup}
-                className="w-full rounded-full bg-[var(--text-primary)] py-[12px] text-body-sm font-[var(--fw-semibold)] text-contrast-token transition-opacity hover:opacity-80 disabled:opacity-40"
-              >
-                {creatingGroup ? "Creando..." : `Crear grupo${selectedMemberIds.size > 0 ? ` (${selectedMemberIds.size})` : ""}`}
-              </button>
-            </div>
-          </div>
-        ) : friends.length === 0 ? (
-          <div className="py-[var(--space-8)] text-center text-body-sm text-muted">No tienes amigos aún</div>
-        ) : (
-          <div>
-            <button
-              type="button"
-              onClick={() => setShowGroupCreator(true)}
-              className="flex w-full items-center gap-[var(--space-3)] rounded-[10px] px-[10px] py-[12px] text-left transition-colors hover:bg-surface"
-            >
-              <div className="avatar-md flex shrink-0 items-center justify-center rounded-full bg-[var(--text-primary)]">
-                <GroupIcon className="size-[16px] text-contrast-token" />
-              </div>
-              <div>
-                <p className="text-body-sm font-[var(--fw-semibold)] text-app">Nuevo grupo</p>
-                <p className="text-[14px] leading-[16px] text-muted">Crea un chat con varios amigos</p>
-              </div>
-            </button>
-
-            <div className="my-[var(--space-2)] border-t border-app" />
-
-            <p className="mb-[var(--space-1)] px-[10px] pt-[var(--space-1)] text-[14px] font-[var(--fw-semibold)] uppercase tracking-wide text-muted">Amigos</p>
-
-            <div className="space-y-[1px]">
-              {friends.map((friend) => {
-                const avatarLabel = (friend.nombre.trim()[0] || "U").toUpperCase();
-                const isStarting = startingChatWith === friend.id;
-                return (
-                  <button
-                    key={friend.id}
-                    type="button"
-                    onClick={() => void handleStartChat(friend.id)}
-                    disabled={!!startingChatWith}
-                    className="flex w-full items-center gap-[var(--space-3)] rounded-[10px] px-[10px] py-[10px] text-left transition-colors hover:bg-surface disabled:opacity-50"
-                  >
-                    <div className="avatar-md flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">
-                      {friend.profile_image ? (
-                        <Image src={friend.profile_image} alt={friend.nombre} width={34} height={34} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
-                      ) : avatarLabel}
-                    </div>
-                    <p className="min-w-0 flex-1 truncate text-body-sm font-[var(--fw-medium)] text-app">{friend.nombre}</p>
-                    {isStarting && (
-                      <div className="size-4 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent opacity-40" />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
+  const chatListContent = newGroupOpen && user ? (
+    <NewGroupPicker
+      g={newGroup}
+      friends={friends}
+      onLoadFriends={(force) => void loadFriends(force)}
+      chats={chats}
+      userId={user.id}
+      onBack={() => setNewGroupOpen(false)}
+      onCreate={() => void createGroup().catch(() => {})}
+    />
   ) : (
     <div className="flex h-full flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between px-[var(--space-4)] pb-[var(--space-8)] pt-mobile-safe-top md:pb-[var(--space-8)] md:pt-[var(--space-3)]">
+      {/* Header: «Mensajes» and the «Nuevo grupo» button (on phones the search takes the top while open) */}
+      {/* Phones: the bell is fixed at the top right (AppSidebar, --page-margin-x + 44 px), so the header leaves it that room. */}
+      <div className={`items-center justify-between gap-[var(--space-2)] pb-[var(--space-6)] pl-[var(--space-4)] pr-[calc(var(--page-margin-x)+48px)] pt-mobile-safe-top md:flex md:pr-[var(--space-2)] md:pt-[var(--space-3)] ${searchActive ? "hidden" : "flex"}`}>
         <h1 className="text-[var(--font-h2)] font-[var(--fw-regular)] leading-[1.15] text-app md:text-[var(--font-h1)]">Mensajes</h1>
+        <button
+          type="button"
+          onClick={openNewGroup}
+          aria-label="Nuevo grupo"
+          title="Nuevo grupo"
+          className="flex size-[44px] shrink-0 items-center justify-center rounded-[8px] text-app transition-colors hover:bg-[var(--chat-surface)]"
+        >
+          <UserPlus className="size-[22px]" aria-hidden />
+        </button>
       </div>
+      {searchActive && <div className="pt-mobile-safe-top md:hidden" />}
 
-      {/* Search bar */}
-      <div className="px-[var(--space-4)] pb-[var(--space-3)]">
-        <SearchInput
-          value={searchValue}
-          onChange={setSearchValue}
-          className="h-[40px] w-full"
+      {user && (
+        <ChatSearch
+          active={searchActive}
+          onActiveChange={setSearchActive}
+          chats={chats}
+          userId={user.id}
+          friends={friends}
+          onLoadFriends={(force) => void loadFriends(force)}
+          onOpenChat={openChat}
+          onStartChat={startChatWith}
         />
-      </div>
+      )}
 
-      {/* Chat list */}
-      <div className="flex-1 overflow-y-auto overscroll-contain">
-        {chatsLoading ? (
-          <ChatListSkeleton />
-        ) : filteredChats.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-[var(--space-3)] py-[var(--space-12)] text-center">
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-12 opacity-20">
-              <path d="M21 3L10 14" stroke="currentColor" strokeWidth="1.8" />
-              <path d="M21 3L14.5 21L10 14L3 9.5L21 3Z" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.8" />
-            </svg>
-            <p className="text-body-sm text-muted">
-              {searchValue.trim() ? "No se encontraron conversaciones" : "No tienes conversaciones aún"}
-            </p>
-          </div>
-        ) : (
-          <div className="flex flex-col pb-[var(--space-4)]">
-            {[
-              { title: "Viajes", items: filteredChats.filter((c) => c.tipo === "PLAN") },
-              { title: "Personas y grupos", items: filteredChats.filter((c) => c.tipo !== "PLAN") },
-            ].filter((section) => section.items.length > 0).map((section, sectionIdx, sections) => (
-              <section key={section.title} aria-label={section.title}>
-                {/* Headings only when there are trips: a list of people alone needs none */}
-                {sections.length > 1 || section.title === "Viajes" ? (
-                  <h2 className={`px-[var(--space-4)] pb-[6px] text-[12px] font-[var(--fw-semibold)] tracking-[0.02em] text-muted ${sectionIdx === 0 ? "pt-[var(--space-2)]" : "pt-[var(--space-4)]"}`}>{section.title}</h2>
-                ) : null}
-                {section.items.map((chat) => {
-                  const name = resolveChatName(chat, user?.id ?? "");
-                  const avatar = resolveChatAvatar(chat, user?.id ?? "");
-                  const hasUnread = chat.unread_count > 0;
-                  const isSelected = chat.chat_id === selectedChatId;
-                  const trip = chat.plan_inicio_at && chat.plan_fin_at ? { start: new Date(chat.plan_inicio_at), end: new Date(chat.plan_fin_at) } : null;
-                  const preview = describeLastMessage(chat.last_message);
-                  return (
-                    <button
-                      key={chat.chat_id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedChatId(chat.chat_id);
-                        setChats((prev) => prev.map((c) => c.chat_id !== chat.chat_id ? c : { ...c, unread_count: 0 }));
-                      }}
-                      aria-current={isSelected ? "true" : undefined}
-                      // The open chat (board d-*): --chat-surface, since --surface is white like the page in light mode.
-                      className={`flex min-h-[68px] w-full items-center gap-3 px-[var(--space-4)] py-[10px] text-left transition-colors focus:outline-none focus-visible:bg-[var(--chat-surface)] ${isSelected ? "bg-[var(--chat-surface)]" : "hover:bg-[var(--chat-surface)]"}`}
-                    >
-                      {trip ? (
-                        <span aria-hidden className={`flex size-[44px] shrink-0 flex-col items-center justify-center rounded-[8px] border leading-none ${hasUnread ? "border-[var(--chat-me-border)] bg-[var(--chat-me)]" : "border-app bg-[var(--surface)]"}`}>
-                          <span className="[font-family:var(--font-display-face)] text-[21px] tabular-nums text-app">{trip.start.getDate()}</span>
-                          <span className="mt-[3px] text-[10px] font-[var(--fw-semibold)] uppercase tracking-[0.04em] text-muted">{trip.start.toLocaleDateString("es-ES", { month: "short" }).replace(".", "")}</span>
-                        </span>
-                      ) : (
-                        <span className="shrink-0"><ChatPreviewAvatar name={name} image={avatar} isGroup={chat.tipo === "GRUPO"} /></span>
-                      )}
-                      <span className="min-w-0 flex-1">
-                        <span className="flex items-baseline gap-2">
-                          <span className={`truncate text-[16px] ${hasUnread ? "font-[700]" : "font-[600]"} text-app`}>{name}</span>
-                          {trip && <span className="shrink-0 text-[12px] text-muted">{tripStatus(trip)}</span>}
-                          <span className={`ml-auto shrink-0 text-[12px] tabular-nums ${hasUnread ? "font-[var(--fw-semibold)] text-primary-token" : "text-muted"}`}>{formatChatTime(chat.last_message_at)}</span>
-                        </span>
-                        <span className="mt-[2px] flex items-center gap-2">
-                          <span className={`flex min-w-0 flex-1 items-center gap-[6px] text-[14px] leading-[1.4] ${preview.missed ? "text-[var(--error)]" : hasUnread ? "text-app" : "text-muted"}`}>
-                            {preview.icon}
-                            <span className="truncate">{preview.text}</span>
-                          </span>
-                          {hasUnread && (
-                            <span className="flex h-[20px] min-w-[20px] shrink-0 items-center justify-center rounded-full bg-[var(--primary)] px-[6px] text-[11px] font-[700] leading-none text-[var(--contrast)]" aria-label={`${chat.unread_count} sin leer`}>
-                              {chat.unread_count > 99 ? "99+" : chat.unread_count}
-                            </span>
-                          )}
-                        </span>
-                      </span>
-                    </button>
-                  );
-                })}
-              </section>
-            ))}
-          </div>
-        )}
-      </div>
+      {/* Chat list (boards li-*): filters, 3 trips on top in «Todos» */}
+      {!searchActive && (
+        <div className="flex-1 overflow-y-auto overscroll-contain">
+          {chatsLoading ? (
+            <ChatListSkeleton />
+          ) : chats.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-[var(--space-3)] px-[var(--space-6)] py-[var(--space-12)] text-center">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-12 opacity-20">
+                <path d="M21 3L10 14" stroke="currentColor" strokeWidth="1.8" />
+                <path d="M21 3L14.5 21L10 14L3 9.5L21 3Z" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.8" />
+              </svg>
+              <p className="text-body-sm text-muted">No tienes conversaciones aún. Busca a un amigo arriba para escribirle.</p>
+            </div>
+          ) : (
+            <ChatList
+              chats={chats}
+              userId={user?.id ?? ""}
+              selectedChatId={selectedChatId}
+              filter={listFilter}
+              onFilter={setListFilter}
+              onOpen={openChat}
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 
   /* ── Chat conversation panel (shared) ── */
   const chatPanel = selectedChat && user ? (
     <ChatConversation
-      key={selectedChat.chat_id}
+      key={`${selectedChat.chat_id}:${jumpTo?.chatId === selectedChat.chat_id ? jumpTo.mensajeId : ""}`}
       chat={selectedChat}
+      initialMessageId={jumpTo?.chatId === selectedChat.chat_id ? jumpTo.mensajeId : undefined}
       currentUserId={user.id}
       planId={selectedChat.plan_id ?? undefined}
       isAdmin={Boolean(selectedChat.plan_id) && planAdminFor === selectedChat.plan_id}
@@ -460,7 +281,7 @@ export default function MessagesPage() {
         ubicacion_nombre: selectedChat.plan_ubicacion ?? "",
       } : undefined}
       containerClassName="flex h-full flex-col pt-[var(--space-2)]"
-      onBack={() => { setSelectedChatId(null); void loadChats(); }}
+      onBack={() => { setSelectedChatId(null); setJumpTo(null); void loadChats(); }}
       onStartCall={(tipo) => {
         const nombre = resolveChatName(selectedChat, user.id);
         const foto = resolveChatAvatar(selectedChat, user.id) ?? undefined;
@@ -486,14 +307,21 @@ export default function MessagesPage() {
         ));
       }}
       registerCallReload={(fn) => { reloadCallMessagesRef.current = fn; }}
-      onOpenChat={(id) => { void loadChats().then(() => setSelectedChatId(id)); }}
+      onOpenChat={(id) => { void loadChats().then(() => openChat(id)); }}
+    />
+  ) : draftFriend && user ? (
+    <DraftDirectChat
+      key={draftFriend.id}
+      friend={draftFriend}
+      onBack={() => setDraftFriend(null)}
+      onSend={(texto) => sendFirstMessage(draftFriend, texto)}
     />
   ) : null;
 
   return (
     <div className="h-dvh bg-app text-app">
       <div className="relative h-full">
-        <AppSidebar hideMobileNav={hideMobileChrome} onCreateConversation={() => void openFriendPicker()} />
+        <AppSidebar hideMobileNav={hideMobileChrome} onCreateGroup={openNewGroup} />
 
         {/* Sliding two-panel layout */}
         <div className="h-full overflow-hidden md:ml-[102px]">
@@ -504,19 +332,32 @@ export default function MessagesPage() {
             }`}
           >
             {/* Left panel – chat list */}
-            <div className={`h-full w-1/2 shrink-0 overflow-hidden md:w-[340px] md:border-r md:border-app md:pb-0 lg:w-[380px] ${showFriendPicker ? "pb-0" : "pb-[calc(var(--space-20)+env(safe-area-inset-bottom))]"}`}>
+            <div className={`h-full w-1/2 shrink-0 overflow-hidden md:w-[340px] md:border-r md:border-app md:pb-0 lg:w-[380px] ${newGroupOpen || searchActive ? "pb-0" : "pb-[calc(var(--space-20)+env(safe-area-inset-bottom))]"}`}>
               {chatListContent}
             </div>
 
             {/* Right panel – conversation */}
             <div className="h-full w-1/2 shrink-0 overflow-hidden md:w-0 md:shrink md:flex-1 md:min-w-0">
-              {chatPanel ?? (
-                <div className="flex h-full flex-col items-center justify-center gap-[var(--space-3)] text-center">
+              {newGroupOpen ? (
+                <div className="hidden h-full md:block">
+                  <NewGroupPreview g={newGroup} onCreate={createGroup} />
+                </div>
+              ) : chatPanel ?? (
+                <div className="flex h-full flex-col items-center justify-center gap-[var(--space-2)] px-[var(--space-6)] text-center">
                   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="size-16 opacity-[0.12]">
                     <path d="M21 3L10 14" stroke="currentColor" strokeWidth="1.8" />
                     <path d="M21 3L14.5 21L10 14L3 9.5L21 3Z" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.8" />
                   </svg>
-                  <p className="text-body-sm text-muted">Selecciona una conversación</p>
+                  <p className="[font-family:var(--font-display-face)] text-[24px] text-app">Elige un chat</p>
+                  <p className="max-w-[300px] text-body-sm text-muted">Para escribir a un amigo, búscalo arriba. Para varios, crea un grupo.</p>
+                  <button
+                    type="button"
+                    onClick={openNewGroup}
+                    className="mt-[var(--space-2)] inline-flex min-h-[44px] items-center gap-[8px] rounded-[8px] border border-app px-[16px] text-[15px] font-[var(--fw-semibold)] text-app hover:bg-[var(--chat-surface)]"
+                  >
+                    <GroupIcon className="size-[18px]" />
+                    Nuevo grupo
+                  </button>
                 </div>
               )}
             </div>
@@ -527,54 +368,23 @@ export default function MessagesPage() {
   );
 }
 
-function ChatListSkeleton() {
-  return (
-    <div className="flex flex-col gap-[var(--space-4)] px-[var(--space-4)] py-[var(--space-3)]" aria-label="Cargando conversaciones" role="status">
-      {[1, 2].map((i) => (
-        <div key={i} className="flex items-center gap-[var(--space-3)]">
-          <div className="skeleton-shimmer size-12 shrink-0 rounded-full" />
-          <div className="skeleton-shimmer h-[14px] w-[148px] rounded-full" />
-        </div>
-      ))}
-    </div>
-  );
+/** What fn_chat_create_grupo / fn_chat_get_or_create_directo refuse on purpose, said as they say it. */
+const DB_MESSAGES = [
+  "El grupo necesita un nombre",
+  "El nombre del grupo es demasiado largo",
+  "Elige al menos 2 personas",
+  "Solo puedes añadir a tus amigos",
+  "Solo puedes escribir a tus amigos",
+];
+function dbMessage(e: unknown): string | null {
+  const msg = (e as { message?: string } | null)?.message ?? "";
+  return DB_MESSAGES.find((m) => msg.includes(m)) ?? null;
 }
 
-function ChatPreviewAvatar({ name, image, isGroup }: { name: string; image: string | null; isGroup: boolean }) {
-  if (image) {
-    return (
-      <div className="relative size-12 shrink-0 overflow-hidden rounded-full border border-app">
-        <Image src={image} alt={name} fill sizes="48px" className="object-cover" unoptimized referrerPolicy="no-referrer" />
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex size-12 shrink-0 items-center justify-center rounded-full border border-app bg-surface-2 text-[15px] font-[700] text-muted">
-      {isGroup ? <GroupIcon className="size-[20px] text-muted" /> : (name.trim()[0] || "U").toUpperCase()}
-    </div>
-  );
-}
-
-/** How the last message reads in the chat list: an icon for its kind and a short text. */
-function describeLastMessage(raw: string | null): { icon: React.ReactNode; text: string; missed: boolean } {
-  const m = raw ?? "";
-  try {
-    const parsed = JSON.parse(m) as { type?: string };
-    const text = momentPreview(m);
-    if (text) {
-      const Icon = parsed?.type === "poll" ? BarChart2 : parsed?.type === "lugar" ? MapPin : parsed?.type === "tarjeta" ? CalendarDays : Receipt;
-      return { icon: <Icon className="size-[14px] shrink-0" aria-hidden />, text, missed: false };
-    }
-  } catch { /* plain text */ }
-  if (/llamada|videollamada/i.test(m)) {
-    const missed = /perdida/i.test(m);
-    const isVideo = /video/i.test(m);
-    const Icon = isVideo ? Video : Phone;
-    return { icon: <Icon className="size-[14px] shrink-0" aria-hidden />, text: missed ? (isVideo ? "Videollamada perdida" : "Llamada perdida") : (isVideo ? "Videollamada" : "Llamada de audio"), missed };
-  }
-  if (/^📷/.test(m)) return { icon: <ImageIcon className="size-[14px] shrink-0" aria-hidden />, text: m.replace(/^📷\s*/, "") || "Foto", missed: false };
-  if (/^🎤|nota de voz/i.test(m)) return { icon: <Mic className="size-[14px] shrink-0" aria-hidden />, text: m.replace(/^🎤\s*/, "") || "Nota de voz", missed: false };
-  if (/^📄|^📎/.test(m)) return { icon: <FileText className="size-[14px] shrink-0" aria-hidden />, text: m.replace(/^(📄|📎)\s*/, "") || "Documento", missed: false };
-  return { icon: null, text: m, missed: false };
+/** One short line for a failed send or create: the database's reason, no connection, or retry. */
+function failMessage(e: unknown, what: string): string {
+  const db = dbMessage(e);
+  if (db) return `${db}.`;
+  if (typeof navigator !== "undefined" && !navigator.onLine) return `Sin conexión. ${what}.`;
+  return `${what}. Inténtalo de nuevo.`;
 }
