@@ -3,17 +3,14 @@
 import NextImage from "next/image";
 import { useEffect, useRef, useState, useCallback, Fragment, type ButtonHTMLAttributes } from "react";
 import { buildTimeline, chapterLabel, inTimeOrder, tripRange, tripStatus, type ChapterLabel } from "@/components/chat/bitacora/timeline";
-import Link from "next/link";
 import { DayChapter } from "@/components/chat/bitacora/DayChapter";
 import { ChatRuler, type RulerMark } from "@/components/chat/bitacora/ChatRuler";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { notifyChatAdded } from "@/components/chat/notifyChatAdded";
 import {
   listChats,
-  addChatMember,
   editMensaje,
   getChatMiembros,
-  deleteMensaje,
   listMensajes,
   sendMensaje,
   sendBotMensaje,
@@ -23,13 +20,10 @@ import {
   pollGetVotes,
   resolveChatName,
   resolveChatAvatar,
-  leaveChat,
-  updateChatFoto,
   formatChatTime,
   type ChatListItem,
   type MensajeRow,
 } from "@/services/api/repositories/chat.repository";
-import { fetchActiveFriends, type PublicUserProfileRow } from "@/services/api/endpoints/users.endpoint";
 import {
   closePollEndpoint,
   getReaccionesEndpoint,
@@ -52,8 +46,13 @@ import {
   getMisDestacadosEndpoint,
   resolverPropuestaEndpoint,
   type ReaccionResumen,
+  getChatInfoEndpoint,
+  eliminarMensajeEndpoint,
+  type ChatInfo,
 } from "@/services/api/endpoints/chat.endpoint";
-import { parseMoment, momentPreview, momentAsAssistantText, formatEuros, type Moment, type ProposalMoment, type PlanCreatedMoment } from "@/components/chat/bitacora/moments";
+import { parseMoment, momentPreview, momentAsAssistantText, formatEuros, noticeText, deletedText, type Moment, type ProposalMoment, type PlanCreatedMoment } from "@/components/chat/bitacora/moments";
+import { ChatInfoPanel } from "@/components/chat/info/ChatInfoPanel";
+import { Sheet, useIsPhone } from "@/components/chat/bitacora/Sheet";
 import { PollMoment, emitPollVote } from "@/components/chat/bitacora/PollMoment";
 import { CallLine } from "@/components/chat/bitacora/CallLine";
 import { TripSummaryCard, ExpenseCard, PlanItemCard } from "@/components/chat/bitacora/MomentCards";
@@ -66,7 +65,7 @@ import { AddToPlanPanel, type PanelPrefill } from "@/components/chat/bitacora/Ad
 import { PlanMarkLine } from "@/components/chat/bitacora/PlanMarkLine";
 import { CreatePlanFlow, CopySeparator, PlanCreatedMark, useMisPlanIds, type Guarda } from "@/components/chat/bitacora/PlanFromChat";
 import { isSuggestionCandidate } from "@/components/chat/bitacora/sugerencias";
-import { uploadPlanCoverFile, uploadAudioBlob, uploadAudioFile, uploadDocumentFile, uploadMediaFile } from "@/services/firebase/upload";
+import { uploadAudioBlob, uploadAudioFile, uploadDocumentFile, uploadMediaFile } from "@/services/firebase/upload";
 import { createRealtimeTopic } from "@/lib/realtime";
 import AudioPlayer from "@/components/common/AudioPlayer";
 import { CameraModal } from "@/components/chat/CameraModal";
@@ -91,10 +90,10 @@ const AI_SUGGESTIONS = [
   { label: "Ideas para cenar", prompt: "@frimee proponnos 3 sitios para cenar y haz una encuesta para votar" },
 ];
 import {
-  Trash2, Ban, AlertTriangle, LogOut,
+  Ban,
   Smile, Pin, Camera, Send as LucideSend, PlusCircle, Mic,
   File, Video, Music, BarChart2, Edit, ChevronLeft, Users,
-  Phone, Download, Plus, X, Sparkles, MapPin, Receipt, CalendarDays, CalendarPlus,
+  Phone, Download, X, Sparkles, MapPin, Receipt, CalendarDays, CalendarPlus, Info,
 } from "lucide-react";
 
 const CHAT_ICON_BUTTON_BASE =
@@ -191,6 +190,9 @@ export function ChatConversation({
   onMembersChanged,
   onOpenChat,
   initialMessageId,
+  onChatChanged,
+  onWriteTo,
+  onRenamed,
 }: {
   chat: ChatListItem;
   currentUserId: string;
@@ -213,6 +215,12 @@ export function ChatConversation({
   onOpenChat?: (chatId: string) => void;
   /** Open at this message (a result of the Messages search) instead of at the bottom. */
   initialMessageId?: number;
+  /** Name, photo, people or silence changed (here or from someone else's notice): reload the list. */
+  onChatChanged?: () => void;
+  /** «Escribir a Ana» from the chat information: her 1 a 1 chat. */
+  onWriteTo?: (person: ChatListItem["miembros"][number]) => void;
+  /** The group got a new name (a notice arrived): show it before the list reloads. */
+  onRenamed?: (nombre: string) => void;
 }) {
   type LocalMsg = MensajeRow & { _key?: number };
   const [messages, setMessages] = useState<LocalMsg[]>([]);
@@ -247,7 +255,23 @@ export function ChatConversation({
       // Blocked storage: hidden for this visit only.
     }
   };
+  // Chat information (boards gi-*): a 320 px panel next to the chat on desktop, full screen on phones.
   const [showInfo, setShowInfo] = useState(false);
+  const isPhone = useIsPhone();
+  const [chatInfo, setChatInfo] = useState<ChatInfo | null>(null);
+  const [chatInfoError, setChatInfoError] = useState(false);
+  const loadChatInfo = useCallback(() => {
+    setChatInfoError(false);
+    getChatInfoEndpoint(chat.chat_id)
+      .then(setChatInfo)
+      .catch((e) => { console.error("[chat] Error leyendo la información del chat:", (e as { message?: string })?.message ?? String(e)); setChatInfoError(true); });
+  }, [chat.chat_id]);
+  useEffect(() => { setChatInfo(null); loadChatInfo(); }, [loadChatInfo]);
+  // «Eliminar»: for me, or for everyone (mine; an admin's with anyone's).
+  const [deleting, setDeleting] = useState<MensajeRow | null>(null);
+  // A notice arriving now (someone renamed, added, removed or left): the panel and the list catch up.
+  const lastSeenIdRef = useRef<number | null>(null);
+  useEffect(() => { lastSeenIdRef.current = null; }, [chat.chat_id]);
   // The message menu: where it opens (over the action bar, or at the pointer) and whether it is only the reactions.
   const router = useRouter();
   // What @frimee saw in each message (activity / expense), and which ones were already asked about.
@@ -448,8 +472,12 @@ export function ChatConversation({
         setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, texto } : m)));
       })
       .on("broadcast", { event: "delete_message" }, ({ payload }) => {
-        const { id } = payload as { id: number };
-        setMessages((prev) => prev.filter((m) => m.id !== id));
+        // With `texto`: deleted for everyone, it stays as «Se eliminó este mensaje». Without: an older app.
+        const { id, texto } = payload as { id: number; texto?: string };
+        setMessages((prev) => (texto
+          ? prev.map((m) => (m.id !== id ? m : { ...m, texto, audio_url: null, document_url: null, document_name: null, image_url: null, image_type: null, tipo: "text" }))
+          : prev.filter((m) => m.id !== id)));
+        setPinnedId((p) => (p === id ? null : p));
       })
       .on("broadcast", { event: "kick_member" }, ({ payload }) => {
         const { user_id } = payload as { user_id: string };
@@ -471,7 +499,9 @@ export function ChatConversation({
         { event: "INSERT", schema: "public", table: "mensajes", filter: `chat_id=eq.${chat.chat_id}` },
         (payload) => {
           const msg = payload.new as MensajeRow;
-          if (!msg.tipo?.startsWith("call_")) return; // solo registros de llamada
+          // Only what the database writes on its own: call records and notices (renamed, added,
+          // removed, left). People's messages arrive by broadcast from whoever sent them.
+          if (!msg.tipo?.startsWith("call_") && parseMoment(msg.texto)?.type !== "aviso") return;
           setMessages((prev) => {
             if (prev.some((m) => m.id === msg.id)) return prev;
             isNearBottomRef.current = true;
@@ -1980,15 +2010,47 @@ export function ChatConversation({
     }
   };
 
-  const handleDeleteMsg = async (msg: MensajeRow) => {
-    try {
-      await deleteMensaje(msg.id);
+  /** Throws on failure: the delete sheet says it and stays open. */
+  const handleDeleteMsg = async (msg: MensajeRow, paraTodos: boolean) => {
+    await eliminarMensajeEndpoint(msg.id, paraTodos);
+    if (paraTodos) {
+      const texto = JSON.stringify({ type: "eliminado", por: msg.sender_id === currentUserId ? "autor" : "admin" });
+      setMessages((prev) => prev.map((m) => (m.id !== msg.id ? m : { ...m, texto, audio_url: null, document_url: null, document_name: null, image_url: null, image_type: null, tipo: "text" })));
+      setPinnedId((p) => (p === msg.id ? null : p));
+      void channelRef.current?.send({ type: "broadcast", event: "delete_message", payload: { id: msg.id, texto } });
+      onChatChanged?.();
+    } else {
       setMessages((prev) => prev.filter((m) => m.id !== msg.id));
-      void channelRef.current?.send({ type: "broadcast", event: "delete_message", payload: { id: msg.id } });
-    } catch (e) {
-      console.error("[chat] Error eliminando:", (e as { message?: string })?.message ?? String(e));
     }
+    loadChatInfo();
   };
+  /** «Eliminar para todos»: my messages, or anyone's for a group's or plan's admin. Never a deleted one. */
+  const canDeleteForAll = (m: MensajeRow) => m.id > 0 && parseMoment(m.texto)?.type !== "eliminado"
+    && (m.sender_id === currentUserId
+      || (chat.tipo === "GRUPO" && Boolean(chatInfo?.admins.includes(currentUserId)))
+      || (chat.tipo === "PLAN" && Boolean(isAdmin)));
+  useEffect(() => {
+    const last = messages[messages.length - 1];
+    if (!last || last.id < 0) return;
+    const seen = lastSeenIdRef.current;
+    lastSeenIdRef.current = Math.max(seen ?? 0, last.id);
+    if (seen === null || last.id <= seen) return;
+    const mo = parseMoment(last.texto);
+    if (mo?.type !== "aviso") return;
+    // The new name at once (header and list); the full list reload comes after.
+    if (mo.clase === "renombrado" && mo.nombre) onRenamed?.(mo.nombre);
+    loadChatInfo();
+    onChatChanged?.();
+    // Removed from the group by an admin: the chat is no longer mine.
+    if (mo.clase === "quitado" && mo.user_id === currentUserId) onBack();
+  }, [messages, loadChatInfo, onChatChanged, onRenamed, currentUserId, onBack]);
+  // A deleted message has no actions but «Eliminar para mí»: any way of opening its menu opens that.
+  useEffect(() => {
+    if (contextMenu && parseMoment(contextMenu.msg.texto)?.type === "eliminado") {
+      setDeleting(contextMenu.msg);
+      setContextMenu(null);
+    }
+  }, [contextMenu]);
 
   const handleForward = async (targetChatId: string) => {
     if (!forwardMsg || forwardSending) return;
@@ -2270,8 +2332,41 @@ export function ChatConversation({
     if (e.key === "Escape") { cancelEdit(); cancelReply(); closeOverlays(); }
   };
 
-  if (showInfo) {
-    return <ChatInfoPanel chat={chat} currentUserId={currentUserId} onBack={() => setShowInfo(false)} onLeave={onBack} channelRef={channelRef} onFotoUpdated={onFotoUpdated} containerClassName={containerClassName} />;
+  const infoLabel = chat.tipo === "GRUPO" ? "Información del grupo" : chat.tipo === "PLAN" ? "Información del plan" : "Información del chat";
+  const infoPanel = (variant: "aside" | "screen") => (
+    <ChatInfoPanel
+      chat={chat}
+      currentUserId={currentUserId}
+      info={chatInfo}
+      infoError={chatInfoError}
+      onRetryInfo={loadChatInfo}
+      variant={variant}
+      onClose={() => setShowInfo(false)}
+      planId={planId}
+      isPlanAdmin={isAdmin}
+      onChanged={() => { loadChatInfo(); onChatChanged?.(); }}
+      onFotoUpdated={onFotoUpdated}
+      onGone={onBack}
+      onEmptied={() => {
+        // Only for me (fn_chat_vaciar): the conversation, the ruler and the pin start again empty.
+        setMessages([]);
+        setHasMore(false);
+        oldestIdRef.current = null;
+        setPinnedId(null);
+        setDetached(null);
+        void getChatIndiceEndpoint(chat.chat_id).then(setIndice).catch((e) => console.error("[chat] Error leyendo el índice:", (e as { message?: string })?.message ?? String(e)));
+        loadChatInfo();
+        onChatChanged?.();
+      }}
+      onCreatePlan={() => { if (isPhone) setShowInfo(false); closeOverlays(); setCreatePlan({ guarda: null }); }}
+      onWriteTo={onWriteTo}
+      onNotice={(n) => showMyServerMessage(n.mensaje_id, n.texto)}
+      onMemberAdded={(p) => { void channelRef.current?.send({ type: "broadcast", event: "member_added", payload: { user_id: p.id, nombre: p.nombre, profile_image: p.profile_image } }); }}
+    />
+  );
+
+  if (showInfo && isPhone) {
+    return <div className={containerClassName ?? "flex h-[calc(100dvh-var(--space-20)-env(safe-area-inset-bottom))] flex-col md:h-[calc(100dvh-var(--space-16))]"}>{infoPanel("screen")}</div>;
   }
 
   const pinnedMsg = pinnedId ? messages.find((m) => m.id === pinnedId) ?? null : null;
@@ -2410,7 +2505,8 @@ export function ChatConversation({
   const isDirectChat = chat.tipo === "DIRECTO";
 
   return (
-    <div className={containerClassName ?? "flex h-[calc(100dvh-var(--space-20)-env(safe-area-inset-bottom))] flex-col md:h-[calc(100dvh-var(--space-16))]"} style={{ paddingBottom: "var(--keyboard-height, 0px)" }}>
+    <div className={`relative ${containerClassName ?? "flex h-[calc(100dvh-var(--space-20)-env(safe-area-inset-bottom))] flex-col md:h-[calc(100dvh-var(--space-16))]"} md:flex-row`}>
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col" style={{ paddingBottom: "var(--keyboard-height, 0px)" }}>
       {/* Poll creator modal */}
       {showPollCreator && (
         <PollCreatorModal
@@ -2456,7 +2552,7 @@ export function ChatConversation({
             onCopy={() => { void navigator.clipboard.writeText(m.texto); closeOverlays(); }}
             onPin={() => { togglePin(m.id); closeOverlays(); }}
             onStar={() => { toggleStar(m.id); closeOverlays(); }}
-            onDelete={() => { void handleDeleteMsg(m); closeOverlays(); }}
+            onDelete={() => { setDeleting(m); closeOverlays(); }}
             onAddToPlan={sellados.has(m.id) ? () => abrirSellado(sellados.get(m.id)!)
               : puedePlan(m) && (planFrom(m) || reading.has(m.id)) ? () => addToPlan(m, { x: contextMenu.x, y: contextMenu.y }) : undefined}
             addToPlanLabel={sellados.has(m.id) ? selladoLabel(sellados.get(m.id)!) : planId ? undefined : "Crear plan con esto"}
@@ -2465,6 +2561,15 @@ export function ChatConversation({
           />
         );
       })()}
+
+      {deleting && (
+        <DeleteMessageSheet
+          msg={deleting}
+          forAll={canDeleteForAll(deleting)}
+          onClose={() => setDeleting(null)}
+          onDelete={async (paraTodos) => { await handleDeleteMsg(deleting, paraTodos); setDeleting(null); }}
+        />
+      )}
 
       {/* Adjuntar: sitio, gasto y del plan */}
       {addPanel && (() => {
@@ -2609,7 +2714,7 @@ export function ChatConversation({
             <button type="button" onClick={onBack} className="flex size-[44px] shrink-0 items-center justify-center rounded-[8px] text-app transition-colors hover:bg-surface" aria-label="Volver">
               <BackIcon className="size-[22px]" />
             </button>
-            <button type="button" onClick={() => setShowInfo(true)} className="flex min-h-[44px] min-w-0 flex-1 items-center gap-[var(--space-3)] rounded-[8px] px-1 text-left transition-colors hover:bg-surface">
+            <button type="button" onClick={() => setShowInfo((v) => (isPhone ? true : !v))} aria-label={`${name}. ${infoLabel}`} className="flex min-h-[44px] min-w-0 flex-1 items-center gap-[var(--space-3)] rounded-[8px] px-1 text-left transition-colors hover:bg-surface">
               {trip ? (
                 <span aria-hidden className="flex size-[36px] shrink-0 flex-col items-center justify-center rounded-[8px] border border-[var(--chat-me-border)] bg-[var(--chat-me)] leading-none">
                   <span className="[font-family:var(--font-display-face)] text-[18px] tabular-nums text-app">{trip.start.getDate()}</span>
@@ -2636,16 +2741,10 @@ export function ChatConversation({
             <ChatIconButton label="Iniciar videollamada" onClick={() => onStartCall?.("video")}>
               <VideoCallIcon className="size-[23px]" />
             </ChatIconButton>
+            <ChatIconButton label={infoLabel} aria-pressed={showInfo} onClick={() => setShowInfo((v) => !v)} className="hidden md:inline-flex">
+              <Info className="size-[21px]" />
+            </ChatIconButton>
           </div>
-          {trip && planId && (
-            <div className="flex min-h-[36px] items-center gap-[var(--space-2)] border-t border-app px-[var(--space-4)] text-[13px]">
-              <span className="tabular-nums text-app">{tripRange(trip)}</span>
-              {planInfo?.ubicacion_nombre && <span className="min-w-0 truncate text-muted">· {planInfo.ubicacion_nombre}</span>}
-              <Link href={`/plans/${planId}`} className="ml-auto flex min-h-[36px] shrink-0 items-center font-[var(--fw-semibold)] text-primary-token hover:underline">
-                Ver plan
-              </Link>
-            </div>
-          )}
         </div>
       )}
 
@@ -2798,7 +2897,7 @@ export function ChatConversation({
               // message above. Mine: 8 px left of the block, at its top (on the right it would cover it).
               const barBesideBlock = isMe && moment?.type !== "poll";
               const menuOpenHere = contextMenu?.msg.id === msg.id;
-              const hoverBar = !isBot && msg.id > 0 ? (
+              const hoverBar = !isBot && msg.id > 0 && moment?.type !== "eliminado" ? (
                 <div
                   role="toolbar"
                   aria-label="Acciones"
@@ -2855,6 +2954,11 @@ export function ChatConversation({
                 <DocumentBubble url={msg.document_url} name={msg.document_name ?? "Documento"} sending={msg.id < 0} />
               ) : msg.image_url ? (
                 <MediaBubble url={msg.image_url} type={msg.image_type ?? "image/jpeg"} sending={msg.id < 0} time={isMe && timeHere ? msgTime : ""} isMe={isMe} onOpenLightbox={!msg.image_type?.startsWith("video/") ? () => setLightboxUrl(msg.image_url!) : undefined} />
+              ) : moment?.type === "eliminado" ? (
+                <p className="flex items-center gap-[6px] text-[15px] italic leading-[1.45] text-muted">
+                  <Ban className="size-[15px] shrink-0" aria-hidden />
+                  {deletedText(moment)}
+                </p>
               ) : moment?.type === "resumen_viaje" ? (
                 <TripSummaryCard data={moment} planTitle={planInfo?.titulo} planDates={trip ? tripRange(trip) : undefined} planId={planId} />
               ) : moment?.type === "gasto" ? (
@@ -2919,9 +3023,9 @@ export function ChatConversation({
                   setEditingMsg(msg);
                   setText(msg.texto);
                   setTimeout(() => inputRef.current?.focus(), 0);
-                } else if (e.key === "Delete" && isMe) {
+                } else if (e.key === "Delete" && msg.id > 0) {
                   e.preventDefault();
-                  void handleDeleteMsg(msg);
+                  setDeleting(msg);
                 } else if (key === "g" && !e.shiftKey && planId && gastoFrom(msg)) {
                   e.preventDefault();
                   registerExpense(msg);
@@ -2950,7 +3054,7 @@ export function ChatConversation({
                 tabIndex: msg.id === tabStopId ? 0 : -1,
                 "data-msg-focus": msg.id,
                 onFocus: () => setFocusMsgId(msg.id),
-                "aria-keyshortcuts": isMe ? "R E F S Delete Shift+F10" : "R F S Shift+F10",
+                "aria-keyshortcuts": isMe ? "R E F S Delete Shift+F10" : "R F S Delete Shift+F10",
                 onKeyDown: onMessageKeyDown,
                 // Right click: the same menu at the pointer (a long press on phones already opens it).
                 onContextMenu: (e: React.MouseEvent) => {
@@ -2974,7 +3078,7 @@ export function ChatConversation({
               // Reactions right under the message (boards m-1a1, d-racha): a 28 px chip with emoji and
               // count inside a 40 px target, tinted when yours is in it; on desktop, «Añadir reacción» and
               // who reacted on hover.
-              const reactionChip = msgReactions.length > 0 ? (
+              const reactionChip = msgReactions.length > 0 && moment?.type !== "eliminado" ? (
                 <div className={`-mb-[6px] flex flex-wrap items-center gap-[6px] ${isMe ? "justify-end" : ""}`}>
                   {msgReactions.map((r) => {
                     const who = reactionWho(r);
@@ -3041,6 +3145,16 @@ export function ChatConversation({
                         otherName={msg.sender_nombre.split(" ")[0] || "Alguien"}
                         onCallBack={onStartCall && !inCall ? () => onStartCall(callTipo.includes("video") ? "video" : "audio") : undefined}
                       />
+                    </div>
+                  </Fragment>
+                );
+              }
+              if (moment?.type === "aviso") {
+                return (
+                  <Fragment key={(msg)._key ?? msg.id}>
+                    {slot?.chapter && <DayChapter id={`day-${msg.id}`} label={slot.chapter} />}
+                    <div id={`msg-${msg.id}`} className={`mt-[10px] flex justify-center px-[var(--space-4)] ${highlight}`}>
+                      <p className="max-w-[420px] text-center text-[13px] leading-[1.4] text-muted">{noticeText(moment, currentUserId)}</p>
                     </div>
                   </Fragment>
                 );
@@ -3452,371 +3566,16 @@ export function ChatConversation({
         </div>
       </div>
     </div>
-  );
-}
-
-function ChatInfoPanel({
-  chat,
-  currentUserId,
-  onBack,
-  onLeave,
-  channelRef,
-  onFotoUpdated,
-  containerClassName,
-}: {
-  chat: ChatListItem;
-  currentUserId: string;
-  onBack: () => void;
-  onLeave: () => void;
-  channelRef: React.RefObject<ReturnType<ReturnType<typeof createBrowserSupabaseClient>["channel"]> | null>;
-  onFotoUpdated?: (foto: string) => void;
-  containerClassName?: string;
-}) {
-  const [confirmLeave, setConfirmLeave] = useState(false);
-  const { isClosing: confirmLeaveClosing, requestClose: closeConfirmLeave } = useModalCloseAnimation(() => setConfirmLeave(false), confirmLeave);
-  const [leaving, setLeaving] = useState(false);
-  const [showAllMembers, setShowAllMembers] = useState(false);
-  const [showAddMembers, setShowAddMembers] = useState(false);
-  const [friends, setFriends] = useState<PublicUserProfileRow[]>([]);
-  const [friendsLoading, setFriendsLoading] = useState(false);
-  const [addingId, setAddingId] = useState<string | null>(null);
-  const [localMembers, setLocalMembers] = useState(() => {
-    const seen = new Set<string>();
-    const deduped = chat.miembros.filter((m) => { if (seen.has(m.id)) return false; seen.add(m.id); return true; });
-    return deduped.sort((a, b) => (a.id === currentUserId ? -1 : b.id === currentUserId ? 1 : 0));
-  });
-  const [localFoto, setLocalFoto] = useState(chat.foto);
-  const [uploadingFoto, setUploadingFoto] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-  const isGrupo = chat.tipo === "GRUPO";
-  const name = resolveChatName(chat, currentUserId);
-  const displayAvatar = isGrupo ? localFoto : resolveChatAvatar(chat, currentUserId);
-  const avatarLabel = (name[0] ?? "?").toUpperCase();
-
-  // Escuchar eventos de miembros en tiempo real
-  useEffect(() => {
-    const ch = channelRef.current;
-    if (!ch) return;
-    const handler = ({ payload }: { payload: unknown }) => {
-      const { user_id, nombre, profile_image } = payload as { user_id: string; nombre?: string; profile_image?: string | null };
-      setLocalMembers((prev) => {
-        if (prev.some((m) => m.id === user_id)) return prev;
-        return [...prev, { id: user_id, nombre: nombre ?? "Usuario", username: null, profile_image: profile_image ?? null }];
-      });
-    };
-    const leaveHandler = ({ payload }: { payload: unknown }) => {
-      const { user_id } = payload as { user_id: string };
-      setLocalMembers((prev) => prev.filter((m) => m.id !== user_id));
-    };
-    ch.on("broadcast", { event: "member_added" }, handler);
-    ch.on("broadcast", { event: "member_left" }, leaveHandler);
-  }, [channelRef]);
-
-  const handleLeave = async () => {
-    if (leaving) return;
-    setLeaving(true);
-    try {
-      await leaveChat(chat.chat_id);
-      void channelRef.current?.send({ type: "broadcast", event: "member_left", payload: { user_id: currentUserId } });
-      onLeave();
-    } catch (e) {
-      console.error("[chat] Error saliendo del chat:", e);
-      setLeaving(false);
-      setConfirmLeave(false);
-    }
-  };
-
-  const handleFotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || uploadingFoto) return;
-    setUploadingFoto(true);
-    try {
-      const { downloadUrl } = await uploadPlanCoverFile({ file, userId: currentUserId });
-      await updateChatFoto(chat.chat_id, downloadUrl);
-      setLocalFoto(downloadUrl);
-      onFotoUpdated?.(downloadUrl);
-    } catch (err) {
-      console.error("[chat] Error actualizando foto:", err);
-    } finally {
-      setUploadingFoto(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  };
-
-  const openAddMembers = async () => {
-    setShowAddMembers(true);
-    setFriendsLoading(true);
-    try {
-      const all = await fetchActiveFriends();
-      const memberIds = new Set(localMembers.map((m) => m.id));
-      setFriends(all.filter((f) => !memberIds.has(f.id)));
-    } catch (err) {
-      console.error("[chat] Error cargando amigos:", err);
-    } finally {
-      setFriendsLoading(false);
-    }
-  };
-
-  const handleAddMember = async (friendId: string) => {
-    if (addingId) return;
-    setAddingId(friendId);
-    try {
-      await addChatMember(chat.chat_id, friendId);
-      const added = friends.find((f) => f.id === friendId);
-      if (added) {
-        setLocalMembers((prev) => [...prev, { id: added.id, nombre: added.nombre, username: null, profile_image: added.profile_image }]);
-        setFriends((prev) => prev.filter((f) => f.id !== friendId));
-        void channelRef.current?.send({ type: "broadcast", event: "member_added", payload: { user_id: added.id, nombre: added.nombre, profile_image: added.profile_image } });
-        // Notificar al usuario añadido para que actualice su lista de chats
-        const supabase = createBrowserSupabaseClient();
-        const notifChannel = supabase.channel(`user-join:${friendId}`);
-        notifChannel.subscribe((status) => {
-          if (status === "SUBSCRIBED") {
-            void notifChannel.send({ type: "broadcast", event: "chat_added", payload: { chat_id: chat.chat_id } });
-            setTimeout(() => void supabase.removeChannel(notifChannel), 2000);
-          }
-        });
-        setShowAddMembers(false);
-      }
-    } catch (err) {
-      console.error("[chat] Error añadiendo miembro:", err);
-    } finally {
-      setAddingId(null);
-    }
-  };
-
-  const visibleMembers = showAllMembers ? localMembers : localMembers.slice(0, 6);
-  const hiddenCount = localMembers.length - 6;
-
-  return (
-    <div className={containerClassName ?? "relative flex h-[calc(100dvh-var(--space-20)-env(safe-area-inset-bottom))] flex-col md:h-[calc(100dvh-var(--space-16))]"}>
-      {/* Header */}
-      <div className="flex items-center gap-[var(--space-2)] border-b border-app px-[var(--space-3)] pb-[var(--space-3)] pt-mobile-safe-top md:px-[var(--space-4)] md:py-[var(--space-3)]">
-        <button type="button" onClick={onBack} className="flex size-[32px] items-center justify-center rounded-full transition-colors hover:bg-surface" aria-label="Volver">
-          <BackIcon className="size-[18px]" />
-        </button>
-        <p className="text-body-sm font-[var(--fw-semibold)] text-app">
-          {isGrupo ? "Info. del grupo" : "Info. del contacto"}
-        </p>
+    {/* Desktop (board gi-d-grupo): next to the chat from 1280 px; over its right side below that. */}
+    {showInfo && !isPhone && (
+      <div className="absolute inset-y-0 right-0 z-30 shadow-[0_8px_32px_rgba(0,0,0,0.3)] xl:static xl:shadow-none">
+        {infoPanel("aside")}
       </div>
-
-      {/* Add members overlay */}
-      {showAddMembers && (
-        <div className="absolute inset-0 z-40 flex flex-col bg-app">
-          <div className="flex items-center gap-[var(--space-2)] border-b border-app px-[var(--space-3)] pb-[var(--space-3)] pt-mobile-safe-top md:px-[var(--space-4)] md:py-[var(--space-3)]">
-            <button type="button" onClick={() => setShowAddMembers(false)} className="flex size-[32px] items-center justify-center rounded-full transition-colors hover:bg-surface">
-              <BackIcon className="size-[18px]" />
-            </button>
-            <p className="text-body-sm font-[var(--fw-semibold)] text-app">Añadir personas</p>
-          </div>
-          <div className="flex-1 overflow-y-auto p-[var(--space-2)]">
-            {friendsLoading ? (
-              <div className="py-[var(--space-8)] text-center text-body-sm text-muted">Cargando...</div>
-            ) : friends.length === 0 ? (
-              <div className="py-[var(--space-8)] text-center text-body-sm text-muted">No hay más amigos que añadir</div>
-            ) : (
-              <div className="space-y-[1px]">
-                {friends.map((f) => {
-                  const label = (f.nombre[0] ?? "?").toUpperCase();
-                  const isAdding = addingId === f.id;
-                  return (
-                    <button
-                      key={f.id}
-                      type="button"
-                      onClick={() => void handleAddMember(f.id)}
-                      disabled={!!addingId}
-                      className="flex w-full items-center gap-[var(--space-3)] rounded-[10px] px-2 py-[10px] text-left transition-colors hover:bg-surface disabled:opacity-50"
-                    >
-                      <div className="avatar-md flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">
-                        {f.profile_image ? <NextImage src={f.profile_image} alt={f.nombre} width={40} height={40} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" /> : label}
-                      </div>
-                      <p className="min-w-0 flex-1 truncate text-body-sm font-[var(--fw-medium)] text-app">{f.nombre}</p>
-                      {isAdding ? (
-                        <span className="shrink-0 text-[14px] text-muted">...</span>
-                      ) : (
-                        <span className="shrink-0 rounded-full border border-app px-[10px] py-[4px] text-[14px] text-app">Añadir</span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Scrollable content */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-[520px]">
-        {/* Hero: avatar + name */}
-        <div className="flex flex-col items-center gap-[var(--space-3)] py-[var(--space-7)]">
-          <div className="relative">
-            <div className="flex size-[96px] items-center justify-center overflow-hidden rounded-full border-2 border-app bg-surface-inset text-[34px] font-[var(--fw-semibold)] text-app">
-              {displayAvatar ? (
-                <NextImage src={displayAvatar} alt={name} width={96} height={96} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
-              ) : isGrupo ? (
-                <GroupIcon className="size-[40px] text-muted" />
-              ) : avatarLabel}
-            </div>
-            {isGrupo && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploadingFoto}
-                  className="absolute -bottom-[2px] -right-[2px] flex size-[28px] items-center justify-center rounded-full border-2 border-[var(--bg)] bg-[var(--surface)] shadow-sm transition-colors hover:bg-surface-inset"
-                  aria-label="Cambiar foto"
-                >
-                  {uploadingFoto ? (
-                    <span className="block size-[10px] animate-spin rounded-full border-2 border-muted border-t-transparent" />
-                  ) : (
-                    <CameraIcon className="size-[13px] text-app" />
-                  )}
-                </button>
-                <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => void handleFotoChange(e)} />
-              </>
-            )}
-          </div>
-          <div className="text-center">
-            <p className="text-[var(--font-h4)] font-[var(--fw-semibold)] text-app">{name}</p>
-            <p className="mt-[3px] text-[14px] text-muted">
-              {isGrupo ? `Grupo · ${localMembers.length} miembros` : "Contacto"}
-            </p>
-          </div>
-        </div>
-
-        {/* Members (groups only) */}
-        {isGrupo && (
-          <>
-            <div className="flex items-center justify-between px-[var(--space-4)] pb-[var(--space-2)]">
-              <p className="text-[14px] font-[var(--fw-semibold)] uppercase tracking-wide text-muted">
-                {localMembers.length} miembros
-              </p>
-            </div>
-            <div className="space-y-[1px] px-[var(--space-2)]">
-              {/* Add member button */}
-              <button
-                type="button"
-                onClick={() => void openAddMembers()}
-                className="flex w-full items-center gap-[var(--space-3)] rounded-[10px] px-2 py-[10px] text-left transition-colors hover:bg-surface"
-              >
-                <div className="avatar-md flex shrink-0 items-center justify-center rounded-full border border-dashed border-[var(--border-strong)] bg-surface-inset">
-                  <Plus className="size-[16px] text-muted" aria-hidden />
-                </div>
-                <p className="text-body-sm font-[var(--fw-medium)] text-app">Añadir personas</p>
-              </button>
-              {visibleMembers.map((m) => {
-                const label = (m.nombre[0] ?? "?").toUpperCase();
-                const isMe = m.id === currentUserId;
-                return (
-                  <div key={m.id} className="flex items-center gap-[var(--space-3)] rounded-[10px] px-2 py-[10px]">
-                    <div className="avatar-md flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">
-                      {m.profile_image ? <NextImage src={m.profile_image} alt={m.nombre} width={40} height={40} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" /> : label}
-                    </div>
-                    <p className="min-w-0 flex-1 truncate text-body-sm text-app">
-                      {isMe ? <><span className="text-muted">(Tú)</span> {m.nombre}</> : m.nombre}
-                    </p>
-                  </div>
-                );
-              })}
-              {!showAllMembers && hiddenCount > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setShowAllMembers(true)}
-                  className="w-full rounded-[10px] px-2 py-[10px] text-left text-body-sm text-[var(--primary)] transition-colors hover:bg-surface"
-                >
-                  Ver todos ({hiddenCount} más)
-                </button>
-              )}
-            </div>
-          </>
-        )}
-
-        <div className="mx-[var(--space-4)] my-[var(--space-3)] border-t border-app" />
-
-        {/* Actions */}
-        <div className="px-[var(--space-2)] pb-[var(--space-8)]">
-          <ActionRow icon={<TrashLightIcon />} label="Vaciar chat" onClick={() => {}} />
-          {!isGrupo && (
-            <>
-              <ActionRow icon={<BlockIcon />} label={`Bloquear a ${name}`} danger onClick={() => {}} />
-              <ActionRow icon={<ReportIcon />} label={`Reportar a ${name}`} danger onClick={() => {}} />
-              <ActionRow icon={<TrashIcon />} label="Eliminar chat" danger onClick={() => setConfirmLeave(true)} />
-            </>
-          )}
-          {isGrupo && (
-            <>
-              <ActionRow icon={<LeaveIcon />} label="Salir del grupo" danger onClick={() => setConfirmLeave(true)} />
-              <ActionRow icon={<ReportIcon />} label="Reportar grupo" danger onClick={() => {}} />
-            </>
-          )}
-        </div>
-        </div>{/* /max-w wrapper */}
-      </div>
-
-      {/* Confirm modal */}
-      {confirmLeave && (
-        <div data-closing={confirmLeaveClosing ? "true" : "false"} className="app-modal-overlay absolute inset-0 z-50 flex items-end justify-center md:items-center">
-          <div className="app-modal-panel w-full max-w-[360px] rounded-t-[20px] bg-app p-[var(--space-5)] md:rounded-[16px]">
-            <p className="text-center text-body-sm font-[var(--fw-semibold)] text-app">
-              {isGrupo ? "¿Salir del grupo?" : "¿Eliminar esta conversación?"}
-            </p>
-            <p className="mt-[var(--space-1)] text-center text-body-sm text-muted">
-              {isGrupo ? "Ya no podrás recibir mensajes de este grupo." : "Se eliminará el chat de tu lista."}
-            </p>
-            <div className="mt-[var(--space-4)] flex flex-col gap-[var(--space-2)]">
-              <button
-                type="button"
-                onClick={() => void handleLeave()}
-                disabled={leaving}
-                className="w-full rounded-full bg-red-500 py-[10px] text-body-sm font-[var(--fw-semibold)] text-white transition-opacity hover:opacity-80 disabled:opacity-50"
-              >
-                {leaving ? "..." : isGrupo ? "Salir" : "Eliminar"}
-              </button>
-              <button
-                type="button"
-                onClick={closeConfirmLeave}
-                className="w-full rounded-full border border-app py-[10px] text-body-sm font-[var(--fw-semibold)] text-app transition-colors hover:bg-surface"
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+    )}
     </div>
   );
 }
 
-function ActionRow({
-  icon,
-  label,
-  danger = false,
-  onClick,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  danger?: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex w-full items-center gap-[var(--space-3)] rounded-[10px] px-3 py-[12px] text-left transition-colors hover:bg-surface ${danger ? "text-red-500" : "text-app"}`}
-    >
-      <span className="size-[20px] shrink-0">{icon}</span>
-      <span className="text-body-sm font-[var(--fw-medium)]">{label}</span>
-    </button>
-  );
-}
-
-const TrashLightIcon = Trash2;
-const TrashIcon = Trash2;
-const BlockIcon = Ban;
-const ReportIcon = AlertTriangle;
-const LeaveIcon = LogOut;
 const EmojiIcon = Smile;
 const PinIcon = Pin;
 const CameraIcon = Camera;
@@ -3927,3 +3686,52 @@ export function PhoneCallIcon({ className = "size-icon" }: { className?: string 
 export function VideoCallIcon({ className = "size-icon" }: { className?: string }) {
   return <Video className={className} aria-hidden />;
 }
+
+/** «Eliminar» on a message: for everyone (mine, or an admin's with anyone's) and/or only for me. */
+function DeleteMessageSheet({ msg, forAll, onClose, onDelete }: {
+  msg: MensajeRow;
+  forAll: boolean;
+  onClose: () => void;
+  onDelete: (paraTodos: boolean) => Promise<void>;
+}) {
+  const [busy, setBusy] = useState<null | "todos" | "mi">(null);
+  const [error, setError] = useState<string | null>(null);
+  const preview = parseMoment(msg.texto)?.type === "eliminado" ? null
+    : msg.audio_url ? "Nota de voz" : msg.document_url ? (msg.document_name ?? "Documento")
+    : msg.image_url ? (msg.image_type?.startsWith("video/") ? "Vídeo" : "Foto")
+    : momentPreview(msg.texto) ?? msg.texto;
+  const run = async (paraTodos: boolean) => {
+    if (busy) return;
+    setBusy(paraTodos ? "todos" : "mi");
+    setError(null);
+    try {
+      await onDelete(paraTodos);
+    } catch (e) {
+      console.error("[chat] Error eliminando:", (e as { message?: string })?.message ?? String(e));
+      setError(typeof navigator !== "undefined" && !navigator.onLine ? "Sin conexión. No se ha eliminado." : "No se ha eliminado. Inténtalo de nuevo.");
+      setBusy(null);
+    }
+  };
+  const danger = "min-h-[46px] w-full rounded-[8px] px-[16px] text-[15px] font-[var(--fw-semibold)] disabled:opacity-60";
+  return (
+    <Sheet title="¿Eliminar el mensaje?" onClose={busy ? () => {} : onClose} maxWidth={400}
+      footer={(
+        <div className="flex flex-col gap-[8px]">
+          {forAll && (
+            <button type="button" onClick={() => void run(true)} disabled={Boolean(busy)} className={`${danger} bg-[var(--error)] text-[var(--bg)] hover:opacity-90`}>
+              {busy === "todos" ? "Eliminando…" : "Eliminar para todos"}
+            </button>
+          )}
+          <button type="button" onClick={() => void run(false)} disabled={Boolean(busy)} className={`${danger} border border-[var(--error)] text-[var(--error)] hover:bg-[color-mix(in_srgb,var(--error)_10%,transparent)]`}>
+            {busy === "mi" ? "Eliminando…" : "Eliminar para mí"}
+          </button>
+          <button type="button" onClick={onClose} disabled={Boolean(busy)} className="min-h-[46px] w-full rounded-[8px] border border-app px-[16px] text-[15px] font-[var(--fw-semibold)] text-app hover:bg-[var(--surface-2)] disabled:opacity-50">Cancelar</button>
+        </div>
+      )}
+    >
+      {preview && <p className="line-clamp-3 rounded-[8px] bg-[var(--surface-2)] px-[12px] py-[8px] text-[14px] text-app">{preview}</p>}
+      {error && <p role="alert" className="mt-[8px] text-[13px] text-[var(--error)]">{error}</p>}
+    </Sheet>
+  );
+}
+

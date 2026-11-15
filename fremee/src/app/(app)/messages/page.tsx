@@ -17,6 +17,7 @@ import {
 } from "@/services/api/repositories/chat.repository";
 import { useToast } from "@/components/ui/Toaster";
 import { ChatConversation, GroupIcon } from "@/components/chat/ChatConversation";
+import { momentPreview } from "@/components/chat/bitacora/moments";
 import { ChatSearch } from "@/components/chat/nuevo/ChatSearch";
 import { DraftDirectChat } from "@/components/chat/nuevo/DraftDirectChat";
 import { NewGroupPicker, NewGroupPreview, useNewGroup } from "@/components/chat/nuevo/NewGroup";
@@ -296,7 +297,7 @@ export default function MessagesPage() {
       }}
       inCall={callState.status !== "idle"}
       onNewMessage={(msg) => {
-        const preview = msg.audio_url ? "🎤 Nota de voz" : msg.document_url ? `📄 ${msg.document_name ?? "Documento"}` : msg.image_url ? (msg.image_type?.startsWith("video/") ? "🎥 Vídeo" : "📷 Foto") : msg.texto;
+        const preview = msg.audio_url ? "🎤 Nota de voz" : msg.document_url ? `📄 ${msg.document_name ?? "Documento"}` : msg.image_url ? (msg.image_type?.startsWith("video/") ? "🎥 Vídeo" : "📷 Foto") : (momentPreview(msg.texto) ?? msg.texto);
         setChats((prev) => prev.map((c) =>
           c.chat_id !== selectedChatId ? c : { ...c, last_message: preview, last_message_at: msg.created_at }
         ));
@@ -308,6 +309,11 @@ export default function MessagesPage() {
       }}
       registerCallReload={(fn) => { reloadCallMessagesRef.current = fn; }}
       onOpenChat={(id) => { void loadChats().then(() => openChat(id)); }}
+      onChatChanged={() => { void loadChats(); }}
+      onRenamed={(nombre) => {
+        setChats((prev) => prev.map((c) => (c.chat_id !== selectedChatId ? c : { ...c, nombre })));
+      }}
+      onWriteTo={(person) => startChatWith(person)}
     />
   ) : draftFriend && user ? (
     <DraftDirectChat

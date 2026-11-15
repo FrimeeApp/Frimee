@@ -16,6 +16,8 @@ export type ChatListItem = {
   plan_fin_at?: string | null;
   plan_ubicacion?: string | null;
   plan_foto?: string | null;
+  /** Silenced by me (fn_chats_list, 2.29). */
+  silenciado?: boolean;
 };
 
 export type MensajeRow = {
@@ -171,10 +173,17 @@ export async function getChatMiembrosEndpoint(chatId: string): Promise<ChatMiemb
   return (data ?? []) as ChatMiembro[];
 }
 
-export async function leaveChatEndpoint(chatId: string): Promise<void> {
+/**
+ * A notice the database wrote in the chat (renamed, added, removed, left): `mensajes` has no realtime,
+ * so whoever did it shares it by broadcast. Null when nothing changed.
+ */
+export type ChatNotice = { mensaje_id: number; texto: string } | null;
+
+export async function leaveChatEndpoint(chatId: string): Promise<ChatNotice> {
   const supabase = createBrowserSupabaseClient();
-  const { error } = await supabase.rpc("fn_chat_leave", { p_chat_id: chatId });
+  const { data, error } = await supabase.rpc("fn_chat_leave", { p_chat_id: chatId });
   if (error) throw error;
+  return (data ?? null) as ChatNotice;
 }
 
 export async function updateChatFotoEndpoint(chatId: string, foto: string): Promise<void> {
@@ -186,13 +195,14 @@ export async function updateChatFotoEndpoint(chatId: string, foto: string): Prom
   if (error) throw error;
 }
 
-export async function addChatMemberEndpoint(chatId: string, userId: string): Promise<void> {
+export async function addChatMemberEndpoint(chatId: string, userId: string): Promise<ChatNotice> {
   const supabase = createBrowserSupabaseClient();
-  const { error } = await supabase.rpc("fn_chat_add_member", {
+  const { data, error } = await supabase.rpc("fn_chat_add_miembro", {
     p_chat_id: chatId,
     p_user_id: userId,
   });
   if (error) throw error;
+  return (data ?? null) as ChatNotice;
 }
 
 export async function closePollEndpoint(mensajeId: number): Promise<void> {
@@ -584,4 +594,98 @@ export async function responderSolicitudEndpoint(planId: number, userId: string,
   const { data, error } = await supabase.rpc("fn_plan_responder_solicitud", { p_plan_id: planId, p_user_id: userId, p_aceptar: aceptar });
   if (error) throw new Error(error.message || error.code || "Error respondiendo la solicitud");
   return data as string;
+}
+
+/* ── Información del chat (tableros gi-*, migración 2.29) ── */
+
+export type ChatInfoPlan = { id: number; titulo: string; inicio_at: string; fin_at: string; soy_miembro?: boolean };
+export type ChatInfo = {
+  tipo: "DIRECTO" | "GRUPO" | "PLAN";
+  silenciado: boolean;
+  creador_id: string | null;
+  admins: string[];
+  recuentos: { fotos: number; sitios: number; enlaces: number; decisiones: number };
+  /** Plans made from this chat («Planes de este grupo»). */
+  planes: ChatInfoPlan[];
+  /** 1 a 1: plans you are both in («Planes en común»). */
+  comun: ChatInfoPlan[];
+  /** 1 a 1: since when you are friends. */
+  amigos_desde: string | null;
+};
+
+export async function getChatInfoEndpoint(chatId: string): Promise<ChatInfo> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_chat_info", { p_chat_id: chatId });
+  if (error) throw error;
+  const d = (data ?? {}) as Partial<ChatInfo>;
+  return {
+    tipo: d.tipo ?? "GRUPO",
+    silenciado: Boolean(d.silenciado),
+    creador_id: d.creador_id ?? null,
+    admins: d.admins ?? [],
+    recuentos: d.recuentos ?? { fotos: 0, sitios: 0, enlaces: 0, decisiones: 0 },
+    planes: d.planes ?? [],
+    comun: d.comun ?? [],
+    amigos_desde: d.amigos_desde ?? null,
+  };
+}
+
+export async function renombrarChatEndpoint(chatId: string, nombre: string): Promise<ChatNotice> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_chat_renombrar", { p_chat_id: chatId, p_nombre: nombre });
+  if (error) throw error;
+  return (data ?? null) as ChatNotice;
+}
+
+export async function quitarMiembroEndpoint(chatId: string, userId: string): Promise<ChatNotice> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_chat_quitar_miembro", { p_chat_id: chatId, p_user_id: userId });
+  if (error) throw error;
+  return (data ?? null) as ChatNotice;
+}
+
+export async function silenciarChatEndpoint(chatId: string, silenciado: boolean): Promise<void> {
+  const supabase = createBrowserSupabaseClient();
+  const { error } = await supabase.rpc("fn_chat_silenciar", { p_chat_id: chatId, p_silenciado: silenciado });
+  if (error) throw error;
+}
+
+/** «Vaciar el chat»: only for me; the others keep everything. */
+export async function vaciarChatEndpoint(chatId: string): Promise<void> {
+  const supabase = createBrowserSupabaseClient();
+  const { error } = await supabase.rpc("fn_chat_vaciar", { p_chat_id: chatId });
+  if (error) throw error;
+}
+
+/** «Eliminar chat» (1 a 1 only): empties it and hides it from my list until a new message arrives. */
+export async function eliminarChatEndpoint(chatId: string): Promise<void> {
+  const supabase = createBrowserSupabaseClient();
+  const { error } = await supabase.rpc("fn_chat_eliminar", { p_chat_id: chatId });
+  if (error) throw error;
+}
+
+/** «Eliminar para mí» (paraTodos false) or «Eliminar para todos» (mine, or an admin with anyone's). */
+export async function eliminarMensajeEndpoint(mensajeId: number, paraTodos: boolean): Promise<void> {
+  const supabase = createBrowserSupabaseClient();
+  const { error } = await supabase.rpc("fn_mensaje_eliminar", { p_mensaje_id: mensajeId, p_para_todos: paraTodos });
+  if (error) throw error;
+}
+
+export type ContenidoTipo = "fotos" | "sitios" | "enlaces" | "decisiones";
+export type ContenidoRow = {
+  id: number;
+  created_at: string;
+  sender_id: string | null;
+  sender_nombre: string;
+  texto: string;
+  image_url: string | null;
+  image_type: string | null;
+};
+
+/** The lists of «En el chat», newest first, by pages (antesId = the last id of the previous page). */
+export async function contenidoChatEndpoint(chatId: string, tipo: ContenidoTipo, antesId: number | null = null, limit = 30): Promise<ContenidoRow[]> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_chat_contenido", { p_chat_id: chatId, p_tipo: tipo, p_antes_id: antesId, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as ContenidoRow[];
 }

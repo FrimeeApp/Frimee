@@ -674,6 +674,18 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
     }
   };
 
+  // From a chat's information («Invitar al plan», board gi-d-plan): the invite sheet, once.
+  const invitarHandledRef = useRef(false);
+  useEffect(() => {
+    if (invitarHandledRef.current || searchParams.get("invitar") !== "1" || !plan) return;
+    invitarHandledRef.current = true;
+    if (!isPast && isAdmin) void openInviteModal();
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.delete("invitar");
+    const nextQuery = nextParams.toString();
+    router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
+  });
+
   const handleInviteFriend = async (friendId: string) => {
     if (!user?.id) return;
     setInviteSendingIds((prev) => new Set(prev).add(friendId));
