@@ -159,6 +159,13 @@ export async function kickMemberEndpoint(planId: number, targetUserId: string): 
   return data as string;
 }
 
+/** Only its creator, and only when nobody else is in it (fn_plan_eliminar). */
+export async function eliminarPlanEndpoint(planId: number): Promise<void> {
+  const supabase = createBrowserSupabaseClient();
+  const { error } = await supabase.rpc("fn_plan_eliminar", { p_plan_id: planId });
+  if (error) throw error;
+}
+
 export async function leavePlanEndpoint(planId: number): Promise<string> {
   const supabase = createBrowserSupabaseClient();
   const { data, error } = await supabase.rpc("fn_plan_leave", { p_plan_id: planId });

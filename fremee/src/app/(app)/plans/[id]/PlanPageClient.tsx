@@ -353,6 +353,27 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
     }, PLAN_ROUTE_TRANSITION_MS);
   };
 
+  // nav-05: Escape closes the plan shown as an overlay, unless a sheet, dialog or menu on top
+  // takes it first (they call preventDefault or are still in the DOM).
+  const closePlanRouteRef = useRef(closePlanRoute);
+  closePlanRouteRef.current = closePlanRoute;
+  useEffect(() => {
+    if (!isOverlayPresentation) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      // Only what is on screen counts: some dialogs (e.g. «Buscar usuarios») stay in the DOM hidden.
+      const onTop = [...document.querySelectorAll<HTMLElement>("[role=dialog], [role=alertdialog], [role=menu], [role=listbox], [data-vaul-drawer]")]
+        .some((el) => !el.closest("[aria-hidden=true], [inert]")
+          && (typeof el.checkVisibility === "function" ? el.checkVisibility() : el.offsetParent !== null));
+      if (onTop) return;
+      const t = e.target as HTMLElement | null;
+      if (t?.closest("input, textarea, [contenteditable=true]")) return;
+      closePlanRouteRef.current("back");
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isOverlayPresentation]);
+
   const handleRoutePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.pointerType !== "touch") return;
     if (typeof window === "undefined" || window.innerWidth >= 768) return;
@@ -673,6 +694,18 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
       setInviteFriendsLoading(false);
     }
   };
+
+  // From a chat's information («Invitar al plan», board gi-d-plan): the invite sheet, once.
+  const invitarHandledRef = useRef(false);
+  useEffect(() => {
+    if (invitarHandledRef.current || searchParams.get("invitar") !== "1" || !plan) return;
+    invitarHandledRef.current = true;
+    if (!isPast && isAdmin) void openInviteModal();
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.delete("invitar");
+    const nextQuery = nextParams.toString();
+    router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
+  });
 
   const handleInviteFriend = async (friendId: string) => {
     if (!user?.id) return;

@@ -135,9 +135,31 @@ export type PlanCreatedMoment = {
   origen_mensaje_id?: number | null;
 };
 
-export type Moment = PollMoment | TripSummaryMoment | ExpenseMoment | PlaceMoment | CardMoment | ProposalMoment | PlanMarkMoment | CopyMoment | PlanCreatedMoment;
+/**
+ * A line in the chat when the group changes (board gi-sistema): someone renamed it, added, removed
+ * or left. Written by the database (fn_chat_renombrar, fn_chat_quitar_miembro, fn_chat_aviso_gente).
+ */
+export type NoticeMoment = {
+  type: "aviso";
+  clase: "renombrado" | "quitado" | "anadido" | "salio";
+  actor_id: string;
+  actor_nombre: string;
+  /** renombrado: the new name. */
+  nombre?: string;
+  /** quitado / anadido / salio: who. */
+  user_id?: string;
+  user_nombre?: string;
+};
 
-const TYPES = new Set(["poll", "resumen_viaje", "gasto", "lugar", "tarjeta", "propuesta", "hito_plan", "copia_chat", "plan_creado"]);
+/** A message deleted for everyone (fn_mensaje_eliminar): by its author or by an admin. */
+export type DeletedMoment = {
+  type: "eliminado";
+  por: "autor" | "admin";
+};
+
+export type Moment = PollMoment | TripSummaryMoment | ExpenseMoment | PlaceMoment | CardMoment | ProposalMoment | PlanMarkMoment | CopyMoment | PlanCreatedMoment | NoticeMoment | DeletedMoment;
+
+const TYPES = new Set(["poll", "resumen_viaje", "gasto", "lugar", "tarjeta", "propuesta", "hito_plan", "copia_chat", "plan_creado", "aviso", "eliminado"]);
 
 /** The moment inside a message's texto, or null for plain text. Never throws. */
 export function parseMoment(texto: string | null | undefined): Moment | null {
@@ -179,8 +201,27 @@ export function momentPreview(texto: string | null | undefined): string | null {
     case "hito_plan": return `Añadido al plan · ${m.titulo}`;
     case "copia_chat": return `Conversación copiada de «${m.origen_nombre}»`;
     case "plan_creado": return `Plan creado · ${m.titulo}`;
+    case "aviso": return noticeText(m);
+    case "eliminado": return deletedText(m);
   }
 }
+
+/** «Ana cambió el nombre a «Lisboa»», «Álex añadió a Marcos»… (meId: second person when it is you). */
+export function noticeText(m: NoticeMoment, meId?: string): string {
+  // When it is you, in second person: «Cambiaste el nombre…», «Ana te añadió».
+  const yo = m.actor_id === meId;
+  const aMi = m.user_id === meId;
+  const quien = m.user_nombre ?? "alguien";
+  switch (m.clase) {
+    case "renombrado": return yo ? `Cambiaste el nombre a «${m.nombre ?? ""}»` : `${m.actor_nombre} cambió el nombre a «${m.nombre ?? ""}»`;
+    case "anadido": return aMi ? `${m.actor_nombre} te añadió` : yo ? `Añadiste a ${quien}` : `${m.actor_nombre} añadió a ${quien}`;
+    case "quitado": return aMi ? `${m.actor_nombre} te quitó del grupo` : yo ? `Quitaste a ${quien} del grupo` : `${m.actor_nombre} quitó a ${quien} del grupo`;
+    case "salio": return aMi ? "Saliste del grupo" : `${m.user_nombre ?? "Alguien"} salió del grupo`;
+  }
+}
+
+export const deletedText = (m: DeletedMoment) =>
+  m.por === "admin" ? "El admin eliminó este mensaje" : "Se eliminó este mensaje";
 
 /** Text the bot history sends back to @frimee: what it said, never the JSON. */
 export function momentAsAssistantText(texto: string): string | null {
