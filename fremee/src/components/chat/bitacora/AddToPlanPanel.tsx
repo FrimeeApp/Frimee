@@ -51,7 +51,7 @@ function planDays(plan: PanelPlan | null): Array<{ key: string; label: string }>
   return out;
 }
 
-function Rombo({ state }: { state: "thinking" | "still" | "ready" | "failed" }) {
+export function Rombo({ state }: { state: "thinking" | "still" | "ready" | "failed" }) {
   const d = "M12 2.5 L21.5 12 L12 21.5 L2.5 12 Z";
   if (state === "ready") {
     return <svg aria-hidden width="24" height="24" viewBox="0 0 24 24" className="rombo-sello shrink-0"><path d={d} fill="var(--primary)" stroke="var(--primary)" strokeWidth="2" strokeLinejoin="round" /></svg>;

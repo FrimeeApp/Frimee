@@ -9,16 +9,20 @@ import {
   copiaRecuentoEndpoint,
   listMensajesEndpoint,
   pedirUnirmeEndpoint,
+  puedoVerChatEndpoint,
   planDesdeChatEndpoint,
   sugerirPlanNuevoEndpoint,
   type ChatListItem,
   type MensajeRow,
   type PlanDesdeChatResult,
 } from "@/services/api/endpoints/chat.endpoint";
+import { fetchUserRelatedPlans, type PlanByIdRow } from "@/services/api/endpoints/plans.endpoint";
 import { Sugerido } from "@/components/ui/TimePicker";
 import { DateRangePicker } from "@/components/ui/DateRangePicker";
 import { momentPreview, type CopyMoment, type PlanCreatedMoment } from "./moments";
 import { Sheet, sheetField, useIsPhone } from "./Sheet";
+import { Rombo } from "./AddToPlanPanel";
+import LocationAutocomplete from "@/components/plans/LocationAutocomplete";
 
 /**
  * «Crear plan» from a chat without a plan (canvas «Frimee · Chat · Bitácora», boards cp-*). The chat
@@ -56,6 +60,11 @@ const fmtRange = (a: string, b: string) => {
   if (s.toDateString() === e.toDateString()) return `${s.getDate()} ${month(s)}`;
   return s.getMonth() === e.getMonth() ? `${s.getDate()}–${e.getDate()} ${month(e)}` : `${s.getDate()} ${month(s)} – ${e.getDate()} ${month(e)}`;
 };
+/** Supabase errors are plain objects: log their message (a bare object shows as «{}»). */
+const errText = (e: unknown) => (e as { message?: string })?.message || String(e);
+/** «Finde en Cercedilla» and «finde en cercedilla » are the same plan name. */
+const normTitulo = (s: string) =>
+  s.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
 const firstName = (n: string) => n.split(" ")[0] || n;
 const plural = (n: number, one: string, many: string) => `${n.toLocaleString("es-ES")} ${n === 1 ? one : many}`;
 const msgLine = (m: MensajeRow) =>
@@ -89,7 +98,9 @@ export function CreatePlanFlow({
     [chat.miembros, currentUserId],
   );
   const big = chat.miembros.length >= 7;
-  const [titulo, setTitulo] = useState(inicial?.titulo || (isGroup ? chat.nombre ?? "" : ""));
+  // The name is known from the start (the message's, or the group's) and never waits for @frimee.
+  const tituloInicial = inicial?.titulo || (isGroup ? chat.nombre ?? "" : "");
+  const [titulo, setTitulo] = useState(tituloInicial);
   const [inicio, setInicio] = useState(guarda?.fecha ?? inicial?.fecha ?? "");
   const [fin, setFin] = useState(guarda?.fecha ?? inicial?.fecha ?? "");
   const [donde, setDonde] = useState(guarda?.lugar ?? inicial?.lugar ?? "");
@@ -99,7 +110,13 @@ export function CreatePlanFlow({
     ...(inicial?.fecha && !guarda?.fecha ? ["fechas" as const] : []),
     ...(inicial?.lugar && !guarda?.lugar ? ["donde" as const] : []),
   ]));
+  // @frimee reading the conversation (at most 8 s, like «Añadir al plan»): one line under the title,
+  // and a skeleton bar in the empty Fechas and Dónde, which stay usable. What you touch is never
+  // overwritten. If it finds no dates, the empty date field says so until you touch it.
   const [leyendo, setLeyendo] = useState(true);
+  const [sinFechas, setSinFechas] = useState(false);
+  const [tocados, setTocados] = useState<Set<string>>(new Set());
+  const esperando = (k: "fechas" | "donde") => leyendo && !tocados.has(k) && !(k === "fechas" ? inicio : donde);
   // The range @frimee suggested (dashed days in the calendar) and «Crear» pressed without dates.
   const [sugFechas, setSugFechas] = useState<{ inicio: string; fin: string } | null>(
     () => (inicial?.fecha && !guarda?.fecha ? { inicio: inicial.fecha, fin: inicial.fecha } : null));
@@ -133,11 +150,14 @@ export function CreatePlanFlow({
   // Name, place and dates read from the conversation; only into fields you have not touched.
   useEffect(() => {
     let cancelled = false;
+    const tope = window.setTimeout(() => { cancelled = true; setLeyendo(false); }, 8000);
     sugerirPlanNuevoEndpoint(chat.chat_id)
       .then((p) => {
-        if (cancelled || !p) return;
+        if (cancelled) return;
+        if (!p?.fecha_inicio) setSinFechas(true);
+        if (!p) return;
         const next = new Set<"titulo" | "fechas" | "donde">();
-        if (p.titulo && !touched.current.has("titulo")) { setTitulo(p.titulo); next.add("titulo"); }
+        if (p.titulo && !tituloInicial && !touched.current.has("titulo")) { setTitulo(p.titulo); next.add("titulo"); }
         if (p.fecha_inicio) setSugFechas({ inicio: p.fecha_inicio, fin: p.fecha_fin || p.fecha_inicio });
         if (p.fecha_inicio && !touched.current.has("fechas") && !guarda?.fecha) {
           setInicio(p.fecha_inicio);
@@ -147,12 +167,31 @@ export function CreatePlanFlow({
         if (p.destino && !touched.current.has("donde") && !guarda?.lugar) { setDonde(p.destino); next.add("donde"); }
         setSug((cur) => new Set([...cur, ...next]));
       })
-      .catch((e) => console.error("[chat] sugerir plan:", e))
-      .finally(() => { if (!cancelled) setLeyendo(false); });
+      .catch((e) => console.error("[chat] sugerir plan:", errText(e)))
+      .finally(() => { window.clearTimeout(tope); if (!cancelled) setLeyendo(false); });
+    return () => { cancelled = true; window.clearTimeout(tope); };
+  }, [chat.chat_id, guarda?.fecha, guarda?.lugar, tituloInicial]);
+  // Your plans, to warn (never block) when you already have this one: same name, overlapping days.
+  const [misPlanes, setMisPlanes] = useState<PlanByIdRow[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    fetchUserRelatedPlans({ userId: currentUserId })
+      .then((ps) => { if (!cancelled) setMisPlanes(ps); })
+      .catch((e) => console.error("[chat] mis planes:", errText(e)));
     return () => { cancelled = true; };
-  }, [chat.chat_id, guarda?.fecha, guarda?.lugar]);
+  }, [currentUserId]);
+  const repetido = useMemo(() => {
+    const t = normTitulo(titulo);
+    if (!t || !inicio || !fin) return null;
+    const a = new Date(`${inicio}T00:00:00`).getTime();
+    const b = new Date(`${fin}T23:59:00`).getTime();
+    return misPlanes.find((p) => normTitulo(p.titulo) === t
+      && new Date(p.inicio_at).getTime() <= b && new Date(p.fin_at).getTime() >= a) ?? null;
+  }, [misPlanes, titulo, inicio, fin]);
+
   const touch = (k: "titulo" | "fechas" | "donde") => {
     touched.current.add(k);
+    setTocados((s) => (s.has(k) ? s : new Set([...s, k])));
     setSug((s) => { if (!s.has(k)) return s; const n = new Set(s); n.delete(k); return n; });
   };
 
@@ -193,7 +232,7 @@ export function CreatePlanFlow({
       });
       onCreated(r, guarda ?? null);
     } catch (e) {
-      console.error("[chat] crear plan desde el chat:", e);
+      console.error("[chat] crear plan desde el chat:", errText(e));
       const msg = (e as { message?: string })?.message ?? "";
       setError(/demasiados/i.test(msg)
         ? "Hay demasiados mensajes para copiar. Elige desde qué mensaje."
@@ -250,9 +289,6 @@ export function CreatePlanFlow({
 
   return (
     <Sheet title="Crear plan" onClose={busy ? () => {} : onClose} footer={footer} maxWidth={560}>
-      <p className="-mt-[4px] mb-[12px] text-[13px] text-muted">
-        {modo === "nada" ? "Con su propio chat, que empieza vacío." : "Con su propio chat, que empieza con una copia de esta conversación."}
-      </p>
       {error && (
         <div role="alert" className="mb-[12px] flex gap-[10px] rounded-[8px] border border-[var(--chat-missed)] bg-[var(--surface)] p-[12px] text-[14px] leading-[1.4] text-app">
           <TriangleAlert className="mt-[2px] size-[16px] shrink-0 text-[var(--chat-missed)]" aria-hidden />
@@ -260,10 +296,16 @@ export function CreatePlanFlow({
         </div>
       )}
 
+      {leyendo && (
+        <p role="status" className="-mt-[4px] mb-[10px] flex items-center gap-[8px] text-[13px] text-muted">
+          <span className="flex size-[16px] shrink-0 items-center justify-center [&>svg]:size-[16px]"><Rombo state="thinking" /></span>
+          Frimee está leyendo la conversación…
+        </p>
+      )}
       <div className="flex flex-col">
         <FieldRow label="Nombre" htmlFor="cp-nombre">
           <input id="cp-nombre" className={`${rowField} text-[17px] font-[var(--fw-semibold)]`} value={titulo} maxLength={80} disabled={busy}
-            placeholder={leyendo ? "Frimee está leyendo el chat…" : "Finde en la sierra"} onChange={(e) => { setTitulo(e.target.value); touch("titulo"); }} />
+            placeholder="Finde en la sierra" onChange={(e) => { setTitulo(e.target.value); touch("titulo"); }} />
           {sug.has("titulo") && <Sugerido />}
         </FieldRow>
         <FieldRow label="Fechas">
@@ -274,13 +316,21 @@ export function CreatePlanFlow({
             sugerido={sugFechas}
             invalid={faltanFechas}
             disabled={busy}
+            leyendo={esperando("fechas")}
+            vacio={sinFechas && !tocados.has("fechas") ? "Frimee no ha encontrado fechas en la conversación" : undefined}
             onChange={(a, b) => { setInicio(a); setFin(b); setFaltanFechas(false); touch("fechas"); }}
           />
           {sug.has("fechas") && inicio && <Sugerido />}
         </FieldRow>
-        <FieldRow label="Dónde" htmlFor="cp-donde">
-          <input id="cp-donde" className={rowField} value={donde} maxLength={120} placeholder="Por decidir" disabled={busy}
-            onChange={(e) => { setDonde(e.target.value); touch("donde"); }} />
+        <FieldRow label="Dónde">
+          <span className="relative flex min-w-0 flex-1 items-center">
+            {/* While @frimee reads: a bar where the place will go; typing takes over. Places search
+                like «Crear plan» in Planes (only the name is kept); empty = «Por decidir». */}
+            {esperando("donde") && <span aria-hidden className="skel-live pointer-events-none absolute left-0 z-[1] h-[16px] w-[45%]" />}
+            <LocationAutocomplete value={donde} onChange={(v) => { setDonde(v.slice(0, 120)); touch("donde"); }}
+              placeholder={esperando("donde") ? "" : "Busca un sitio o déjalo por decidir"} dropdownVariant="surface"
+              className="flex h-[44px] min-w-0 items-center text-[15px] text-app" />
+          </span>
           {sug.has("donde") && <Sugerido />}
         </FieldRow>
         {guardaLine && (
@@ -290,6 +340,15 @@ export function CreatePlanFlow({
         )}
         <div aria-hidden className="border-t border-app" />
       </div>
+      {repetido && (
+        <p role="status" className="mt-[10px] flex items-start gap-[8px] text-[13px] leading-[1.45] text-app">
+          <TriangleAlert className="mt-[2px] size-[15px] shrink-0 text-[var(--warning)]" aria-hidden />
+          <span className="min-w-0 flex-1">
+            Ya tienes «{repetido.titulo}» esos días ({fmtRange(repetido.inicio_at, repetido.fin_at)}). Puedes crearlo igualmente.{" "}
+            <Link href={`/plans/${repetido.id}`} onClick={onClose} className="font-[var(--fw-semibold)] text-primary-token">Abrir</Link>
+          </span>
+        </p>
+      )}
 
       <h3 className="mb-[6px] mt-[18px] flex items-baseline gap-[8px]">
         <span className="text-[14px] font-[var(--fw-semibold)] text-app">Quién entra</span>
@@ -697,11 +756,53 @@ function CopyFromPicker({
 }
 
 /**
+ * The plans you are in now. The «Plan creado» mark keeps who entered at creation; whoever joined
+ * later (an accepted «Pedir unirme», an invite) must see «Abrir el plan» too. Remembered for 30 s
+ * so the marks of one chat ask once.
+ */
+let misPlanesCache: { userId: string; at: number; p: Promise<Set<number>> } | null = null;
+function misPlanIds(userId: string): Promise<Set<number>> {
+  if (misPlanesCache && misPlanesCache.userId === userId && Date.now() - misPlanesCache.at < 30_000) return misPlanesCache.p;
+  const p = fetchUserRelatedPlans({ userId }).then((ps) => new Set(ps.map((x) => x.id)));
+  p.catch(() => { misPlanesCache = null; });
+  misPlanesCache = { userId, at: Date.now(), p };
+  return p;
+}
+export function useMisPlanIds(userId: string, enabled = true) {
+  const [ids, setIds] = useState<Set<number> | null>(null);
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    misPlanIds(userId)
+      .then((v) => { if (!cancelled) setIds(v); })
+      .catch((e) => console.error("[chat] mis planes:", errText(e)));
+    return () => { cancelled = true; };
+  }, [userId, enabled]);
+  return ids;
+}
+
+/** Whether you are still in the original chat (null while asking, or if asking failed). */
+function useVeChat(chatId: string, enabled = true) {
+  const [ve, setVe] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    puedoVerChatEndpoint(chatId)
+      .then((v) => { if (!cancelled) setVe(v); })
+      .catch((e) => console.error("[chat] comprobar el chat original:", (e as { message?: string })?.message ?? String(e)));
+    return () => { cancelled = true; };
+  }, [chatId, enabled]);
+  return ve;
+}
+
+/**
  * «Antes del plan» (boards cp-m-plan, cp-sistema): the first entry of a plan's chat made from
  * another chat. A chapter in serif with a copy node; the link only works for who is in that chat.
  */
 export function CopySeparator({ data, onOpenChat }: { data: CopyMoment; onOpenChat?: (chatId: string) => void }) {
   const cuando = fmtSince(data.copiado_at);
+  // Someone who joined the plan later (or left the group) cannot open that chat: no link then.
+  const ve = useVeChat(data.origen_chat_id);
   return (
     <div className="relative pb-[6px] pl-[56px] pr-[var(--space-4)] pt-[18px]">
       <span aria-hidden className="absolute left-[18px] top-[22px] flex size-[20px] items-center justify-center rounded-full border border-app bg-[var(--bg)] text-muted">
@@ -711,7 +812,7 @@ export function CopySeparator({ data, onOpenChat }: { data: CopyMoment; onOpenCh
       <p className="mt-[2px] text-[13px] leading-[1.45] text-muted">
         Conversación copiada de «{data.origen_nombre}» el {cuando} · {plural(data.copiados, "mensaje", "mensajes")}. Las reacciones y los fijados se quedan en el otro chat.
       </p>
-      {onOpenChat ? (
+      {ve !== true ? null : onOpenChat ? (
         <button type="button" onClick={() => onOpenChat(data.origen_chat_id)} className="min-h-[44px] text-[14px] font-[var(--fw-semibold)] text-primary-token">
           Ir al chat original
         </button>
@@ -750,8 +851,10 @@ export function PlanCreatedMark({
     ...data.miembros.filter((m) => m.id !== currentUserId).map((m) => m.nombre),
     ...(data.miembros.some((m) => m.id === currentUserId) ? ["tú"] : []),
   ]);
-  const dentro = data.miembros.some((m) => m.id === currentUserId);
+  const misPlanes = useMisPlanIds(currentUserId, !inPlanChat);
+  const dentro = data.miembros.some((m) => m.id === currentUserId) || Boolean(misPlanes?.has(data.plan_id));
   const sinCopia = inPlanChat && data.copiados === 0;
+  const ve = useVeChat(data.origen_chat_id, sinCopia);
   const titulo = inPlanChat
     ? `${quien} ${yo ? "creaste" : "creó"} el plan${otros.length ? ` con ${listaY(otros)}` : ""}`
     : `${quien} ${yo ? "creaste" : "creó"} «${data.titulo}» con esta conversación`;
@@ -763,12 +866,12 @@ export function PlanCreatedMark({
       if (r === "ya_miembro") { router.push(`/plans/${data.plan_id}`); return; }
       setPedido("enviado");
     } catch (e) {
-      console.error("[chat] pedir unirme:", e);
+      console.error("[chat] pedir unirme:", errText(e));
       setPedido("error");
     }
   };
 
-  const back = onOpenChat ? (
+  const back = ve !== true ? null : onOpenChat ? (
     <button type="button" onClick={() => onOpenChat(data.origen_chat_id)} className="mt-[6px] inline-flex min-h-[44px] items-center gap-[6px] text-[14px] font-[var(--fw-semibold)] text-primary-token">
       Ir al chat original<span aria-hidden>→</span>
     </button>

@@ -221,8 +221,15 @@ Si se propusieron varias opciones, usa la última en la que se pusieron de acuer
 
 async function planNuevo(supabase: ReturnType<typeof createClient>, chat_id: string): Promise<Response> {
   const desde = new Date(Date.now() - PLAN_NUEVO_DIAS * 86_400_000).toISOString();
-  const { data } = await supabase.from("mensajes").select("id, texto, created_at, sender_id, tipo")
-    .eq("chat_id", chat_id).gte("created_at", desde).order("id", { ascending: false }).limit(PLAN_NUEVO_MAX * 2);
+  // Only what was said after the last plan made from this chat: that one already exists, so it is
+  // never suggested again (its «Plan creado» mark is a moment JSON the model does not see).
+  const { data: ultimo } = await supabase.from("mensajes").select("id")
+    .eq("chat_id", chat_id).like("texto", '{"type": "plan_creado"%')
+    .order("id", { ascending: false }).limit(1).maybeSingle();
+  let query = supabase.from("mensajes").select("id, texto, created_at, sender_id, tipo")
+    .eq("chat_id", chat_id).gte("created_at", desde);
+  if (ultimo) query = query.gt("id", (ultimo as { id: number }).id);
+  const { data } = await query.order("id", { ascending: false }).limit(PLAN_NUEVO_MAX * 2);
   // People's text and @frimee's answers (they often name the place); no moments JSON or calls.
   const rows = ((data ?? []) as MsgRow[])
     .filter((m) => (m.tipo === "text" || m.tipo === "bot") && !m.texto.startsWith("{") && m.texto.trim().length > 0)

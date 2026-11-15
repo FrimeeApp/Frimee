@@ -216,11 +216,14 @@ async function fetchDirections(params: DirectionsParams): Promise<DirectionsResu
 }
 
 async function geocode(address: string): Promise<Coord | null> {
+  // A plan made without a place is saved as «Por decidir»: nothing to look up.
+  if (!address.trim() || address.trim().toLowerCase() === "por decidir") return null;
   return new Promise((resolve) => {
     const geocoder = new window.google.maps.Geocoder();
     geocoder.geocode({ address }, (results: Array<{ geometry: { location: { lat: () => number; lng: () => number } } }> | null, status: string) => {
       if (status !== "OK" || !results?.[0]) {
-        logDayRouteMap("Geocode sin resultado", { address, status });
+        // A place Google does not know is not an error (the map just leaves it out).
+        if (status !== "ZERO_RESULTS") logDayRouteMap("Geocode sin resultado", { address, status });
         resolve(null);
         return;
       }

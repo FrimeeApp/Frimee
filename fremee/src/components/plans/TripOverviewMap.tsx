@@ -26,12 +26,15 @@ function toCoord(lat: number | null | undefined, lng: number | null | undefined)
 }
 
 async function geocode(address: string): Promise<Coord | null> {
+  // A plan made without a place is saved as «Por decidir»: nothing to look up.
+  if (!address.trim() || address.trim().toLowerCase() === "por decidir") return null;
   return new Promise((resolve) => {
     const maps = getGoogleMaps();
     const geocoder = new maps.Geocoder();
     geocoder.geocode({ address }, (results, status) => {
       if (status !== "OK" || !results?.[0]) {
-        logTripOverviewMap("Geocode sin resultado", { address, status });
+        // A place Google does not know is not an error (the map just leaves it out).
+        if (status !== "ZERO_RESULTS") logTripOverviewMap("Geocode sin resultado", { address, status });
         resolve(null);
         return;
       }
