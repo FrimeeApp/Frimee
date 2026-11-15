@@ -2,7 +2,7 @@
 
 import NextImage from "next/image";
 import { useEffect, useRef, useState, useCallback, Fragment, type ButtonHTMLAttributes } from "react";
-import { buildTimeline, inTimeOrder, tripRange, tripStatus } from "@/components/chat/bitacora/timeline";
+import { buildTimeline, chapterLabel, inTimeOrder, tripRange, tripStatus, type ChapterLabel } from "@/components/chat/bitacora/timeline";
 import Link from "next/link";
 import { DayChapter } from "@/components/chat/bitacora/DayChapter";
 import { ChatRuler, type RulerMark } from "@/components/chat/bitacora/ChatRuler";
@@ -34,6 +34,11 @@ import {
   getReaccionesEndpoint,
   pinMensajeEndpoint,
   getPinnedEndpoint,
+  getChatIndiceEndpoint,
+  getChatLecturasEndpoint,
+  listMensajesTramoEndpoint,
+  listMensajesDespuesEndpoint,
+  type ChatIndice,
   destacarMensajeEndpoint,
   getMisDestacadosEndpoint,
   resolverPropuestaEndpoint,
@@ -46,7 +51,8 @@ import { CallLine } from "@/components/chat/bitacora/CallLine";
 import { TripSummaryCard, ExpenseCard, PlanItemCard } from "@/components/chat/bitacora/MomentCards";
 import { PlaceCard } from "@/components/chat/bitacora/PlaceCard";
 import { FrimeeProposal } from "@/components/chat/bitacora/FrimeeProposal";
-import { MessageActions } from "@/components/chat/bitacora/MessageActions";
+import { MessageActions, DiamondIcon } from "@/components/chat/bitacora/MessageActions";
+import { useRouter } from "next/navigation";
 import { PlaceSheet, ExpenseSheet, InvitePlanSheet } from "@/components/chat/bitacora/AttachSheets";
 import { uploadPlanCoverFile, uploadAudioBlob, uploadAudioFile, uploadDocumentFile, uploadMediaFile } from "@/services/firebase/upload";
 import { createRealtimeTopic } from "@/lib/realtime";
@@ -73,7 +79,7 @@ const AI_SUGGESTIONS = [
   { label: "Ideas para cenar", prompt: "@frimee proponnos 3 sitios para cenar y haz una encuesta para votar" },
 ];
 import {
-  Trash2, Ban, AlertTriangle, LogOut, ChevronDown,
+  Trash2, Ban, AlertTriangle, LogOut,
   Smile, Pin, Camera, Send as LucideSend, PlusCircle, Mic,
   File, Video, Music, BarChart2, Edit, ChevronLeft, Users,
   Phone, Download, Plus, X, Sparkles, MapPin, Receipt, CalendarDays,
@@ -163,7 +169,6 @@ export function ChatConversation({
   onAbrirActividad,
   onLeave,
   onMembersChanged,
-  unreadAtOpen = 0,
 }: {
   chat: ChatListItem;
   currentUserId: string;
@@ -182,8 +187,6 @@ export function ChatConversation({
   onAbrirActividad?: (titulo: string) => void;
   onLeave?: () => void;
   onMembersChanged?: () => void;
-  /** Unread messages when the chat was opened (the list zeroes its count on open): the ruler marks where you left off. */
-  unreadAtOpen?: number;
 }) {
   type LocalMsg = MensajeRow & { _key?: number };
   const [messages, setMessages] = useState<LocalMsg[]>([]);
@@ -218,7 +221,25 @@ export function ChatConversation({
     }
   };
   const [showInfo, setShowInfo] = useState(false);
-  const [contextMenu, setContextMenu] = useState<{ msg: MensajeRow; x: number; y: number } | null>(null);
+  // The message menu: where it opens (over the action bar, or at the pointer) and whether it is only the reactions.
+  const router = useRouter();
+  // How far the others have read (fn_chat_lecturas): «visto» when all of them read past a message.
+  const [lecturas, setLecturas] = useState<Array<{ user_id: string; last_read_at: string | null }>>([]);
+  const loadLecturasRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    let alive = true;
+    const load = () => {
+      void getChatLecturasEndpoint(chat.chat_id)
+        .then((rows) => { if (alive) setLecturas(rows); })
+        .catch((e) => console.error("[chat] Error leyendo lecturas:", (e as { message?: string })?.message ?? String(e)));
+    };
+    loadLecturasRef.current = load;
+    load();
+    return () => { alive = false; };
+  }, [chat.chat_id]);
+  // The one message in the tab order (roving focus); the latest one until you move.
+  const [focusMsgId, setFocusMsgId] = useState<number | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ msg: MensajeRow; x: number; y: number; place?: "above" | "cursor"; reactionsOnly?: boolean } | null>(null);
   const [replyingTo, setReplyingTo] = useState<MensajeRow | null>(null);
   const [editingMsg, setEditingMsg] = useState<MensajeRow | null>(null);
   // Everyone's reactions per message: emoji, count and whether one of them is mine.
@@ -316,6 +337,10 @@ export function ChatConversation({
   }, [chat.chat_id, registerCallReload]);
 
   useEffect(() => {
+    // The index first: it reads your last read before markChatRead moves it.
+    const indicePromise = getChatIndiceEndpoint(chat.chat_id)
+      .then(setIndice)
+      .catch((e) => console.error("[chat] Error leyendo el índice:", (e as { message?: string })?.message ?? String(e)));
     void (async () => {
       try {
         const data = await listMensajes({ chatId: chat.chat_id, limit: 50 });
@@ -332,7 +357,7 @@ export function ChatConversation({
         setLoading(false);
       }
     })();
-    void markChatRead(chat.chat_id);
+    void indicePromise.finally(() => markChatRead(chat.chat_id).then(() => { void channelRef.current?.send({ type: "broadcast", event: "read", payload: { user_id: currentUserId } }); }));
   }, [chat.chat_id, currentUserId, onLeave]);
 
   useEffect(() => {
@@ -362,7 +387,7 @@ export function ChatConversation({
           return [...prev, msg];
         });
         onNewMessageRef.current(msg);
-        void markChatRead(chat.chat_id);
+        void markChatRead(chat.chat_id).then(() => { void channelRef.current?.send({ type: "broadcast", event: "read", payload: { user_id: currentUserId } }); });
       })
       .on("broadcast", { event: "edit_message" }, ({ payload }) => {
         const { id, texto } = payload as { id: number; texto: string };
@@ -381,6 +406,8 @@ export function ChatConversation({
         emitPollVote(mensaje_id);
       })
       .on("broadcast", { event: "reactions_changed" }, () => { void loadReactionsRef.current(); })
+      // Someone read the chat: refresh the «visto» checks.
+      .on("broadcast", { event: "read" }, () => { loadLecturasRef.current(); })
       .on("broadcast", { event: "pin_changed" }, ({ payload }) => {
         const { mensaje_id } = payload as { mensaje_id: number | null };
         setPinnedId(mensaje_id);
@@ -417,9 +444,16 @@ export function ChatConversation({
   const [awayFromEnd, setAwayFromEnd] = useState(false);
   const [newWhileAway, setNewWhileAway] = useState(0);
   const lastMsgIdRef = useRef<number | null>(null);
-  // First message you had not read when the chat opened (frozen after the first load).
-  const [firstUnreadId, setFirstUnreadId] = useState<number | null>(null);
-  const firstUnreadDoneRef = useRef(false);
+  // The whole chat for the ruler (fn_chat_indice), and the loaded stretch when it is not the latest
+  // one (after jumping to an old milestone): its position and last message.
+  const [indice, setIndice] = useState<ChatIndice | null>(null);
+  const [detached, setDetached] = useState<{ start: number; endId: number } | null>(null);
+  const detachedRef = useRef(detached);
+  useEffect(() => { detachedRef.current = detached; }, [detached]);
+  // While an old stretch loads: the day it belongs to, for the loading rows.
+  const [jumping, setJumping] = useState<ChapterLabel | null>(null);
+  const [loadingNewer, setLoadingNewer] = useState(false);
+  const bottomSentinelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -432,8 +466,9 @@ export function ChatConversation({
     setAwayFromEnd(false);
     setNewWhileAway(0);
     lastMsgIdRef.current = null;
-    setFirstUnreadId(null);
-    firstUnreadDoneRef.current = false;
+    setIndice(null);
+    setDetached(null);
+    setJumping(null);
   }, [chat.chat_id]);
 
   // Follow the reader: new messages only pull the view down when you are at the end.
@@ -460,18 +495,6 @@ export function ChatConversation({
     if (!isNearBottomRef.current && last.sender_id !== currentUserId) setNewWhileAway((n) => n + 1);
   }, [messages, currentUserId]);
 
-  useEffect(() => {
-    if (loading || firstUnreadDoneRef.current) return;
-    firstUnreadDoneRef.current = true;
-    if (unreadAtOpen <= 0) return;
-    const ordered = inTimeOrder(messages);
-    let n = 0;
-    for (let i = ordered.length - 1; i >= 0; i--) {
-      if (ordered[i].sender_id === currentUserId) continue;
-      n += 1;
-      if (n === unreadAtOpen) { setFirstUnreadId(ordered[i].id); break; }
-    }
-  }, [loading, messages, unreadAtOpen, currentUserId]);
 
   // Phones: the keyboard opens or closes (NativeSystemUi). If you were at the end of the chat, the
   // last messages stay in view right above it instead of being covered.
@@ -493,10 +516,37 @@ export function ChatConversation({
       if (container) container.scrollTop = container.scrollHeight;
       // Activar observer después de un tick para que el scroll esté asentado
       setTimeout(() => { observerReadyRef.current = true; }, 100);
-    } else if (isNearBottomRef.current) {
+    } else if (isNearBottomRef.current && !detachedRef.current) {
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages, loading]);
+
+  // In an old stretch: load newer messages when its end comes into view, until the latest.
+  useEffect(() => {
+    const sentinel = bottomSentinelRef.current;
+    if (!sentinel || !detached) return;
+    const observer = new IntersectionObserver(async ([entry]) => {
+      const d = detachedRef.current;
+      if (!entry.isIntersecting || loadingNewer || !d) return;
+      setLoadingNewer(true);
+      try {
+        const newer = await listMensajesDespuesEndpoint(chat.chat_id, d.endId, 50);
+        isNearBottomRef.current = false;
+        setMessages((prev) => {
+          const seen = new Set(prev.map((m) => m.id));
+          const real = [...prev.filter((m) => m.id > 0), ...newer.filter((m) => !seen.has(m.id))].sort((a, b) => a.id - b.id);
+          return [...real, ...prev.filter((m) => m.id < 0)];
+        });
+        setDetached(newer.length < 50 ? null : { ...d, endId: newer[newer.length - 1].id });
+      } catch (e) {
+        console.error("[chat] Error cargando mensajes nuevos:", (e as { message?: string })?.message ?? String(e));
+      } finally {
+        setLoadingNewer(false);
+      }
+    }, { root: scrollContainerRef.current, threshold: 0 });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [chat.chat_id, detached, loadingNewer]);
 
   // Load more (older) messages when sentinel enters viewport
   useEffect(() => {
@@ -515,6 +565,7 @@ export function ChatConversation({
         const prevScrollHeight = container?.scrollHeight ?? 0;
         setMessages((prev) => [...older, ...prev]);
         oldestIdRef.current = older[0].id;
+        setDetached((d) => (d ? { ...d, start: Math.max(0, d.start - older.length) } : d));
         if (older.length < 50) setHasMore(false);
         requestAnimationFrame(() => {
           if (container) container.scrollTop = container.scrollHeight - prevScrollHeight;
@@ -559,7 +610,14 @@ export function ChatConversation({
     });
   }, []);
 
-  const closeOverlays = () => { setContextMenu(null); setShowAttachMenu(false); setShowEmojiPicker(false); };
+  const closeOverlays = () => {
+    setContextMenu(null);
+    setShowAttachMenu(false);
+    setShowEmojiPicker(false);
+    // Let go of the focus a message's bar or menu took, so nothing stays highlighted.
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && active.closest("article")) active.blur();
+  };
   const logError = (what: string, e: unknown) => console.error(`[chat] ${what}:`, (e as { message?: string })?.message ?? String(e));
 
   // ── Reactions, pin and stars (phase 2: stored, and the pin is shared by the whole chat) ──
@@ -598,6 +656,21 @@ export function ChatConversation({
     void reactMensaje(msgId, emoji)
       .then(() => channelRef.current?.send({ type: "broadcast", event: "reactions_changed", payload: { mensaje_id: msgId } }))
       .catch((e) => { setReactions(prev); logError("Error guardando reacción", e); });
+  };
+
+  /**
+   * «Añadir al plan» (rombo, P): the add-activity sheet with the message as its title (a shared place
+   * keeps its name). In the plan page it opens right there; from Mensajes it goes to the plan.
+   */
+  const canAddToPlan = Boolean(planId) && Boolean(isAdmin);
+  const addToPlan = (m: MensajeRow) => {
+    if (!planId) return;
+    const mo = parseMoment(m.texto);
+    const titulo = (mo?.type === "lugar" ? mo.nombre : mo?.type === "tarjeta" ? mo.titulo : mo ? momentPreview(m.texto) ?? "" : m.texto)
+      .trim().slice(0, 80);
+    closeOverlays();
+    if (onAbrirActividad) onAbrirActividad(titulo);
+    else router.push(`/plans/${planId}?tab=itinerario&nuevaActividad=${encodeURIComponent(titulo)}`);
   };
 
   /** Double tap (board s-sistema · Gestos): react with the last emoji used; again removes it. */
@@ -1474,6 +1547,8 @@ export function ChatConversation({
 
   // override: send this text instead of the input's (the @frimee suggestions use it).
   const onSend = async (override?: string) => {
+    // Writing from an old stretch: back to the latest messages first.
+    if (detachedRef.current) await goToLatest();
     const trimmed = (override ?? text).trim();
     if (!trimmed || sending) return;
 
@@ -2063,20 +2138,118 @@ export function ChatConversation({
   const trip = planInfo ? { start: new Date(planInfo.inicio_at), end: new Date(planInfo.fin_at) } : null;
   // Shown in time order: a message created out of order (the plan's welcome before the guest demo's
   // backdated ones) would otherwise open the same day twice.
-  const timelineMessages = inTimeOrder(messages);
+  // In an old stretch, what arrives meanwhile waits below it until you go back to the latest.
+  const timelineMessages = inTimeOrder(detached ? messages.filter((m) => m.id > 0 && m.id <= detached.endId) : messages);
   const timeline = buildTimeline(timelineMessages, trip);
-  // The ruler travels days and milestones (polls and @frimee proposals that were not dismissed).
+  const tabStopId = focusMsgId != null && timelineMessages.some((m) => m.id === focusMsgId)
+    ? focusMsgId
+    : [...timelineMessages].reverse().find((m) => m.id > 0)?.id ?? null;
+  // Who reacted. The backend gives totals and whether yours is in: names only in 1 a 1.
+  const otherName = chat.miembros.find((m) => m.id !== currentUserId)?.nombre?.split(" ")[0] || "Alguien";
+  const reactionWho = (r: { total: number; mia: boolean }) => {
+    if (r.mia) return r.total === 1 ? "Tú" : isDirectChat ? `Tú y ${otherName}` : `Tú y ${r.total - 1} más`;
+    return isDirectChat ? otherName : `${r.total} ${r.total === 1 ? "persona" : "personas"}`;
+  };
+  const reactionLabel = (r: { emoji: string; total: number; mia: boolean }) => {
+    if (r.mia && r.total === 1) return `Reaccionaste con ${r.emoji}. Toca para quitarla`;
+    if (r.mia) return `${reactionWho(r)} reaccionasteis con ${r.emoji}. Toca para quitar la tuya`;
+    return `${reactionWho(r)} ${r.total === 1 ? "reaccionó" : "reaccionaron"} con ${r.emoji}. Toca para reaccionar igual`;
+  };
+  // The ruler covers the whole chat (fn_chat_indice) plus what arrived after reading it.
+  const loadedReal = messages.filter((m) => m.id > 0);
+  const indexMaxId = indice?.max_id ?? 0;
+  const arrived = indice ? loadedReal.filter((m) => m.id > indexMaxId).sort((a, b) => a.id - b.id) : [];
+  const rulerTotal = indice ? indice.total + arrived.length : loadedReal.length;
+  const dayFromString = (d: string) => {
+    const [y, mo, day] = d.split("-").map(Number);
+    return new Date(y, mo - 1, day);
+  };
+  const pollDecided = (p: { closed?: boolean; expires_at?: string }) => Boolean(p.closed || (p.expires_at && new Date(p.expires_at) < new Date()));
   const rulerMarks: RulerMark[] = [];
-  timelineMessages.forEach((m, i) => {
-    const chapter = timeline[i]?.chapter;
-    if (chapter) rulerMarks.push({ kind: "day", elementId: `day-${m.id}`, label: chapter });
-    const mo = parseMoment(m.texto);
-    if (mo?.type === "poll") {
-      rulerMarks.push({ kind: "hito", elementId: `msg-${m.id}`, label: mo.question, decided: Boolean(mo.closed || (mo.expires_at && new Date(mo.expires_at) < new Date())) });
-    } else if (mo?.type === "propuesta" && mo.estado !== "descartada") {
-      rulerMarks.push({ kind: "hito", elementId: `msg-${m.id}`, label: mo.titulo, decided: mo.estado === "aceptada" });
+  if (indice) {
+    for (const d of indice.dias) {
+      rulerMarks.push({ kind: "day", id: d.primer_id, ord: d.desde, label: chapterLabel(dayFromString(d.dia), new Date(), trip) });
     }
-  });
+    for (const h of indice.hitos) {
+      // A loaded message knows its current state (a poll closed, a proposal accepted or dismissed).
+      const loaded = loadedReal.find((m) => m.id === h.id);
+      const mo = loaded ? parseMoment(loaded.texto) : null;
+      if (mo?.type === "propuesta" && mo.estado === "descartada") continue;
+      const decided = mo?.type === "poll" ? pollDecided(mo) : mo?.type === "propuesta" ? mo.estado === "aceptada" : h.estado === "decidido";
+      rulerMarks.push({ kind: "hito", id: h.id, ord: h.ord, label: h.titulo ?? (h.tipo === "poll" ? "Encuesta" : "Propuesta de Frimee"), decided });
+    }
+    // New since the index (realtime): their days and milestones join the ruler without reloading.
+    let lastDay = indice.dias.length > 0 ? indice.dias[indice.dias.length - 1].dia : null;
+    arrived.forEach((m, k) => {
+      const ord = indice.total + k;
+      const at = m.created_at ? new Date(m.created_at) : new Date();
+      const key = `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, "0")}-${String(at.getDate()).padStart(2, "0")}`;
+      if (key !== lastDay) {
+        lastDay = key;
+        rulerMarks.push({ kind: "day", id: m.id, ord, label: chapterLabel(at, new Date(), trip) });
+      }
+      const mo = parseMoment(m.texto);
+      if (mo?.type === "poll") rulerMarks.push({ kind: "hito", id: m.id, ord, label: mo.question, decided: pollDecided(mo) });
+      else if (mo?.type === "propuesta" && mo.estado !== "descartada") rulerMarks.push({ kind: "hito", id: m.id, ord, label: mo.titulo, decided: mo.estado === "aceptada" });
+    });
+  }
+  rulerMarks.sort((a, b) => a.ord - b.ord);
+  // Where the loaded stretch sits among all the messages.
+  const loadedCount = detached ? loadedReal.filter((m) => m.id <= detached.endId).length : loadedReal.length;
+  const loadedFrom = detached ? detached.start : Math.max(0, rulerTotal - loadedCount);
+
+  const dayLabelFor = (id: number) => {
+    const d = indice ? [...indice.dias].reverse().find((x) => x.primer_id <= id) : null;
+    return d ? chapterLabel(dayFromString(d.dia), new Date(), trip) : null;
+  };
+
+  /** Jump to an old message: load only the stretch around it, not everything in between. */
+  const revealMessage = async (id: number) => {
+    setJumping(dayLabelFor(id) ?? { title: "Cargando", subtitle: "" });
+    try {
+      const rows = await listMensajesTramoEndpoint(chat.chat_id, id, 25, 25);
+      if (rows.length === 0) return;
+      const latestKnown = Math.max(indexMaxId, ...loadedReal.map((m) => m.id));
+      const last = rows[rows.length - 1];
+      isNearBottomRef.current = false;
+      setMessages(rows.map((r) => {
+        const { orden, ...m } = r;
+        void orden;
+        return m;
+      }));
+      oldestIdRef.current = rows[0].id;
+      setHasMore(rows[0].orden > 0);
+      setDetached(last.id < latestKnown ? { start: rows[0].orden, endId: last.id } : null);
+      await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      setHighlightedId(id);
+      setTimeout(() => setHighlightedId(null), 1500);
+    } catch (e) {
+      console.error("[chat] Error saltando al mensaje:", (e as { message?: string })?.message ?? String(e));
+    } finally {
+      setJumping(null);
+    }
+  };
+
+  /** «Ir a lo último»: from an old stretch, load the latest messages again. */
+  const goToLatest = async () => {
+    const wasDetached = Boolean(detachedRef.current);
+    if (wasDetached) {
+      try {
+        const data = await listMensajes({ chatId: chat.chat_id, limit: 50 });
+        setMessages(data);
+        if (data.length > 0) oldestIdRef.current = data[0].id;
+        setHasMore(data.length === 50);
+        setDetached(null);
+      } catch (e) {
+        console.error("[chat] Error volviendo a lo último:", (e as { message?: string })?.message ?? String(e));
+        return;
+      }
+    }
+    isNearBottomRef.current = true;
+    setNewWhileAway(0);
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    requestAnimationFrame(() => requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: reduce || wasDetached ? "auto" : "smooth" })));
+  };
   const otherMembers = chat.miembros.filter((m) => m.id !== currentUserId).map((m) => m.nombre.split(" ")[0]);
   const headerSubtitle = trip
     ? `${chat.miembros.length} personas · ${tripStatus(trip)}`
@@ -2122,7 +2295,8 @@ export function ChatConversation({
             isPinned={pinnedId === m.id}
             isStarred={starredIds.has(m.id)}
             myReaction={myReactionOf(m.id)}
-            anchor={{ x: contextMenu.x, y: contextMenu.y }}
+            anchor={{ x: contextMenu.x, y: contextMenu.y, place: contextMenu.place }}
+            reactionsOnly={contextMenu.reactionsOnly}
             onClose={closeOverlays}
             onReact={(emoji) => { reactTo(m.id, emoji); closeOverlays(); }}
             onReply={() => { setReplyingTo(m); closeOverlays(); setTimeout(() => inputRef.current?.focus(), 50); }}
@@ -2132,6 +2306,7 @@ export function ChatConversation({
             onPin={() => { togglePin(m.id); closeOverlays(); }}
             onStar={() => { toggleStar(m.id); closeOverlays(); }}
             onDelete={() => { void handleDeleteMsg(m); closeOverlays(); }}
+            onAddToPlan={canAddToPlan && m.tipo !== "bot" ? () => addToPlan(m) : undefined}
           />
         );
       })()}
@@ -2287,13 +2462,13 @@ export function ChatConversation({
 
       {/* Messages */}
       <div className="relative flex min-h-0 flex-1 flex-col">
-      <div ref={scrollContainerRef} className="scrollbar-thin min-h-0 flex-1 overflow-x-hidden overflow-y-auto pb-[var(--space-2)] pt-[var(--space-2)]" onClick={closeOverlays}>
+      <div ref={scrollContainerRef} tabIndex={-1} className="outline-none scrollbar-thin min-h-0 flex-1 pr-[8px] md:pr-[48px] overflow-x-hidden overflow-y-auto pb-[var(--space-2)] pt-[var(--space-2)]" onClick={closeOverlays}>
         {loading ? (
           <div className="flex h-full items-center justify-center text-body-sm text-muted">Cargando...</div>
         ) : messages.length === 0 ? (
           <div className="flex h-full items-center justify-center text-body-sm text-muted">Sé el primero en escribir</div>
         ) : (
-          <div className="relative flex min-h-full flex-col justify-end">
+          <div className="relative mx-auto flex min-h-full w-full max-w-[780px] flex-col justify-end">
             {/* The spine of the Bitácora: one line that holds the whole conversation */}
             <div aria-hidden className="pointer-events-none absolute bottom-0 left-[27px] top-0 w-px bg-[var(--border)]" />
             {/* Sentinel para infinite scroll hacia arriba */}
@@ -2325,10 +2500,12 @@ export function ChatConversation({
               const isStarred = starredIds.has(msg.id);
               // In 1 a 1 the avatar on the spine is enough; groups and plans name each turn.
               const showName = startsTurn && (isBot || !isDirectChat);
-              const openMsgMenu = (e: React.MouseEvent<HTMLButtonElement>) => {
+              // Desktop: the menu opens over the action bar, right-aligned to it.
+              const openFromBar = (e: React.MouseEvent<HTMLButtonElement>, reactionsOnly = false) => {
                 e.stopPropagation();
-                const rect = e.currentTarget.getBoundingClientRect();
-                setContextMenu({ msg, x: rect.left + rect.width / 2, y: rect.bottom + 4 });
+                const bar = e.currentTarget.closest<HTMLElement>("[role=toolbar]") ?? e.currentTarget;
+                const rect = bar.getBoundingClientRect();
+                setContextMenu({ msg, x: rect.right, y: rect.top, place: "above", reactionsOnly });
               };
               const onBubbleTouchStart = (e: React.TouchEvent) => {
                 const t = e.touches[0];
@@ -2382,19 +2559,49 @@ export function ChatConversation({
                   swipeRef.current = null;
                 }
               };
-              const menuButton = !isBot && (
-                <button type="button" onClick={openMsgMenu} className="flex size-[20px] items-center justify-center rounded-full text-muted opacity-0 transition-opacity group-hover/msg:opacity-100 focus-visible:opacity-100 hover:text-app" aria-label="Opciones del mensaje"><ChevronDownIcon className="size-[13px]" /></button>
-              );
+              // Desktop action bar (board d-acciones): on hover, or with the keyboard focus (:focus-visible,
+              // so a click never leaves it showing). Inside the row, 4 px from its top, so it never covers the
+              // message above. Mine: 8 px left of the block, at its top (on the right it would cover it).
+              const barBesideBlock = isMe && moment?.type !== "poll";
+              const menuOpenHere = contextMenu?.msg.id === msg.id;
+              const hoverBar = !isBot && msg.id > 0 ? (
+                <div
+                  role="toolbar"
+                  aria-label="Acciones"
+                  // Inside my block: a double click here is not «react with the last emoji».
+                  onDoubleClick={(e) => e.stopPropagation()}
+                  className={`absolute z-[3] hidden gap-[2px] rounded-[8px] border border-app bg-[var(--bg)] p-[2px] shadow-[0_2px_8px_rgba(0,0,0,0.12)] md:group-hover/msg:flex md:group-has-[:focus-visible]/msg:flex ${barBesideBlock ? "right-full top-0 mr-[8px]" : "right-[16px] top-[4px]"} ${menuOpenHere ? "md:flex" : ""}`}
+                >
+                  <button type="button" aria-label="Reaccionar" title="Reaccionar" onClick={(e) => openFromBar(e, true)} className="flex size-[36px] items-center justify-center rounded-[6px] text-muted transition-colors hover:bg-[var(--surface-2)] hover:text-app">
+                    <svg aria-hidden viewBox="0 0 24 24" className="size-[18px]" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M8 14s1.5 2 4 2 4-2 4-2" /><path d="M9 9h.01M15 9h.01" /></svg>
+                  </button>
+                  <button type="button" aria-label="Responder" title="Responder · R" onClick={(e) => { e.stopPropagation(); setReplyingTo(msg); setTimeout(() => inputRef.current?.focus(), 0); }} className="flex size-[36px] items-center justify-center rounded-[6px] text-muted transition-colors hover:bg-[var(--surface-2)] hover:text-app">
+                    <svg aria-hidden viewBox="0 0 24 24" className="size-[18px]" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M9 14 4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></svg>
+                  </button>
+                  {canAddToPlan && (
+                    <button type="button" aria-label="Añadir al plan" title="Añadir al plan · P" onClick={(e) => { e.stopPropagation(); addToPlan(msg); }} className="flex size-[36px] items-center justify-center rounded-[6px] transition-colors hover:bg-[var(--surface-2)]">
+                      <DiamondIcon />
+                    </button>
+                  )}
+                  <button type="button" aria-label="Más acciones" title="Más acciones" aria-haspopup="menu" aria-pressed={menuOpenHere && !contextMenu?.reactionsOnly} onClick={(e) => openFromBar(e)} className={`flex size-[36px] items-center justify-center rounded-[6px] text-muted transition-colors hover:bg-[var(--surface-2)] hover:text-app ${menuOpenHere && !contextMenu?.reactionsOnly ? "bg-[var(--surface-2)] text-app" : ""}`}>
+                    <svg aria-hidden viewBox="0 0 24 24" className="size-[18px]" fill="currentColor"><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></svg>
+                  </button>
+                </div>
+              ) : null;
+              // Phones: the long press lifts the message while its actions are open.
+              const lifted = menuOpenHere ? "z-[2] scale-[1.02] drop-shadow-[0_8px_16px_rgba(0,0,0,0.35)] md:scale-100 md:drop-shadow-none" : "";
+              // Desktop (board d-acciones): the whole message darkens a little on hover, and while its menu is open.
+              const rowHover = `isolate before:pointer-events-none before:absolute before:inset-y-0 before:left-[8px] before:right-[8px] before:-z-10 before:rounded-[8px] before:transition-colors before:content-[''] md:hover:before:bg-[var(--chat-surface)] ${menuOpenHere ? "md:before:bg-[var(--chat-surface)]" : ""}`;
               const replyQuote = msg.reply_texto && msg.reply_to_id ? (
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); scrollToMessage(msg.reply_to_id!); }}
-                  className="mb-[6px] w-full rounded-[6px] border-l-[3px] border-[var(--primary)] bg-[var(--surface-2)] px-2 py-[4px] text-left transition-opacity hover:opacity-80"
+                  aria-label={`Respuesta a ${msg.reply_sender_nombre ?? "un mensaje"}: ${momentPreview(msg.reply_texto) ?? msg.reply_texto}. Ir al mensaje`}
+                  className="mb-[4px] flex w-fit max-w-full items-center gap-[6px] rounded-[6px] bg-[var(--chat-surface)] px-[8px] py-[4px] text-left text-[13px] transition-opacity hover:opacity-80"
                 >
-                  <p className="truncate text-[13px] font-[var(--fw-semibold)] text-app">{msg.reply_sender_nombre ?? "Usuario"}</p>
-                  <p className="truncate text-[13px] text-muted">
-                    {momentPreview(msg.reply_texto) ?? msg.reply_texto}
-                  </p>
+                  <svg aria-hidden viewBox="0 0 24 24" className="size-[14px] shrink-0 text-muted" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M9 14 4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></svg>
+                  <span className="shrink-0 font-[var(--fw-semibold)] text-primary-token">{msg.reply_sender_nombre ?? "Usuario"}</span>
+                  <span className="min-w-0 truncate text-muted">{momentPreview(msg.reply_texto) ?? msg.reply_texto}</span>
                 </button>
               ) : null;
               // Calls never get here: they are drawn as a line on the spine (CallLine) below.
@@ -2425,11 +2632,40 @@ export function ChatConversation({
               );
               // Rich content keeps its own look until phase 2: framed on a surface for the others.
               const richFrame = isRichContent && !msg.image_url && !moment ? "rounded-[8px] border border-app bg-[var(--surface)] px-3 py-2" : "";
+              // Sending (clock), sent (one check) or seen by everyone else (two checks, accent).
+              const seen = Boolean(msg.created_at) && lecturas.length > 0
+                && lecturas.every((l) => l.last_read_at && new Date(l.last_read_at) >= new Date(msg.created_at));
+              const readMark = !isMe ? null : msg.id < 0 ? (
+                <svg role="img" aria-label="Enviando" viewBox="0 0 24 24" className="size-[14px] shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><circle cx="12" cy="12" r="8" /><path d="M12 8v4l2.5 2" /></svg>
+              ) : seen ? (
+                <svg role="img" aria-label="Visto" viewBox="0 0 24 24" className="size-[16px] shrink-0 text-primary-token" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="m2 12.5 4.5 4.5L15 8.5" /><path d="m11 16 1 1 8.5-8.5" /></svg>
+              ) : (
+                <svg role="img" aria-label="Enviado" viewBox="0 0 24 24" className="size-[14px] shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>
+              );
               const isPlainText = !moment && !msg.audio_url && !msg.document_url && !msg.image_url && !isCallRecord;
               // Desktop keyboard (board s-sistema · Gestos): R reply, E edit mine, Supr delete mine, Enter actions.
               const onMessageKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-                if (e.target !== e.currentTarget || e.ctrlKey || e.metaKey || e.altKey || msg.id < 0) return;
+                if (e.target !== e.currentTarget || msg.id < 0) return;
                 const key = e.key.toLowerCase();
+                if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+                  e.preventDefault();
+                  const all = [...(scrollContainerRef.current?.querySelectorAll<HTMLElement>("[data-msg-focus]") ?? [])];
+                  const at = all.indexOf(e.currentTarget);
+                  const next = all[at + (e.key === "ArrowUp" ? -1 : 1)];
+                  if (next) { next.focus(); next.scrollIntoView({ block: "nearest" }); }
+                  return;
+                }
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  scrollContainerRef.current?.focus();
+                  return;
+                }
+                if ((e.ctrlKey || e.metaKey) && key === "c" && isPlainText && !window.getSelection()?.toString()) {
+                  e.preventDefault();
+                  void navigator.clipboard.writeText(msg.texto);
+                  return;
+                }
+                if (e.ctrlKey || e.metaKey || e.altKey) return;
                 if (key === "r") {
                   e.preventDefault();
                   setReplyingTo(msg);
@@ -2442,17 +2678,35 @@ export function ChatConversation({
                 } else if (e.key === "Delete" && isMe) {
                   e.preventDefault();
                   void handleDeleteMsg(msg);
-                } else if ((e.key === "Enter" || e.key === "ContextMenu") && !isBot) {
+                } else if (key === "p" && !e.shiftKey && canAddToPlan) {
+                  e.preventDefault();
+                  addToPlan(msg);
+                } else if (key === "f" && !e.shiftKey) {
+                  e.preventDefault();
+                  setForwardMsg(msg);
+                } else if (key === "s" && !e.shiftKey) {
+                  e.preventDefault();
+                  toggleStar(msg.id);
+                } else if ((e.key === "Enter" || e.key === "ContextMenu" || (e.key === "F10" && e.shiftKey)) && !isBot) {
+                  // Menu key or Shift+F10: the same menu, over the message.
                   e.preventDefault();
                   const rect = e.currentTarget.getBoundingClientRect();
-                  setContextMenu({ msg, x: rect.left + rect.width / 2, y: rect.bottom + 4 });
+                  setContextMenu({ msg, x: rect.right, y: rect.top, place: "above" });
                 }
               };
               const gestureProps = {
-                tabIndex: 0,
-                "aria-keyshortcuts": isMe ? "R E Delete Enter" : "R Enter",
+                // Roving focus: only one message is in the tab order; ↑ ↓ move between them.
+                tabIndex: msg.id === tabStopId ? 0 : -1,
+                "data-msg-focus": msg.id,
+                onFocus: () => setFocusMsgId(msg.id),
+                "aria-keyshortcuts": isMe ? "R E F S Delete Shift+F10" : "R F S Shift+F10",
                 onKeyDown: onMessageKeyDown,
-                onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
+                // Right click: the same menu at the pointer (a long press on phones already opens it).
+                onContextMenu: (e: React.MouseEvent) => {
+                  e.preventDefault();
+                  if (isBot || msg.id < 0 || Date.now() - lastTouchAtRef.current < 1000) return;
+                  setContextMenu({ msg, x: e.clientX, y: e.clientY, place: "cursor" });
+                },
                 onDoubleClick: (e: React.MouseEvent) => {
                   // Phones already handled the double tap on touchend.
                   if (Date.now() - lastTouchAtRef.current < 800 || msg.id < 0) return;
@@ -2466,20 +2720,48 @@ export function ChatConversation({
                 onTouchCancel: onBubbleTouchEnd,
               };
               // Everyone's reactions; tapping one toggles mine.
+              // Reactions right under the message (boards m-1a1, d-racha): a 28 px chip with emoji and
+              // count inside a 40 px target, tinted when yours is in it; on desktop, «Añadir reacción» and
+              // who reacted on hover.
               const reactionChip = msgReactions.length > 0 ? (
-                <div className="mt-[4px] flex flex-wrap gap-[4px]">
-                  {msgReactions.map((r) => (
+                <div className={`-mb-[6px] flex flex-wrap items-center gap-[6px] ${isMe ? "justify-end" : ""}`}>
+                  {msgReactions.map((r) => {
+                    const who = reactionWho(r);
+                    return (
+                      <button
+                        key={r.emoji}
+                        type="button"
+                        aria-pressed={r.mia}
+                        aria-label={reactionLabel(r)}
+                        onClick={(e) => { e.stopPropagation(); reactTo(msg.id, r.mia ? "" : r.emoji); }}
+                        className="group/r relative inline-flex h-[40px] items-center outline-none"
+                      >
+                        <span className={`inline-flex h-[28px] items-center gap-[4px] rounded-[8px] border px-[8px] text-[13px] font-[var(--fw-medium)] tabular-nums text-app group-focus-visible/r:ring-2 group-focus-visible/r:ring-[var(--primary)] ${r.mia ? "border-[var(--chat-me-border)] bg-[var(--chat-tint)]" : "border-app"}`}>
+                          <span>{r.emoji}</span><span>{r.total}</span>
+                        </span>
+                        <span role="tooltip" className="pointer-events-none absolute bottom-[40px] left-1/2 z-10 hidden -translate-x-1/2 whitespace-nowrap rounded-[6px] border border-app bg-[var(--bg)] px-[10px] py-[6px] text-[12px] font-[var(--fw-semibold)] text-app shadow-[0_8px_32px_rgba(0,0,0,0.3)] md:group-hover/r:block md:group-focus-visible/r:block">
+                          {who}
+                        </span>
+                      </button>
+                    );
+                  })}
+                  {!isBot && (
                     <button
-                      key={r.emoji}
                       type="button"
-                      aria-pressed={r.mia}
-                      aria-label={`${r.emoji} ${r.total}${r.mia ? ", tu reacción" : ""}`}
-                      onClick={(e) => { e.stopPropagation(); reactTo(msg.id, r.mia ? "" : r.emoji); }}
-                      className={`inline-flex min-h-[28px] items-center gap-[4px] rounded-full border px-[8px] text-[13px] tabular-nums ${r.mia ? "border-[var(--chat-me-border)] bg-[var(--chat-tint)] text-app" : "border-app bg-[var(--surface)] text-muted"}`}
+                      aria-label="Añadir reacción"
+                      title="Añadir reacción"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        setContextMenu({ msg, x: rect.right, y: rect.top, place: "above", reactionsOnly: true });
+                      }}
+                      className="hidden size-[40px] items-center justify-center rounded-full text-muted transition-colors hover:bg-[var(--surface-2)] hover:text-app md:inline-flex"
                     >
-                      <span>{r.emoji}</span>{r.total > 1 && <span>{r.total}</span>}
+                      <svg aria-hidden viewBox="0 0 24 24" className="size-[18px]" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M20.9 11.2A9 9 0 1 1 12.8 3.04" /><path d="M8 14s1.5 2 4 2 4-2 4-2" /><path d="M9 9h.01M15 9h.01" /><path d="M19 2v6M16 5h6" />
+                      </svg>
                     </button>
-                  ))}
+                  )}
                 </div>
               ) : null;
               const highlight = highlightedId === msg.id ? "bg-[var(--text-primary)]/10 transition-colors" : "";
@@ -2487,10 +2769,12 @@ export function ChatConversation({
               const gapAbove = burstTimeRow ? "mt-[6px]"
                 : slot?.chapter ? ""
                 : startsBurst ? "mt-[14px]"
-                : startsTurn ? "mt-[8px]"
+                : startsTurn ? "mt-[6px]"
                 : "mt-[2px]";
               // Others: name and time on top of a turn; inside a burst only the name, and only in groups.
               const showHeader = startsTurn && (!inBurst || showName || isBot);
+              // The header adds 4 px on top: 14 between people (system board), less inside a quick exchange.
+              const gapAboveHeader = burstTimeRow ? "mt-[6px]" : slot?.chapter ? "" : startsBurst ? "mt-[10px]" : startsTurn ? "mt-[2px]" : "mt-[2px]";
               const compactMine = inBurst && !isRichContent && !replyQuote;
               if (isCallRecord && msg.tipo) {
                 const callTipo = msg.tipo;
@@ -2515,9 +2799,10 @@ export function ChatConversation({
                 return (
                   <Fragment key={(msg)._key ?? msg.id}>
                     {slot?.chapter && <DayChapter id={`day-${msg.id}`} label={slot.chapter} />}
-                    <article id={`msg-${msg.id}`} aria-label={`Encuesta, ${msgTime}`} className={`group/msg relative pl-[56px] pr-[var(--space-4)] ${slot?.chapter ? "mt-[4px]" : "mt-[14px]"} ${highlight}`}>
+                    <article id={`msg-${msg.id}`} aria-label={`Encuesta, ${msgTime}`} className={`group/msg relative pl-[56px] pr-[var(--space-4)] ${slot?.chapter ? "mt-[4px]" : "mt-[14px]"} ${highlight} ${rowHover}`}>
+                      {hoverBar}
                       <span aria-hidden className={`absolute left-[23px] top-[18px] size-[9px] rotate-45 ${pollDecided ? "bg-[var(--primary)]" : "border border-[var(--primary)] bg-[var(--bg)]"}`} />
-                      <div className={`relative max-w-[460px] ${contextMenu?.msg.id === msg.id ? "opacity-75" : ""}`} {...gestureProps}>
+                      <div className={`relative max-w-[460px] transition-transform duration-200 ease-[cubic-bezier(.2,0,0,1)] ${lifted} outline-none`} {...gestureProps}>
                         <PollMoment
                           mensajeId={msg.id}
                           poll={moment}
@@ -2528,7 +2813,6 @@ export function ChatConversation({
                             void channelRef.current?.send({ type: "broadcast", event: "poll_vote", payload: { mensaje_id: msg.id, option_index: idx } });
                           }}
                         />
-                        <span className="absolute right-[8px] top-[8px]">{menuButton}</span>
                       </div>
                       {reactionChip}
                     </article>
@@ -2542,39 +2826,45 @@ export function ChatConversation({
                   <div className={`pl-[56px] pr-[var(--space-4)] text-[12px] tabular-nums text-muted ${slot?.chapter ? "mt-[4px]" : "mt-[14px]"}`}>{msgTime}</div>
                 )}
                 {isMe ? (
-                  <article id={`msg-${msg.id}`} aria-label={`Tú, ${msgTime}`} className={`group/msg relative pl-[56px] pr-[var(--space-4)] ${gapAbove} ${highlight}`}>
+                  <article id={`msg-${msg.id}`} aria-label={`Tú, ${msgTime}`} className={`group/msg relative pl-[56px] pr-[var(--space-4)] ${gapAbove} ${highlight} ${rowHover}`}>
                     {startsTurn && <span aria-hidden className="absolute left-[24px] top-[12px] size-[7px] rounded-full bg-[var(--primary)]" />}
                     <div className="flex flex-col items-end">
-                      <div className={`relative max-w-[min(286px,100%)] md:max-w-[min(520px,100%)] ${contextMenu?.msg.id === msg.id ? "opacity-75" : ""}`} {...gestureProps}>
+                      {/* Block and its reactions, aligned to the right edge. */}
+                      <div className="flex max-w-full flex-col items-end">
+                      <div className={`relative max-w-[min(286px,100%)] md:max-w-[min(420px,100%)] transition-transform duration-200 ease-[cubic-bezier(.2,0,0,1)] ${lifted} outline-none`} {...gestureProps}>
+                        {hoverBar}
                         {compactMine ? (
-                          <div className="flex items-end gap-[8px] rounded-[8px] bg-[var(--chat-me)] px-[10px] py-[4px]">
+                          <div className="flex items-end gap-[8px] rounded-[8px] bg-[var(--chat-me-block)] px-[10px] py-[4px]">
                             {content}
                             {(timeHere || isStarred) && (
                               <span className="flex shrink-0 items-center gap-[4px] pb-[2px] text-[12px] tabular-nums text-muted">
                                 {isStarred && <span aria-label="Destacado">★</span>}
                                 {timeHere && msgTime}
+                                {timeHere && readMark}
                               </span>
                             )}
                           </div>
                         ) : (
-                          <div className={msg.image_url || isCard ? "" : `rounded-[8px] bg-[var(--chat-me)] ${isRichContent ? "px-3 py-2" : "px-[12px] py-[8px]"}`}>
+                          <div className={isCard ? "" : `rounded-[8px] bg-[var(--chat-me-block)] ${msg.image_url ? "p-[4px]" : msg.audio_url ? "p-[8px]" : isRichContent ? "px-3 py-2" : "px-[12px] py-[8px]"}`}>
                             {replyQuote}
                             {content}
                             {!msg.image_url && (timeHere || isStarred) && (
                               <div className="mt-[2px] flex items-center justify-end gap-[4px] text-[12px] text-muted">
                                 {isStarred && <span aria-label="Destacado">★</span>}
                                 {timeHere && <span className="tabular-nums">{msgTime}</span>}
+                                {timeHere && readMark}
                               </div>
                             )}
                           </div>
                         )}
-                        <span className="absolute -left-[26px] top-[4px]">{menuButton}</span>
                       </div>
                       {reactionChip}
+                      </div>
                     </div>
                   </article>
                 ) : (
-                  <article id={`msg-${msg.id}`} aria-label={`${isBot ? "Frimee, asistente" : msg.sender_nombre}, ${msgTime}`} className={`group/msg relative pl-[56px] pr-[var(--space-4)] ${gapAbove} ${highlight}`}>
+                  <article id={`msg-${msg.id}`} aria-label={`${isBot ? "Frimee, asistente" : msg.sender_nombre}, ${msgTime}`} className={`group/msg relative pl-[56px] pr-[var(--space-4)] ${showHeader ? gapAboveHeader : gapAbove} ${highlight} ${rowHover}`}>
+                    {hoverBar}
                     {startsTurn && (
                       isBot ? (
                         <span aria-hidden className="absolute left-[13px] top-0 flex size-[28px] items-center justify-center overflow-hidden rounded-[8px] border border-[var(--chat-me-border)] bg-[var(--chat-me)]">
@@ -2592,17 +2882,13 @@ export function ChatConversation({
                         {isBot && <span className="rounded-[4px] border border-app px-[6px] py-px text-[11px] font-[var(--fw-semibold)] text-muted">Asistente</span>}
                         {!inBurst && <span className="text-[12px] tabular-nums text-muted">{msgTime}</span>}
                         {isStarred && <span className="text-[12px] text-muted" aria-label="Destacado">★</span>}
-                        {menuButton}
                       </div>
                     )}
-                    <div className={`relative max-w-[640px] ${showHeader ? "mt-[4px]" : startsTurn ? "pt-[3px]" : ""} ${contextMenu?.msg.id === msg.id ? "opacity-75" : ""}`} {...gestureProps}>
+                    <div className={`relative max-w-[640px] ${showHeader ? "mt-[4px]" : startsTurn ? "pt-[3px]" : ""} transition-transform duration-200 ease-[cubic-bezier(.2,0,0,1)] ${lifted} outline-none`} {...gestureProps}>
                       <div className={`${isBot ? "rounded-[8px] border border-dashed border-[var(--chat-me-border)] bg-[var(--surface-inset)] p-[12px]" : richFrame} ${msg.image_url ? "max-w-[min(286px,100%)]" : isRichContent ? "inline-block max-w-full" : ""}`}>
                         {replyQuote}
                         {content}
                       </div>
-                      {!showHeader && !isBot && (
-                        <span className={`absolute ${startsTurn ? "right-0" : "-left-[28px]"} top-[2px]`}>{menuButton}</span>
-                      )}
                     </div>
                     {reactionChip}
                   </article>
@@ -2610,6 +2896,12 @@ export function ChatConversation({
                 </Fragment>
               );
             })}
+            {detached && <div ref={bottomSentinelRef} className="h-px" />}
+            {loadingNewer && (
+              <div className="flex justify-center py-2">
+                <div className="size-5 animate-spin rounded-full border-2 border-app border-t-transparent" />
+              </div>
+            )}
             <div ref={bottomRef} />
           </div>
         )}
@@ -2618,17 +2910,33 @@ export function ChatConversation({
         <ChatRuler
           scrollRef={scrollContainerRef}
           marks={rulerMarks}
-          lastReadElementId={firstUnreadId ? `msg-${firstUnreadId}` : null}
-          contentKey={messages}
+          total={rulerTotal}
+          loadedFrom={loadedFrom}
+          loadedCount={loadedCount}
+          readOrd={indice?.primer_no_leido?.ord ?? null}
+          onReveal={revealMessage}
         />
       )}
-      {!loading && awayFromEnd && (
+      {/* Jumping to an old stretch: loading rows on the spine, the day already titled. */}
+      {jumping && (
+        <div role="status" aria-label={`Cargando ${jumping.title}`} className="absolute inset-0 z-[5] overflow-hidden bg-[var(--bg)]">
+          <div className="relative mx-auto h-full w-full max-w-[780px]">
+            <div aria-hidden className="absolute bottom-0 left-[27px] top-0 w-px bg-[var(--border)]" />
+            <DayChapter label={jumping} />
+            {[72, 48, 88, 56, 64, 40].map((w, i) => (
+              <div key={i} aria-hidden className={`relative pl-[56px] pr-[var(--space-4)] ${i === 0 ? "mt-[4px]" : "mt-[14px]"}`}>
+                <span className="absolute left-[13px] top-0 size-[28px] rounded-full bg-[var(--surface-2)]" />
+                <div className="h-[12px] w-[80px] animate-pulse rounded-[4px] bg-[var(--surface-2)] motion-reduce:animate-none" />
+                <div className="mt-[8px] h-[14px] animate-pulse rounded-[4px] bg-[var(--surface-2)] motion-reduce:animate-none" style={{ width: `${w}%` }} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {!loading && (awayFromEnd || detached) && (
         <button
           type="button"
-          onClick={() => {
-            const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-            bottomRef.current?.scrollIntoView({ behavior: reduce ? "auto" : "smooth" });
-          }}
+          onClick={() => void goToLatest()}
           className="absolute bottom-[12px] left-1/2 z-[6] flex h-[44px] -translate-x-1/2 items-center gap-[6px] whitespace-nowrap rounded-full bg-[var(--primary)] px-[16px] text-[14px] font-[var(--fw-semibold)] text-[var(--contrast)] shadow-[0_4px_16px_rgba(0,0,0,0.25)]"
         >
           <svg aria-hidden viewBox="0 0 24 24" className="size-[16px]" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14" /><path d="m6 13 6 6 6-6" /></svg>
@@ -3206,7 +3514,6 @@ const TrashIcon = Trash2;
 const BlockIcon = Ban;
 const ReportIcon = AlertTriangle;
 const LeaveIcon = LogOut;
-const ChevronDownIcon = ChevronDown;
 const EmojiIcon = Smile;
 const PinIcon = Pin;
 const CameraIcon = Camera;

@@ -443,6 +443,7 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
   useEffect(() => {
     const tab = searchParams.get("tab");
     const createGasto = searchParams.get("createGasto");
+    const nuevaActividad = searchParams.get("nuevaActividad");
 
     if (tab === "itinerario" || tab === "gastos" || tab === "fotos" || tab === "chat") {
       setActiveTab(tab);
@@ -457,6 +458,19 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
         const nextQuery = nextParams.toString();
         router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
       }
+    }
+
+    // From a chat message («Añadir al plan»): the add sheet with its title already written.
+    if (nuevaActividad && plan && !isPast) {
+      setActiveTab("itinerario");
+      setEditingSubplan(null);
+      setAddSheetInitialTitulo(nuevaActividad);
+      setAddSheetInitialDate(undefined);
+      setShowAddSheet(true);
+      const nextParams = new URLSearchParams(searchParams.toString());
+      nextParams.delete("nuevaActividad");
+      const nextQuery = nextParams.toString();
+      router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
     }
   }, [searchParams, plan, isPast, pathname, router]);
 
