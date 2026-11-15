@@ -1,0 +1,8 @@
+/* TimePicker (src/components/ui/TimePicker.tsx): desktop list drops in. */
+@keyframes tp-caer {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  @keyframes tp-caer { from { opacity: 0; } to { opacity: 1; } }
+}
