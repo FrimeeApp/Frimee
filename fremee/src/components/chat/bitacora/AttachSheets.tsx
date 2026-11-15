@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { CalendarDays, LocateFixed } from "lucide-react";
 import LocationAutocomplete, { type Coords } from "@/components/plans/LocationAutocomplete";
 import { createGastoEndpoint } from "@/services/api/endpoints/gastos.endpoint";
-import { fetchUserRelatedPlans, type PlanByIdRow } from "@/services/api/endpoints/plans.endpoint";
+import { fetchPlanUserRol, fetchUserRelatedPlans, type PlanByIdRow } from "@/services/api/endpoints/plans.endpoint";
 import type { CardMoment, ExpenseMoment, PlaceMoment } from "./moments";
 import { formatEuros } from "./moments";
 import { Sheet, sheetField, sheetLabel, sheetPrimaryButton } from "./Sheet";
@@ -85,17 +85,19 @@ type Member = { id: string; nombre: string };
 
 /** Records a plan expense split in equal parts and leaves it as a moment in the chat. */
 export function ExpenseSheet({
-  planId, members, currentUserId, onClose, onSent,
+  planId, members, currentUserId, onClose, onSent, initial,
 }: {
   planId: number;
   members: Member[];
   currentUserId: string;
   onClose: () => void;
   onSent: (moment: ExpenseMoment) => Promise<void>;
+  /** From a message («Registrar como gasto»): what @frimee read in it, to review before saving. */
+  initial?: { titulo?: string; importe?: number; pagador?: string | null };
 }) {
-  const [titulo, setTitulo] = useState("");
-  const [importe, setImporte] = useState("");
-  const [pagador, setPagador] = useState(currentUserId);
+  const [titulo, setTitulo] = useState(initial?.titulo ?? "");
+  const [importe, setImporte] = useState(initial?.importe ? String(initial.importe).replace(".", ",") : "");
+  const [pagador, setPagador] = useState(initial?.pagador && members.some((m) => m.id === initial.pagador) ? initial.pagador : currentUserId);
   const [entre, setEntre] = useState<Set<string>>(() => new Set(members.map((m) => m.id)));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -247,6 +249,64 @@ export function InvitePlanSheet({
             </li>
           ))}
           {plans.length === 0 && <li className="px-[8px] py-[12px] text-[14px] text-muted">No tienes planes por delante a los que invitar.</li>}
+        </ul>
+      )}
+    </Sheet>
+  );
+}
+
+/**
+ * «¿Dónde la guardo?» (board m-grupo-plan): in a chat without a plan, «Añadir al plan» asks which of
+ * your plans ahead to add it to. Only a plan's admins can add activities, so the others are shown
+ * but disabled. Creating a plan from the chat itself comes later (it needs its own backend).
+ */
+export function ChoosePlanSheet({
+  currentUserId, activity, onClose, onChoose,
+}: {
+  currentUserId: string;
+  /** What is being saved, e.g. «Calzada Romana · sábado 29, 10:00». */
+  activity: string;
+  onClose: () => void;
+  onChoose: (planId: number) => void;
+}) {
+  const [plans, setPlans] = useState<Array<PlanByIdRow & { admin: boolean }> | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchUserRelatedPlans({ userId: currentUserId, limit: 100 })
+      .then(async (rows) => {
+        const now = Date.now();
+        const ahead = rows.filter((p) => new Date(p.fin_at).getTime() >= now).sort((a, b) => a.inicio_at.localeCompare(b.inicio_at));
+        const roles = await Promise.all(ahead.map((p) => fetchPlanUserRol(p.id, currentUserId).catch(() => null)));
+        if (!cancelled) setPlans(ahead.map((p, i) => ({ ...p, admin: roles[i] === "ADMIN" })));
+      })
+      .catch((e) => { console.error("[chat] Error cargando planes:", errMsg(e)); if (!cancelled) setError("No se pudieron cargar tus planes. Inténtalo de nuevo."); });
+    return () => { cancelled = true; };
+  }, [currentUserId]);
+
+  return (
+    <Sheet title="¿Dónde la guardo?" onClose={onClose}>
+      <p className="mb-[12px] rounded-[8px] bg-[var(--chat-surface)] px-[12px] py-[10px] text-[14px] text-app">{activity}</p>
+      {error && <p role="alert" className="mb-[8px] text-[13px] text-[var(--chat-missed)]">{error}</p>}
+      {plans === null && !error && <p className="py-[16px] text-[14px] text-muted">Cargando…</p>}
+      {plans && (
+        <ul className="flex flex-col">
+          {plans.map((p) => (
+            <li key={p.id}>
+              <button type="button" disabled={!p.admin} onClick={() => onChoose(p.id)}
+                className="flex min-h-[56px] w-full items-center gap-[12px] rounded-[8px] px-[8px] py-[8px] text-left hover:bg-[var(--surface-2)] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent">
+                <span className="flex size-[36px] shrink-0 items-center justify-center rounded-[8px] border border-app bg-[var(--surface)] text-muted"><CalendarDays className="size-[16px]" aria-hidden /></span>
+                <span className="min-w-0">
+                  <span className="block truncate text-[15px] text-app">{p.titulo}</span>
+                  <span className="block truncate text-[12px] text-muted">
+                    {p.admin ? `${whenLabel(p.inicio_at)}${p.ubicacion_nombre ? ` · ${p.ubicacion_nombre}` : ""}` : "Solo los admins del plan pueden añadir"}
+                  </span>
+                </span>
+              </button>
+            </li>
+          ))}
+          {plans.length === 0 && <li className="px-[8px] py-[12px] text-[14px] text-muted">No tienes planes por delante. Pronto podrás crear uno desde aquí.</li>}
         </ul>
       )}
     </Sheet>

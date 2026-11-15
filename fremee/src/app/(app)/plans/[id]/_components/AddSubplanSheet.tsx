@@ -11,6 +11,7 @@ import {
   createSubplan, updateSubplan, deleteSubplan,
   type SubplanRow, type TipoSubplan, TIPOS_TRANSPORTE,
 } from "@/services/api/endpoints/subplanes.endpoint";
+import { loadGoogleMapsScript } from "@/lib/googleMaps";
 import LocationAutocomplete, { type Coords } from "@/components/plans/LocationAutocomplete";
 import { FIELD_LINE_CLS } from "@/lib/styles";
 import { isoDateOnly, timeToMin, getOccupiedIntervals } from "./plan-utils";
@@ -263,13 +264,22 @@ export type AddSheetProps = {
   /** Active expenses linked to initialSubplan; when > 0 the delete dialog offers to void them. */
   gastosCount?: number;
   initialTitulo?: string;
+  /** HH:MM, e.g. read from a chat message («Añadir al plan»). */
+  initialHora?: string;
+  /** From a chat message: the type @frimee read («RESTAURANTE»…). */
+  initialTipo?: TipoSubplan;
+  /**
+   * From a chat message: the place. With coordinates (a shared place card) it is used as is; with
+   * only a name it is looked up on Google Places (`buscar`, e.g. «Time Out Market, Lisboa»).
+   */
+  initialUbicacion?: { nombre: string; lat?: number; lng?: number; buscar?: string };
   initialDate?: string;
   initialSubplan?: SubplanRow | null;
 };
 
 export function AddSubplanSheet({
   planId, planStartDate, planEndDate, subplanes,
-  onClose, onSaved, onDeleted, gastosCount = 0, initialTitulo, initialDate, initialSubplan,
+  onClose, onSaved, onDeleted, gastosCount = 0, initialTitulo, initialHora, initialTipo, initialUbicacion, initialDate, initialSubplan,
 }: AddSheetProps) {
   const { isClosing, requestClose } = useModalCloseAnimation(onClose);
   const TOTAL_STEPS = 3;
@@ -300,8 +310,11 @@ export function AddSubplanSheet({
     initialStartDate && initialStartDate >= minDate && initialStartDate <= maxDate ? initialStartDate :
     initialDate && initialDate >= minDate && initialDate <= maxDate ? initialDate :
     minDate;
-  const defaultHoraInicio = initialSubplan ? toLocalTime(initialSubplan.inicio_at) : (planIsAllDay ? "10:00" : planStartTime);
-  const defaultHoraFin    = initialSubplan ? toLocalTime(initialSubplan.fin_at)    : (planIsAllDay ? "11:00" : planEndTime);
+  const horaFromMessage = !initialSubplan && initialHora && /^\d{2}:\d{2}$/.test(initialHora) ? initialHora : null;
+  // An hour later, within the day.
+  const horaMasUna = (h: string) => `${String(Math.min(23, Number(h.slice(0, 2)) + 1)).padStart(2, "0")}:${h.slice(3)}`;
+  const defaultHoraInicio = initialSubplan ? toLocalTime(initialSubplan.inicio_at) : horaFromMessage ?? (planIsAllDay ? "10:00" : planStartTime);
+  const defaultHoraFin    = initialSubplan ? toLocalTime(initialSubplan.fin_at)    : horaFromMessage ? horaMasUna(horaFromMessage) : (planIsAllDay ? "11:00" : planEndTime);
 
   const [titulo,             setTitulo]             = useState(initialSubplan?.titulo ?? initialTitulo ?? "");
   const [descripcion,        setDescripcion]        = useState(initialSubplan?.descripcion ?? "");
@@ -310,12 +323,41 @@ export function AddSubplanSheet({
   const [horaInicio,         setHoraInicio]         = useState(defaultHoraInicio);
   const [horaFin,            setHoraFin]            = useState(defaultHoraFin);
   const allDay = false;
-  const [tipo,               setTipo]               = useState<TipoSubplan>(initialSubplan?.tipo ?? "ACTIVIDAD");
-  const [ubicacion,          setUbicacion]          = useState(initialSubplan?.ubicacion_nombre ?? "");
+  const [tipo,               setTipo]               = useState<TipoSubplan>(initialSubplan?.tipo ?? initialTipo ?? "ACTIVIDAD");
+  const [ubicacion,          setUbicacion]          = useState(initialSubplan?.ubicacion_nombre ?? initialUbicacion?.nombre ?? "");
   const [ubicacionCoords,    setUbicacionCoords]    = useState<Coords | null>(
     initialSubplan?.ubicacion_lat != null && initialSubplan?.ubicacion_lng != null
-      ? { lat: initialSubplan.ubicacion_lat, lng: initialSubplan.ubicacion_lng } : null,
+      ? { lat: initialSubplan.ubicacion_lat, lng: initialSubplan.ubicacion_lng }
+      : !initialSubplan && initialUbicacion?.lat != null && initialUbicacion?.lng != null
+        ? { lat: initialUbicacion.lat, lng: initialUbicacion.lng } : null,
   );
+
+  // A place read from a chat message has only a name: find it on Google Places (biased to the trip's
+  // destination) and fill the first result in. It stays editable; if nothing is found, the name stays.
+  useEffect(() => {
+    if (initialSubplan || !initialUbicacion?.nombre || initialUbicacion.lat != null) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        await loadGoogleMapsScript();
+        const { suggestions } = await window.google.maps.places.AutocompleteSuggestion.fetchAutocompleteSuggestions({
+          input: initialUbicacion.buscar ?? initialUbicacion.nombre,
+        });
+        const first = suggestions?.[0]?.placePrediction;
+        if (!first || cancelled) return;
+        const place = first.toPlace();
+        await place.fetchFields({ fields: ["location"] });
+        if (cancelled || !place.location) return;
+        setUbicacion(first.text.toString());
+        setUbicacionCoords({ lat: place.location.lat(), lng: place.location.lng() });
+      } catch {
+        // Maps not available: the name read from the message stays, to pick the place by hand.
+      }
+    })();
+    return () => { cancelled = true; };
+    // Only once, when the sheet opens with a place from a message.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [ubicacionFin,       setUbicacionFin]       = useState(initialSubplan?.ubicacion_fin_nombre ?? "");
   const [ubicacionFinCoords, setUbicacionFinCoords] = useState<Coords | null>(
     initialSubplan?.ubicacion_fin_lat != null && initialSubplan?.ubicacion_fin_lng != null

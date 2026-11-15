@@ -6,6 +6,12 @@ export type TipoSubplan =
 
 export const TIPOS_TRANSPORTE: TipoSubplan[] = ["VUELO", "BARCO"];
 
+const TIPOS_SUBPLAN = new Set<string>(["VUELO", "TREN", "BUS", "BARCO", "COCHE", "HOTEL", "RESTAURANTE", "ACTIVIDAD", "OTRO"]);
+/** A type that came from outside (a link, @frimee): only the known ones. */
+export function isTipoSubplan(v: unknown): v is TipoSubplan {
+  return typeof v === "string" && TIPOS_SUBPLAN.has(v);
+}
+
 export type SubplanRow = {
   id: number;
   plan_id: number;

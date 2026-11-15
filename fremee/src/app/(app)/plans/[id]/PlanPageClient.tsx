@@ -12,7 +12,7 @@ import { resolveChatName, resolveChatAvatar } from "@/services/api/repositories/
 import { fetchPlansByIds, fetchPlanMemberIds, fetchPlanUserRol, updatePlanEndpoint, type PlanByIdRow } from "@/services/api/endpoints/plans.endpoint";
 import CreatePlanModal, { type EditPlanInitialValues } from "@/components/plans/modals/CreatePlanModal";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
-import { fetchSubplanes, updateSubplanTransporte, updateSubplanViaje, type SubplanRow, TIPOS_TRANSPORTE } from "@/services/api/endpoints/subplanes.endpoint";
+import { fetchSubplanes, updateSubplanTransporte, updateSubplanViaje, type SubplanRow, type TipoSubplan, TIPOS_TRANSPORTE, isTipoSubplan } from "@/services/api/endpoints/subplanes.endpoint";
 import { getBalancesForPlanEndpoint, listGastosForPlanEndpoint, pagarLiquidacionEndpoint, uploadComprobanteEndpoint, type BalanceRow, type GastoRow } from "@/services/api/endpoints/gastos.endpoint";
 import DayRouteMap from "@/components/plans/DayRouteMap";
 import { findMissingLegs, useComputeMissingLegs } from "@/hooks/useComputeMissingLegs";
@@ -233,6 +233,9 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
   const [showAddSheet, setShowAddSheet] = useState(false);
   const [addSheetInitialTitulo, setAddSheetInitialTitulo] = useState<string | undefined>();
   const [addSheetInitialDate, setAddSheetInitialDate] = useState<string | undefined>();
+  const [addSheetInitialHora, setAddSheetInitialHora] = useState<string | undefined>();
+  const [addSheetInitialTipo, setAddSheetInitialTipo] = useState<TipoSubplan | undefined>();
+  const [addSheetInitialUbicacion, setAddSheetInitialUbicacion] = useState<{ nombre: string; lat?: number; lng?: number; buscar?: string } | undefined>();
   const [editingSubplan, setEditingSubplan] = useState<SubplanRow | null>(null);
   const [showAddGastoSheet, setShowAddGastoSheet] = useState(false);
   const [mobileCreateOpen, setMobileCreateOpen] = useState(false);
@@ -444,6 +447,12 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
     const tab = searchParams.get("tab");
     const createGasto = searchParams.get("createGasto");
     const nuevaActividad = searchParams.get("nuevaActividad");
+    const nuevaFecha = searchParams.get("fecha");
+    const nuevaHora = searchParams.get("hora");
+    const nuevoTipo = searchParams.get("tipo");
+    const nuevoLugar = searchParams.get("lugar");
+    const nuevaLat = searchParams.get("lat");
+    const nuevaLng = searchParams.get("lng");
 
     if (tab === "itinerario" || tab === "gastos" || tab === "fotos" || tab === "chat") {
       setActiveTab(tab);
@@ -461,18 +470,26 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
     }
 
     // From a chat message («Añadir al plan»): the add sheet with its title already written.
-    if (nuevaActividad && plan && !isPast) {
+    // Only admins add activities (the database checks it too).
+    if (nuevaActividad && plan && !isPast && isAdmin) {
       setActiveTab("itinerario");
       setEditingSubplan(null);
       setAddSheetInitialTitulo(nuevaActividad);
-      setAddSheetInitialDate(undefined);
+      setAddSheetInitialDate(nuevaFecha || undefined);
+      setAddSheetInitialHora(nuevaHora || undefined);
+      setAddSheetInitialTipo(isTipoSubplan(nuevoTipo) ? nuevoTipo : undefined);
+      setAddSheetInitialUbicacion(nuevoLugar ? {
+        nombre: nuevoLugar,
+        ...(nuevaLat && nuevaLng ? { lat: Number(nuevaLat), lng: Number(nuevaLng) } : { buscar: plan.ubicacion_nombre ? `${nuevoLugar}, ${plan.ubicacion_nombre}` : nuevoLugar }),
+      } : undefined);
       setShowAddSheet(true);
       const nextParams = new URLSearchParams(searchParams.toString());
       nextParams.delete("nuevaActividad");
+      for (const k of ["fecha", "hora", "tipo", "lugar", "lat", "lng"]) nextParams.delete(k);
       const nextQuery = nextParams.toString();
       router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
     }
-  }, [searchParams, plan, isPast, pathname, router]);
+  }, [searchParams, plan, isPast, isAdmin, pathname, router]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -1229,11 +1246,19 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
                   planInfo={plan ? { titulo: plan.titulo, inicio_at: plan.inicio_at, fin_at: plan.fin_at, ubicacion_nombre: plan.ubicacion_nombre } : undefined}
                   planId={plan?.id}
                   isAdmin={isAdmin}
-                  onAbrirActividad={(titulo) => {
+                  onAbrirActividad={(titulo, extra) => {
                     if (isPast || !isAdmin) return;
                     setEditingSubplan(null);
                     setAddSheetInitialTitulo(titulo);
-                    setAddSheetInitialDate(undefined);
+                    setAddSheetInitialDate(extra?.fecha || undefined);
+                    setAddSheetInitialHora(extra?.hora || undefined);
+                    setAddSheetInitialTipo(isTipoSubplan(extra?.tipo) ? extra.tipo : undefined);
+                    setAddSheetInitialUbicacion(extra?.lugar ? {
+                      nombre: extra.lugar,
+                      ...(extra.lat != null && extra.lng != null
+                        ? { lat: extra.lat, lng: extra.lng }
+                        : { buscar: plan?.ubicacion_nombre ? `${extra.lugar}, ${plan.ubicacion_nombre}` : extra.lugar }),
+                    } : undefined);
                     setShowAddSheet(true);
                     setActiveTab("itinerario");
                   }}
@@ -2100,12 +2125,18 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
             setEditingSubplan(null);
             setAddSheetInitialTitulo(undefined);
             setAddSheetInitialDate(undefined);
+            setAddSheetInitialHora(undefined);
+            setAddSheetInitialTipo(undefined);
+            setAddSheetInitialUbicacion(undefined);
           }}
           onSaved={handleSubplanSaved}
           onDeleted={handleSubplanDeleted}
           gastosCount={editingSubplan ? gastos.filter((g) => g.subplan_id === editingSubplan.id).length : 0}
           initialTitulo={addSheetInitialTitulo}
           initialDate={addSheetInitialDate}
+          initialHora={addSheetInitialHora}
+          initialTipo={addSheetInitialTipo}
+          initialUbicacion={addSheetInitialUbicacion}
           initialSubplan={editingSubplan}
         />
       )}
