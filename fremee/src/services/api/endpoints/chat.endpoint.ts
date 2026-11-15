@@ -360,6 +360,20 @@ export async function getSugerenciasEndpoint(chatId: string, ids: number[], onAs
   return [...stored, ...(((fn as { sugerencias?: Sugerencia[] })?.sugerencias) ?? [])];
 }
 
+export type PlanCompletado = { titulo: string; fecha: string; hora: string; hora_fin: string; lugar: string; tipo: string };
+
+/**
+ * «Añadir al plan» opened on a message: @frimee reads it again with the conversation around it
+ * (chat-sugerencias, `completar`), so a time in one message and the place in the next end up
+ * together, and a debated time takes the last agreed one (or stays empty). Null: nothing found.
+ */
+export async function completarSugerenciaEndpoint(chatId: string, mensajeId: number): Promise<PlanCompletado | null> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.functions.invoke("chat-sugerencias", { body: { chat_id: chatId, completar: mensajeId } });
+  if (error) throw new Error(error.message || "Error leyendo la conversación");
+  return ((data as { plan?: PlanCompletado | null })?.plan) ?? null;
+}
+
 /**
  * An expense AND its message in the chat, in one transaction (fn_chat_registrar_gasto): never one
  * without the other. `clientId` is made when the sheet opens: the same request again (a retry after

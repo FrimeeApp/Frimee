@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
-  BusFront, CarFront, CarTaxiFront, ChevronLeft, CircleEllipsis,
+  BusFront, CarFront, CarTaxiFront, ChevronLeft, CircleAlert, CircleEllipsis,
   FerrisWheel, Footprints, Hotel, MapPin, Plane, Ship,
   TrainFront, TramFront, UtensilsCrossed,
 } from "lucide-react";
@@ -17,6 +17,7 @@ import { FIELD_LINE_CLS } from "@/lib/styles";
 import { isoDateOnly, timeToMin, getOccupiedIntervals } from "./plan-utils";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
 import { CloseButton, IconButton } from "@/components/ui/IconButton";
+import { TimePicker } from "@/components/ui/TimePicker";
 import { ModalFeedback, type ModalFeedbackState } from "@/components/ui/ModalFeedback";
 import { DiscardChangesDialog } from "@/components/ui/DiscardChangesDialog";
 
@@ -182,75 +183,6 @@ function PlanInlineCalendar({
   );
 }
 
-// ── TimeWheelInput ────────────────────────────────────────────────────────────
-
-function TimeWheelInput({ value, onChange, minTime, maxTime }: {
-  value: string;
-  onChange: (v: string) => void;
-  minTime?: string;
-  maxTime?: string;
-}) {
-  const [hStr, mStr] = value.split(":");
-  const h = parseInt(hStr ?? "0", 10);
-  const m = parseInt(mStr ?? "0", 10);
-  const touchHRef = useRef<{ startY: number; start: number } | null>(null);
-  const touchMRef = useRef<{ startY: number; start: number } | null>(null);
-  const wrapperRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const el = wrapperRef.current;
-    if (!el) return;
-    const stop = (e: WheelEvent) => e.preventDefault();
-    el.addEventListener("wheel", stop, { passive: false });
-    return () => el.removeEventListener("wheel", stop);
-  }, []);
-
-  const emit = (hh: number, mm: number) => {
-    let total = Math.max(0, Math.min(23 * 60 + 59, hh * 60 + mm));
-    if (minTime) { const [a, b] = minTime.split(":").map(Number); total = Math.max((a ?? 0) * 60 + (b ?? 0), total); }
-    if (maxTime) { const [a, b] = maxTime.split(":").map(Number); total = Math.min((a ?? 0) * 60 + (b ?? 0), total); }
-    onChange(`${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`);
-  };
-
-  const inputCls = "w-[46px] bg-transparent text-[28px] font-[var(--fw-bold)] text-app outline-none text-center [appearance:textfield] [&::-webkit-inner-spin-button]:hidden [&::-webkit-outer-spin-button]:hidden";
-
-  return (
-    <div ref={wrapperRef} className="flex items-baseline">
-      <input
-        type="number" min={0} max={23}
-        value={String(h).padStart(2, "0")}
-        onChange={(e) => emit(Math.max(0, Math.min(23, parseInt(e.target.value) || 0)), m)}
-        onWheel={(e) => { e.preventDefault(); e.stopPropagation(); emit(h + (e.deltaY > 0 ? -1 : 1), m); }}
-        onTouchStart={(e) => { touchHRef.current = { startY: e.touches[0].clientY, start: h }; }}
-        onTouchMove={(e) => {
-          if (!touchHRef.current) return;
-          e.preventDefault();
-          const delta = Math.round((touchHRef.current.startY - e.touches[0].clientY) / 20);
-          emit(touchHRef.current.start + delta, m);
-        }}
-        onTouchEnd={() => { touchHRef.current = null; }}
-        className={inputCls}
-      />
-      <span className="select-none text-[28px] font-[var(--fw-bold)] text-app">:</span>
-      <input
-        type="number" min={0} max={59}
-        value={String(m).padStart(2, "0")}
-        onChange={(e) => emit(h, Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
-        onWheel={(e) => { e.preventDefault(); e.stopPropagation(); emit(h, m + (e.deltaY > 0 ? -1 : 1)); }}
-        onTouchStart={(e) => { touchMRef.current = { startY: e.touches[0].clientY, start: m }; }}
-        onTouchMove={(e) => {
-          if (!touchMRef.current) return;
-          e.preventDefault();
-          const delta = Math.round((touchMRef.current.startY - e.touches[0].clientY) / 8);
-          emit(h, touchMRef.current.start + delta);
-        }}
-        onTouchEnd={() => { touchMRef.current = null; }}
-        className={inputCls}
-      />
-    </div>
-  );
-}
-
 // ── AddSubplanSheet ───────────────────────────────────────────────────────────
 
 export type AddSheetProps = {
@@ -404,7 +336,29 @@ export function AddSubplanSheet({
     return horaFin;
   })();
 
-  const occupiedIntervals = fecha ? getOccupiedIntervals(subplanes.filter((s) => s.id !== initialSubplan?.id), fecha) : [];
+  // ── Time fields (Design «Selector de hora») ──
+  const dayMs = 86_400_000;
+  const diaSiguienteRaw = new Date(new Date(`${fecha}T12:00:00`).getTime() + dayMs).toISOString().slice(0, 10);
+  const diaSiguiente = diaSiguienteRaw <= maxDate ? diaSiguienteRaw : null;
+  const fechaCorta = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString("es-ES", { weekday: "short", day: "numeric", month: "short" }).replace(/\./g, "");
+  const finAntesQueInicio = efectivaFechaFin === fecha && timeToMin(horaFin) <= timeToMin(horaInicio);
+  const duracionMin = Math.round((new Date(`${efectivaFechaFin}T12:00:00`).getTime() - new Date(`${fecha}T12:00:00`).getTime()) / dayMs) * 1440
+    + timeToMin(horaFin) - timeToMin(horaInicio);
+  const duracion = duracionMin <= 0 ? null
+    : duracionMin < 60 ? `${duracionMin} min`
+    : `${Math.floor(duracionMin / 60)} h${duracionMin % 60 ? ` ${duracionMin % 60} min` : ""}`;
+  const horaSubtitle = [fechaCorta(fecha), titulo.trim() || ubicacion.trim()].filter(Boolean).join(" · ");
+  // Moving the start keeps the duration on the same day (an hour by default).
+  const cambiarInicio = (v: string) => {
+    const dur = efectivaFechaFin === fecha && timeToMin(horaFin) > timeToMin(horaInicio) ? timeToMin(horaFin) - timeToMin(horaInicio) : 60;
+    setHoraInicio(v);
+    if (efectivaFechaFin === fecha) {
+      const fin = Math.min(timeToMin(v) + dur, 23 * 60 + 59);
+      setHoraFin(`${String(Math.floor(fin / 60)).padStart(2, "0")}:${String(fin % 60).padStart(2, "0")}`);
+    }
+  };
+
+  const occupiedIntervals =fecha ? getOccupiedIntervals(subplanes.filter((s) => s.id !== initialSubplan?.id), fecha) : [];
   const isSaving = feedbackState?.type === "loading";
   const canSubmit = titulo.trim().length > 0 && fecha.length > 0 && fecha >= minDate && fecha <= maxDate && !isSaving;
 
@@ -511,7 +465,7 @@ export function AddSubplanSheet({
     }
   };
 
-  const canContinueWizard = wizardStep === 3 ? titulo.trim().length > 0 : true;
+  const canContinueWizard = wizardStep === 3 ? titulo.trim().length > 0 : wizardStep === 2 ? !finAntesQueInicio : true;
   const isLastStep = wizardStep === TOTAL_STEPS;
   const meta = STEP_META[wizardStep - 1];
   const initialSnapshot = useMemo(() => JSON.stringify({
@@ -698,18 +652,45 @@ export function AddSubplanSheet({
                   startDate={fecha} endDate={fechaFin}
                   onChange={(start, end) => { setFecha(start); setFechaFin(end); }}
                 />
-                <div className="grid grid-cols-2 gap-[var(--space-5)]">
-                  {[
-                    { label: "Hora inicio", value: horaInicio, onChange: setHoraInicio, minTime: fecha === minDate && !planIsAllDay ? planStartTime : undefined, maxTime: fecha === maxDate && !planIsAllDay ? planEndTime : undefined },
-                    { label: "Hora fin",    value: horaFin,    onChange: setHoraFin,    minTime: efectivaFechaFin === fecha ? horaInicio : undefined, maxTime: efectivaFechaFin === maxDate && !planIsAllDay ? planEndTime : undefined },
-                  ].map((p) => (
-                    <div key={p.label}>
-                      <p className="mb-[var(--space-2)] text-[14px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">{p.label}</p>
-                      <div className="border-b-2 border-app pb-[var(--space-1)] transition-colors focus-within:border-primary-token">
-                        <TimeWheelInput value={p.value} onChange={p.onChange} minTime={p.minTime} maxTime={p.maxTime} />
+                <div>
+                  <div className="grid grid-cols-2 gap-[var(--space-3)]">
+                    <div className="min-w-0">
+                      <p className="mb-[var(--space-2)] text-[14px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Inicio</p>
+                      <TimePicker
+                        variant="box" label="Hora de inicio" subtitle={horaSubtitle}
+                        value={horaInicio} onChange={cambiarInicio}
+                        minTime={fecha === minDate && !planIsAllDay ? planStartTime : undefined}
+                        maxTime={fecha === maxDate && !planIsAllDay ? planEndTime : undefined}
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="mb-[var(--space-2)] text-[14px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Fin</p>
+                      <TimePicker
+                        variant="box" label="Hora de fin" subtitle={horaSubtitle}
+                        value={horaFin} invalid={finAntesQueInicio}
+                        onChange={(v, o) => { setHoraFin(v); if (o?.nextDay && diaSiguiente) setFechaFin(diaSiguiente); }}
+                        nextDayBefore={efectivaFechaFin === fecha && diaSiguiente ? horaInicio : undefined}
+                        maxTime={efectivaFechaFin === maxDate && !planIsAllDay ? planEndTime : undefined}
+                      />
+                      {!finAntesQueInicio && duracion && <p className="mt-[6px] text-[12px] text-muted">Dura {duracion}</p>}
+                    </div>
+                  </div>
+                  {finAntesQueInicio && (
+                    <div role="alert" className="mt-[var(--space-2)] flex items-start gap-[8px] text-[13px] leading-[1.4] text-[var(--error)]">
+                      <CircleAlert aria-hidden className="mt-[1px] size-[16px] shrink-0" />
+                      <div>
+                        La hora de fin es anterior a la de inicio.
+                        {diaSiguiente && (
+                          <div className="mt-[2px]">
+                            <button type="button" onClick={() => setFechaFin(diaSiguiente)} className="min-h-[36px] text-[13px] font-[var(--fw-semibold)] text-[var(--chat-accent-text)]">
+                              Termina el {fechaCorta(diaSiguiente)}
+                            </button>
+                            <span className="text-[12px] text-muted"> o cambia la hora de fin</span>
+                          </div>
+                        )}
                       </div>
                     </div>
-                  ))}
+                  )}
                 </div>
                 {error && wizardStep === 2 && <p className="text-body-sm text-[var(--error)]">{error}</p>}
               </div>
