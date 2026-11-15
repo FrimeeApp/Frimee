@@ -1,13 +1,42 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Play, Pause, Loader2 } from "lucide-react";
 
+const SPEEDS = [1, 1.5, 2] as const;
+const BAR_COUNT = 32;
+
+/**
+ * The bars of a voice note. The file is not decoded (that would download every note in view):
+ * a stable shape per note, derived from its URL, so each one looks different but never changes.
+ */
+function barsFor(src: string): number[] {
+  let h = 2166136261;
+  for (let i = 0; i < src.length; i++) h = Math.imul(h ^ src.charCodeAt(i), 16777619);
+  const out: number[] = [];
+  for (let i = 0; i < BAR_COUNT; i++) {
+    h = Math.imul(h ^ (h >>> 15), 2246822507);
+    h = Math.imul(h ^ (h >>> 13), 3266489909);
+    const r = ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+    // Softer at both ends, like speech starting and stopping.
+    const edge = Math.min(1, (i + 1) / 4, (BAR_COUNT - i) / 4);
+    out.push(0.2 + 0.8 * r * edge);
+  }
+  return out;
+}
+
+/**
+ * Voice note (board «Bitácora» · nota de voz): a 44 px round play button in the inverted colour,
+ * the wave with what was played in the text colour and the rest in the secondary one (told apart
+ * by lightness, also on the tinted block), then the time and the speed on the same line.
+ */
 export default function AudioPlayer({ src, sending }: { src: string; sending?: boolean }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(1);
+  const bars = useMemo(() => barsFor(src), [src]);
 
   const fmt = (s: number) => {
     if (!isFinite(s) || isNaN(s) || s === 0) return "0:00";
@@ -19,7 +48,20 @@ export default function AudioPlayer({ src, sending }: { src: string; sending?: b
     const a = audioRef.current;
     if (!a) return;
     if (playing) { a.pause(); setPlaying(false); }
-    else { void a.play(); setPlaying(true); }
+    else { a.playbackRate = speed; void a.play(); setPlaying(true); }
+  };
+
+  const cycleSpeed = () => {
+    const next = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length];
+    setSpeed(next);
+    if (audioRef.current) audioRef.current.playbackRate = next;
+  };
+
+  const seekTo = (fraction: number) => {
+    const a = audioRef.current;
+    if (!a || !duration) return;
+    a.currentTime = Math.min(Math.max(fraction, 0), 1) * duration;
+    setCurrentTime(a.currentTime);
   };
 
   const handleLoadedMetadata = (e: React.SyntheticEvent<HTMLAudioElement>) => {
@@ -37,68 +79,75 @@ export default function AudioPlayer({ src, sending }: { src: string; sending?: b
     }
   };
 
-  const bars = [3, 6, 10, 7, 13, 9, 5, 12, 7, 10, 14, 6, 9, 12, 4, 8, 11, 7, 13, 5];
-  const W = 160;
-  const H = 20;
-  const barW = Math.floor((W - (bars.length - 1) * 2) / bars.length);
-
   return (
-    <div className="flex w-[210px] items-center gap-[8px] py-[2px]">
+    <div className="flex w-[264px] max-w-full items-center gap-[10px]">
       <audio
         ref={audioRef}
         src={src}
         preload="metadata"
         onLoadedMetadata={handleLoadedMetadata}
         onTimeUpdate={handleTimeUpdate}
+        // Notes recorded in the browser (webm) report their length late: take it whenever it arrives,
+        // so the wave can show the progress.
+        onDurationChange={(e) => { const d = e.currentTarget.duration; if (isFinite(d) && d > 0) setDuration(d); }}
         onEnded={() => { setPlaying(false); setCurrentTime(0); if (audioRef.current) audioRef.current.currentTime = 0; }}
       />
 
       <button
         type="button"
-        onClick={toggle}
+        onClick={(e) => { e.stopPropagation(); toggle(); }}
         disabled={sending}
-        className="shrink-0 transition-opacity disabled:opacity-40"
-        aria-label={playing ? "Pausar" : "Reproducir"}
+        className="flex size-[44px] shrink-0 items-center justify-center rounded-full bg-[var(--text-primary)] text-[var(--bg)] transition-opacity disabled:opacity-40"
+        aria-label={playing ? "Pausar nota de voz" : "Reproducir nota de voz"}
       >
         {sending ? (
-          <Loader2 className="size-[22px] animate-spin opacity-60" />
+          <Loader2 className="size-[18px] animate-spin" />
         ) : playing ? (
-          <Pause className="size-[22px]" />
+          <Pause className="size-[18px]" fill="currentColor" />
         ) : (
-          <Play className="size-[22px]" />
+          <Play className="ml-[2px] size-[18px]" fill="currentColor" />
         )}
       </button>
 
-      <div className="flex min-w-0 flex-1 flex-col gap-[4px]">
-        <svg
-          width="100%"
-          height={H}
-          viewBox={`0 0 ${W} ${H}`}
-          preserveAspectRatio="none"
-          className="cursor-pointer"
-          onClick={(e) => {
-            if (!audioRef.current || !duration) return;
-            const r = e.currentTarget.getBoundingClientRect();
-            audioRef.current.currentTime = ((e.clientX - r.left) / r.width) * duration;
-          }}
-        >
-          {bars.map((h, i) => (
-            <rect
-              key={i}
-              x={i * (barW + 2)}
-              y={H - h}
-              width={barW}
-              height={h}
-              rx={barW / 2}
-              fill="currentColor"
-              fillOpacity={i / bars.length < progress ? 0.9 : 0.25}
-            />
-          ))}
-        </svg>
-        <span className="text-[14px] leading-none opacity-60">
-          {fmt(currentTime > 0 ? currentTime : duration)}
-        </span>
+      <div
+        role="slider"
+        tabIndex={0}
+        aria-label="Posición de la nota de voz"
+        aria-valuemin={0}
+        aria-valuemax={Math.round(duration) || 0}
+        aria-valuenow={Math.round(currentTime)}
+        aria-valuetext={`${fmt(currentTime)} de ${fmt(duration)}`}
+        className="flex h-[28px] min-w-0 flex-1 cursor-pointer items-center justify-between rounded-[4px] outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]"
+        onClick={(e) => {
+          e.stopPropagation();
+          const r = e.currentTarget.getBoundingClientRect();
+          seekTo((e.clientX - r.left) / r.width);
+        }}
+        onKeyDown={(e) => {
+          if (!duration) return;
+          if (e.key === "ArrowRight") { e.preventDefault(); e.stopPropagation(); seekTo((currentTime + 5) / duration); }
+          if (e.key === "ArrowLeft") { e.preventDefault(); e.stopPropagation(); seekTo((currentTime - 5) / duration); }
+        }}
+      >
+        {bars.map((h, i) => (
+          <span
+            key={i}
+            aria-hidden
+            className={`w-[2px] shrink-0 rounded-full ${(i + 0.5) / bars.length <= progress ? "bg-[var(--text-primary)]" : "bg-[var(--text-secondary)]"}`}
+            style={{ height: `${Math.round(h * 100)}%` }}
+          />
+        ))}
       </div>
+
+      <span className="shrink-0 text-[12px] tabular-nums text-muted">{fmt(currentTime > 0 ? currentTime : duration)}</span>
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); cycleSpeed(); }}
+        aria-label={`Velocidad ${speed}×, cambiar`}
+        className="flex h-[28px] min-w-[36px] shrink-0 items-center justify-center rounded-full border border-app px-[6px] text-[12px] font-[var(--fw-semibold)] tabular-nums text-app"
+      >
+        {String(speed).replace(".", ",")}×
+      </button>
     </div>
   );
 }

@@ -290,3 +290,45 @@ export async function resolverPropuestaEndpoint(
   if (error) throw error;
   return Boolean(data);
 }
+
+/** The light index of a chat for the ruler (fn_chat_indice): positions are the order among all messages. */
+export type ChatIndice = {
+  total: number;
+  /** Last message in the index: anything newer arrived later (realtime) and is added on the client. */
+  max_id: number | null;
+  dias: Array<{ dia: string; primer_id: number; desde: number; n: number }>;
+  hitos: Array<{ id: number; ord: number; created_at: string; tipo: "poll" | "propuesta"; titulo: string | null; estado: "decidido" | "abierto" }>;
+  primer_no_leido: { id: number; ord: number } | null;
+};
+
+export async function getChatIndiceEndpoint(chatId: string): Promise<ChatIndice> {
+  const supabase = createBrowserSupabaseClient();
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const { data, error } = await supabase.rpc("fn_chat_indice", { p_chat_id: chatId, p_tz: tz });
+  if (error) throw new Error(error.message || error.code || "Error leyendo el índice del chat");
+  return data as ChatIndice;
+}
+
+/** The messages around one (a jump to an old milestone), oldest first, each with its position. */
+export async function listMensajesTramoEndpoint(chatId: string, mensajeId: number, antes = 25, despues = 25): Promise<Array<MensajeRow & { orden: number }>> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_mensajes_tramo", { p_chat_id: chatId, p_mensaje_id: mensajeId, p_antes: antes, p_despues: despues });
+  if (error) throw new Error(error.message || error.code || "Error cargando el tramo del chat");
+  return (data ?? []) as Array<MensajeRow & { orden: number }>;
+}
+
+/** Newer messages after a cursor, oldest first (scrolling down from an old stretch). */
+export async function listMensajesDespuesEndpoint(chatId: string, cursorId: number, limit = 50): Promise<MensajeRow[]> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_mensajes_list_despues", { p_chat_id: chatId, p_cursor_id: cursorId, p_limit: limit });
+  if (error) throw new Error(error.message || error.code || "Error cargando mensajes");
+  return (data ?? []) as MensajeRow[];
+}
+
+/** How far the other members of a chat have read (fn_chat_lecturas): for the «visto» checks. */
+export async function getChatLecturasEndpoint(chatId: string): Promise<Array<{ user_id: string; last_read_at: string | null }>> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_chat_lecturas", { p_chat_id: chatId });
+  if (error) throw new Error(error.message || error.code || "Error leyendo las lecturas del chat");
+  return (data ?? []) as Array<{ user_id: string; last_read_at: string | null }>;
+}

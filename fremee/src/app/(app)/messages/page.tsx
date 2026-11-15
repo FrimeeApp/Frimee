@@ -42,8 +42,6 @@ export default function MessagesPage() {
   const [chats, setChats] = useState<ChatListItem[]>([]);
   const [chatsLoading, setChatsLoading] = useState(true);
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
-  // Unread count of the chat when you opened it (the list zeroes it): the ruler marks where you left off.
-  const [unreadAtOpen, setUnreadAtOpen] = useState<{ chatId: string; count: number } | null>(null);
   const [searchValue, setSearchValue] = useState("");
   const feedSupabaseRef = useRef(createBrowserSupabaseClient());
 
@@ -396,7 +394,6 @@ export default function MessagesPage() {
                       type="button"
                       onClick={() => {
                         setSelectedChatId(chat.chat_id);
-                        setUnreadAtOpen({ chatId: chat.chat_id, count: chat.unread_count });
                         setChats((prev) => prev.map((c) => c.chat_id !== chat.chat_id ? c : { ...c, unread_count: 0 }));
                       }}
                       className={`flex min-h-[68px] w-full items-center gap-3 px-[var(--space-4)] py-[10px] text-left transition-colors focus:outline-none focus-visible:bg-surface ${isSelected ? "bg-surface" : "hover:bg-surface"}`}
@@ -442,7 +439,6 @@ export default function MessagesPage() {
   const chatPanel = selectedChat && user ? (
     <ChatConversation
       chat={selectedChat}
-      unreadAtOpen={unreadAtOpen?.chatId === selectedChat.chat_id ? unreadAtOpen.count : 0}
       currentUserId={user.id}
       planId={selectedChat.plan_id ?? undefined}
       isAdmin={Boolean(selectedChat.plan_id) && planAdminFor === selectedChat.plan_id}
