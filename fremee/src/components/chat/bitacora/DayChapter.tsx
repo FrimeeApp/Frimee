@@ -1,9 +1,9 @@
 import type { ChapterLabel } from "./timeline";
 
 /** A day of the conversation, as a chapter on the timeline's spine (board «Bitácora»). */
-export function DayChapter({ label }: { label: ChapterLabel }) {
+export function DayChapter({ label, id }: { label: ChapterLabel; id?: string }) {
   return (
-    <div className="relative pb-[6px] pl-[56px] pr-[var(--space-4)] pt-[18px]">
+    <div id={id} className="relative pb-[6px] pl-[56px] pr-[var(--space-4)] pt-[18px]">
       <span
         aria-hidden
         className="absolute left-[22px] top-[27px] size-[11px] rounded-full border-2 border-[var(--text-secondary)] bg-[var(--bg)]"
