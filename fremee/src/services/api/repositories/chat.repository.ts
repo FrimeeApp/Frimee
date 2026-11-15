@@ -63,6 +63,7 @@ export async function sendMensaje(params: {
   documentName?: string | null;
   imageUrl?: string | null;
   imageType?: string | null;
+  documentSize?: number | null;
 }): Promise<number> {
   return sendMensajeEndpoint(params);
 }

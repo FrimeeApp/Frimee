@@ -11,6 +11,8 @@
 -- 6) Eliminar mensajes: para mí (mensaje_oculto) o para todos (autor, o admin con los de otros),
 --    que deja «Se eliminó este mensaje» y actualiza la lista de chats (chat-17).
 -- 7) Avisos en el chat: «Álex añadió a Marcos», «Ana salió del grupo», «Álex quitó a Ana».
+-- 8) «En el chat» con vídeos (junto a las fotos) y archivos: mensajes.document_size (lo guarda
+--    fn_mensaje_send, que además pasa a exigir ser miembro del chat y deja de estar abierta a anon).
 --
 -- Funciones de la app afectadas: fn_mensajes_list, fn_mensajes_tramo, fn_mensajes_list_despues,
 -- fn_chat_indice, fn_chat_buscar_mensajes, fn_chat_pinned, fn_chat_add_miembro, fn_chat_leave,
@@ -23,6 +25,8 @@ alter table public.chat_miembro add column if not exists silenciado boolean not 
 alter table public.chat_miembro add column if not exists vaciado_hasta bigint;
 -- 1 a 1 eliminado de tu lista: vuelve en cuanto llega un mensaje posterior.
 alter table public.chat_miembro add column if not exists eliminado_at timestamptz;
+-- Tamaño en bytes de un documento enviado («Ana · 13 nov · 184 KB»); null en los de antes.
+alter table public.mensajes add column if not exists document_size bigint;
 
 -- «Eliminar para mí»: mensajes que alguien ha quitado solo de su vista.
 create table if not exists public.mensaje_oculto (
@@ -450,7 +454,7 @@ begin
   end if;
 
   with vis as (
-    select id, texto, tipo, image_url, image_type,
+    select id, texto, tipo, image_url, image_type, document_url,
            case when left(texto, 1) = '{' then public.try_jsonb(texto) end as j
       from mensajes
      where chat_id = p_chat_id and id > v_corte
@@ -466,7 +470,9 @@ begin
          where grupo_id = v_chat.grupo_id and rol = 'ADMIN' and estado = 'ACTIVO'), '[]'::jsonb)
       else '[]'::jsonb end,
     'recuentos', jsonb_build_object(
-      'fotos', (select count(*) from vis where image_url is not null and coalesce(image_type, 'image/') like 'image/%'),
+      -- Fotos y vídeos van juntos; archivos = documentos (las notas de voz no cuentan).
+      'fotos', (select count(*) from vis where image_url is not null and (coalesce(image_type, 'image/') like 'image/%' or image_type like 'video/%')),
+      'archivos', (select count(*) from vis where document_url is not null),
       'sitios', (select count(*) from vis where j->>'type' = 'lugar'),
       'enlaces', (select count(*) from vis where j is null and tipo = 'text' and texto ~* 'https?://'),
       'decisiones', (select count(*) from vis where public.fn_momento_decidido(j))
@@ -506,8 +512,11 @@ end;
 $$;
 
 -- Las listas de «En el chat», de la más nueva a la más vieja, por páginas (p_antes_id = cursor).
+-- Cambia lo que devuelve (documentos): se borra antes de crearla.
+drop function if exists public.fn_chat_contenido(uuid, text, bigint, integer);
 create or replace function public.fn_chat_contenido(p_chat_id uuid, p_tipo text, p_antes_id bigint default null, p_limit integer default 30)
- returns table(id bigint, created_at timestamptz, sender_id uuid, sender_nombre text, texto text, image_url text, image_type text)
+ returns table(id bigint, created_at timestamptz, sender_id uuid, sender_nombre text, texto text, image_url text, image_type text,
+               document_url text, document_name text, document_size bigint)
  language plpgsql
  stable security definer
  set search_path to 'public'
@@ -516,13 +525,14 @@ declare
   v_corte bigint;
 begin
   perform public.assert_allowed(public.is_chat_member(p_chat_id));
-  if p_tipo not in ('fotos', 'sitios', 'enlaces', 'decisiones') then
+  if p_tipo not in ('fotos', 'archivos', 'sitios', 'enlaces', 'decisiones') then
     raise exception 'Tipo desconocido: %', p_tipo using errcode = '22023';
   end if;
   v_corte := public.fn_chat_vaciado_hasta(p_chat_id);
 
   return query
-  select m.id, m.created_at, m.sender_id, coalesce(u.nombre, 'Frimee')::text, m.texto, m.image_url, m.image_type
+  select m.id, m.created_at, m.sender_id, coalesce(u.nombre, 'Frimee')::text, m.texto, m.image_url, m.image_type,
+         m.document_url, m.document_name, m.document_size
     from mensajes m
     left join usuarios u on u.id = m.sender_id
    where m.chat_id = p_chat_id
@@ -530,7 +540,8 @@ begin
      and not exists (select 1 from mensaje_oculto o where o.user_id = auth.uid() and o.mensaje_id = m.id)
      and (p_antes_id is null or m.id < p_antes_id)
      and case p_tipo
-           when 'fotos' then m.image_url is not null and coalesce(m.image_type, 'image/') like 'image/%'
+           when 'fotos' then m.image_url is not null and (coalesce(m.image_type, 'image/') like 'image/%' or m.image_type like 'video/%')
+           when 'archivos' then m.document_url is not null
            when 'sitios' then left(m.texto, 1) = '{' and public.try_jsonb(m.texto)->>'type' = 'lugar'
            when 'enlaces' then left(m.texto, 1) <> '{' and m.tipo = 'text' and m.texto ~* 'https?://'
            else left(m.texto, 1) = '{' and public.fn_momento_decidido(public.try_jsonb(m.texto))
@@ -854,3 +865,42 @@ revoke all on function public.fn_mensajes_list_despues(uuid, bigint, integer) fr
 revoke all on function public.fn_chat_indice(uuid, text) from public, anon;
 revoke all on function public.fn_chat_buscar_mensajes(text, int) from public, anon;
 revoke all on function public.fn_chat_pinned(uuid) from public, anon;
+
+-- 8) Enviar un mensaje: guarda el tamaño de los documentos y exige ser miembro del chat.
+drop function if exists public.fn_mensaje_send(uuid, text, bigint, text, text, text, text, text);
+create or replace function public.fn_mensaje_send(
+  p_chat_id uuid, p_texto text, p_reply_to_id bigint default null, p_audio_url text default null,
+  p_document_url text default null, p_document_name text default null, p_image_url text default null,
+  p_image_type text default null, p_document_size bigint default null)
+ returns bigint
+ language plpgsql
+ security definer
+ set search_path to 'public'
+as $$
+declare
+  v_id      bigint;
+  v_preview text;
+begin
+  perform public.assert_allowed(public.is_chat_member(p_chat_id));
+
+  insert into mensajes (chat_id, sender_id, texto, reply_to_id, audio_url, document_url, document_name, document_size, image_url, image_type)
+  values (p_chat_id, auth.uid(), trim(p_texto), p_reply_to_id, p_audio_url, p_document_url, p_document_name,
+          case when p_document_url is not null and p_document_size > 0 then p_document_size end, p_image_url, p_image_type)
+  returning id into v_id;
+
+  v_preview :=
+    case
+      when p_audio_url    is not null and trim(p_texto) = '' then '🎤 Nota de voz'
+      when p_document_url is not null and trim(p_texto) = '' then '📄 ' || coalesce(p_document_name, 'Documento')
+      when p_image_url    is not null and trim(p_texto) = '' then
+        case when p_image_type like 'video/%' then '🎥 Vídeo' else '📷 Foto' end
+      else trim(p_texto)
+    end;
+
+  update chat set last_message = v_preview, last_message_at = now() where id = p_chat_id;
+
+  return v_id;
+end;
+$$;
+revoke all on function public.fn_mensaje_send(uuid, text, bigint, text, text, text, text, text, bigint) from public, anon;
+grant execute on function public.fn_mensaje_send(uuid, text, bigint, text, text, text, text, text, bigint) to authenticated, service_role;

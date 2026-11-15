@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Ban, Bell, BellOff, CalendarPlus, Camera, Check, ChevronLeft, ChevronRight, Image as ImageIcon, Link2, LogOut,
+  Ban, Bell, BellOff, CalendarPlus, Camera, Check, ChevronLeft, ChevronRight, FileText, Image as ImageIcon, Link2, LogOut,
   MapPin, MessageCircle, MoreHorizontal, Pencil, Plus, Trash2, User, UserMinus, Users,
 } from "lucide-react";
 import {
@@ -20,6 +20,7 @@ import { uploadPlanCoverFile } from "@/services/firebase/upload";
 import { notifyChatAdded } from "@/components/chat/notifyChatAdded";
 import { PersonAvatar, firstName } from "@/components/chat/nuevo/people";
 import { Sheet } from "@/components/chat/bitacora/Sheet";
+import { InChatList, IN_CHAT_LABEL } from "@/components/chat/info/InChatList";
 
 type Member = ChatListItem["miembros"][number];
 
@@ -123,8 +124,10 @@ export type ChatInfoPanelProps = {
   onEmptied: () => void;
   onCreatePlan: () => void;
   onWriteTo?: (person: Member) => void;
-  /** «En el chat» rows (fotos, sitios…): opens that list. */
-  onOpenList?: (tipo: ContenidoTipo) => void;
+  /** Id of the newest photo, file, place… that arrived while open: the open list adds it. */
+  inChatNewest?: number;
+  /** A row of «En el chat» was pressed: go to that message in the conversation. */
+  onJumpTo: (mensajeId: number) => void;
   /** People added here, for the other members' panels (broadcast «member_added»). */
   onMemberAdded?: (person: Member) => void;
   /** The notice the database wrote («Ana cambió el nombre…»): shown here and shared with the others. */
@@ -151,7 +154,11 @@ export function ChatInfoPanel(props: ChatInfoPanelProps) {
     setMembers(dedupeMembers(chat.miembros, currentUserId));
   }
 
-  const [view, setView] = useState<"info" | "add">("info");
+  const [view, setView] = useState<"info" | "add" | ContenidoTipo>("info");
+  const isList = view !== "info" && view !== "add";
+  // «‹ Fotos · 24»: the subview's name and how many there are.
+  const subTitle = view === "add" ? "Añadir personas"
+    : isList ? `${IN_CHAT_LABEL[view]}${info?.recuentos[view] ? ` · ${info.recuentos[view]}` : ""}` : null;
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   // Alone in a plan: inviting is what matters, and leaving would empty it (board feedback 15 nov).
   const alone = members.length <= 1;
@@ -159,7 +166,9 @@ export function ChatInfoPanel(props: ChatInfoPanelProps) {
   const title = isGrupo ? "Información del grupo" : isPlan ? "Información del plan" : "Información del chat";
   const name = resolveChatName(chat, currentUserId);
 
-  const body = view === "add" ? (
+  const body = isList ? (
+    <InChatList key={view} chatId={chat.chat_id} tipo={view} total={info?.recuentos[view]} planId={props.planId} currentUserId={currentUserId} newest={props.inChatNewest} onJumpTo={props.onJumpTo} />
+  ) : view === "add" ? (
     <AddPeople
       chat={chat}
       members={members}
@@ -207,7 +216,7 @@ export function ChatInfoPanel(props: ChatInfoPanelProps) {
         />
       )}
 
-      <InChatSection info={info} infoError={props.infoError} onRetry={props.onRetryInfo} onOpenList={props.onOpenList} />
+      <InChatSection info={info} infoError={props.infoError} onRetry={props.onRetryInfo} onOpenList={setView} />
 
       <MuteSection chat={chat} info={info} onChanged={props.onChanged} />
 
@@ -235,19 +244,19 @@ export function ChatInfoPanel(props: ChatInfoPanelProps) {
         <div className="flex h-full min-h-0 flex-col bg-app">
           <header className="border-b border-app bg-app pt-mobile-safe-top">
             <div className="flex h-[56px] items-center gap-[4px] px-[4px]">
-              <button type="button" onClick={view === "add" ? () => setView("info") : props.onClose} aria-label={view === "add" ? "Volver a la información" : "Volver al chat"} title="Volver" className="flex size-[44px] items-center justify-center rounded-[8px] text-app hover:bg-[var(--surface-2)]">
+              <button type="button" onClick={subTitle ? () => setView("info") : props.onClose} aria-label={subTitle ? "Volver a la información" : "Volver al chat"} title="Volver" className="flex size-[44px] items-center justify-center rounded-[8px] text-app hover:bg-[var(--surface-2)]">
                 <ChevronLeft className="size-[22px]" aria-hidden />
               </button>
-              <h1 className="[font-family:var(--font-sans)] text-[17px] font-[var(--fw-semibold)] leading-[22px] tracking-normal text-app">{view === "add" ? "Añadir personas" : title}</h1>
+              <h1 className="[font-family:var(--font-sans)] text-[17px] font-[var(--fw-semibold)] leading-[22px] tracking-normal text-app">{subTitle ?? title}</h1>
             </div>
           </header>
           <div className="min-h-0 flex-1 overflow-y-auto px-[8px] pb-[calc(24px+env(safe-area-inset-bottom))] pt-[20px]">{body}</div>
         </div>
       ) : (
         <aside aria-label={title} className="h-full w-[320px] shrink-0 overflow-y-auto border-l border-app bg-app px-[12px] py-[20px]">
-          {view === "add" && (
-            <button type="button" onClick={() => setView("info")} className="mb-[8px] flex min-h-[44px] items-center gap-[4px] rounded-[8px] px-[4px] text-[15px] font-[var(--fw-semibold)] text-app hover:bg-[var(--surface-2)]">
-              <ChevronLeft className="size-[18px]" aria-hidden /> Añadir personas
+          {subTitle && (
+            <button type="button" onClick={() => setView("info")} aria-label={`Volver a la información · ${subTitle}`} className="mb-[8px] flex min-h-[44px] items-center gap-[4px] rounded-[8px] px-[4px] text-[15px] font-[var(--fw-semibold)] tabular-nums text-app hover:bg-[var(--surface-2)]">
+              <ChevronLeft className="size-[18px]" aria-hidden /> {subTitle}
             </button>
           )}
           {body}
@@ -652,13 +661,14 @@ function PersonMenu({ person, open, onToggle, onProfile, onWriteTo, onRemove }: 
 /* ── En el chat · Avisos · zona de peligro ── */
 
 const IN_CHAT: Array<{ tipo: ContenidoTipo; label: string; icon: React.ReactNode }> = [
-  { tipo: "fotos", label: "Fotos", icon: <ImageIcon className="size-[18px]" aria-hidden /> },
-  { tipo: "sitios", label: "Sitios", icon: <MapPin className="size-[18px]" aria-hidden /> },
+  { tipo: "fotos", label: "Fotos y vídeos", icon: <ImageIcon className="size-[18px]" aria-hidden /> },
+  { tipo: "archivos", label: "Archivos", icon: <FileText className="size-[18px]" aria-hidden /> },
   { tipo: "enlaces", label: "Enlaces", icon: <Link2 className="size-[18px]" aria-hidden /> },
+  { tipo: "sitios", label: "Sitios", icon: <MapPin className="size-[18px]" aria-hidden /> },
   { tipo: "decisiones", label: "Decisiones", icon: <span aria-hidden className="inline-block size-[10px] rotate-45 rounded-[2px] border-2 border-[var(--primary)] bg-[var(--primary)]" /> },
 ];
 
-function InChatSection({ info, infoError, onRetry, onOpenList }: { info: ChatInfo | null; infoError?: boolean; onRetry: () => void; onOpenList?: (tipo: ContenidoTipo) => void }) {
+function InChatSection({ info, infoError, onRetry, onOpenList }: { info: ChatInfo | null; infoError?: boolean; onRetry: () => void; onOpenList: (tipo: ContenidoTipo) => void }) {
   return (
     <section>
       <SectionTitle>En el chat</SectionTitle>
@@ -671,7 +681,7 @@ function InChatSection({ info, infoError, onRetry, onOpenList }: { info: ChatInf
         <div aria-hidden className="mx-[8px] h-[52px] animate-pulse rounded-[8px] bg-[var(--surface-2)] motion-reduce:animate-none" />
       ) : IN_CHAT.every((r) => !info.recuentos[r.tipo]) ? (
         <p className="flex min-h-[44px] items-center px-[8px] text-[14px] text-muted">Aún no habéis compartido nada.</p>
-      ) : IN_CHAT.filter((r) => info.recuentos[r.tipo] > 0).map((r) => {
+      ) : IN_CHAT.filter((r) => (info.recuentos[r.tipo] ?? 0) > 0).map((r) => {
         const n = info.recuentos[r.tipo];
         const inner = (
           <>
@@ -683,10 +693,8 @@ function InChatSection({ info, infoError, onRetry, onOpenList }: { info: ChatInf
             </span>
           </>
         );
-        return onOpenList ? (
+        return (
           <button key={r.tipo} type="button" onClick={() => onOpenList(r.tipo)} className="flex min-h-[52px] w-full items-center gap-[12px] rounded-[8px] py-[4px] pl-[8px] pr-[4px] text-left hover:bg-[var(--surface-2)]">{inner}</button>
-        ) : (
-          <div key={r.tipo} className="flex min-h-[52px] items-center gap-[12px] py-[4px] pl-[8px] pr-[4px]">{inner}</div>
         );
       })}
     </section>
