@@ -8,6 +8,7 @@ import { fetchPlanUserRol, fetchUserRelatedPlans } from "@/services/api/endpoint
 import { resolvePlace } from "@/lib/places";
 import { Sheet, useIsPhone } from "./Sheet";
 import { Sugerido, TimePicker } from "@/components/ui/TimePicker";
+import type { Guarda } from "./PlanFromChat";
 
 /**
  * «Añadir al plan» from the chat (boards m-anadir, d-anadir, e-anadir, g-proponer): a panel that
@@ -82,7 +83,7 @@ const Skel = ({ w }: { w: string }) => <span aria-hidden className="skel-live bl
 const fieldCls = "h-[40px] w-full min-w-0 bg-transparent text-[15px] text-app outline-none placeholder:text-muted";
 
 export function AddToPlanPanel({
-  status, prefill, suggested, plan, currentUserId, personas, anchor, onClose, onAdd, onMoreOptions,
+  status, prefill, suggested, plan, currentUserId, personas, anchor, onClose, onAdd, onMoreOptions, onCreatePlan,
 }: {
   /** thinking: @frimee is still reading; ready: there is data; failed: it found nothing to use. */
   status: "thinking" | "ready" | "failed";
@@ -99,6 +100,8 @@ export function AddToPlanPanel({
   onClose: () => void;
   onAdd: (values: PanelValues) => Promise<void>;
   onMoreOptions: (planId: number, prefill: PanelPrefill) => void;
+  /** Chats without a plan: «Crear un plan nuevo» with this chat, keeping what is being added. */
+  onCreatePlan?: (guarda: Guarda) => void;
 }) {
   const phone = useIsPhone();
   const [manual, setManual] = useState(status === "failed");
@@ -296,6 +299,17 @@ export function AddToPlanPanel({
             </span>
           )}
         </Row>
+        {!plan && onCreatePlan && ready && (
+          <div className="flex justify-end">
+            <button type="button" className="min-h-[44px] text-[14px] font-[var(--fw-semibold)] text-primary-token"
+              onClick={() => onCreatePlan({
+                titulo: titulo.trim(), fecha: prefill?.fecha || dia || undefined, hora: hasHora ? hora : undefined,
+                durMin: durMin > 0 ? durMin : undefined, tipo, lugar: sitio.trim() || undefined, lat: coords?.lat ?? null, lng: coords?.lng ?? null,
+              })}>
+              Crear un plan nuevo con este chat
+            </button>
+          </div>
+        )}
       </div>
 
       {waiting && slow && (

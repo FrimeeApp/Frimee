@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Drawer } from "vaul";
 import { X } from "lucide-react";
 
@@ -21,12 +22,15 @@ export function Sheet({
   onClose,
   children,
   footer,
+  maxWidth = 440,
 }: {
   title: string;
   onClose: () => void;
   children: React.ReactNode;
   /** Sticky bottom row (the main button), kept above the keyboard. */
   footer?: React.ReactNode;
+  /** Desktop dialog width (px). */
+  maxWidth?: number;
 }) {
   const phone = useIsPhone();
 
@@ -66,20 +70,24 @@ export function Sheet({
     );
   }
 
-  return (
+  // On body: the Messages page slides its panels with a transform, which would trap a fixed layer
+  // inside the chat panel (the veil would not cover the sidebar).
+  return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-[16px]" onClick={onClose}>
       <div
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="flex max-h-[85dvh] w-full max-w-[440px] flex-col overflow-hidden rounded-[16px] border border-app bg-[var(--bg)] shadow-[0_8px_32px_rgba(0,0,0,0.3)]"
+        style={{ maxWidth }}
+        className="flex max-h-[85dvh] w-full flex-col overflow-hidden rounded-[16px] border border-app bg-[var(--bg)] shadow-[0_8px_32px_rgba(0,0,0,0.3)]"
         onClick={(e) => e.stopPropagation()}
       >
         {header}
         <div className="min-h-0 flex-1 overflow-y-auto px-[16px] pb-[12px] pt-[8px]">{children}</div>
         {footer && <div className="border-t border-app px-[16px] py-[10px]">{footer}</div>}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

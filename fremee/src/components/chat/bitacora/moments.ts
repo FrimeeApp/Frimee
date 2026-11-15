@@ -11,6 +11,8 @@ export type PollMoment = {
   options: string[];
   expires_at?: string;
   closed?: boolean;
+  /** Copied into a plan's chat (closed, results as they were then). */
+  copiada_at?: string;
 };
 
 export type TripSummaryMoment = {
@@ -84,6 +86,8 @@ export type ProposalMoment = {
   resuelta_por_nombre?: string;
   resuelta_at?: string;
   resultado?: string | null;
+  /** Copied into a plan's chat while pending: shown as copied, never acceptable there. */
+  copia?: boolean;
 };
 
 /**
@@ -102,9 +106,38 @@ export type PlanMarkMoment = {
   origen_id?: number | null;
 };
 
-export type Moment = PollMoment | TripSummaryMoment | ExpenseMoment | PlaceMoment | CardMoment | ProposalMoment | PlanMarkMoment;
+/**
+ * «Antes del plan» (boards cp-m-plan, cp-sistema): the first entry of a plan's chat made from another
+ * chat. The copied messages below keep their author and real date.
+ */
+export type CopyMoment = {
+  type: "copia_chat";
+  origen_chat_id: string;
+  origen_nombre: string;
+  copiados: number;
+  copiado_at: string;
+};
 
-const TYPES = new Set(["poll", "resumen_viaje", "gasto", "lugar", "tarjeta", "propuesta", "hito_plan"]);
+/** «Plan creado» (boards cp-m-grupo, cp-m-plan): in the original chat and closing the copied part. */
+export type PlanCreatedMoment = {
+  type: "plan_creado";
+  plan_id: number;
+  titulo: string;
+  inicio_at: string;
+  fin_at: string;
+  creador_id: string;
+  creador_nombre: string;
+  miembros: Array<{ id: string; nombre: string }>;
+  copiados: number;
+  origen_chat_id: string;
+  origen_nombre: string;
+  /** The message the plan was made from (its diamond goes away); null from the header. */
+  origen_mensaje_id?: number | null;
+};
+
+export type Moment = PollMoment | TripSummaryMoment | ExpenseMoment | PlaceMoment | CardMoment | ProposalMoment | PlanMarkMoment | CopyMoment | PlanCreatedMoment;
+
+const TYPES = new Set(["poll", "resumen_viaje", "gasto", "lugar", "tarjeta", "propuesta", "hito_plan", "copia_chat", "plan_creado"]);
 
 /** The moment inside a message's texto, or null for plain text. Never throws. */
 export function parseMoment(texto: string | null | undefined): Moment | null {
@@ -144,6 +177,8 @@ export function momentPreview(texto: string | null | undefined): string | null {
     case "tarjeta": return m.kind === "plan" ? `Invitación · ${m.titulo}` : `${cardLabel(m.kind)} · ${m.titulo}`;
     case "propuesta": return `Frimee propone · ${m.titulo}`;
     case "hito_plan": return `Añadido al plan · ${m.titulo}`;
+    case "copia_chat": return `Conversación copiada de «${m.origen_nombre}»`;
+    case "plan_creado": return `Plan creado · ${m.titulo}`;
   }
 }
 

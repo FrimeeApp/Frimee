@@ -7,6 +7,7 @@
 // requested messages (new and stored).
 //
 // POST { chat_id, completar: mensaje_id }: see completar() below (the panel's on-demand reading).
+// POST { chat_id, plan_nuevo: true }: see planNuevo() below («Crear plan» from a chat).
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import Anthropic from "npm:@anthropic-ai/sdk@1.3.0";
@@ -189,15 +190,89 @@ async function completar(supabase: ReturnType<typeof createClient>, chat_id: str
   return jsonResponse({ plan: plan?.es_plan ? plan : null });
 }
 
+// ── plan_nuevo: name, destination and dates for «Crear plan» from this chat ──
+// POST { chat_id, plan_nuevo: true } when someone opens «Crear plan» in a chat without a plan. Reads
+// the latest conversation and suggests what the sheet asks for. Only on demand, never stored.
+
+const PLAN_NUEVO_MAX = 80;
+const PLAN_NUEVO_DIAS = 45;
+
+type PlanNuevo = { hay_viaje: boolean; titulo: string; destino: string; fecha_inicio: string; fecha_fin: string; primer_id: number };
+const SCHEMA_PLAN_NUEVO = {
+  type: "object",
+  properties: {
+    hay_viaje: { type: "boolean" },
+    titulo: { type: "string" },
+    destino: { type: "string" },
+    fecha_inicio: { type: "string" },
+    fecha_fin: { type: "string" },
+    primer_id: { type: "integer" },
+  },
+  required: ["hay_viaje", "titulo", "destino", "fecha_inicio", "fecha_fin", "primer_id"],
+  additionalProperties: false,
+};
+const SYSTEM_PLAN_NUEVO = `Eres el asistente de Frimee, una app para organizar viajes y planes en grupo. Alguien va a crear un plan a partir de un chat. Te paso los últimos mensajes, en orden, y la fecha de hoy. Sugiere los datos del plan del que están hablando AHORA (el más reciente si hay varios).
+- hay_viaje: true si se habla de cualquier plan concreto: un viaje, una escapada, una cena, un concierto, un cumpleaños… false solo si no se habla de ninguno.
+- titulo: corto, como lo llamaría el grupo («Finde en Cercedilla», «Lisboa en diciembre», «Cena en Lavapiés»); sin fechas.
+- destino: la ciudad, pueblo, barrio o sitio; "" si no se dice.
+- fecha_inicio y fecha_fin: YYYY-MM-DD. Deduce «el finde del 28», «el puente», «del 12 al 15» con la fecha de los mensajes y la de hoy; un finde es de viernes a domingo. Si solo hay un día, el mismo en las dos. "" si no se dice.
+- primer_id: el id del primer mensaje en el que empiezan a hablar de ESTE plan; 0 si no está claro.
+Si se propusieron varias opciones, usa la última en la que se pusieron de acuerdo, o la última propuesta si nadie la rechazó; si siguen enfrentadas, deja el campo en "".`;
+
+async function planNuevo(supabase: ReturnType<typeof createClient>, chat_id: string): Promise<Response> {
+  const desde = new Date(Date.now() - PLAN_NUEVO_DIAS * 86_400_000).toISOString();
+  const { data } = await supabase.from("mensajes").select("id, texto, created_at, sender_id, tipo")
+    .eq("chat_id", chat_id).gte("created_at", desde).order("id", { ascending: false }).limit(PLAN_NUEVO_MAX * 2);
+  // People's text and @frimee's answers (they often name the place); no moments JSON or calls.
+  const rows = ((data ?? []) as MsgRow[])
+    .filter((m) => (m.tipo === "text" || m.tipo === "bot") && !m.texto.startsWith("{") && m.texto.trim().length > 0)
+    .slice(0, PLAN_NUEVO_MAX)
+    .reverse();
+  if (rows.length === 0) return jsonResponse({ plan: null });
+
+  const senderIds = [...new Set(rows.map((m) => m.sender_id).filter((x): x is string => Boolean(x)))];
+  const { data: users } = await supabase.from("usuarios").select("id, nombre").in("id", senderIds);
+  const names = new Map(((users ?? []) as Array<{ id: string; nombre: string }>).map((u) => [u.id, u.nombre]));
+  const lines = rows.map((m) => JSON.stringify({
+    id: m.id, cuando: m.created_at.slice(0, 16).replace("T", " "), autor: m.sender_id ? names.get(m.sender_id) ?? "?" : "Frimee", texto: m.texto.slice(0, 500),
+  }));
+
+  const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+  if (!apiKey) return jsonResponse({ error: "Missing API key" }, 500);
+  const hoy = new Date().toISOString().slice(0, 10);
+  const response = await new Anthropic({ apiKey }).messages.create({
+    model: "claude-haiku-5-5",
+    max_tokens: 512,
+    system: SYSTEM_PLAN_NUEVO,
+    output_config: { effort: "low", format: { type: "json_schema", schema: SCHEMA_PLAN_NUEVO } },
+    messages: [{ role: "user", content: `Hoy es ${hoy}.\n\nConversación (una línea por mensaje):\n${lines.join("\n")}` }],
+  });
+  if (response.stop_reason === "refusal" || response.stop_reason === "max_tokens") {
+    console.error("[chat-sugerencias] plan_nuevo sin respuesta útil:", response.stop_reason);
+    return jsonResponse({ plan: null });
+  }
+  const text = response.content.find((b) => b.type === "text");
+  const plan = text && text.type === "text" ? JSON.parse(text.text) as PlanNuevo : null;
+  if (!plan?.hay_viaje) return jsonResponse({ plan: null });
+  const fecha = (s: string) => (/^\d{4}-\d{2}-\d{2}$/.test(s) ? s : "");
+  let [ini, fin] = [fecha(plan.fecha_inicio), fecha(plan.fecha_fin)];
+  if (ini && !fin) fin = ini;
+  if (ini && fin && fin < ini) [ini, fin] = [fin, ini];
+  // Only an id that is really one of these messages.
+  const primer = rows.some((m) => m.id === plan.primer_id) ? plan.primer_id : 0;
+  return jsonResponse({ plan: { titulo: plan.titulo.trim(), destino: plan.destino.trim(), fecha_inicio: ini, fecha_fin: fin, primer_id: primer } });
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
 
   try {
-    const { chat_id, mensaje_ids, completar: completarId } = await req.json() as { chat_id?: string; mensaje_ids?: number[]; completar?: number };
+    const { chat_id, mensaje_ids, completar: completarId, plan_nuevo } = await req.json() as { chat_id?: string; mensaje_ids?: number[]; completar?: number; plan_nuevo?: boolean };
     const modoCompletar = typeof completarId === "number" && Number.isInteger(completarId) && completarId > 0;
-    if (!chat_id || (!modoCompletar && !Array.isArray(mensaje_ids))) return jsonResponse({ error: "Faltan datos" }, 400);
-    const ids = modoCompletar ? [] : [...new Set((mensaje_ids ?? []).filter((n) => Number.isInteger(n) && n > 0))].slice(0, MAX_IDS);
-    if (!modoCompletar && ids.length === 0) return jsonResponse({ sugerencias: [] });
+    const modoPlan = plan_nuevo === true;
+    if (!chat_id || (!modoCompletar && !modoPlan && !Array.isArray(mensaje_ids))) return jsonResponse({ error: "Faltan datos" }, 400);
+    const ids = modoCompletar || modoPlan ? [] : [...new Set((mensaje_ids ?? []).filter((n) => Number.isInteger(n) && n > 0))].slice(0, MAX_IDS);
+    if (!modoCompletar && !modoPlan && ids.length === 0) return jsonResponse({ sugerencias: [] });
 
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
@@ -210,6 +285,7 @@ serve(async (req) => {
     if (!member) return jsonResponse({ error: "No eres miembro de este chat" }, 403);
 
     if (modoCompletar) return await completar(supabase, chat_id, completarId);
+    if (modoPlan) return await planNuevo(supabase, chat_id);
 
     const { data: stored } = await supabase
       .from("mensaje_sugerencias").select("mensaje_id").in("mensaje_id", ids);

@@ -142,6 +142,14 @@ export default function MessagesPage() {
     void loadChats();
   }, [user, loadChats]);
 
+  // /messages?chat=<id> (a plan made from a chat, the link back to the original): open it once.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("chat");
+    if (!id) return;
+    setSelectedChatId(id);
+    window.history.replaceState(null, "", window.location.pathname);
+  }, []);
+
   // Detectar cuando el usuario es añadido a un nuevo chat
   useEffect(() => {
     if (!user) return;
@@ -396,7 +404,9 @@ export default function MessagesPage() {
                         setSelectedChatId(chat.chat_id);
                         setChats((prev) => prev.map((c) => c.chat_id !== chat.chat_id ? c : { ...c, unread_count: 0 }));
                       }}
-                      className={`flex min-h-[68px] w-full items-center gap-3 px-[var(--space-4)] py-[10px] text-left transition-colors focus:outline-none focus-visible:bg-surface ${isSelected ? "bg-surface" : "hover:bg-surface"}`}
+                      aria-current={isSelected ? "true" : undefined}
+                      // The open chat (board d-*): --chat-surface, since --surface is white like the page in light mode.
+                      className={`flex min-h-[68px] w-full items-center gap-3 px-[var(--space-4)] py-[10px] text-left transition-colors focus:outline-none focus-visible:bg-[var(--chat-surface)] ${isSelected ? "bg-[var(--chat-surface)]" : "hover:bg-[var(--chat-surface)]"}`}
                     >
                       {trip ? (
                         <span aria-hidden className={`flex size-[44px] shrink-0 flex-col items-center justify-center rounded-[8px] border leading-none ${hasUnread ? "border-[var(--chat-me-border)] bg-[var(--chat-me)]" : "border-app bg-[var(--surface)]"}`}>
@@ -438,6 +448,7 @@ export default function MessagesPage() {
   /* ── Chat conversation panel (shared) ── */
   const chatPanel = selectedChat && user ? (
     <ChatConversation
+      key={selectedChat.chat_id}
       chat={selectedChat}
       currentUserId={user.id}
       planId={selectedChat.plan_id ?? undefined}
@@ -475,6 +486,7 @@ export default function MessagesPage() {
         ));
       }}
       registerCallReload={(fn) => { reloadCallMessagesRef.current = fn; }}
+      onOpenChat={(id) => { void loadChats().then(() => setSelectedChatId(id)); }}
     />
   ) : null;
 

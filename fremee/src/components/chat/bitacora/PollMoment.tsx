@@ -95,6 +95,30 @@ export function PollMoment({
   const votersLine = `${total} de ${Math.max(members, total)} han votado`;
   const pct = (i: number) => (total > 0 ? Math.round(((votes[i] ?? 0) / total) * 100) : 0);
 
+  // Copied into a plan's chat (board cp-sistema · Encuesta copiada): a snapshot of the results,
+  // with neutral bars because nobody can vote here.
+  if (poll.copiada_at) {
+    const at = new Date(poll.copiada_at).toLocaleDateString("es-ES", { day: "numeric", month: "short" }).replace(".", "");
+    return (
+      <div className="rounded-[8px] border border-app bg-[var(--surface)] p-[14px]">
+        <p className="text-[12px] font-[var(--fw-semibold)] tracking-[.02em] text-muted">Encuesta copiada · cerrada</p>
+        <p className="mt-[6px] [font-family:var(--font-display-face)] text-[26px] leading-[30px] text-app">{poll.question}</p>
+        <ul className="mt-[12px] flex flex-col gap-[8px]">
+          {poll.options.map((opt, i) => (
+            <li key={i} className="relative flex min-h-[44px] items-center justify-between gap-[8px] overflow-hidden rounded-[8px] border border-app px-[12px] py-[10px] text-[15px] text-app">
+              <span aria-hidden className="absolute inset-y-0 left-0 rounded-[8px] bg-[var(--surface-2)]" style={{ width: `${pct(i)}%` }} />
+              <span className="relative min-w-0 break-words">{opt}</span>
+              <span className="relative shrink-0 tabular-nums text-muted">{votes[i] ?? 0}<span className="sr-only"> votos</span></span>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-[10px] text-[12px] text-muted">
+          Resultados a {at} · {total} {total === 1 ? "voto" : "votos"}. Para votar de nuevo, crea otra encuesta.
+        </p>
+      </div>
+    );
+  }
+
   if (decided && fetched) {
     const max = Math.max(0, ...poll.options.map((_, i) => votes[i] ?? 0));
     const winners = poll.options.filter((_, i) => max > 0 && (votes[i] ?? 0) === max);

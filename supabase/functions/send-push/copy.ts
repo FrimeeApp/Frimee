@@ -27,6 +27,10 @@ export function buildCopy(
     case "plan_invite":
     case "trip_invitation_received":
       return { title: "¡Te invitan a un viaje!", body: trim(`${actor} te suma a ${destino}. ¿Te apuntas?`) };
+    case "plan_added":
+      return { title: "Te han añadido a un plan", body: trim(`${actor} te ha añadido a ${destino}`) };
+    case "plan_join_request":
+      return { title: "Quieren unirse a tu plan", body: trim(`${actor} pide unirse a ${destino}`) };
     case "trip_invitation_accepted":
       return { title: "¡Nuevo compañero de viaje!", body: trim(`${actor} se une a ${destino} 🎉`) };
     case "trip_invitation_declined":
@@ -115,6 +119,8 @@ export function buildCopy(
 export function preferenceCategoryAndKey(tipo: string): { category: string; key: string } | null {
   const map: Record<string, { category: string; key: string }> = {
     plan_invite:                  { category: "viajes",        key: "trip_invitation_received" },
+    plan_added:                   { category: "viajes",        key: "trip_invitation_received" },
+    plan_join_request:            { category: "viajes",        key: "trip_invitation_accepted" },
     trip_invitation_received:     { category: "viajes",        key: "trip_invitation_received" },
     trip_invitation_accepted:     { category: "viajes",        key: "trip_invitation_accepted" },
     trip_invitation_declined:     { category: "viajes",        key: "trip_invitation_accepted" },
