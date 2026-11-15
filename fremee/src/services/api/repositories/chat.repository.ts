@@ -21,6 +21,7 @@ import {
   type ChatListItem,
   type MensajeRow,
   type ChatMiembro,
+  type ChatNotice,
 } from "@/services/api/endpoints/chat.endpoint";
 
 export { fetchPlanChatItem };
@@ -78,7 +79,7 @@ export async function getChatMiembros(chatId: string): Promise<ChatMiembro[]> {
   return getChatMiembrosEndpoint(chatId);
 }
 
-export async function leaveChat(chatId: string): Promise<void> {
+export async function leaveChat(chatId: string): Promise<ChatNotice> {
   return leaveChatEndpoint(chatId);
 }
 
@@ -86,7 +87,7 @@ export async function updateChatFoto(chatId: string, foto: string): Promise<void
   return updateChatFotoEndpoint(chatId, foto);
 }
 
-export async function addChatMember(chatId: string, userId: string): Promise<void> {
+export async function addChatMember(chatId: string, userId: string): Promise<ChatNotice> {
   return addChatMemberEndpoint(chatId, userId);
 }
 
