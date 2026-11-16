@@ -20,6 +20,7 @@ import {
   FILL_BTN,
   FOCUS,
   LABEL,
+  LiveDot,
   PeopleStack,
   PinButton,
   Pill,
@@ -640,5 +641,45 @@ export function FinishedLink({ plans, onClick }: { plans: FeedPlanItemDto[]; onC
         <ChevronRight size={18} aria-hidden />
       </span>
     </button>
+  );
+}
+
+/** «Todos los planes» on desktop (d-todos): cover with its state and pin, then title, dates and who goes. */
+export function PlanTile({ plan, extra, pinned, onTogglePin, onOpen, userId }: Common) {
+  const timing = planTiming(plan);
+  const finished = timing.kind === "finished";
+  const people = extra?.miembros ?? [];
+  const count = people.length || 1;
+  const status = timing.kind === "ongoing" ? `En curso · día ${timing.day} de ${timing.total}` : countdownText(plan);
+  return (
+    <article aria-label={plan.title} className={`${CARD} transition-transform duration-[120ms] has-[a:active]:scale-[.98] motion-reduce:transition-none`}>
+      <PlanCover plan={plan} className="h-[148px]">
+        {status && (
+          <div className="absolute left-2.5 top-2.5">
+            <Pill>
+              {timing.kind === "ongoing" && <LiveDot />}
+              {status}
+            </Pill>
+          </div>
+        )}
+        {!finished && (
+          <div className="absolute right-1.5 top-1.5">
+            <PinButton pinned={pinned} onToggle={onTogglePin} onPhoto />
+          </div>
+        )}
+      </PlanCover>
+      <div className="px-3.5 pb-3.5 pt-3">
+        <h3 className="truncate text-[16px] font-[var(--fw-semibold)] leading-[22px] text-app">
+          <OpenLink plan={plan} onOpen={onOpen}>{plan.title}</OpenLink>
+        </h3>
+        <p className="mt-0.5 truncate text-[14px] text-muted">{rangeAndPlace(plan, true)}</p>
+        <div className="mt-2.5 flex items-center gap-2">
+          <PeopleStack people={people} size={22} max={3} />
+          <span className="min-w-0 flex-1 truncate text-[12px] text-muted">
+            {count} {count === 1 ? "persona" : "personas"} · {creatorText(plan, userId)}
+          </span>
+        </div>
+      </div>
+    </article>
   );
 }
