@@ -1,0 +1,38 @@
+/* Frimee · pinned plans stack (Mis planes, board s-pila).
+   The front card leaves 28 % to one side at −3° and .35 opacity; the next one rises 6 px from .97.
+   240 ms, transform and opacity only. Reduced motion: 120 ms cross-fade. */
+
+@layer components {
+  .pinned-stack-enter {
+    animation: pinned-stack-in 240ms cubic-bezier(.2, 0, 0, 1) both;
+  }
+  .pinned-stack-leave-left {
+    animation: pinned-stack-out-left 240ms cubic-bezier(.3, 0, 1, 1) both;
+  }
+  .pinned-stack-leave-right {
+    animation: pinned-stack-out-right 240ms cubic-bezier(.3, 0, 1, 1) both;
+  }
+
+  @keyframes pinned-stack-in {
+    from { transform: translateY(6px) scale(.97); }
+    to { transform: none; }
+  }
+  @keyframes pinned-stack-out-left {
+    to { transform: translateX(-28%) rotate(-3deg); opacity: .35; }
+  }
+  @keyframes pinned-stack-out-right {
+    to { transform: translateX(28%) rotate(3deg); opacity: .35; }
+  }
+  @keyframes pinned-stack-fade-in {
+    from { opacity: 0; }
+  }
+  @keyframes pinned-stack-fade-out {
+    to { opacity: 0; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .pinned-stack-enter { animation: pinned-stack-fade-in 120ms linear both; }
+    .pinned-stack-leave-left,
+    .pinned-stack-leave-right { animation: pinned-stack-fade-out 120ms linear both; }
+  }
+}
