@@ -463,6 +463,11 @@ export function CreatePlanFlow({
 const rowField = "h-[44px] w-full min-w-0 bg-transparent text-[15px] text-app outline-none placeholder:text-muted [color-scheme:inherit] focus-visible:underline focus-visible:decoration-[var(--primary)] focus-visible:underline-offset-4";
 
 const listaY = (xs: string[]) => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} y ${xs[xs.length - 1]}`);
+/** Up to three first names; more: «Ana, Clara y 7 más» (the full list goes in the hover / reader). */
+const listaCorta = (xs: string[]) => {
+  const first = (x: string) => x.split(" ")[0] || x;
+  return xs.length <= 3 ? listaY(xs.map(first)) : `${xs.slice(0, 2).map(first).join(", ")} y ${xs.length - 2} más`;
+};
 
 type Member = ChatListItem["miembros"][number];
 
@@ -847,16 +852,17 @@ export function PlanCreatedMark({
   const quien = yo ? "Tú" : data.creador_nombre || "Alguien";
   const otros = data.miembros.filter((m) => m.id !== data.creador_id).map((m) => (m.id === currentUserId ? "contigo" : m.nombre));
   // «tú» goes last, as people say it.
-  const gente = listaY([
+  const genteNombres = [
     ...data.miembros.filter((m) => m.id !== currentUserId).map((m) => m.nombre),
     ...(data.miembros.some((m) => m.id === currentUserId) ? ["tú"] : []),
-  ]);
+  ];
+  const gente = listaCorta(genteNombres);
   const misPlanes = useMisPlanIds(currentUserId, !inPlanChat);
   const dentro = data.miembros.some((m) => m.id === currentUserId) || Boolean(misPlanes?.has(data.plan_id));
   const sinCopia = inPlanChat && data.copiados === 0;
   const ve = useVeChat(data.origen_chat_id, sinCopia);
   const titulo = inPlanChat
-    ? `${quien} ${yo ? "creaste" : "creó"} el plan${otros.length ? ` con ${listaY(otros)}` : ""}`
+    ? `${quien} ${yo ? "creaste" : "creó"} el plan${otros.length ? ` con ${listaCorta(otros)}` : ""}`
     : `${quien} ${yo ? "creaste" : "creó"} «${data.titulo}» con esta conversación`;
 
   const pedir = async () => {
@@ -886,8 +892,11 @@ export function PlanCreatedMark({
       <div role="note" className="relative mx-[12px] mt-[14px] rounded-[8px] border border-app bg-[var(--surface)] py-[14px] pl-[44px] pr-[16px]">
         <span aria-hidden className="absolute left-[16px] top-[18px] size-[13px] rotate-45 rounded-[2px] bg-[var(--primary)]" />
         <p className="text-[12px] font-[var(--fw-semibold)] tracking-[.02em] text-[var(--chat-accent-text)]">Plan creado</p>
-        <p className="mt-[4px] text-[16px] font-[var(--fw-semibold)] leading-[1.35] text-app">{titulo}</p>
-        <p className="mt-[2px] text-[12px] leading-[1.45] text-muted">
+        <p className="mt-[4px] text-[16px] font-[var(--fw-semibold)] leading-[1.35] text-app" title={inPlanChat && otros.length > 3 ? listaY(otros) : undefined}>
+          {titulo}
+          {inPlanChat && otros.length > 3 && <span className="sr-only">: {listaY(otros)}</span>}
+        </p>
+        <p className="mt-[2px] text-[12px] leading-[1.45] text-muted" title={!inPlanChat && genteNombres.length > 3 ? listaY(genteNombres) : undefined}>
           {sinCopia
             ? `A partir de «${data.origen_nombre}», sin copiar la conversación.`
             : `${fmtRange(data.inicio_at, data.fin_at)}${inPlanChat ? "" : ` · ${gente}`}`}

@@ -60,18 +60,24 @@ export function TripSummaryCard({
 
 // ── Expense ───────────────────────────────────────────────────────────────────────────────────
 
-export function ExpenseCard({ data, planId }: { data: ExpenseMoment; planId?: number | null }) {
+/**
+ * An expense (review 2026-11-15): its own moment of the chat, like milestones — never somebody's
+ * bubble, whoever wrote it down. «Gasto · Cena · 30,00 € · Pagó Ana · 3,00 € por persona» and
+ * «Ver cuentas». Money always as «30,00 €». `apuntadoPor`: who wrote it down, when not the payer.
+ */
+export function ExpenseCard({ data, planId, apuntadoPor }: { data: ExpenseMoment; planId?: number | null; apuntadoPor?: string | null }) {
   const each = data.participantes > 0 ? data.total / data.participantes : data.total;
   return (
-    <div className={frame}>
+    <div className="w-full max-w-[560px] overflow-hidden rounded-[8px] border border-app bg-[var(--surface)]">
       <div className="p-[14px]">
         <p className={label}><Receipt className="size-[14px]" aria-hidden /> Gasto</p>
-        <div className="mt-[6px] flex items-baseline justify-between gap-[12px]">
+        <div className="mt-[4px] flex items-baseline justify-between gap-[12px]">
           <p className="min-w-0 break-words [font-family:var(--font-display-face)] text-[24px] leading-[28px] text-app">{data.titulo}</p>
           <p className="shrink-0 text-[18px] font-[var(--fw-semibold)] tabular-nums text-app">{formatEuros(data.total)}</p>
         </div>
         <p className="mt-[4px] text-[12px] text-muted">
-          Pagó {data.pagado_por_nombre} · {data.participantes > 1 ? `a partes iguales entre ${data.participantes} · ${formatEuros(each)} cada uno` : "solo para una persona"}
+          Pagó {data.pagado_por_nombre} · {data.participantes > 1 ? `${formatEuros(each)} por persona` : "solo para una persona"}
+          {apuntadoPor ? ` · apuntado por ${apuntadoPor}` : ""}
         </p>
       </div>
       {planId && (

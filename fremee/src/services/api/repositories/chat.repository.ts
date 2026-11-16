@@ -18,6 +18,15 @@ import {
   getMyReaccionesEndpoint,
   pollVoteEndpoint,
   pollGetVotesEndpoint,
+  pollDecidirEndpoint,
+  pollDesempatarEndpoint,
+  pollVotosEndpoint,
+  pollReabrirEndpoint,
+  pollSortearEndpoint,
+  type PollCierre,
+  type PollDesempate,
+  type PollVoteResult,
+  type PollVoto,
   type ChatListItem,
   type MensajeRow,
   type ChatMiembro,
@@ -26,7 +35,7 @@ import {
 
 export { fetchPlanChatItem };
 
-export type { ChatListItem, MensajeRow, ChatMiembro };
+export type { ChatListItem, MensajeRow, ChatMiembro, PollCierre, PollDesempate, PollVoteResult, PollVoto };
 
 export async function listChats(): Promise<ChatListItem[]> {
   return listChatsEndpoint();
@@ -96,7 +105,7 @@ export async function editMensaje(mensajeId: number, texto: string): Promise<voi
   return editMensajeEndpoint(mensajeId, texto);
 }
 
-export async function closePoll(mensajeId: number): Promise<void> {
+export async function closePoll(mensajeId: number): Promise<PollCierre> {
   return closePollEndpoint(mensajeId);
 }
 
@@ -114,8 +123,28 @@ export async function getMyReacciones(
   return getMyReaccionesEndpoint(chatId);
 }
 
-export async function pollVote(mensajeId: number, optionIndex: number): Promise<void> {
+export async function pollVote(mensajeId: number, optionIndex: number): Promise<PollVoteResult> {
   return pollVoteEndpoint(mensajeId, optionIndex);
+}
+
+export async function pollDecidir(mensajeId: number, optionIndex: number): Promise<PollCierre> {
+  return pollDecidirEndpoint(mensajeId, optionIndex);
+}
+
+export async function pollDesempatar(mensajeId: number): Promise<PollDesempate> {
+  return pollDesempatarEndpoint(mensajeId);
+}
+
+export async function pollReabrir(mensajeId: number): Promise<PollCierre> {
+  return pollReabrirEndpoint(mensajeId);
+}
+
+export async function pollSortear(mensajeId: number): Promise<PollCierre> {
+  return pollSortearEndpoint(mensajeId);
+}
+
+export async function pollVotos(mensajeId: number): Promise<PollVoto[]> {
+  return pollVotosEndpoint(mensajeId);
 }
 
 export async function pollGetVotes(
