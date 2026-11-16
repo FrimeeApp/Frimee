@@ -24,6 +24,7 @@ import { formatDateRange } from "@/lib/formatters";
 import { createRealtimeTopic } from "@/lib/realtime";
 import { getOpenChat } from "@/lib/open-chat";
 import { useToast } from "@/components/ui/Toaster";
+import { dateInputToIso, isPlanFinished } from "@/lib/plan-dates";
 type IconProps = {
   className?: string;
   strokeWidth?: number;
@@ -58,11 +59,6 @@ type AppSidebarProps = {
   hideMobileNav?: boolean;
 };
 type MobileNavStyle = CSSProperties & { "--mobile-nav-base-height": string };
-
-function dateInputToIso(dateInput: string, hour = 12) {
-  const [year, month, day] = dateInput.split("-").map(Number);
-  return new Date(year ?? 0, (month ?? 1) - 1, day ?? 1, hour, 0, 0).toISOString();
-}
 
 export default function AppSidebar({ onCreatePlan, onCreateGroup, hideMobileNav }: AppSidebarProps) {
   const router = useRouter();
@@ -286,10 +282,9 @@ export default function AppSidebar({ onCreatePlan, onCreateGroup, hideMobileNav 
     setExpensePlansLoading(true);
     try {
       const plans = await listUserRelatedPlans({ userId: user.id, limit: 100 });
-      const now = Date.now();
       setExpensePlans(
         plans
-          .filter((plan) => new Date(plan.endsAt).getTime() >= now)
+          .filter((plan) => !isPlanFinished(plan.endsAt))
           .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())
       );
     } catch {
