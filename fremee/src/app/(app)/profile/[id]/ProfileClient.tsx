@@ -16,9 +16,14 @@ import {
   saveUserProfileAndSettings,
 } from "@/services/api/repositories/settings.repository";
 import type { FeedPlanItemDto } from "@/services/api/dtos/plan.dto";
-import { Settings, Plane, Wallet, Camera, Check, Pencil, LayoutGrid, Bookmark } from "lucide-react";
+import { Settings, Plane, Wallet, Camera, Check, Pencil, LayoutGrid, Bookmark, Ban, MoreHorizontal } from "lucide-react";
+import { useBloqueos } from "@/hooks/useBloqueos";
+import { BlockConfirm } from "@/components/chat/info/BlockConfirm";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
 import { Tabs } from "@/components/ui/Tabs";
+
+/** Seguir is hidden while the feed is (its code and data stay for when the feed comes back). */
+const MOSTRAR_SEGUIR = false;
 
 type ProfileData = {
   id: string;
@@ -427,6 +432,7 @@ export default function ProfilePage() {
               {/* Follow + Add friend buttons - other profiles only */}
               {!isOwnProfile && user && (
                 <div className="mt-[var(--space-3)] flex gap-[var(--space-2)]">
+                  {MOSTRAR_SEGUIR && (
                   <button
                     type="button"
                     onClick={onFollowPress}
@@ -439,6 +445,7 @@ export default function ProfilePage() {
                   >
                     {following ? "Siguiendo" : "Seguir"}
                   </button>
+                  )}
                   <button
                     type="button"
                     onClick={onFriendButtonPress}
@@ -451,6 +458,7 @@ export default function ProfilePage() {
                   >
                     {sendingFriendRequest ? "..." : friendshipStatus === "friends" ? "Amigos" : friendshipStatus === "pending" ? "Pendiente" : "Añadir amigo"}
                   </button>
+                  <ProfileMoreMenu userId={profileData.id} name={profileData.nombre} />
                 </div>
               )}
 
@@ -462,12 +470,14 @@ export default function ProfilePage() {
                   </span>
                   <span className="text-body-sm text-muted">Planes</span>
                 </div>
+                {MOSTRAR_SEGUIR && (
                 <div className="flex flex-col items-center">
                   <span className="text-[18px] font-[600] leading-[1.2]" style={{ fontFamily: "var(--font-inter), sans-serif" }}>
                     {followerCount}
                   </span>
                   <span className="text-body-sm text-muted">Seguidores</span>
                 </div>
+                )}
                 <div className="flex flex-col items-center">
                   <span className="text-[18px] font-[600] leading-[1.2]" style={{ fontFamily: "var(--font-inter), sans-serif" }}>
                     0
@@ -689,6 +699,67 @@ function ProfileSkeleton() {
           <div key={i} className="skeleton-shimmer aspect-[4/3] w-full rounded-[6px]" />
         ))}
       </div>
+    </div>
+  );
+}
+
+/** «⋯» next to the friend button: Bloquear, or Desbloquear when already blocked. */
+function ProfileMoreMenu({ userId, name }: { userId: string; name: string }) {
+  const { bloqueados, bloquear, desbloquear } = useBloqueos();
+  const [open, setOpen] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const blocked = bloqueados.has(userId);
+  const first = name.split(" ")[0];
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => { if (!wrapRef.current?.contains(e.target as Node)) setOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
+  }, [open]);
+
+  const onItem = () => {
+    setOpen(false);
+    setError(null);
+    if (!blocked) { setConfirming(true); return; }
+    desbloquear(userId).catch((e) => {
+      console.error("[perfil] Error desbloqueando:", (e as { message?: string })?.message ?? String(e));
+      setError("No se ha desbloqueado. Inténtalo de nuevo.");
+    });
+  };
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-label="Más opciones"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="flex size-[36px] items-center justify-center rounded-full border border-app text-app transition-colors hover:bg-surface"
+      >
+        <MoreHorizontal className="size-[18px]" aria-hidden />
+      </button>
+      {open && (
+        <div role="menu" className="absolute left-1/2 top-[42px] z-20 w-[200px] -translate-x-1/2 rounded-[8px] border border-app bg-[var(--bg)] p-[4px] shadow-[0_8px_24px_rgba(0,0,0,0.25)]">
+          <button type="button" role="menuitem" onClick={onItem} className="flex min-h-[44px] w-full items-center gap-[10px] rounded-[6px] px-[10px] text-left text-[15px] text-[var(--error)] hover:bg-[var(--surface-2)]">
+            <Ban className="size-[18px]" aria-hidden />
+            {blocked ? "Desbloquear" : "Bloquear"}
+          </button>
+        </div>
+      )}
+      {error && <p role="alert" className="absolute left-1/2 top-[42px] w-[220px] -translate-x-1/2 text-center text-[13px] text-[var(--error)]">{error}</p>}
+      {confirming && (
+        <BlockConfirm
+          name={first}
+          onClose={() => setConfirming(false)}
+          onConfirm={async () => { await bloquear(userId); setConfirming(false); }}
+        />
+      )}
     </div>
   );
 }
