@@ -22,6 +22,8 @@ import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
 import { DEFAULT_PLAN_COVER_IMAGE } from "@/config/app";
 import { formatDateRange } from "@/lib/formatters";
 import { createRealtimeTopic } from "@/lib/realtime";
+import { getOpenChat } from "@/lib/open-chat";
+import { useToast } from "@/components/ui/Toaster";
 type IconProps = {
   className?: string;
   strokeWidth?: number;
@@ -64,6 +66,7 @@ function dateInputToIso(dateInput: string, hour = 12) {
 
 export default function AppSidebar({ onCreatePlan, onCreateGroup, hideMobileNav }: AppSidebarProps) {
   const router = useRouter();
+  const { toast } = useToast();
   const pathname = usePathname();
   const [modalOpen, setModalOpen] = useState(false);
 
@@ -157,11 +160,22 @@ export default function AppSidebar({ onCreatePlan, onCreateGroup, hideMobileNav 
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "notificaciones", filter: `user_id=eq.${user.id}` },
-        () => setUnreadNotifs((prev) => prev + 1)
+        (payload) => {
+          setUnreadNotifs((prev) => prev + 1);
+          // A poll draw in a chat that is not on screen: a short notice instead of the board.
+          const row = payload.new as { tipo?: string; entity_id?: string | null };
+          if (row.tipo !== "poll_draw") return;
+          try {
+            const meta = JSON.parse(row.entity_id ?? "") as { chat_id?: string; mensaje_id?: string; actor_nombre?: string };
+            if (!meta.chat_id || meta.chat_id === getOpenChat()) return;
+            const href = `/messages?chat=${encodeURIComponent(meta.chat_id)}${meta.mensaje_id ? `&m=${encodeURIComponent(meta.mensaje_id)}` : ""}`;
+            toast(`${meta.actor_nombre?.split(" ")[0] ?? "Alguien"} ha lanzado un sorteo`, "info", { label: "Ver", onClick: () => router.push(href) });
+          } catch { /* malformed entity: the bell count is enough */ }
+        }
       )
       .subscribe();
     return () => { void supabase.removeChannel(channel); };
-  }, [user?.id]);
+  }, [user?.id, router, toast]);
 
   useEffect(() => {
     setSearchPopoverOpen(false);

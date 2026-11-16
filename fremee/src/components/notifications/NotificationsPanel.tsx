@@ -72,6 +72,32 @@ function planChatMeta(tipo: string, entityId: string | null): { planId: string |
   }
 }
 
+/** poll_reopen: «te pide que votes en «¿Dónde vamos?».» entity_id = {chat_id, mensaje_id, pregunta}. */
+function pollReopenMeta(entityId: string | null): { href: string | null; label: string } {
+  try {
+    const meta = JSON.parse(entityId ?? "") as { chat_id?: string; mensaje_id?: string; pregunta?: string };
+    return {
+      href: meta.chat_id ? `/messages?chat=${encodeURIComponent(meta.chat_id)}${meta.mensaje_id ? `&m=${encodeURIComponent(meta.mensaje_id)}` : ""}` : null,
+      label: `Falta tu voto en «${meta.pregunta ?? "…"}».`,
+    };
+  } catch {
+    return { href: null, label: "Falta tu voto en una encuesta." };
+  }
+}
+
+/** poll_draw: «sorteó «¿Dónde vamos?» en Finde en la sierra: Madrid.» (who was not watching). */
+function pollDrawMeta(entityId: string | null): { href: string | null; label: string } {
+  try {
+    const meta = JSON.parse(entityId ?? "") as { chat_id?: string; mensaje_id?: string; chat_nombre?: string; opcion?: string };
+    return {
+      href: meta.chat_id ? `/messages?chat=${encodeURIComponent(meta.chat_id)}${meta.mensaje_id ? `&m=${encodeURIComponent(meta.mensaje_id)}` : ""}` : null,
+      label: `lanzó un sorteo en ${meta.chat_nombre ?? "un chat"}: ${meta.opcion ?? "…"}.`,
+    };
+  } catch {
+    return { href: null, label: "lanzó un sorteo." };
+  }
+}
+
 function recordatorioLabel(entityId: string | null): string {
   try {
     const meta = JSON.parse(entityId ?? "") as { plan_titulo?: string; importe?: number; has_tasks?: boolean };
@@ -166,6 +192,8 @@ export function NotifItem({
   const isPlanInvite = n.tipo === "plan_invite" && n.entity_id;
   const added = n.tipo === "plan_added" || n.tipo === "plan_join_request" ? planChatMeta(n.tipo, n.entity_id) : null;
   const isJoinRequest = n.tipo === "plan_join_request" && Boolean(added?.planId && added.userId);
+  const pollReopen = n.tipo === "poll_reopen" ? pollReopenMeta(n.entity_id) : n.tipo === "poll_draw" ? pollDrawMeta(n.entity_id) : null;
+  const router = useRouter();
   const [joinError, setJoinError] = useState(false);
   const handleJoinRequest = async (accept: boolean) => {
     if (!added?.planId || !added.userId || acting) return;
@@ -242,10 +270,10 @@ export function NotifItem({
                 </>
               ) : (
                 <>
-                  <span className="font-[var(--fw-semibold)]">{n.actor_nombre ?? "Alguien"}</span>
-                  {" "}
+                  {/* «Falta tu voto en …» reads on its own, without who reopened it. */}
+                  {n.tipo !== "poll_reopen" && <><span className="font-[var(--fw-semibold)]">{n.actor_nombre ?? "Alguien"}</span>{" "}</>}
                   <span className="text-muted">
-                    {added ? added.label : normalizeNotificationText(n.tipo === "recordatorio" ? recordatorioLabel(n.entity_id) : (TIPO_LABELS[n.tipo] ?? n.tipo))}
+                    {added ? added.label : pollReopen ? pollReopen.label : normalizeNotificationText(n.tipo === "recordatorio" ? recordatorioLabel(n.entity_id) : (TIPO_LABELS[n.tipo] ?? n.tipo))}
                   </span>
                 </>
               )}
@@ -261,6 +289,15 @@ export function NotifItem({
               className="shrink-0 rounded-full border border-app px-3 py-1 text-[14px] font-[var(--fw-semibold)] text-app transition-opacity hover:opacity-80"
             >
               Ver plan
+            </button>
+          )}
+          {pollReopen?.href && (
+            <button
+              type="button"
+              onClick={() => router.push(pollReopen.href!)}
+              className="shrink-0 rounded-full bg-[var(--primary)] px-3 py-1 text-[14px] font-[var(--fw-semibold)] text-[var(--contrast)] transition-opacity hover:opacity-80"
+            >
+              {n.tipo === "poll_draw" ? "Ver" : "Votar"}
             </button>
           )}
           {isJoinRequest && (

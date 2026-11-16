@@ -145,10 +145,14 @@ export default function MessagesPage() {
     void loadChats();
   }, [user, loadChats]);
 
-  // /messages?chat=<id> (a plan made from a chat, the link back to the original): open it once.
+  // /messages?chat=<id>[&m=<mensaje>] (a plan made from a chat, the link back to the original, a
+  // reopened poll from a notification): open it once, at that message if there is one.
   useEffect(() => {
-    const id = new URLSearchParams(window.location.search).get("chat");
+    const q = new URLSearchParams(window.location.search);
+    const id = q.get("chat");
     if (!id) return;
+    const m = Number(q.get("m"));
+    if (Number.isFinite(m) && m > 0) setJumpTo({ chatId: id, mensajeId: m });
     setSelectedChatId(id);
     window.history.replaceState(null, "", window.location.pathname);
   }, []);
@@ -283,6 +287,7 @@ export default function MessagesPage() {
       } : undefined}
       containerClassName="flex h-full flex-col pt-[var(--space-2)]"
       onBack={() => { setSelectedChatId(null); setJumpTo(null); void loadChats(); }}
+      backOnPhoneOnly
       onStartCall={(tipo) => {
         const nombre = resolveChatName(selectedChat, user.id);
         const foto = resolveChatAvatar(selectedChat, user.id) ?? undefined;

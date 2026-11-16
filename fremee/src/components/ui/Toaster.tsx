@@ -4,14 +4,21 @@ import { createContext, useCallback, useContext, useRef, useState, type ReactNod
 
 type ToastType = "error" | "success" | "info";
 
-interface Toast {
+/** Optional action next to the text («Ver»); the toast then stays a bit longer. */
+export type ToastAction = {
+  label: string;
+  onClick: () => void;
+}
+
+type Toast = {
   id: number;
   type: ToastType;
   message: string;
+  action?: ToastAction;
 }
 
-interface ToastCtx {
-  toast: (message: string, type?: ToastType) => void;
+type ToastCtx = {
+  toast: (message: string, type?: ToastType, action?: ToastAction) => void;
   toastError: (message: string) => void;
   toastSuccess: (message: string) => void;
 }
@@ -48,10 +55,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     if (t) { clearTimeout(t); timers.current.delete(id); }
   }, []);
 
-  const toast = useCallback((message: string, type: ToastType = "info") => {
+  const toast = useCallback((message: string, type: ToastType = "info", action?: ToastAction) => {
     const id = ++_nextId;
-    setToasts((prev) => [...prev.slice(-4), { id, type, message }]);
-    const timer = setTimeout(() => dismiss(id), DURATION[type]);
+    setToasts((prev) => [...prev.slice(-4), { id, type, message, action }]);
+    const timer = setTimeout(() => dismiss(id), action ? 6000 : DURATION[type]);
     timers.current.set(id, timer);
   }, [dismiss]);
 
@@ -65,7 +72,22 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         aria-live="polite"
         className="pointer-events-none fixed bottom-[calc(env(safe-area-inset-bottom)+72px)] left-0 right-0 z-[200] flex flex-col items-center gap-[var(--space-2)] px-[var(--space-4)] md:bottom-[var(--space-6)] md:items-end md:pr-[var(--space-6)]"
       >
-        {toasts.map((t) => (
+        {toasts.map((t) => t.action ? (
+          <div
+            key={t.id}
+            role="status"
+            className={`pointer-events-auto flex max-w-sm items-center gap-[var(--space-3)] rounded-[14px] py-[var(--space-1)] pl-[var(--space-4)] pr-[var(--space-2)] text-body-sm font-[var(--fw-medium)] shadow-elev-3 animate-in fade-in slide-in-from-bottom-2 duration-200 ${COLORS[t.type]}`}
+          >
+            <span className="min-w-0 flex-1">{t.message}</span>
+            <button
+              type="button"
+              onClick={() => { const a = t.action; dismiss(t.id); a?.onClick(); }}
+              className="min-h-[40px] shrink-0 rounded-[8px] px-[var(--space-2)] font-[var(--fw-semibold)] text-[var(--chat-accent-text)] hover:underline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+            >
+              {t.action.label}
+            </button>
+          </div>
+        ) : (
           <button
             key={t.id}
             type="button"
