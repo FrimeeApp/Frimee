@@ -1995,6 +1995,10 @@ export function ChatConversation({
         setMessages((prev) => prev.map((m) =>
           m.id === thinkingKey ? { ...m, id: botMsgId, _key: botMsgId, texto: replyText || "…" } : m
         ));
+        // Live for the others too (it was only saved: they saw it after reloading).
+        const botMsg: LocalMsg = { id: botMsgId, _key: botMsgId, sender_id: "frimee", sender_nombre: "Frimee", sender_profile_image: null, texto: replyText || "…", created_at: new Date().toISOString(), tipo: "bot" };
+        void channelRef.current?.send({ type: "broadcast", event: "new_message", payload: botMsg });
+        onNewMessageRef.current(botMsg);
 
         if (pollToCreate) {
           try {
@@ -2007,6 +2011,7 @@ export function ChatConversation({
             const errorId = await sendBotMensaje(chat.chat_id, "No pude crear la encuesta, inténtalo de nuevo.");
             const errorMsg: LocalMsg = { id: errorId, _key: errorId, sender_id: "frimee", sender_nombre: "Frimee", sender_profile_image: null, texto: "No pude crear la encuesta, inténtalo de nuevo.", created_at: new Date().toISOString(), tipo: "bot" };
             setMessages((prev) => prev.some((m) => m.id === errorId) ? prev : [...prev, errorMsg]);
+            void channelRef.current?.send({ type: "broadcast", event: "new_message", payload: errorMsg });
           }
         }
       } catch {
