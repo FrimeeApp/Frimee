@@ -45,6 +45,13 @@ export default function CallRoom({ miembros, participanteNombre, tipo, isGroup, 
   const [stageRef, stage] = useElementSize<HTMLDivElement>();
   const [contentRef, content] = useElementSize<HTMLDivElement>();
   const mobile = stage.width > 0 && stage.width < 768;
+  // ll-18: sharing depends on the browser, not on the width (a narrow desktop window still shares).
+  // Phones' browsers and the native app have no getDisplayMedia.
+  // CallRoom only mounts during a call, in the browser (never server-rendered).
+  const [canShare] = useState(() => {
+    const w = window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } };
+    return typeof navigator.mediaDevices?.getDisplayMedia === "function" && !w.Capacitor?.isNativePlatform?.();
+  });
 
   const [focusId, setFocusId] = useState<string | null>(null);
   const [gridOverride, setGridOverride] = useState(false);
@@ -412,8 +419,7 @@ export default function CallRoom({ miembros, participanteNombre, tipo, isGroup, 
             >
               {cameraEnabled || tipo === "audio" ? <Video className="size-6" aria-hidden /> : <VideoOff className="size-6" aria-hidden />}
             </CallControl>
-            {!mobile && (
-              <>
+            {canShare && (
                 <CallControl
                   kind={screenSharing ? "on" : "stage"}
                   ariaLabel={screenSharing ? "Dejar de compartir pantalla" : "Compartir pantalla"}
@@ -424,6 +430,9 @@ export default function CallRoom({ miembros, participanteNombre, tipo, isGroup, 
                 >
                   <ScreenShare className="size-6" aria-hidden />
                 </CallControl>
+            )}
+            {!mobile && (
+              <>
                 {onMinimize && (
                   <CallControl ariaLabel="Minimizar llamada" tip="Minimizar" onClick={onMinimize}>
                     <Minimize2 className="size-6" aria-hidden />
