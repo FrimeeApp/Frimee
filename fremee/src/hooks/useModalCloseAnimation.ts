@@ -27,7 +27,10 @@ function lockDocumentScroll(lockId: symbol) {
   previousBodyPaddingRight = body.style.paddingRight;
   previousHtmlOverscroll = documentElement.style.overscrollBehavior;
 
-  const scrollbarWidth = window.innerWidth - documentElement.clientWidth;
+  // html keeps the scrollbar's gutter (scrollbar-gutter: stable in base.css), so the page does not
+  // move when the scrollbar goes away; padding the body as well shifted everything left by that width.
+  const gutterKept = getComputedStyle(documentElement).scrollbarGutter.includes("stable");
+  const scrollbarWidth = gutterKept ? 0 : window.innerWidth - documentElement.clientWidth;
   body.style.overflow = "hidden";
   body.style.position = "fixed";
   body.style.top = `-${lockedScrollY}px`;

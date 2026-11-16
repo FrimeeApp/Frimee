@@ -1,41 +1,54 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent } from "react";
-import { format } from "date-fns";
-import { es } from "date-fns/locale";
-import { FileText, Globe, Lock, Plane, User, Users } from "lucide-react";
-import LocationAutocomplete from "@/components/plans/LocationAutocomplete";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import {
+  CalendarDays,
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  CircleAlert,
+  Clock,
+  Globe,
+  ImagePlus,
+  Loader2,
+  Lock,
+  MapPin,
+  Minus,
+  Search,
+  Sun,
+  X,
+} from "lucide-react";
+import LocationAutocomplete, { type PickedPlace } from "@/components/plans/LocationAutocomplete";
 import { fetchActiveFriends, type PublicUserProfileRow } from "@/services/api/endpoints/users.endpoint";
 import { listChats, type ChatListItem } from "@/services/api/repositories/chat.repository";
-import { FIELD_LINE_CLS } from "@/lib/styles";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
-import { CloseButton, IconButton } from "@/components/ui/IconButton";
-import { ModalFeedback, type ModalFeedbackState } from "@/components/ui/ModalFeedback";
 import { DiscardChangesDialog } from "@/components/ui/DiscardChangesDialog";
-import { Tabs } from "@/components/ui/Tabs";
+import { Avatar } from "@/components/ui/Avatar";
+import { TimePicker } from "@/components/ui/TimePicker";
+import { PhoneRangeSheet, RangeCalendar, dayLabel, rangeLabel } from "@/components/ui/DateRangePicker";
+import { useIsPhone } from "@/components/chat/bitacora/Sheet";
+import type { PlanWhen } from "@/lib/plan-dates";
+
+/* ─── Contract with the callers (useCreatePlan, PlanPageClient) ─────────────── */
 
 export type CreatePlanPayload = {
   title: string;
+  description: string;
+  /** "" = no place yet (stored as «Por decidir»). */
   location: string;
-  startDate: string;
-  endDate: string;
-  startTime: string | null;
-  endTime: string | null;
-  startAllDay: boolean;
-  endAllDay: boolean;
+  when: PlanWhen;
   coverImageUrl: string | null;
   coverFile: File | null;
   visibility: "PÚBLICO" | "SOLO_GRUPO";
-  inviteMode: "now" | "later";
-  invitedFriendIds: string[];
+  /** People to invite (the creator is never in it). */
+  invited: { id: string; name: string }[];
 };
 
 export type EditPlanInitialValues = {
   title: string;
   description: string;
   location: string;
-  startDate: string;
-  endDate: string;
+  when: PlanWhen;
   coverImageUrl: string | null;
   visibility: CreatePlanPayload["visibility"];
 };
@@ -46,919 +59,891 @@ export type CreatePlanDates = { startDate: string; endDate: string };
 type CreatePlanModalProps = {
   open: boolean;
   onClose: () => void;
-  onCreate: (payload: CreatePlanPayload) => void | Promise<void>;
+  onCreate: (payload: CreatePlanPayload) => void | Promise<unknown>;
   currentUserId?: string;
   initialValues?: EditPlanInitialValues;
   initialDates?: CreatePlanDates;
   mode?: "create" | "edit";
 };
 
-const DEFAULT_VISIBILITY: CreatePlanPayload["visibility"] = "SOLO_GRUPO";
-const DEFAULT_INVITE_MODE: CreatePlanPayload["inviteMode"] = "later";
-const TOTAL_STEPS = 4;
+/* ─── Helpers ────────────────────────────────────────────────────────────────── */
 
-const STEP_META = [
-  { title: "¿A dónde vas?", subtitle: "Elige tu próximo destino" },
-  { title: "¿Cuándo?", subtitle: "Añade las fechas del viaje" },
-  { title: "Dale un nombre", subtitle: "¿Cómo llamarás a este plan?" },
-  { title: "Últimos detalles", subtitle: "Privacidad y participantes" },
-];
+const STEPS = ["Qué y dónde", "Cuándo", "Detalles"] as const;
 
-function toDateInputValue(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+const pad = (n: number) => String(n).padStart(2, "0");
+const iso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const parse = (s: string) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+const plusDays = (s: string, n: number) => { const d = parse(s); d.setDate(d.getDate() + n); return iso(d); };
+const toMin = (t: string) => { const [h, m] = t.split(":").map(Number); return (h ?? 0) * 60 + (m ?? 0); };
+const fromMin = (m: number) => `${pad(Math.floor(m / 60) % 24)}:${pad(m % 60)}`;
+const lower = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
+/** «Sáb 21» (dayLabel without the month). */
+const dayNoMonth = (s: string) => dayLabel(s).replace(/ \S+$/, "");
+const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+const firstName = (n: string) => n.trim().split(/\s+/)[0] || n;
+
+function durationText(min: number) {
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return [h ? `${h} h` : "", m ? `${m} min` : ""].filter(Boolean).join(" ");
 }
 
-function addDays(date: Date, amount: number) {
-  const next = new Date(date);
-  next.setDate(next.getDate() + amount);
-  return next;
+/** «Ciudad · Portugal» from Google's place types. */
+function placeKind(types: string[]) {
+  const has = (t: string) => types.includes(t);
+  if (has("locality") || has("postal_town")) return "Ciudad";
+  if (has("country")) return "País";
+  if (types.some((t) => t.startsWith("administrative_area"))) return "Región";
+  if (has("airport")) return "Aeropuerto";
+  if (has("lodging")) return "Alojamiento";
+  if (has("restaurant") || has("cafe") || has("bar")) return "Restaurante";
+  return "";
 }
+const isDestination = (types: string[]) =>
+  types.some((t) => t === "locality" || t === "postal_town" || t === "country" || t.startsWith("administrative_area") || t === "colloquial_area");
 
-function isBlobUrl(url: string) {
-  return url.startsWith("blob:");
-}
-
-// ─── Inline range calendar ────────────────────────────────────────────────────
-
-function InlineRangeCalendar({
-  startDate,
-  endDate,
-  onChange,
-}: {
-  startDate: string;
-  endDate: string;
-  onChange: (start: string, end: string) => void;
-}) {
-  const todayStr = toDateInputValue(new Date());
-  const [hoverDate, setHoverDate] = useState<string | null>(null);
-  const [phase, setPhase] = useState<"start" | "end">("start");
-  const [monthCount, setMonthCount] = useState(4);
-  const [desktopPage, setDesktopPage] = useState(0);
-
-  const now = new Date();
-  const baseYear = now.getFullYear();
-  const baseMonth = now.getMonth();
-
-  const handleDayClick = (dateStr: string) => {
-    if (dateStr < todayStr) return;
-    if (phase === "start") {
-      onChange(dateStr, dateStr);
-      setPhase("end");
-    } else {
-      if (dateStr >= startDate) {
-        onChange(startDate, dateStr);
-        setPhase("start");
-      } else {
-        onChange(dateStr, dateStr);
-        setPhase("end");
-      }
-    }
+function defaultWhen(dates?: CreatePlanDates): PlanWhen {
+  const today = iso(new Date());
+  return {
+    startDate: dates?.startDate ?? today,
+    endDate: dates?.endDate ?? plusDays(today, 1),
+    allDay: true,
+    startTime: "",
+    endTime: "",
+    endNextDay: false,
   };
+}
 
-  const hasRange = startDate !== endDate;
-  const previewEnd = phase === "end" && hoverDate && hoverDate > startDate ? hoverDate : null;
+/** The first o'clock hour after now (max 22:00), for «Con horario». */
+function nextHour() {
+  return fromMin(Math.min(22 * 60, (new Date().getHours() + 1) * 60));
+}
 
-  const renderMonth = (year: number, month: number) => {
-    const firstDay = new Date(year, month, 1);
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    let startDow = firstDay.getDay();
-    startDow = (startDow + 6) % 7; // Mon=0 … Sun=6
-    const monthLabel = format(firstDay, "MMMM yyyy", { locale: es });
+type Person = { id: string; name: string; image: string | null };
 
-    const cells: React.ReactNode[] = Array.from({ length: startDow }, (_, i) => (
-      <div key={`pad-${i}`} />
-    ));
+/* ─── Small pieces ───────────────────────────────────────────────────────────── */
 
-    for (let i = 0; i < daysInMonth; i++) {
-      const day = i + 1;
-      const mm = String(month + 1).padStart(2, "0");
-      const dd = String(day).padStart(2, "0");
-      const dateStr = `${year}-${mm}-${dd}`;
-      const isPast = dateStr < todayStr;
-      const isStart = dateStr === startDate;
-      const isEnd = hasRange && dateStr === endDate;
-      const inRange = hasRange && dateStr > startDate && dateStr < endDate;
-      const inPreview = !!previewEnd && dateStr > startDate && dateStr < previewEnd;
-      const isPreviewEnd = dateStr === previewEnd;
+const FIELD =
+  "flex h-[46px] items-center gap-[10px] rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface-2)] pl-[12px] pr-[4px] focus-within:border-[var(--primary)] focus-within:shadow-[0_0_0_1px_var(--primary)]";
+const FILL =
+  "inline-flex h-[46px] shrink-0 items-center justify-center gap-[8px] whitespace-nowrap rounded-[8px] bg-[var(--chat-accent-text)] px-[16px] text-[15px] font-[var(--fw-semibold)] text-contrast-token transition-opacity hover:opacity-90 disabled:cursor-progress disabled:opacity-75";
+const TEXT_BTN =
+  "inline-flex min-h-[44px] shrink-0 items-center gap-[6px] whitespace-nowrap text-[14px] font-[var(--fw-semibold)] text-[var(--chat-accent-text)] disabled:opacity-60";
+const ICON_BTN = "flex size-[44px] shrink-0 items-center justify-center rounded-[8px] text-app hover:bg-[var(--surface-2)] disabled:opacity-40";
 
-      cells.push(
-        <div
-          key={dateStr}
-          className="relative flex h-12 items-center justify-center"
-          onClick={() => !isPast && handleDayClick(dateStr)}
-          onMouseEnter={() => !isPast && setHoverDate(dateStr)}
-          onMouseLeave={() => setHoverDate(null)}
-        >
-          {/* Solid range strip */}
-          {inRange && <div className="absolute inset-y-[4px] inset-x-0 bg-[var(--surface-2)]" />}
-
-          {/* Preview range strip */}
-          {!inRange && inPreview && (
-            <div className="absolute inset-y-[4px] inset-x-0 bg-[var(--surface-2)] opacity-50" />
-          )}
-
-          {/* Start right-half connector */}
-          {isStart && (hasRange || !!previewEnd) && (
-            <div className={`absolute inset-y-[4px] left-1/2 right-0 bg-[var(--surface-2)] ${!hasRange ? "opacity-50" : ""}`} />
-          )}
-
-          {/* End left-half connector */}
-          {(isEnd || isPreviewEnd) && (
-            <div className={`absolute inset-y-[4px] left-0 right-1/2 bg-[var(--surface-2)] ${isPreviewEnd ? "opacity-50" : ""}`} />
-          )}
-
-          {/* Day circle */}
-          <div
-            className={[
-              "relative z-10 flex size-10 items-center justify-center rounded-full text-[15px] font-[var(--fw-semibold)] transition-colors select-none",
-              isStart || isEnd
-                ? "bg-[var(--text-primary)] text-[var(--bg)]"
-                : isPreviewEnd
-                ? "bg-[var(--surface-2)] text-app"
-                : isPast
-                ? "text-muted opacity-25 cursor-default"
-                : "cursor-pointer text-app hover:bg-[var(--surface-2)]",
-            ].join(" ")}
-          >
-            {day}
-          </div>
-        </div>
-      );
-    }
-
-    while (cells.length < 42) {
-      cells.push(<div key={`tail-${year}-${month}-${cells.length}`} />);
-    }
-
-    return (
-      <div key={`${year}-${month}`} className="flex flex-col">
-        <p className="mb-[var(--space-4)] text-center text-[15px] font-[var(--fw-bold)] capitalize text-app">
-          {monthLabel}
-        </p>
-        <div className="mb-[var(--space-1)] grid grid-cols-7 text-center">
-          {["L", "M", "X", "J", "V", "S", "D"].map((d) => (
-            <span key={d} className="py-1 text-[14px] font-[var(--fw-semibold)] text-muted">{d}</span>
-          ))}
-        </div>
-        <div className="grid grid-cols-7">{cells}</div>
-      </div>
-    );
-  };
-
-  const mobileMonths = useMemo(
-    () =>
-      Array.from({ length: monthCount }, (_, i) => {
-        const d = new Date(baseYear, baseMonth + i, 1);
-        return { year: d.getFullYear(), month: d.getMonth() };
-      }),
-    [monthCount, baseYear, baseMonth]
-  );
-
-  const desktopMonths = useMemo(
-    () =>
-      [0, 1].map((offset) => {
-        const d = new Date(baseYear, baseMonth + desktopPage * 2 + offset, 1);
-        return { year: d.getFullYear(), month: d.getMonth() };
-      }),
-    [desktopPage, baseYear, baseMonth]
-  );
-
+function Section({ title, extra, children, htmlFor }: { title: string; extra?: string; children: React.ReactNode; htmlFor?: string }) {
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      {/* Mobile: vertical scrollable months */}
-      <div className="min-h-0 flex-1 space-y-[var(--space-8)] overflow-y-auto pr-1 md:hidden">
-        {mobileMonths.map(({ year, month }) => renderMonth(year, month))}
-        <button
-          type="button"
-          onClick={() => setMonthCount((c) => c + 4)}
-          className="w-full py-[var(--space-4)] text-body-sm font-[var(--fw-semibold)] text-muted transition-colors hover:text-app"
-        >
-          Cargar más fechas
-        </button>
+    <div>
+      <div className="mb-[8px] mt-[20px] flex items-baseline gap-[8px]">
+        {htmlFor ? (
+          <label htmlFor={htmlFor} className="text-[14px] font-[var(--fw-semibold)] text-app">{title}</label>
+        ) : (
+          <b className="text-[14px] font-[var(--fw-semibold)] text-app">{title}</b>
+        )}
+        {extra && <span className="text-[12px] text-muted">{extra}</span>}
       </div>
-
-      {/* Desktop: two columns with side arrows */}
-      <div className="hidden md:flex md:h-full md:items-start md:gap-[var(--space-3)]">
-        <button
-          type="button"
-          onClick={() => setDesktopPage((p) => Math.max(0, p - 1))}
-          disabled={desktopPage === 0}
-          className="mt-[54px] flex size-8 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-surface disabled:opacity-20"
-          aria-label="Mes anterior"
-        >
-          <svg viewBox="0 0 24 24" fill="none" className="size-4">
-            <path d="M15 19l-7-7 7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
-        <div className="grid flex-1 grid-cols-2 gap-[var(--space-8)]">
-          {desktopMonths.map(({ year, month }) => renderMonth(year, month))}
-        </div>
-        <button
-          type="button"
-          onClick={() => setDesktopPage((p) => p + 1)}
-          className="mt-[54px] flex size-8 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-surface"
-          aria-label="Mes siguiente"
-        >
-          <svg viewBox="0 0 24 24" fill="none" className="size-4">
-            <path d="M9 5l7 7-7 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
-      </div>
+      {children}
     </div>
   );
 }
 
-// ─── Main modal ───────────────────────────────────────────────────────────────
+function Summary({ items }: { items: { icon: React.ReactNode; text: string }[] }) {
+  if (!items.length) return null;
+  return (
+    <div aria-label="Resumen" className="mt-[10px] flex flex-wrap gap-[6px]">
+      {items.map((it) => (
+        <span key={it.text} className="inline-flex h-[26px] max-w-full items-center gap-[5px] rounded-full bg-[var(--surface-2)] px-[10px] text-[12px] font-[var(--fw-semibold)] text-app">
+          <span aria-hidden className="flex shrink-0 text-muted">{it.icon}</span>
+          <span className="truncate">{it.text}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
 
+function CheckBox({ state }: { state: "on" | "off" | "mixed" | "lock" }) {
+  return (
+    <span
+      aria-hidden
+      className={`ml-auto flex size-[22px] shrink-0 items-center justify-center rounded-[6px] border-2 ${
+        state === "on" || state === "mixed" ? "border-[var(--primary)] bg-[var(--primary)] text-[var(--bg)]"
+        : state === "lock" ? "border-[var(--surface-2)] bg-[var(--surface-2)] text-muted"
+        : "border-[var(--border-strong)]"}`}
+    >
+      {state === "mixed" ? <Minus className="size-[14px]" strokeWidth={3} /> : state !== "off" && <Check className="size-[14px]" strokeWidth={3} />}
+    </span>
+  );
+}
+
+/* ─── The modal ──────────────────────────────────────────────────────────────── */
+
+/**
+ * «Nuevo plan» (canvas «Frimee · Chat · Bitácora», boards cpn-*): three named steps — Qué y dónde,
+ * Cuándo, Detalles — in a sheet on phones and a 560 px window on desktop. Also edits a plan
+ * (mode="edit": no «Quién va», «Guardar cambios»).
+ */
 export default function CreatePlanModal({ open, onClose, onCreate, currentUserId, initialValues, initialDates, mode = "create" }: CreatePlanModalProps) {
   const { isClosing, requestClose } = useModalCloseAnimation(onClose, open);
-  const wasOpenRef = useRef(false);
-  const coverInputRef = useRef<HTMLInputElement | null>(null);
-  const handleNextRef = useRef<() => void>(() => {});
-  const handleSubmitRef = useRef<() => void | Promise<void>>(() => {});
-  const initialSnapshotRef = useRef<string>("");
+  const phone = useIsPhone();
+  const editing = mode === "edit";
 
   const [step, setStep] = useState(1);
   const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
+  const [suggestedTitle, setSuggestedTitle] = useState<string | null>(null);
+  const [titleError, setTitleError] = useState(false);
   const [location, setLocation] = useState("");
-  const [startDate, setStartDate] = useState(() => toDateInputValue(new Date()));
-  const [endDate, setEndDate] = useState(() => toDateInputValue(addDays(new Date(), 1)));
-  const [visibility, setVisibility] = useState<CreatePlanPayload["visibility"]>(DEFAULT_VISIBILITY);
-  const [inviteMode, setInviteMode] = useState<CreatePlanPayload["inviteMode"]>(DEFAULT_INVITE_MODE);
+  const [place, setPlace] = useState<{ main: string; secondary: string } | null>(null);
+  const [when, setWhen] = useState<PlanWhen>(() => defaultWhen(initialDates));
+  const [whenError, setWhenError] = useState<string | null>(null);
+  const [description, setDescription] = useState("");
+  const [visibility, setVisibility] = useState<CreatePlanPayload["visibility"]>("SOLO_GRUPO");
   const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [feedbackState, setFeedbackState] = useState<ModalFeedbackState | null>(null);
+  const [failed, setFailed] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
-  const [friends, setFriends] = useState<PublicUserProfileRow[]>([]);
-  const [loadingFriends, setLoadingFriends] = useState(false);
-  const [invitedFriendIds, setInvitedFriendIds] = useState<Set<string>>(new Set());
-  const [groups, setGroups] = useState<ChatListItem[]>([]);
-  const [loadingGroups, setLoadingGroups] = useState(false);
-  const [selectedGroupIds, setSelectedGroupIds] = useState<Set<string>>(new Set());
-  const [inviteTab, setInviteTab] = useState<"friends" | "groups">("friends");
+  const [datesOpen, setDatesOpen] = useState(false);
+  const [calFirst, setCalFirst] = useState<string | null>(null);
 
-  const canSubmit = useMemo(() => {
-    if (!title.trim()) return false;
-    if (!location.trim()) return false;
-    if (!startDate || !endDate) return false;
-    return endDate >= startDate;
-  }, [endDate, location, startDate, title]);
+  const [tab, setTab] = useState<"friends" | "groups">("friends");
+  const [query, setQuery] = useState("");
+  const [friends, setFriends] = useState<PublicUserProfileRow[] | null>(null);
+  const [groups, setGroups] = useState<ChatListItem[] | null>(null);
+  const [invited, setInvited] = useState<Set<string>>(new Set());
+  /** The form as it opened, to ask before throwing changes away. */
+  const [initialSnapshot, setInitialSnapshot] = useState("");
 
-  const canContinue = useMemo(() => {
-    if (step === 1) return location.trim().length > 0;
-    if (step === 2) return !!(startDate && endDate && endDate >= startDate);
-    if (step === 3) return title.trim().length > 0;
-    return true;
-  }, [step, location, startDate, endDate, title]);
+  const wasOpenRef = useRef(false);
+  const coverInputRef = useRef<HTMLInputElement | null>(null);
+  const titleInputRef = useRef<HTMLInputElement | null>(null);
+  const headingRef = useRef<HTMLHeadingElement | null>(null);
 
-  const formSnapshot = useMemo(() => JSON.stringify({
-    title,
-    description,
-    location,
-    startDate,
-    endDate,
-    visibility,
-    coverImageUrl,
-    inviteMode,
-    invitedFriendIds: Array.from(invitedFriendIds).sort(),
-    selectedGroupIds: Array.from(selectedGroupIds).sort(),
-  }), [coverImageUrl, description, endDate, inviteMode, invitedFriendIds, location, selectedGroupIds, startDate, title, visibility]);
+  const snapshot = JSON.stringify({ title, location, when, description, visibility, coverImageUrl, invited: [...invited].sort() });
 
-  const hasProgress = Boolean(coverFile) || step > 1 || (initialSnapshotRef.current !== "" && formSnapshot !== initialSnapshotRef.current);
-
-  const requestDismiss = useCallback(() => {
-    if (saving) return;
-    if (hasProgress) {
-      setDiscardOpen(true);
-      return;
-    }
-    requestClose();
-  }, [hasProgress, requestClose, saving]);
-
-  const resetForm = useCallback(() => {
-    const today = new Date();
-    const nextTitle = initialValues?.title ?? "";
-    const nextDescription = initialValues?.description ?? "";
-    const nextLocation = initialValues?.location ?? "";
-    const nextStartDate = initialValues?.startDate ?? initialDates?.startDate ?? toDateInputValue(today);
-    const nextEndDate = initialValues?.endDate ?? initialDates?.endDate ?? toDateInputValue(addDays(today, 1));
-    const nextVisibility = initialValues?.visibility ?? DEFAULT_VISIBILITY;
-    const nextCoverImageUrl = initialValues?.coverImageUrl ?? null;
+  /* Reset every time it opens. */
+  const reset = useCallback(() => {
+    const v = initialValues;
+    const loc = v?.location ?? "";
     setStep(1);
-    setTitle(nextTitle);
-    setDescription(nextDescription);
-    setLocation(nextLocation);
-    setStartDate(nextStartDate);
-    setEndDate(nextEndDate);
-    setVisibility(nextVisibility);
-    setInviteMode(DEFAULT_INVITE_MODE);
-    setCoverImageUrl(nextCoverImageUrl);
+    setTitle(v?.title ?? "");
+    setSuggestedTitle(null);
+    setTitleError(false);
+    setLocation(loc);
+    setPlace(loc ? { main: loc.split(",")[0].trim(), secondary: loc.split(",").slice(1).join(",").trim() } : null);
+    setWhen(v?.when ?? defaultWhen(initialDates));
+    setWhenError(null);
+    setDescription(v?.description ?? "");
+    setVisibility(v?.visibility ?? "SOLO_GRUPO");
+    setCoverImageUrl(v?.coverImageUrl ?? null);
     setCoverFile(null);
     setSaving(false);
-    setErrorMsg(null);
-    setInvitedFriendIds(new Set());
-    setSelectedGroupIds(new Set());
-    setInviteTab("friends");
+    setFailed(false);
     setDiscardOpen(false);
-    initialSnapshotRef.current = JSON.stringify({
-      title: nextTitle,
-      description: nextDescription,
-      location: nextLocation,
-      startDate: nextStartDate,
-      endDate: nextEndDate,
-      visibility: nextVisibility,
-      coverImageUrl: nextCoverImageUrl,
-      inviteMode: DEFAULT_INVITE_MODE,
-      invitedFriendIds: [],
-      selectedGroupIds: [],
-    });
+    setDatesOpen(false);
+    setCalFirst(null);
+    setTab("friends");
+    setQuery("");
+    setInvited(new Set());
+    setInitialSnapshot(JSON.stringify({
+      title: v?.title ?? "", location: loc, when: v?.when ?? defaultWhen(initialDates), description: v?.description ?? "",
+      visibility: v?.visibility ?? "SOLO_GRUPO", coverImageUrl: v?.coverImageUrl ?? null, invited: [],
+    }));
   }, [initialValues, initialDates]);
 
   useEffect(() => {
-    if (!open) {
-      wasOpenRef.current = false;
-      return;
-    }
+    if (!open) { wasOpenRef.current = false; return; }
     if (wasOpenRef.current) return;
     wasOpenRef.current = true;
-
-    const resetTimer = window.setTimeout(() => {
-      resetForm();
-    }, 0);
-
-    return () => window.clearTimeout(resetTimer);
-  }, [open, resetForm]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !saving) {
-        requestDismiss();
-        return;
-      }
-
-      if (e.key !== "Enter" || saving || e.defaultPrevented || e.isComposing) return;
-      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
-
-      const target = e.target;
-      if (!(target instanceof HTMLElement)) return;
-      if (target.closest("button, a, [role='button'], [contenteditable='true']")) return;
-      if (target instanceof HTMLTextAreaElement) return;
-
-      e.preventDefault();
-      if (step === TOTAL_STEPS) {
-        void handleSubmitRef.current();
-        return;
-      }
-      if (canContinue) {
-        handleNextRef.current();
-      }
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [canContinue, open, requestDismiss, saving, step]);
+    const t = window.setTimeout(reset, 0);
+    return () => window.clearTimeout(t);
+  }, [open, reset]);
 
   useEffect(() => {
     if (!open) return;
     document.body.setAttribute("data-create-plan-open", "true");
-    return () => {
-      document.body.removeAttribute("data-create-plan-open");
-    };
+    return () => document.body.removeAttribute("data-create-plan-open");
   }, [open]);
 
+  useEffect(() => () => { if (coverImageUrl?.startsWith("blob:")) URL.revokeObjectURL(coverImageUrl); }, [coverImageUrl]);
+
+  /* People to invite: loaded when «Detalles» is first shown. */
   useEffect(() => {
-    if (inviteMode !== "now" || friends.length > 0) return;
+    if (!open || editing || step !== 3) return;
     let cancelled = false;
-    const load = async () => {
-      setLoadingFriends(true);
-      try {
-        const activeFriends = await fetchActiveFriends();
-        if (!cancelled) setFriends(activeFriends);
-      } catch (e) {
-        if (!cancelled) console.error(e);
-      } finally {
-        if (!cancelled) setLoadingFriends(false);
-      }
-    };
-    void load();
+    if (friends === null) {
+      fetchActiveFriends()
+        .then((r) => { if (!cancelled) setFriends(r); })
+        .catch((e: unknown) => { console.error("[nuevo-plan] friends", e); if (!cancelled) setFriends([]); });
+    }
+    if (groups === null) {
+      listChats()
+        .then((r) => { if (!cancelled) setGroups(r.filter((c) => c.tipo === "GRUPO")); })
+        .catch((e: unknown) => { console.error("[nuevo-plan] groups", e); if (!cancelled) setGroups([]); });
+    }
     return () => { cancelled = true; };
-  }, [inviteMode, friends.length]);
+  }, [open, editing, step, friends, groups]);
+
+  /* Everyone who can be invited, by id (friends + members of my groups). */
+  const people = useMemo(() => {
+    const map = new Map<string, Person>();
+    for (const g of groups ?? []) for (const m of g.miembros) map.set(m.id, { id: m.id, name: m.nombre, image: m.profile_image });
+    for (const f of friends ?? []) map.set(f.id, { id: f.id, name: f.nombre, image: f.profile_image });
+    if (currentUserId) map.delete(currentUserId);
+    return map;
+  }, [friends, groups, currentUserId]);
+
+  // Focus the step title when the step changes (screen readers hear where they are).
+  const firstRender = useRef(true);
+  useEffect(() => {
+    if (firstRender.current) { firstRender.current = false; return; }
+    if (step > 1) headingRef.current?.focus();
+  }, [step]);
+
+  const hasChanges = Boolean(coverFile) || (initialSnapshot !== "" && snapshot !== initialSnapshot);
+
+  const requestDismiss = useCallback(() => {
+    if (saving) return;
+    if (hasChanges) { setDiscardOpen(true); return; }
+    requestClose();
+  }, [hasChanges, requestClose, saving]);
 
   useEffect(() => {
-    if (inviteMode !== "now" || groups.length > 0) return;
-    let cancelled = false;
-    const load = async () => {
-      setLoadingGroups(true);
-      try {
-        const all = await listChats();
-        if (!cancelled) setGroups(all.filter((c) => c.tipo === "GRUPO"));
-      } catch (e) {
-        if (!cancelled) console.error(e);
-      } finally {
-        if (!cancelled) setLoadingGroups(false);
-      }
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !e.defaultPrevented && !discardOpen && !datesOpen) requestDismiss();
     };
-    void load();
-    return () => { cancelled = true; };
-  }, [inviteMode, groups.length]);
-
-  useEffect(() => {
-    return () => { if (coverImageUrl && isBlobUrl(coverImageUrl)) URL.revokeObjectURL(coverImageUrl); };
-  }, [coverImageUrl]);
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, requestDismiss, discardOpen, datesOpen]);
 
   if (!open) return null;
 
-  const onPickCover = () => coverInputRef.current?.click();
+  /* ── validation ── */
+
+  const oneDay = when.startDate === when.endDate;
+  const endBeforeStart =
+    !when.allDay && oneDay && !when.endNextDay && Boolean(when.startTime && when.endTime) && toMin(when.endTime) <= toMin(when.startTime);
+
+  function checkStep1() {
+    if (title.trim()) return true;
+    setTitleError(true);
+    setStep(1);
+    window.requestAnimationFrame(() => titleInputRef.current?.focus());
+    return false;
+  }
+  function checkStep2() {
+    if (!when.startDate || !when.endDate) { setWhenError("Elige las fechas del plan."); setStep(2); return false; }
+    if (!when.allDay && (!when.startTime || !when.endTime)) { setWhenError("Elige la hora de inicio y la de fin."); setStep(2); return false; }
+    if (endBeforeStart) { setStep(2); return false; }
+    setWhenError(null);
+    return true;
+  }
+
+  function next() {
+    if (step === 1 && !checkStep1()) return;
+    if (step === 2 && !checkStep2()) return;
+    setStep((s) => Math.min(3, s + 1));
+  }
+
+  async function submit() {
+    if (saving) return;
+    if (!checkStep1() || !checkStep2()) return;
+    setSaving(true);
+    setFailed(false);
+    try {
+      await onCreate({
+        title: title.trim(),
+        description: description.trim(),
+        location: location.trim(),
+        when: when.allDay ? { ...when, startTime: "", endTime: "", endNextDay: false } : when,
+        coverImageUrl,
+        coverFile,
+        visibility,
+        invited: [...invited].map((id) => ({ id, name: people.get(id)?.name ?? "" })).filter((p) => p.name),
+      });
+      setSaving(false);
+      requestClose();
+    } catch (error) {
+      console.error("[nuevo-plan] save failed:", (error as { message?: string })?.message ?? error);
+      setSaving(false);
+      setFailed(true);
+    }
+  }
+
+  /* ── field handlers ── */
+
+  const onTitle = (v: string) => {
+    setTitle(v);
+    if (v.trim()) setTitleError(false);
+    if (suggestedTitle && v !== suggestedTitle) setSuggestedTitle(null);
+  };
+
+  const onPick = (p: PickedPlace) => {
+    setPlace({ main: p.main, secondary: [placeKind(p.types), p.secondary].filter(Boolean).join(" · ") });
+    if (!editing && isDestination(p.types) && (!title.trim() || title === suggestedTitle)) {
+      const s = `Viaje a ${p.main}`;
+      setTitle(s);
+      setSuggestedTitle(s);
+      setTitleError(false);
+    }
+  };
+
+  const removePlace = () => {
+    setPlace(null);
+    setLocation("");
+    if (suggestedTitle && title === suggestedTitle) { setTitle(""); setSuggestedTitle(null); }
+  };
+
+  const setDates = (a: string, b: string) => {
+    setWhen((w) => ({ ...w, startDate: a, endDate: b, endNextDay: a === b ? w.endNextDay : false }));
+    if (a && b) setWhenError(null);
+  };
+
+  const setAllDay = (allDay: boolean) => {
+    setWhen((w) => {
+      if (allDay || (w.startTime && w.endTime)) return { ...w, allDay };
+      const start = nextHour();
+      const endM = toMin(start) + 120;
+      return { ...w, allDay, startTime: start, endTime: fromMin(endM), endNextDay: w.startDate === w.endDate && endM >= 24 * 60 };
+    });
+    setWhenError(null);
+  };
+
+  const setStart = (v: string) => {
+    setWhen((w) => {
+      if (!w.startTime || !w.endTime || w.startDate !== w.endDate) return { ...w, startTime: v };
+      // Moving the start keeps the duration (as in «Añadir al plan»).
+      const dur = toMin(w.endTime) + (w.endNextDay ? 1440 : 0) - toMin(w.startTime);
+      const endM = toMin(v) + (dur > 0 ? dur : 60);
+      return { ...w, startTime: v, endTime: fromMin(endM % 1440), endNextDay: endM >= 1440 };
+    });
+  };
+
+  const setEnd = (v: string, o?: { nextDay?: boolean }) => {
+    setWhen((w) => ({ ...w, endTime: v, endNextDay: w.startDate === w.endDate ? Boolean(o?.nextDay) : false }));
+  };
 
   const onCoverChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
-    if (coverImageUrl && isBlobUrl(coverImageUrl)) URL.revokeObjectURL(coverImageUrl);
     setCoverImageUrl(URL.createObjectURL(file));
     setCoverFile(file);
   };
 
-  function handleNext() {
-    if (step < TOTAL_STEPS) setStep((s) => s + 1);
-  }
+  const toggle = (ids: string[], on: boolean) =>
+    setInvited((prev) => {
+      const n = new Set(prev);
+      for (const id of ids) { if (on) n.add(id); else n.delete(id); }
+      return n;
+    });
 
-  function handleBack() {
-    if (step > 1) setStep((s) => s - 1);
-  }
+  /* ── texts ── */
 
-  async function handleSubmit() {
-    if (!canSubmit || saving) {
-      if (!canSubmit) setErrorMsg("Completa todos los campos para continuar.");
-      return;
-    }
-    setErrorMsg(null);
-    setSaving(true);
-    setFeedbackState({ type: "loading" });
-    try {
-      await onCreate({
-        title: title.trim(),
-        location: location.trim(),
-        startDate,
-        endDate,
-        startTime: null,
-        endTime: null,
-        startAllDay: true,
-        endAllDay: true,
-        coverImageUrl,
-        coverFile,
-        visibility,
-        inviteMode,
-        invitedFriendIds: [...invitedFriendIds].filter((id) => id !== currentUserId),
-      });
-      setFeedbackState({ type: "success", label: "Plan creado" });
-    } catch (err) {
-      const message =
-        typeof err === "object" && err && "message" in err ? String(err.message) : "No se pudo crear el plan.";
-      setErrorMsg(message);
-      setFeedbackState({ type: "error", message });
-    } finally {
-      setSaving(false);
-    }
-  }
+  const datesText = when.startDate && when.endDate ? rangeLabel(when.startDate, when.endDate) : "";
+  const dayCount = when.startDate && when.endDate ? Math.round((parse(when.endDate).getTime() - parse(when.startDate).getTime()) / 86_400_000) + 1 : 0;
+  const hoursText = when.allDay ? "Todo el día" : when.startTime && when.endTime ? `${when.startTime} – ${when.endTime}${when.endNextDay ? " +1" : ""}` : "";
+  const durationMin = !when.allDay && oneDay && when.startTime && when.endTime && !endBeforeStart
+    ? toMin(when.endTime) + (when.endNextDay ? 1440 : 0) - toMin(when.startTime) : 0;
+  const placeText = place?.main || location.trim();
+  const peopleCount = invited.size;
 
-  handleNextRef.current = handleNext;
-  handleSubmitRef.current = handleSubmit;
+  const summary2 = placeText ? [{ icon: <MapPin className="size-[13px]" />, text: placeText }] : [];
+  const summary3 = [
+    ...summary2,
+    ...(datesText ? [{ icon: <CalendarDays className="size-[13px]" />, text: datesText }] : []),
+    ...(hoursText ? [{ icon: when.allDay ? <Sun className="size-[13px]" /> : <Clock className="size-[13px]" />, text: hoursText }] : []),
+  ];
 
-  const meta = STEP_META[step - 1];
-  const desktopMaxWidth = step === 2 ? "840px" : step === 4 ? "620px" : "540px";
-  const primaryFooterButtonClass =
-    "rounded-[14px] bg-[var(--text-primary)] px-[var(--space-8)] py-[12px] text-body-sm font-[var(--fw-semibold)] text-contrast-token transition-opacity hover:opacity-85 disabled:opacity-[var(--disabled-opacity)]";
+  /* ── step bodies ── */
+
+  const step1 = (
+    <div>
+      <label htmlFor="np-nombre" className="block text-[12px] font-[var(--fw-semibold)] tracking-[.02em] text-muted">Nombre del plan</label>
+      <div className={`flex min-h-[60px] items-center gap-[8px] ${titleError ? "border-b-2 border-[var(--error)]" : "border-b border-[var(--border-strong)] focus-within:border-b-2 focus-within:border-[var(--primary)]"}`}>
+        <input
+          id="np-nombre"
+          ref={titleInputRef}
+          value={title}
+          onChange={(e) => onTitle(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); next(); } }}
+          placeholder="Escapada a Lisboa"
+          autoFocus={!phone}
+          maxLength={120}
+          aria-invalid={titleError || undefined}
+          aria-describedby={titleError ? "np-nombre-error" : undefined}
+          className="h-[58px] min-w-0 flex-1 bg-transparent [font-family:var(--font-display-face)] text-[32px] tracking-[-0.01em] text-app outline-none placeholder:text-muted"
+        />
+        {suggestedTitle && title === suggestedTitle && (
+          <span className="inline-flex h-[24px] shrink-0 items-center gap-[5px] rounded-full border border-dashed border-[var(--chat-me-border)] px-[8px] text-[12px] font-[var(--fw-semibold)] text-muted">
+            <svg width="11" height="11" viewBox="0 0 24 24" aria-hidden><path d="M12 2.5 L21.5 12 L12 21.5 L2.5 12 Z" fill="none" stroke="var(--primary)" strokeWidth="2.5" strokeLinejoin="round" /></svg>
+            Sugerido
+          </span>
+        )}
+      </div>
+      {titleError && (
+        <p id="np-nombre-error" role="alert" className="mt-[8px] flex items-start gap-[8px] text-[13px] leading-[1.4] text-[var(--error)]">
+          <CircleAlert aria-hidden className="mt-[1px] size-[16px] shrink-0" />Ponle un nombre al plan.
+        </p>
+      )}
+
+      <Section title="Dónde" extra="opcional" htmlFor={place ? undefined : "np-donde"}>
+        {place ? (
+          <div className="flex min-h-[60px] items-center gap-[12px] rounded-[8px] border border-[var(--border-strong)] py-[8px] pl-[12px] pr-[4px]">
+            <span aria-hidden className="flex size-[36px] shrink-0 items-center justify-center rounded-[8px] bg-[var(--chat-me)] text-[var(--chat-accent-text)]">
+              <MapPin className="size-[18px]" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[15px] font-[var(--fw-semibold)] text-app">{place.main}</span>
+              {place.secondary && <span className="block truncate text-[12px] text-muted">{place.secondary}</span>}
+            </span>
+            <button type="button" onClick={removePlace} aria-label={`Quitar ${place.main}`} title="Quitar" className={`${ICON_BTN} text-muted`}>
+              <X className="size-[18px]" aria-hidden />
+            </button>
+          </div>
+        ) : (
+          <div className={FIELD}>
+            <Search aria-hidden className="size-[18px] shrink-0 text-muted" />
+            <LocationAutocomplete
+              inputId="np-donde"
+              value={location}
+              onChange={(v) => setLocation(v)}
+              onPick={onPick}
+              placeholder="Ciudad, sitio o dirección"
+              dropdownVariant="surface"
+              inputClassName="h-[44px] w-full min-w-0 bg-transparent text-[15px] text-app outline-none placeholder:text-muted"
+            />
+          </div>
+        )}
+      </Section>
+    </div>
+  );
+
+  const pickInline = (d: string) => {
+    if (!calFirst || d < calFirst) { setCalFirst(d); return; }
+    setDates(calFirst, d);
+    setCalFirst(null);
+  };
+
+  const step2 = (
+    <div>
+      <h2 ref={headingRef} tabIndex={-1} className="[font-family:var(--font-display-face)] text-[32px] leading-[1.15] text-app outline-none">¿Cuándo?</h2>
+      <Summary items={summary2} />
+
+      {phone ? (
+        <Section title="Fechas">
+          <button
+            type="button"
+            aria-haspopup="dialog"
+            aria-label={`Fechas: ${datesText || "sin elegir"}. Cambiar`}
+            onClick={() => setDatesOpen(true)}
+            className="flex min-h-[52px] w-full items-center gap-[10px] rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface-2)] pl-[12px] pr-[4px] text-left"
+          >
+            <CalendarDays aria-hidden className="size-[18px] shrink-0 text-muted" />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[15px] font-[var(--fw-semibold)] tabular-nums text-app">{datesText || "Elige las fechas"}</span>
+              {dayCount > 0 && <span className="block text-[12px] text-muted">{dayCount} {dayCount === 1 ? "día" : "días"}</span>}
+            </span>
+            <span aria-hidden className="flex w-[32px] justify-center text-muted"><ChevronDown className="size-[18px]" /></span>
+          </button>
+        </Section>
+      ) : (
+        <div>
+          <div className="mb-[8px] mt-[20px]">
+            <b className="text-[14px] font-[var(--fw-semibold)] text-app">Fechas</b>
+          </div>
+          <div className="flex justify-center">
+            <div className="w-[332px]">
+              <RangeCalendar a={when.startDate} b={when.endDate} first={calFirst} hover onPick={pickInline} onEscape={() => setCalFirst(null)} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      <Section title="Horario">
+        <div role="radiogroup" aria-label="Horario" className="grid grid-cols-2 gap-[4px] rounded-[8px] bg-[var(--surface-2)] p-[4px]">
+          {([
+            { allDay: true, label: "Todo el día", Icon: Sun },
+            { allDay: false, label: "Con horario", Icon: Clock },
+          ] as const).map(({ allDay, label, Icon }) => {
+            const on = when.allDay === allDay;
+            return (
+              <button
+                key={label}
+                type="button"
+                role="radio"
+                aria-checked={on}
+                onClick={() => setAllDay(allDay)}
+                className={`flex h-[44px] items-center justify-center gap-[8px] rounded-[6px] border text-[14px] ${
+                  on ? "border-[var(--border-strong)] bg-[var(--bg)] font-[var(--fw-semibold)] text-app" : "border-transparent font-[var(--fw-medium)] text-muted"}`}
+              >
+                <Icon aria-hidden className="size-[16px]" />{label}
+              </button>
+            );
+          })}
+        </div>
+
+        {when.allDay ? (
+          when.startDate && when.endDate && (
+            <p className="mt-[8px] text-[13px] text-muted">
+              {oneDay
+                ? `El ${lower(dayLabel(when.startDate))}, el día entero.`
+                : `Del ${lower(parse(when.startDate).getMonth() === parse(when.endDate).getMonth() ? dayNoMonth(when.startDate) : dayLabel(when.startDate))} al ${lower(dayLabel(when.endDate))}, días enteros.`}
+            </p>
+          )
+        ) : (
+          <>
+            <div className="mt-[12px] flex gap-[12px]">
+              <div className="min-w-0 flex-1">
+                <p className="mb-[6px] text-[12px] font-[var(--fw-semibold)] tracking-[.02em] text-muted">Inicio</p>
+                <TimePicker
+                  variant="box"
+                  label={oneDay ? "Hora de inicio" : `Hora de inicio · ${dayLabel(when.startDate)}`}
+                  subtitle={[when.startDate ? dayLabel(when.startDate) : "", title.trim()].filter(Boolean).join(" · ")}
+                  value={when.startTime}
+                  onChange={setStart}
+                />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="mb-[6px] text-[12px] font-[var(--fw-semibold)] tracking-[.02em] text-muted">Fin</p>
+                <TimePicker
+                  variant="box"
+                  label={oneDay ? "Hora de fin" : `Hora de fin · ${dayLabel(when.endDate)}`}
+                  subtitle={[when.endDate ? dayLabel(when.endDate) : "", title.trim()].filter(Boolean).join(" · ")}
+                  value={when.endTime}
+                  invalid={endBeforeStart}
+                  onChange={setEnd}
+                  nextDayBefore={oneDay && when.startTime ? when.startTime : undefined}
+                />
+                {durationMin > 0 && (
+                  <p className="mt-[6px] text-[12px] text-muted">
+                    {when.endNextDay ? `${dayNoMonth(plusDays(when.startDate, 1))} · dura ${durationText(durationMin)}` : `Dura ${durationText(durationMin)}`}
+                  </p>
+                )}
+              </div>
+            </div>
+            {!oneDay && when.startTime && when.endTime && (
+              <p className="mt-[8px] text-[13px] text-muted">
+                Empieza el {lower(dayLabel(when.startDate))} a las {when.startTime} y acaba el {lower(dayLabel(when.endDate))} a las {when.endTime}.
+              </p>
+            )}
+            {endBeforeStart && (
+              <div role="alert" className="mt-[8px] flex items-start gap-[8px] text-[13px] leading-[1.4] text-[var(--error)]">
+                <CircleAlert aria-hidden className="mt-[1px] size-[16px] shrink-0" />
+                <div>
+                  La hora de fin es anterior a la de inicio.
+                  <div className="mt-[2px]">
+                    <button type="button" onClick={() => setWhen((w) => ({ ...w, endNextDay: true }))} className="min-h-[36px] text-[13px] font-[var(--fw-semibold)] text-[var(--chat-accent-text)]">
+                      Que acabe el {lower(dayNoMonth(plusDays(when.startDate, 1)))} (+1)
+                    </button>
+                    <span className="text-[12px] text-muted"> o cambia la hora de fin</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+        {whenError && (
+          <p role="alert" className="mt-[8px] flex items-start gap-[8px] text-[13px] leading-[1.4] text-[var(--error)]">
+            <CircleAlert aria-hidden className="mt-[1px] size-[16px] shrink-0" />{whenError}
+          </p>
+        )}
+      </Section>
+    </div>
+  );
+
+  const q = norm(query);
+  const friendRows = (friends ?? []).filter((f) => f.id !== currentUserId && (!q || norm(f.nombre).includes(q) || norm(f.username ?? "").includes(q)));
+  const groupRows = (groups ?? []).filter((g) => !q || norm(g.nombre ?? "").includes(q));
+
+  const step3 = (
+    <div>
+      <h2 ref={headingRef} tabIndex={-1} className="[font-family:var(--font-display-face)] text-[32px] leading-[1.15] text-app outline-none">Detalles</h2>
+      <Summary items={summary3} />
+
+      {!editing && (
+        <Section title="Quién va" extra={peopleCount ? `Tú y ${peopleCount} más` : "Solo tú de momento"}>
+          <div role="tablist" aria-label="Invitar desde" className="flex gap-[20px] border-b border-app">
+            {([["friends", "Amigos"], ["groups", "Grupos"]] as const).map(([v, label]) => (
+              <button
+                key={v}
+                type="button"
+                role="tab"
+                aria-selected={tab === v}
+                onClick={() => setTab(v)}
+                className={`min-h-[44px] border-b-2 text-[14px] font-[var(--fw-semibold)] ${tab === v ? "border-[var(--text-primary)] text-app" : "border-transparent text-muted"}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className={`${FIELD} mt-[10px] h-[44px]`}>
+            <Search aria-hidden className="size-[18px] shrink-0 text-muted" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              aria-label={tab === "friends" ? "Buscar amigos" : "Buscar grupos"}
+              placeholder={tab === "friends" ? "Buscar amigos" : "Buscar grupos"}
+              className="h-[42px] min-w-0 flex-1 bg-transparent text-[15px] text-app outline-none placeholder:text-muted"
+            />
+          </div>
+
+          <div role="group" aria-label="Quién va" className="mt-[4px]">
+            <div className="flex min-h-[52px] w-full items-center gap-[12px] px-[4px]">
+              <Avatar name="Tú" size="md" />
+              <span className="min-w-0 flex-1">
+                <span className="block text-[15px] font-[var(--fw-semibold)] text-app">Tú</span>
+                <span className="block text-[12px] text-muted">{editing ? "En el plan" : "Creas el plan"}</span>
+              </span>
+              <CheckBox state="lock" />
+            </div>
+
+            {tab === "friends" ? (
+              friends === null ? (
+                <div role="status" className="space-y-[8px] py-[6px]" aria-label="Cargando tus amigos">
+                  {[0, 1, 2].map((i) => <div key={i} className="h-[40px] animate-pulse rounded-[6px] bg-[var(--surface-2)] motion-reduce:animate-none" />)}
+                </div>
+              ) : friendRows.length === 0 ? (
+                <p className="py-[12px] text-[14px] text-muted">
+                  {q ? `Nadie con «${query.trim()}» entre tus amigos.` : "Aún no tienes amigos en Frimee. Podrás invitar con el enlace del plan."}
+                </p>
+              ) : (
+                friendRows.map((f) => {
+                  const on = invited.has(f.id);
+                  return (
+                    <button
+                      key={f.id}
+                      type="button"
+                      role="checkbox"
+                      aria-checked={on}
+                      onClick={() => toggle([f.id], !on)}
+                      className="flex min-h-[52px] w-full items-center gap-[12px] rounded-[8px] px-[4px] text-left hover:bg-[var(--surface-2)]"
+                    >
+                      <Avatar name={f.nombre} src={f.profile_image} size="md" />
+                      <span className={`min-w-0 flex-1 truncate text-[15px] text-app ${on ? "font-[var(--fw-semibold)]" : ""}`}>{f.nombre}</span>
+                      <CheckBox state={on ? "on" : "off"} />
+                    </button>
+                  );
+                })
+              )
+            ) : groups === null ? (
+              <div role="status" className="space-y-[8px] py-[6px]" aria-label="Cargando tus grupos">
+                {[0, 1, 2].map((i) => <div key={i} className="h-[40px] animate-pulse rounded-[6px] bg-[var(--surface-2)] motion-reduce:animate-none" />)}
+              </div>
+            ) : groupRows.length === 0 ? (
+              <p className="py-[12px] text-[14px] text-muted">{q ? `Ningún grupo con «${query.trim()}».` : "No estás en ningún grupo."}</p>
+            ) : (
+              groupRows.map((g) => {
+                const ids = g.miembros.map((m) => m.id).filter((id) => id !== currentUserId);
+                const n = ids.filter((id) => invited.has(id)).length;
+                const state = ids.length && n === ids.length ? "on" : n ? "mixed" : "off";
+                return (
+                  <button
+                    key={g.chat_id}
+                    type="button"
+                    role="checkbox"
+                    aria-checked={state === "on" ? true : state === "mixed" ? "mixed" : false}
+                    onClick={() => toggle(ids, state !== "on")}
+                    className="flex min-h-[52px] w-full items-center gap-[12px] rounded-[8px] px-[4px] text-left hover:bg-[var(--surface-2)]"
+                  >
+                    <Avatar name={g.nombre ?? "Grupo"} src={g.foto} size="md" />
+                    <span className="min-w-0 flex-1">
+                      <span className={`block truncate text-[15px] text-app ${state !== "off" ? "font-[var(--fw-semibold)]" : ""}`}>{g.nombre ?? "Grupo"}</span>
+                      <span className="block truncate text-[12px] text-muted">
+                        {state === "mixed" ? `${n} de ${ids.length} invitados` : `${ids.length + 1} personas`}
+                      </span>
+                    </span>
+                    <CheckBox state={state} />
+                  </button>
+                );
+              })
+            )}
+          </div>
+          {peopleCount > 0 && (
+            <p className="mt-[6px] text-[12px] text-muted">
+              Invitas a {[...invited].slice(0, 3).map((id) => firstName(people.get(id)?.name ?? "")).filter(Boolean).join(", ")}
+              {peopleCount > 3 ? ` y ${peopleCount - 3} más` : ""}.
+            </p>
+          )}
+        </Section>
+      )}
+
+      <Section title="Visibilidad">
+        <div role="radiogroup" aria-label="Visibilidad" className="grid grid-cols-2 gap-[8px]">
+          {([
+            { value: "SOLO_GRUPO", label: "Privado", hint: "Solo los invitados pueden verlo", Icon: Lock },
+            { value: "PÚBLICO", label: "Público", hint: "Visible para todos", Icon: Globe },
+          ] as const).map(({ value, label, hint, Icon }) => {
+            const on = visibility === value;
+            return (
+              <button
+                key={value}
+                type="button"
+                role="radio"
+                aria-checked={on}
+                onClick={() => setVisibility(value)}
+                className={`flex min-h-[56px] w-full items-start gap-[12px] rounded-[8px] text-left ${
+                  on ? "border-2 border-[var(--primary)] bg-[var(--chat-me)] px-[11px] py-[9px]" : "border border-[var(--border-strong)] px-[12px] py-[10px]"}`}
+              >
+                <span aria-hidden className={`relative mt-[1px] size-[20px] shrink-0 rounded-full border-2 ${on ? "border-[var(--primary)]" : "border-[var(--border-strong)]"}`}>
+                  {on && <span className="absolute inset-[3px] rounded-full bg-[var(--primary)]" />}
+                </span>
+                <span className="min-w-0">
+                  <span className="flex items-center gap-[6px] text-[15px] font-[var(--fw-semibold)] text-app"><Icon aria-hidden className="size-[15px]" />{label}</span>
+                  <span className="mt-[2px] block text-[13px] leading-[1.35] text-muted">{hint}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </Section>
+
+      <Section title="Portada" extra="opcional">
+        {coverImageUrl ? (
+          <div className="relative h-[120px] w-full overflow-hidden rounded-[8px] border border-app">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={coverImageUrl} alt="Portada del plan" className="size-full object-cover" />
+            <div className="absolute bottom-[8px] right-[8px] flex gap-[6px]">
+              <button type="button" onClick={() => coverInputRef.current?.click()} className="min-h-[36px] rounded-[8px] bg-black/60 px-[12px] text-[13px] font-[var(--fw-semibold)] text-white">Cambiar</button>
+              <button type="button" onClick={() => { setCoverImageUrl(null); setCoverFile(null); }} className="min-h-[36px] rounded-[8px] bg-black/60 px-[12px] text-[13px] font-[var(--fw-semibold)] text-white">Quitar</button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => coverInputRef.current?.click()}
+            className="flex h-[72px] w-full items-center justify-center gap-[8px] rounded-[8px] border border-dashed border-[var(--border-strong)] text-[14px] font-[var(--fw-semibold)] text-app hover:bg-[var(--surface-2)]"
+          >
+            <ImagePlus aria-hidden className="size-[18px]" />Añadir foto de portada
+          </button>
+        )}
+        <input ref={coverInputRef} type="file" accept="image/*" onChange={onCoverChange} className="hidden" />
+      </Section>
+
+      <Section title="Descripción" extra="opcional" htmlFor="np-descripcion">
+        <textarea
+          id="np-descripcion"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="De qué va, qué llevar…"
+          rows={3}
+          maxLength={1000}
+          className="block min-h-[76px] w-full resize-none rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface-2)] p-[12px] text-[15px] leading-[1.45] text-app outline-none placeholder:text-muted focus:border-[var(--primary)] focus:shadow-[0_0_0_1px_var(--primary)]"
+        />
+      </Section>
+    </div>
+  );
+
+  /* ── frame ── */
+
+  const label = `${editing ? "Editar plan" : "Nuevo plan"}, paso ${step} de 3`;
+  const busyText = editing ? "Guardando…" : "Creando el plan…";
 
   return (
     <>
-    <div
-      data-closing={isClosing ? "true" : "false"}
-      className="app-modal-overlay fixed inset-0 z-[60] flex items-end justify-center md:items-center"
-      onClick={saving ? undefined : requestDismiss}
-      role="presentation"
-    >
       <div
-        className="app-modal-panel relative flex h-dvh w-full flex-col overflow-hidden bg-[var(--bg)] pt-[env(safe-area-inset-top)] md:h-[min(760px,90dvh)] md:w-full md:max-w-[var(--create-plan-desktop-max-width)] md:rounded-[24px] md:pt-0 md:shadow-elev-4 md:transition-[max-width] md:duration-300 md:[transition-timing-function:cubic-bezier(0.22,1,0.36,1)]"
-        style={{ "--create-plan-desktop-max-width": desktopMaxWidth } as CSSProperties}
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
+        data-closing={isClosing ? "true" : "false"}
+        className="app-modal-overlay fixed inset-0 z-[60] flex items-end justify-center bg-black/60 md:items-center"
+        onClick={saving ? undefined : requestDismiss}
+        role="presentation"
       >
-        {feedbackState && (
-          <ModalFeedback
-            state={feedbackState}
-            onSuccess={requestClose}
-            onDismissError={() => setFeedbackState(null)}
-          />
-        )}
-        {/* ── Progress bar ── */}
-        <div className="h-[3px] w-full shrink-0 bg-[var(--surface-2)]">
-          <div
-            className="h-full bg-primary-token transition-all duration-[400ms] [transition-timing-function:var(--ease-standard)]"
-            style={{ width: `${(step / TOTAL_STEPS) * 100}%` }}
-          />
-        </div>
+        <section
+          role="dialog"
+          aria-modal="true"
+          aria-label={label}
+          aria-busy={saving || undefined}
+          onClick={(e) => e.stopPropagation()}
+          className="app-modal-panel relative flex w-full flex-col overflow-hidden bg-[var(--bg)] max-md:h-[calc(100dvh-env(safe-area-inset-top)-12px)] max-md:rounded-t-[16px] max-md:border-t max-md:border-app md:h-[min(820px,92dvh)] md:max-w-[560px] md:rounded-[8px] md:border md:border-app md:shadow-[0_12px_32px_rgba(0,0,0,0.35)]"
+        >
+          <span aria-hidden className="mx-auto mt-[8px] block h-[4px] w-[36px] shrink-0 rounded-full bg-[var(--border)] md:hidden" />
 
-        {/* ── Top nav ── */}
-        <div className="flex shrink-0 items-center justify-between px-[var(--space-5)] py-[var(--space-3)]">
-          {step > 1 ? (
-            <IconButton onClick={handleBack} disabled={saving} tone="app" aria-label="Volver">
-              <svg viewBox="0 0 24 24" fill="none" className="size-[18px]">
-                <path d="M15 19l-7-7 7-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </IconButton>
-          ) : (
-            <div className="size-11" aria-hidden="true" />
-          )}
-          <span className="text-caption font-[var(--fw-medium)] text-muted">{step} de {TOTAL_STEPS}</span>
-          <CloseButton onClick={requestDismiss} disabled={saving} tone="app" />
-        </div>
-
-        {/* ── Content ── */}
-        <div className={`flex-1 min-h-0 px-[var(--space-6)] pt-[var(--space-2)] ${step === 2 ? "flex flex-col overflow-hidden pb-[var(--space-6)]" : "overflow-y-scroll [scrollbar-gutter:stable] pb-[var(--space-8)]"}`}>
-          <div className={`shrink-0 ${step === 2 ? "mb-[var(--space-5)] md:mb-[var(--space-6)]" : "mb-[var(--space-8)]"}`}>
-            <h2 className="font-[var(--fw-bold)] leading-tight text-app" style={{ fontSize: "clamp(22px, 5vw, 28px)" }}>
-              {meta.title}
-            </h2>
-            <p className="mt-[var(--space-1)] text-body-sm text-muted">{meta.subtitle}</p>
+          <div className="flex shrink-0 items-center gap-[4px] px-[8px] pt-[8px] max-md:pt-0">
+            {step > 1 ? (
+              <button type="button" onClick={() => setStep((s) => s - 1)} disabled={saving} aria-label="Volver al paso anterior" title="Volver" className={ICON_BTN}>
+                <ChevronLeft className="size-[22px]" aria-hidden />
+              </button>
+            ) : (
+              <span aria-hidden className="w-[44px] shrink-0" />
+            )}
+            <div className="flex-1 text-center text-[12px] text-muted">{editing ? "Editar plan" : "Nuevo plan"}</div>
+            <button type="button" onClick={requestDismiss} disabled={saving} aria-label="Cerrar" title="Cerrar" className={ICON_BTN}>
+              <X className="size-[22px]" aria-hidden />
+            </button>
           </div>
 
-          {/* ── Step 1: Destino ── */}
-          {step === 1 && (
-            <div className="group flex items-center gap-[var(--space-3)] border-b-2 border-app pb-[var(--space-3)] transition-colors duration-200 focus-within:border-primary-token">
-              <svg viewBox="0 0 24 24" fill="none" className="size-5 shrink-0 text-muted transition-colors group-focus-within:text-primary-token" aria-hidden="true">
-                <path d="M12 2C8.13 2 5 5.13 5 9C5 14.25 12 22 12 22C12 22 19 14.25 19 9C19 5.13 15.87 2 12 2Z" stroke="currentColor" strokeWidth="1.5" />
-                <circle cx="12" cy="9" r="2.5" fill="currentColor" />
-              </svg>
-              <LocationAutocomplete
-                value={location}
-                onChange={(v) => setLocation(v)}
-                placeholder="París, Tokyo, Nueva York..."
-                onCommit={canContinue ? handleNext : undefined}
-                onEnter={canContinue ? handleNext : undefined}
-                autoFocus
-              />
-            </div>
-          )}
-
-          {/* ── Step 2: Fechas ── */}
-          {step === 2 && (
-            <div className="min-h-0 flex-1">
-              <InlineRangeCalendar
-                startDate={startDate}
-                endDate={endDate}
-                onChange={(start, end) => { setStartDate(start); setEndDate(end); }}
-              />
-            </div>
-          )}
-
-          {/* ── Step 3: Nombre + portada ── */}
-          {step === 3 && (
-            <div className="space-y-[var(--space-5)]">
-              {coverImageUrl ? (
-                <div className="relative h-[160px] w-full overflow-hidden rounded-[16px]">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={coverImageUrl} alt="Portada" className="h-full w-full object-cover" />
-                  <button
-                    type="button"
-                    onClick={onPickCover}
-                    className="absolute inset-0 flex items-center justify-center bg-black/30 text-body-sm font-[var(--fw-semibold)] text-white transition-colors hover:bg-black/45"
-                  >
-                    Cambiar foto
-                  </button>
-                </div>
+          <nav aria-label={`Pasos: ${step} de 3`} className="grid shrink-0 grid-cols-3 gap-[8px] px-[20px] pt-[4px]">
+            {STEPS.map((name, i) => {
+              const n = i + 1;
+              const done = n < step;
+              const cur = n === step;
+              const inner = (
+                <>
+                  <i aria-hidden className={`block h-[3px] rounded-[2px] ${done || cur ? "bg-[var(--primary)]" : "bg-[var(--border)]"}`} />
+                  <span className="flex items-center gap-[4px]">
+                    {done && <Check aria-hidden className="size-[12px] text-[var(--chat-accent-text)]" strokeWidth={3} />}
+                    {name}
+                  </span>
+                </>
+              );
+              const cls = `flex min-h-[44px] flex-col justify-center gap-[6px] text-left text-[12px] font-[var(--fw-semibold)] ${cur ? "text-app" : "text-muted"}`;
+              return done ? (
+                <button key={name} type="button" disabled={saving} onClick={() => setStep(n)} className={cls}>{inner}</button>
               ) : (
-                <button
-                  type="button"
-                  onClick={onPickCover}
-                  className="flex w-full items-center gap-[var(--space-3)] rounded-[16px] border-2 border-dashed border-app p-[var(--space-4)] text-muted transition-colors hover:border-[var(--border-strong)] hover:text-app"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" className="size-5 shrink-0" stroke="currentColor" strokeWidth="1.5">
-                    <rect x="3" y="3" width="18" height="18" rx="3" />
-                    <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" stroke="none" />
-                    <path d="M3 16l5-5 4 4 3-3 6 6" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                  <span className="text-body-sm font-[var(--fw-medium)]">Añadir foto de portada (opcional)</span>
-                </button>
-              )}
-              <input ref={coverInputRef} type="file" accept="image/*" onChange={onCoverChange} className="hidden" />
+                <div key={name} aria-current={cur ? "step" : undefined} className={cls}>{inner}</div>
+              );
+            })}
+          </nav>
 
-              <div className={`flex items-center gap-[var(--space-3)] ${FIELD_LINE_CLS}`}>
-                <Plane className="size-5 shrink-0 text-muted" strokeWidth={1.5} aria-hidden="true" />
-                <input
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Verano en Italia"
-                  autoFocus
-                  className="w-full flex-1 bg-transparent text-[22px] font-[var(--fw-semibold)] text-app shadow-none outline-none ring-0 placeholder:text-muted focus:outline-none focus:ring-0 focus:shadow-none focus-visible:shadow-none"
-                />
+          <div inert={saving} className="min-h-0 flex-1 overflow-y-auto px-[20px] pb-[20px] pt-[12px]">
+            {failed && (
+              <div role="alert" className="mb-[16px] flex items-start gap-[10px] rounded-[8px] border border-[var(--error)] bg-[color-mix(in_srgb,var(--error)_10%,var(--bg))] p-[12px] text-[14px] leading-[1.4] text-app">
+                <CircleAlert aria-hidden className="mt-[1px] size-[18px] shrink-0 text-[var(--error)]" />
+                {editing
+                  ? "No se pudieron guardar los cambios. Comprueba la conexión y vuelve a intentarlo."
+                  : "No se pudo crear el plan. Comprueba la conexión y vuelve a intentarlo. No se ha guardado nada a medias."}
               </div>
-              <div className={`flex items-center gap-[var(--space-3)] ${FIELD_LINE_CLS}`}>
-                <FileText className="size-5 shrink-0 text-muted" strokeWidth={1.5} aria-hidden="true" />
-                <input
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Descripción breve (opcional)"
-                  className="w-full flex-1 bg-transparent text-body-sm text-app shadow-none outline-none ring-0 placeholder:text-muted focus:outline-none focus:ring-0 focus:shadow-none focus-visible:shadow-none"
-                />
-              </div>
-            </div>
-          )}
+            )}
+            {step === 1 ? step1 : step === 2 ? step2 : step3}
+          </div>
 
-          {/* ── Step 4: Detalles ── */}
-          {step === 4 && (
-            <div className="space-y-[var(--space-6)]">
-              <div>
-                <p className="mb-[var(--space-3)] text-body-sm font-[var(--fw-semibold)] text-app">Visibilidad</p>
-                <div className="grid grid-cols-2 gap-[var(--space-3)]">
-                  {([
-                    {
-                      value: "PÚBLICO" as const,
-                      label: "Público",
-                      description: "Visible para todos",
-                      Icon: Globe,
-                    },
-                    {
-                      value: "SOLO_GRUPO" as const,
-                      label: "Privado",
-                      description: "Solo los invitados pueden verlo",
-                      Icon: Lock,
-                    },
-                  ]).map(({ value, label, description, Icon }) => (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => setVisibility(value)}
-                      className={`flex flex-col items-start gap-[var(--space-2)] rounded-[16px] border-2 p-[var(--space-4)] text-left transition-colors ${
-                        visibility === value ? "border-[var(--primary)]/40 bg-[var(--primary)]/10" : "border-app bg-app hover:bg-surface"
-                      }`}
-                    >
-                      <div className="flex items-center gap-[var(--space-2)]">
-                        <Icon className={`${visibility === value ? "text-primary-token" : "text-muted"} size-[18px] shrink-0`} strokeWidth={1.7} />
-                        <span className="text-body-sm font-[var(--fw-semibold)] text-app">{label}</span>
-                      </div>
-                      <span className="text-caption text-muted">{description}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <p className="mb-[var(--space-3)] text-body-sm font-[var(--fw-semibold)] text-app">Tipo de plan</p>
-                <div className="grid grid-cols-2 gap-[var(--space-3)]">
-                  {([
-                    {
-                      value: "later" as const,
-                      label: "Individual",
-                      description: "Solo tú de momento",
-                      Icon: User,
-                    },
-                    {
-                      value: "now" as const,
-                      label: "Grupal",
-                      description: "Invita amigos ahora",
-                      Icon: Users,
-                    },
-                  ]).map(({ value, label, description, Icon }) => (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => setInviteMode(value)}
-                      className={`flex flex-col items-start gap-[var(--space-2)] rounded-[16px] border-2 p-[var(--space-4)] text-left transition-colors ${
-                        inviteMode === value ? "border-[var(--primary)]/40 bg-[var(--primary)]/10" : "border-app bg-app hover:bg-surface"
-                      }`}
-                    >
-                      <div className="flex items-center gap-[var(--space-2)]">
-                        <Icon className={`${inviteMode === value ? "text-primary-token" : "text-muted"} size-[18px] shrink-0`} strokeWidth={1.7} />
-                        <span className="text-body-sm font-[var(--fw-semibold)] text-app">{label}</span>
-                      </div>
-                      <span className="text-caption text-muted">{description}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div
-                className="grid transition-all duration-[250ms] ease-out"
-                style={{ gridTemplateRows: inviteMode === "now" ? "1fr" : "0fr", opacity: inviteMode === "now" ? 1 : 0 }}
-              >
-                <div className="overflow-hidden">
-                  {/* ── Tabs ── */}
-                  <Tabs
-                    tabs={[
-                      {
-                        value: "friends",
-                        label: "Amigos",
-                        badge: invitedFriendIds.size > 0 ? (
-                          <span className="inline-flex size-[16px] items-center justify-center rounded-full bg-[var(--text-primary)] text-[14px] text-contrast-token">
-                            {invitedFriendIds.size}
-                          </span>
-                        ) : undefined,
-                      },
-                      {
-                        value: "groups",
-                        label: "Grupos",
-                        badge: selectedGroupIds.size > 0 ? (
-                          <span className="inline-flex size-[16px] items-center justify-center rounded-full bg-[var(--text-primary)] text-[14px] text-contrast-token">
-                            {selectedGroupIds.size}
-                          </span>
-                        ) : undefined,
-                      },
-                    ]}
-                    value={inviteTab}
-                    onChange={(tab) => setInviteTab(tab as "friends" | "groups")}
-                    className="mb-[var(--space-3)] text-body-sm"
-                    fontWeight="var(--fw-semibold)"
-                  />
-
-                  {/* ── Friends list ── */}
-                  {inviteTab === "friends" && (
-                    loadingFriends ? (
-                      <div className="flex justify-center py-4">
-                        <div className="size-[18px] animate-spin rounded-full border-2 border-[var(--text-primary)] border-t-transparent" />
-                      </div>
-                    ) : friends.length === 0 ? (
-                      <p className="text-body-sm text-muted">No tienes amigos para invitar.</p>
-                    ) : (
-                      <div className="max-h-[calc(3*52px)] overflow-y-auto [scrollbar-gutter:stable]">
-                        {friends.map((friend) => {
-                          const selected = invitedFriendIds.has(friend.id);
-                          const avatarLabel = (friend.nombre.trim()[0] || "?").toUpperCase();
-                          return (
-                            <button
-                              key={friend.id}
-                              type="button"
-                              onClick={() => {
-                                setInvitedFriendIds((prev) => {
-                                  const next = new Set(prev);
-                                  if (next.has(friend.id)) next.delete(friend.id);
-                                  else next.add(friend.id);
-                                  return next;
-                                });
-                              }}
-                              className={`flex h-[52px] w-full items-center gap-[var(--space-3)] rounded-[8px] px-2 transition-colors hover:bg-surface ${selected ? "bg-surface" : ""}`}
-                            >
-                              {friend.profile_image ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={friend.profile_image} alt={friend.nombre} className="size-[32px] rounded-full object-cover" referrerPolicy="no-referrer" />
-                              ) : (
-                                <div className="flex size-[32px] items-center justify-center rounded-full bg-[var(--text-primary)] text-[14px] font-[var(--fw-semibold)] text-contrast-token">
-                                  {avatarLabel}
-                                </div>
-                              )}
-                              <span className="flex-1 text-left text-body-sm font-[var(--fw-medium)]">{friend.nombre}</span>
-<div className={`flex size-[20px] items-center justify-center rounded-full border-2 transition-colors ${selected ? "border-[var(--text-primary)] bg-[var(--text-primary)]" : "border-app"}`}>
-                                {selected && (
-                                  <svg viewBox="0 0 24 24" fill="none" className="size-[12px]" aria-hidden="true">
-                                    <path d="M5 13l4 4L19 7" stroke="var(--bg)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                                  </svg>
-                                )}
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )
-                  )}
-
-                  {/* ── Groups list ── */}
-                  {inviteTab === "groups" && (
-                    loadingGroups ? (
-                      <div className="flex justify-center py-4">
-                        <div className="size-[18px] animate-spin rounded-full border-2 border-[var(--text-primary)] border-t-transparent" />
-                      </div>
-                    ) : groups.length === 0 ? (
-                      <p className="text-body-sm text-muted">No perteneces a ningún grupo.</p>
-                    ) : (
-                      <div className="max-h-[calc(3*52px)] overflow-y-auto [scrollbar-gutter:stable]">
-                        {groups.map((group) => {
-                          const selected = selectedGroupIds.has(group.chat_id);
-                          const avatarLabel = (group.nombre?.trim()[0] || "G").toUpperCase();
-                          const memberCount = group.miembros.length;
-                          return (
-                            <button
-                              key={group.chat_id}
-                              type="button"
-                              onClick={() => {
-                                const groupMemberIds = group.miembros
-                                  .map((m) => m.id)
-                                  .filter((id) => id !== currentUserId);
-                                const isSelecting = !selectedGroupIds.has(group.chat_id);
-                                setSelectedGroupIds((prev) => {
-                                  const next = new Set(prev);
-                                  if (isSelecting) next.add(group.chat_id);
-                                  else next.delete(group.chat_id);
-                                  return next;
-                                });
-                                setInvitedFriendIds((prev) => {
-                                  const next = new Set(prev);
-                                  if (isSelecting) {
-                                    groupMemberIds.forEach((id) => next.add(id));
-                                  } else {
-                                    // only remove members not in any other selected group
-                                    const otherGroupIds = new Set(
-                                      [...selectedGroupIds].filter((gid) => gid !== group.chat_id)
-                                    );
-                                    const keptByOtherGroup = new Set(
-                                      [...otherGroupIds].flatMap((gid) => {
-                                        const g = groups.find((gr) => gr.chat_id === gid);
-                                        return (g?.miembros ?? []).map((m) => m.id);
-                                      })
-                                    );
-                                    groupMemberIds.forEach((id) => {
-                                      if (!keptByOtherGroup.has(id)) next.delete(id);
-                                    });
-                                  }
-                                  return next;
-                                });
-                              }}
-                              className={`flex h-[52px] w-full items-center gap-[var(--space-3)] rounded-[8px] px-2 transition-colors hover:bg-surface ${selected ? "bg-surface" : ""}`}
-                            >
-                              {group.foto ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={group.foto} alt={group.nombre ?? "Grupo"} className="size-[32px] rounded-full object-cover" referrerPolicy="no-referrer" />
-                              ) : (
-                                <div className="flex size-[32px] items-center justify-center rounded-full bg-[var(--surface-2)] text-[14px] font-[var(--fw-semibold)] text-app">
-                                  {avatarLabel}
-                                </div>
-                              )}
-                              <span className="flex-1 text-left text-body-sm font-[var(--fw-medium)]">{group.nombre ?? "Grupo"}</span>
-                              <span className="text-caption text-muted">{memberCount} miembros</span>
-                              <div className={`flex size-[20px] items-center justify-center rounded-full border-2 transition-colors ${selected ? "border-[var(--text-primary)] bg-[var(--text-primary)]" : "border-app"}`}>
-                                {selected && (
-                                  <svg viewBox="0 0 24 24" fill="none" className="size-[12px]" aria-hidden="true">
-                                    <path d="M5 13l4 4L19 7" stroke="var(--bg)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                                  </svg>
-                                )}
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )
-                  )}
-                </div>
-              </div>
-
-              {errorMsg && <p className="text-body-sm text-error-token">{errorMsg}</p>}
-            </div>
-          )}
-        </div>
-
-        {/* ── Footer ── */}
-        <div className="shrink-0 border-t border-app px-[var(--space-5)] pb-[calc(var(--space-4)+env(safe-area-inset-bottom))] pt-[var(--space-4)] md:py-[var(--space-4)]">
-          {step === 2 ? (
-            <div className="flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => {
-                  const today = new Date();
-                  setStartDate(toDateInputValue(today));
-                  setEndDate(toDateInputValue(addDays(today, 1)));
-                }}
-                className="text-body-sm font-[var(--fw-semibold)] text-app underline underline-offset-2 transition-opacity hover:opacity-60"
-              >
-                Restablecer
+          <div className="flex shrink-0 items-center justify-between gap-[12px] border-t border-app px-[20px] pt-[12px] pb-[calc(12px+env(safe-area-inset-bottom))] max-md:pb-[calc(24px+env(safe-area-inset-bottom))]">
+            {step === 3 ? (
+              <button type="button" onClick={() => void submit()} disabled={saving} className={`${FILL} flex-1`}>
+                {saving ? <><Loader2 aria-hidden className="size-[18px] animate-spin motion-reduce:animate-none" />{busyText}</>
+                  : failed ? "Reintentar"
+                  : editing ? "Guardar cambios" : "Crear plan"}
               </button>
-              <button
-                type="button"
-                onClick={handleNext}
-                className="rounded-[14px] bg-[var(--text-primary)] px-[var(--space-8)] py-[12px] text-body-sm font-[var(--fw-semibold)] text-contrast-token transition-opacity hover:opacity-85"
-              >
-                Siguiente
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center justify-between">
-              <div className="min-w-[88px]" aria-hidden="true" />
-              <button
-                type="button"
-                onClick={step === TOTAL_STEPS ? handleSubmit : handleNext}
-                disabled={!canContinue || saving}
-                className={primaryFooterButtonClass}
-              >
-                {step === TOTAL_STEPS ? (saving ? "Guardando..." : mode === "edit" ? "Guardar cambios" : "Crear plan") : "Continuar"}
-              </button>
-            </div>
-          )}
-        </div>
+            ) : (
+              <>
+                {step === 2 ? (
+                  <button type="button" onClick={() => void submit()} disabled={saving} className={TEXT_BTN}>
+                    {saving ? <><Loader2 aria-hidden className="size-[16px] animate-spin motion-reduce:animate-none" />{busyText}</>
+                      : editing ? "Guardar ya" : "Crear ya, sin detalles"}
+                  </button>
+                ) : <span />}
+                <button type="button" onClick={next} disabled={saving} className={`${FILL} min-w-[132px]`}>Siguiente</button>
+              </>
+            )}
+          </div>
+          <span className="sr-only" aria-live="polite">{saving ? busyText : ""}</span>
+        </section>
       </div>
-    </div>
-    <DiscardChangesDialog
-      open={discardOpen}
-      onCancel={() => setDiscardOpen(false)}
-      onDiscard={() => {
-        setDiscardOpen(false);
-        requestClose();
-      }}
-    />
+
+      {datesOpen && (
+        <PhoneRangeSheet
+          inicio={when.startDate}
+          fin={when.endDate}
+          onChange={setDates}
+          onClose={() => setDatesOpen(false)}
+          label="Fechas del plan"
+        />
+      )}
+
+      <DiscardChangesDialog
+        open={discardOpen}
+        onCancel={() => setDiscardOpen(false)}
+        onDiscard={() => { setDiscardOpen(false); requestClose(); }}
+      />
     </>
   );
 }

@@ -103,7 +103,7 @@ export function DateRangePicker(props: DateRangePickerProps) {
     <>
       {trigger}
       {open && (phone
-        ? <PhoneSheet {...props} label={label} onClose={() => { setOpen(false); triggerRef.current?.focus(); }} />
+        ? <PhoneRangeSheet {...props} label={label} onClose={() => { setOpen(false); triggerRef.current?.focus(); }} />
         : <DesktopMenu {...props} anchor={triggerRef} onClose={() => { setOpen(false); triggerRef.current?.focus(); }} />)}
     </>
   );
@@ -111,7 +111,7 @@ export function DateRangePicker(props: DateRangePickerProps) {
 
 // ── shared calendar ───────────────────────────────────────────────────────────
 
-type CalProps = {
+export type CalProps = {
   /** Applied range (shown when not choosing). */
   a: string;
   b: string;
@@ -123,7 +123,8 @@ type CalProps = {
   onEscape: () => void;
 };
 
-function Calendar({ a, b, first, sugerido, hover, onPick, onEscape }: CalProps) {
+/** The month grid on its own (inline in «Nuevo plan» on desktop). */
+export function RangeCalendar({ a, b, first, sugerido, hover, onPick, onEscape }: CalProps) {
   const today = todayIso();
   const start0 = first ?? a ?? sugerido?.inicio ?? today;
   const [view, setView] = useState(() => { const d = parse(start0 || today); return { y: d.getFullYear(), m: d.getMonth() }; });
@@ -314,7 +315,7 @@ function DesktopMenu({ inicio, fin, sugerido, onChange, anchor, onClose, label =
       style={{ left: pos?.left ?? 0, top: pos?.top ?? 0, width: W, visibility: pos ? "visible" : "hidden" }}
       onClick={(e) => e.stopPropagation()}
     >
-      <Calendar a={inicio} b={fin} first={first} sugerido={sugerido} hover onPick={pick} onEscape={onClose} />
+      <RangeCalendar a={inicio} b={fin} first={first} sugerido={sugerido} hover onPick={pick} onEscape={onClose} />
       <div className="mt-[8px] flex items-center justify-between border-t border-app pt-[4px]">
         {sugerido?.inicio ? <Legend /> : <span />}
         <button type="button" onClick={() => { setFirst(null); onChange("", ""); }}
@@ -327,7 +328,8 @@ function DesktopMenu({ inicio, fin, sugerido, onChange, anchor, onClose, label =
 
 // ── phones: bottom sheet with «Usar …» ────────────────────────────────────────
 
-function PhoneSheet({ inicio, fin, sugerido, onChange, onClose, label = "Fechas del plan" }: DateRangePickerProps & { onClose: () => void }) {
+/** The phone sheet on its own, for a custom trigger. */
+export function PhoneRangeSheet({ inicio, fin, sugerido, onChange, onClose, label = "Fechas del plan" }: DateRangePickerProps & { onClose: () => void }) {
   const [draft, setDraft] = useState<{ a: string; b: string }>({ a: inicio, b: fin });
   const [first, setFirst] = useState<string | null>(null);
   const pick = (d: string) => {
@@ -356,7 +358,7 @@ function PhoneSheet({ inicio, fin, sugerido, onChange, onClose, label = "Fechas 
           </div>
           <div className="mt-[8px] flex justify-center">
             <div className="w-[322px]">
-              <Calendar a={draft.b ? draft.a : ""} b={draft.b} first={first} sugerido={sugerido} hover={false} onPick={pick} onEscape={onClose} />
+              <RangeCalendar a={draft.b ? draft.a : ""} b={draft.b} first={first} sugerido={sugerido} hover={false} onPick={pick} onEscape={onClose} />
             </div>
           </div>
           {sugerido?.inicio && <div className="mt-[10px]"><Legend /></div>}
