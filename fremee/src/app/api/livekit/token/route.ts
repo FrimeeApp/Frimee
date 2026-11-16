@@ -20,9 +20,6 @@ export async function POST(req: NextRequest) {
 
   const rl = await checkRateLimit(`livekit:${user.id}`, 10, 60_000);
   if (rl.limited) return withCors(req, rateLimitedResponse(rl.retryAfter));
-  const guest = await checkGuestDailyLimit(user, "livekit");
-  if (guest.limited) return withCors(req, guestLimitedResponse(guest.retryAfter));
-
   const body = await req.json() as unknown;
   if (typeof body !== "object" || body === null) {
     return withCors(req, NextResponse.json({ error: "Invalid request body" }, { status: 400 }));
@@ -52,6 +49,10 @@ export async function POST(req: NextRequest) {
     .eq("user_id", user.id)
     .maybeSingle();
   if (!member) return withCors(req, NextResponse.json({ error: "forbidden" }, { status: 403 }));
+
+  // Only valid calls use up a guest's daily quota (a refused room or chat does not count).
+  const guest = await checkGuestDailyLimit(user, "livekit");
+  if (guest.limited) return withCors(req, guestLimitedResponse(guest.retryAfter));
 
   const at = new AccessToken(apiKey, apiSecret, {
     identity: user.id,

@@ -152,13 +152,6 @@ export async function promoteToAdminEndpoint(planId: number, targetUserId: strin
   return data as string;
 }
 
-export async function kickMemberEndpoint(planId: number, targetUserId: string): Promise<string> {
-  const supabase = createBrowserSupabaseClient();
-  const { data, error } = await supabase.rpc("fn_plan_kick_member", { p_plan_id: planId, p_target_user_id: targetUserId });
-  if (error) throw error;
-  return data as string;
-}
-
 /** Only its creator, and only when nobody else is in it (fn_plan_eliminar). */
 export async function eliminarPlanEndpoint(planId: number): Promise<void> {
   const supabase = createBrowserSupabaseClient();
@@ -166,11 +159,21 @@ export async function eliminarPlanEndpoint(planId: number): Promise<void> {
   if (error) throw error;
 }
 
-export async function leavePlanEndpoint(planId: number): Promise<string> {
+/** Leave or kick out with the notice the database wrote in the plan chat («Ana salió del plan»). */
+export type PlanSalida = { resultado: string; aviso: { mensaje_id: number; texto: string } | null };
+
+export async function salirPlanEndpoint(planId: number): Promise<PlanSalida> {
   const supabase = createBrowserSupabaseClient();
-  const { data, error } = await supabase.rpc("fn_plan_leave", { p_plan_id: planId });
+  const { data, error } = await supabase.rpc("fn_plan_salir", { p_plan_id: planId });
   if (error) throw error;
-  return data as string;
+  return data as PlanSalida;
+}
+
+export async function expulsarPlanEndpoint(planId: number, targetUserId: string): Promise<PlanSalida> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_plan_expulsar", { p_plan_id: planId, p_target_user_id: targetUserId });
+  if (error) throw error;
+  return data as PlanSalida;
 }
 
 export type UpdatePlanParams = {

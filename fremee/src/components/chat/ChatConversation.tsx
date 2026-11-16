@@ -76,7 +76,7 @@ import { PollCreatorModal } from "@/components/chat/PollCreatorModal";
 import { PLAN_WRITE_COMMANDS, VALID_TASK_CATEGORIES } from "@/components/chat/chat.constants";
 import { crearTareaEndpoint, misTareasEndpoint, todasTareasEndpoint, updateEstadoTareaEndpoint, recordarEndpoint, type TareaRow } from "@/services/api/endpoints/tareas.endpoint";
 import { getBalancesForPlanEndpoint } from "@/services/api/endpoints/gastos.endpoint";
-import { promoteToAdminEndpoint, demoteAdminEndpoint, kickMemberEndpoint, leavePlanEndpoint } from "@/services/api/endpoints/plans.endpoint";
+import { promoteToAdminEndpoint, demoteAdminEndpoint, expulsarPlanEndpoint, salirPlanEndpoint } from "@/services/api/endpoints/plans.endpoint";
 import { callFrimeeAssistant, type FrimeeHistoryEntry } from "@/services/api/endpoints/frimee.endpoint";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
 import { useBloqueos } from "@/hooks/useBloqueos";
@@ -439,6 +439,8 @@ export function ChatConversation({
   // Same for onLeave: a new function from the parent must not resubscribe the channel.
   const onLeaveRef = useRef(onLeave);
   useEffect(() => { onLeaveRef.current = onLeave; });
+  const onBackRef = useRef(onBack);
+  useEffect(() => { onBackRef.current = onBack; });
 
   const name = resolveChatName(chat, currentUserId);
   const avatar = resolveChatAvatar(chat, currentUserId);
@@ -513,7 +515,7 @@ export function ChatConversation({
       }
     })();
     void indicePromise.finally(() => markChatRead(chat.chat_id).then(() => { void channelRef.current?.send({ type: "broadcast", event: "read", payload: { user_id: currentUserId } }); }));
-  }, [chat.chat_id, currentUserId, onLeave]);
+  }, [chat.chat_id, currentUserId]);
 
   useEffect(() => {
     const supabase = supabaseRef.current;
@@ -562,7 +564,7 @@ export function ChatConversation({
       })
       .on("broadcast", { event: "kick_member" }, ({ payload }) => {
         const { user_id } = payload as { user_id: string };
-        if (user_id === currentUserId) onLeaveRef.current?.();
+        if (user_id === currentUserId) (onLeaveRef.current ?? onBackRef.current)?.();
       })
       .on("broadcast", { event: "poll_vote" }, ({ payload }) => {
         const { mensaje_id } = payload as { mensaje_id: number; option_index: number };
@@ -1183,7 +1185,7 @@ export function ChatConversation({
   const getFreshMembers = async (): Promise<typeof chat.miembros> => {
     try {
       const fresh = await getChatMiembros(chat.chat_id);
-      return fresh.map((m) => ({ id: m.user_id, nombre: m.nombre, username: null, profile_image: m.profile_image }));
+      return fresh.map((m) => ({ id: m.id, nombre: m.nombre, username: m.username, profile_image: m.profile_image }));
     } catch {
       return chat.miembros;
     }
@@ -1722,14 +1724,16 @@ export function ChatConversation({
       if (target.id === currentUserId) return "No puedes expulsarte a ti mismo. Usa /salir para abandonar el plan.";
 
       try {
-        const result = await kickMemberEndpoint(planId, target.id);
+        const { resultado: result, aviso } = await expulsarPlanEndpoint(planId, target.id);
         if (result === "not_admin") return "Solo los admins pueden expulsar miembros.";
         if (result === "cannot_kick_self") return "No puedes expulsarte a ti mismo.";
         if (result === "cannot_kick_owner") return "No puedes expulsar al creador del plan.";
         if (result === "target_not_member") return `${target.nombre} no está en este plan.`;
+        if (aviso) showMyServerMessage(aviso.mensaje_id, aviso.texto);
         void channelRef.current?.send({ type: "broadcast", event: "kick_member", payload: { user_id: target.id } });
         onMembersChanged?.();
-        return `${target.nombre} ha sido expulsado del plan.`;
+        // The notice already says it («Quitaste a Ana del plan»).
+        return aviso ? "" : `${target.nombre} ha sido expulsado del plan.`;
       } catch {
         return "No pude expulsar al usuario, inténtalo de nuevo.";
       }
@@ -1739,11 +1743,14 @@ export function ChatConversation({
       if (!planId) return "Este comando solo está disponible en el chat de un plan.";
 
       try {
-        const result = await leavePlanEndpoint(planId);
+        const { resultado: result, aviso } = await salirPlanEndpoint(planId);
         if (result === "not_member") return "No eres miembro de este plan.";
         if (result === "owner_cannot_leave") return "El creador del plan no puede abandonarlo.";
         if (result === "last_admin") return "Eres el único admin. Promueve a otro miembro con /admin @usuario antes de salir.";
-        onLeave?.();
+        // The others see «Ana salió del plan» live; then out of a chat that is no longer mine
+        // (Messages has no onLeave: back to the list).
+        if (aviso) showMyServerMessage(aviso.mensaje_id, aviso.texto);
+        (onLeave ?? onBack)?.();
         return "";
       } catch {
         return "No pude abandonar el plan, inténtalo de nuevo.";
