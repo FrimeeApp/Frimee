@@ -79,6 +79,7 @@ import { getBalancesForPlanEndpoint } from "@/services/api/endpoints/gastos.endp
 import { promoteToAdminEndpoint, demoteAdminEndpoint, kickMemberEndpoint, leavePlanEndpoint } from "@/services/api/endpoints/plans.endpoint";
 import { callFrimeeAssistant, type FrimeeHistoryEntry } from "@/services/api/endpoints/frimee.endpoint";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
+import { useBloqueos } from "@/hooks/useBloqueos";
 import { ImageLightbox } from "@/components/ui/ImageLightbox";
 import { LinkifiedText } from "@/components/chat/bitacora/LinkifiedText";
 import dynamic from "next/dynamic";
@@ -187,6 +188,28 @@ function formatDateLabel(date: Date): string {
   return date.toLocaleDateString("es-ES", { day: "numeric" });
 }
 
+/** How a «Se eliminó» moment is written; «bloqueado» is only ever drawn, never stored. */
+const TAPADO = JSON.stringify({ type: "eliminado", por: "bloqueado" });
+
+/**
+ * In groups and plans, what someone I blocked writes is drawn as «Mensaje de una persona bloqueada»
+ * (only plain messages: their polls, expenses, notices and calls stay as they are):
+ * no text, media or reply, and (being an «eliminado» moment) no actions or reactions. Quotes of
+ * those messages too. In their 1 a 1 (bloqueados = null) what they said before stays as it was.
+ */
+function taparBloqueados<T extends MensajeRow>(list: T[], bloqueados: Set<string> | null, me: string): T[] {
+  if (!bloqueados || bloqueados.size === 0) return list;
+  const tapados = new Set(list.filter((m) => m.sender_id !== me && bloqueados.has(m.sender_id)
+    && !m.tipo?.startsWith("call_") && !parseMoment(m.texto)).map((m) => m.id));
+  return list.map((m) => {
+    if (tapados.has(m.id)) {
+      return { ...m, texto: TAPADO, audio_url: null, document_url: null, document_name: null, image_url: null, image_type: null, reply_to_id: null, reply_texto: null, reply_sender_nombre: null };
+    }
+    if (m.reply_to_id != null && tapados.has(m.reply_to_id)) return { ...m, reply_texto: TAPADO };
+    return m;
+  });
+}
+
 export function ChatConversation({
   chat,
   currentUserId,
@@ -244,6 +267,12 @@ export function ChatConversation({
 }) {
   type LocalMsg = MensajeRow & { _key?: number };
   const [messages, setMessages] = useState<LocalMsg[]>([]);
+  // Who I blocked: their group messages are covered, and in their 1 a 1 I cannot write.
+  const { bloqueados, desbloquear } = useBloqueos();
+  const [unblockError, setUnblockError] = useState<string | null>(null);
+  // Who I blocked, only in a 1 a 1 (null elsewhere): read inside the realtime handlers.
+  const bloqueoRef = useRef<{ set: Set<string>; directo: boolean }>({ set: bloqueados, directo: false });
+  useEffect(() => { bloqueoRef.current = { set: bloqueados, directo: chat.tipo === "DIRECTO" }; }, [bloqueados, chat.tipo]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -504,6 +533,10 @@ export function ChatConversation({
       .channel(topic)
       .on("broadcast", { event: "new_message" }, ({ payload }) => {
         const msg = payload as MensajeRow;
+        // The sender broadcasts it themselves: in a 1 a 1 with someone I blocked it must not show
+        // (the database already keeps it from me; in groups it is drawn covered).
+        const bloqueo = bloqueoRef.current;
+        if (bloqueo.directo && bloqueo.set.has(msg.sender_id)) return;
         if (sentMsgIdsRef.current.has(msg.id)) {
           sentMsgIdsRef.current.delete(msg.id);
           return;
@@ -512,7 +545,7 @@ export function ChatConversation({
           if (prev.some((m) => m.id === msg.id)) return prev;
           return [...prev, msg];
         });
-        onNewMessageRef.current(msg);
+        onNewMessageRef.current(bloqueo.directo ? msg : taparBloqueados([msg], bloqueo.set, currentUserId)[0]);
         void markChatRead(chat.chat_id).then(() => { void channelRef.current?.send({ type: "broadcast", event: "read", payload: { user_id: currentUserId } }); });
       })
       .on("broadcast", { event: "edit_message" }, ({ payload }) => {
@@ -2508,7 +2541,14 @@ export function ChatConversation({
   // Shown in time order: a message created out of order (the plan's welcome before the guest demo's
   // backdated ones) would otherwise open the same day twice.
   // In an old stretch, what arrives meanwhile waits below it until you go back to the latest.
-  const timelineMessages = inTimeOrder(detached ? messages.filter((m) => m.id > 0 && m.id <= detached.endId) : messages);
+  const timelineMessages = taparBloqueados(
+    inTimeOrder(detached ? messages.filter((m) => m.id > 0 && m.id <= detached.endId) : messages),
+    chat.tipo === "DIRECTO" ? null : bloqueados,
+    currentUserId,
+  );
+  const blockedOther = chat.tipo === "DIRECTO"
+    ? chat.miembros.find((m) => m.id !== currentUserId && bloqueados.has(m.id)) ?? null
+    : null;
   const timeline = buildTimeline(timelineMessages, trip);
   const tabStopId = focusMsgId != null && timelineMessages.some((m) => m.id === focusMsgId)
     ? focusMsgId
@@ -2868,12 +2908,16 @@ export function ChatConversation({
                 <CalendarPlus className="size-[21px]" />
               </ChatIconButton>
             )}
-            <ChatIconButton label="Iniciar llamada de voz" onClick={() => onStartCall?.("audio")}>
-              <PhoneCallIcon className="size-[22px]" />
-            </ChatIconButton>
-            <ChatIconButton label="Iniciar videollamada" onClick={() => onStartCall?.("video")}>
-              <VideoCallIcon className="size-[23px]" />
-            </ChatIconButton>
+            {!blockedOther && (
+              <>
+                <ChatIconButton label="Iniciar llamada de voz" onClick={() => onStartCall?.("audio")}>
+                  <PhoneCallIcon className="size-[22px]" />
+                </ChatIconButton>
+                <ChatIconButton label="Iniciar videollamada" onClick={() => onStartCall?.("video")}>
+                  <VideoCallIcon className="size-[23px]" />
+                </ChatIconButton>
+              </>
+            )}
             <ChatIconButton label={infoLabel} aria-pressed={showInfo} onClick={() => { setInfoStart(null); setShowInfo((v) => !v); }} className="hidden md:inline-flex">
               <Info className="size-[21px]" />
             </ChatIconButton>
@@ -2942,7 +2986,9 @@ export function ChatConversation({
         ) : messages.length === 0 ? (
           <div className="flex h-full items-center justify-center text-body-sm text-muted">Sé el primero en escribir</div>
         ) : (
-          <div className="relative mx-auto flex min-h-full w-full max-w-[780px] flex-col justify-end">
+          <div className="relative mx-auto flex min-h-full w-full max-w-[780px] flex-col justify-end pb-[16px]">
+            {/* pb: room for the hover action bar (42 px) of a one-line last message, so it never
+                pokes out of the scroller and makes the scrollbar (and the whole chat) jump. */}
             {/* The spine of the Bitácora: one line that holds the whole conversation */}
             <div aria-hidden className="pointer-events-none absolute bottom-0 left-[27px] top-0 w-px bg-[var(--border)]" />
             {/* Sentinel para infinite scroll hacia arriba */}
@@ -2963,6 +3009,9 @@ export function ChatConversation({
               // An exchange of quick messages: one time at its start, no repeated headers inside it.
               const inBurst = slot?.inBurst ?? false;
               const timeHere = inBurst ? endsBurst : endsTurn;
+              // My read checks: also at the end of each run of mine inside a burst (the burst's one
+              // time may sit under someone else's message, and mine would never say «visto»).
+              const checkHere = timeHere || (inBurst && endsTurn);
               const msgDate = msg.created_at ? new Date(msg.created_at) : null;
               const msgTime = msgDate ? msgDate.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", hour12: false }) : formatChatTime(msg.created_at);
               const isCallRecord = Boolean(msg.tipo?.startsWith("call_"));
@@ -3481,11 +3530,11 @@ export function ChatConversation({
                         {compactMine ? (
                           <div className="flex items-end gap-[8px] rounded-[8px] bg-[var(--chat-me-block)] px-[10px] py-[4px]">
                             {content}
-                            {(timeHere || isStarred) && (
+                            {(checkHere || isStarred) && (
                               <span className="flex shrink-0 items-center gap-[4px] pb-[2px] text-[12px] tabular-nums text-muted">
                                 {isStarred && <button type="button" onClick={(e) => { e.stopPropagation(); openStarred(); }} onPointerDown={(e) => e.stopPropagation()} aria-label="Ver tus destacados" title="Ver tus destacados" className="-m-[6px] rounded-[4px] p-[6px] hover:text-app">★</button>}
                                 {timeHere && msgTime}
-                                {timeHere && readMark}
+                                {checkHere && readMark}
                               </span>
                             )}
                           </div>
@@ -3493,11 +3542,11 @@ export function ChatConversation({
                           <div className={isCard ? "" : `rounded-[8px] bg-[var(--chat-me-block)] ${msg.image_url ? "p-[4px]" : msg.audio_url ? "p-[8px]" : isRichContent ? "px-3 py-2" : "px-[12px] py-[8px]"}`}>
                             {replyQuote}
                             {content}
-                            {!msg.image_url && (timeHere || isStarred) && (
+                            {!msg.image_url && (checkHere || isStarred) && (
                               <div className="mt-[2px] flex items-center justify-end gap-[4px] text-[12px] text-muted">
                                 {isStarred && <button type="button" onClick={(e) => { e.stopPropagation(); openStarred(); }} onPointerDown={(e) => e.stopPropagation()} aria-label="Ver tus destacados" title="Ver tus destacados" className="-m-[6px] rounded-[4px] p-[6px] hover:text-app">★</button>}
                                 {timeHere && <span className="tabular-nums">{msgTime}</span>}
-                                {timeHere && readMark}
+                                {checkHere && readMark}
                               </div>
                             )}
                           </div>
@@ -3621,7 +3670,28 @@ export function ChatConversation({
       )}
       </div>
 
-      {/* Input area */}
+      {/* Input area · in a 1 a 1 with someone I blocked, only the way back */}
+      {blockedOther ? (
+        <div className="px-[var(--space-3)] pb-[calc(env(safe-area-inset-bottom)+12px)] pt-[var(--space-2)] md:px-[var(--space-4)] md:pb-[var(--space-3)]">
+          <p className="flex min-h-[48px] flex-wrap items-center justify-center gap-x-[4px] text-center text-[14px] text-muted">
+            Has bloqueado a {blockedOther.nombre.split(" ")[0]} ·
+            <button
+              type="button"
+              onClick={() => {
+                setUnblockError(null);
+                desbloquear(blockedOther.id).catch((e) => {
+                  console.error("[chat] Error desbloqueando:", (e as { message?: string })?.message ?? String(e));
+                  setUnblockError(typeof navigator !== "undefined" && !navigator.onLine ? "Sin conexión. No se ha desbloqueado." : "No se ha desbloqueado. Inténtalo de nuevo.");
+                });
+              }}
+              className="min-h-[44px] px-[4px] font-[var(--fw-semibold)] text-[var(--chat-accent-text)]"
+            >
+              Desbloquear
+            </button>
+          </p>
+          {unblockError && <p role="alert" className="text-center text-[13px] text-[var(--error)]">{unblockError}</p>}
+        </div>
+      ) : (
       <div className="relative px-[var(--space-3)] pb-[calc(env(safe-area-inset-bottom)+12px)] pt-[var(--space-2)] md:px-[var(--space-4)] md:pb-[var(--space-3)]">
         {cerrarOpen && (
           <div id="cerrar-lista" role="listbox" aria-label="Encuestas abiertas" className="absolute inset-x-[8px] bottom-full z-[8] mb-[6px] max-h-[50vh] overflow-y-auto rounded-[8px] border border-app bg-[var(--bg)] p-[4px] shadow-[0_8px_24px_rgba(0,0,0,0.25)] md:inset-x-[var(--space-4)] md:max-w-[560px]">
@@ -3871,6 +3941,7 @@ export function ChatConversation({
           </div>
         </div>
       </div>
+      )}
     </div>
     {/* Desktop (board gi-d-grupo): next to the chat from 1280 px; over its right side below that. */}
     {showInfo && !isPhone && (
