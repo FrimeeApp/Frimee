@@ -4,6 +4,7 @@ import {
   upsertNotificationPreferences,
   uploadProfileImageToSupabaseStorage,
   upsertUserProfileAndSettingsRpc,
+  upsertUserSettingsRpc,
   type ProfileVisibility,
   type ThemePreference,
   type UpsertUserProfileAndSettingsParams,
@@ -20,6 +21,11 @@ export type UserProfileAndSettingsDto = UserProfileAndSettingsRow;
 export async function getUserSettings(userId: string): Promise<UserSettingsDto | null> {
   void userId;
   return fetchUserSettingsByUserId();
+}
+
+/** Only the theme (the other settings stay as they are: the RPC keeps what comes as null). */
+export async function saveThemePreference(userId: string, theme: ThemePreference): Promise<UserSettingsDto> {
+  return upsertUserSettingsRpc({ userId, theme });
 }
 
 export async function saveUserProfileAndSettings(

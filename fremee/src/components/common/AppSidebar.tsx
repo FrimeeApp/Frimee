@@ -15,7 +15,7 @@ import { countNotificacionesNoLeidas } from "@/services/api/repositories/notific
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import NotificationsPanel from "@/components/notifications/NotificationsPanel";
 import UserSearchSurface from "@/components/search/UserSearchSurface";
-import { Map, CreditCard, Send, Plus, Search, Bell, UserPlus } from "lucide-react";
+import { Map, CreditCard, Send, Plus, Search, Bell, UserPlus, ChevronsUpDown } from "lucide-react";
 import { ActiveExpensesIcon, ActiveMessagesIcon, ActivePlansIcon, ActiveSearchIcon } from "@/components/common/active-nav-icons";
 import { CloseButton } from "@/components/ui/IconButton";
 import { DraggableBottomSheet } from "@/components/ui/DraggableBottomSheet";
@@ -26,6 +26,13 @@ import { createRealtimeTopic } from "@/lib/realtime";
 import { getOpenChat } from "@/lib/open-chat";
 import { useToast } from "@/components/ui/Toaster";
 import { isPlanFinished } from "@/lib/plan-dates";
+import CreateMenu, { type CreateMenuPlanContext } from "@/components/common/CreateMenu";
+import ProfileMenu from "@/components/common/ProfileMenu";
+
+// Plans for the «Crear» menu, shared by every page's sidebar for a minute.
+let createPlansCache: { userId: string; at: number; plans: FeedPlanItemDto[] } | null = null;
+const LAST_PLAN_KEY = "frimee:ultimo-plan";
+
 type IconProps = {
   className?: string;
   strokeWidth?: number;
@@ -58,10 +65,12 @@ type AppSidebarProps = {
   /** Messages: the FAB's «Nuevo grupo» (1 a 1 chats start from the Messages search). */
   onCreateGroup?: () => void;
   hideMobileNav?: boolean;
+  /** Plan page: the «Crear» menu starts with «En este plan». */
+  planContext?: CreateMenuPlanContext;
 };
 type MobileNavStyle = CSSProperties & { "--mobile-nav-base-height": string };
 
-export default function AppSidebar({ onCreatePlan, onCreateGroup, hideMobileNav }: AppSidebarProps) {
+export default function AppSidebar({ onCreatePlan, onCreateGroup, hideMobileNav, planContext }: AppSidebarProps) {
   const router = useRouter();
   const { toast } = useToast();
   const pathname = usePathname();
@@ -116,10 +125,42 @@ export default function AppSidebar({ onCreatePlan, onCreateGroup, hideMobileNav 
   const [unreadNotifs, setUnreadNotifs] = useState(0);
   const searchPanelRef = useRef<HTMLDivElement>(null);
   const mobileFabRef = useRef<HTMLDivElement>(null);
-  const desktopCreateRef = useRef<HTMLDivElement>(null);
+  const desktopCreateRef = useRef<HTMLButtonElement>(null);
+  const profileButtonRef = useRef<HTMLButtonElement>(null);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const asideRef = useRef<HTMLElement>(null);
   const expenseCreatedRef = useRef(false);
+  const [createPlans, setCreatePlans] = useState<FeedPlanItemDto[] | null>(null);
+  const [lastPlanId, setLastPlanId] = useState<number | null>(null);
 
-  const { user, profile } = useAuth();
+  const { user, profile, signOut } = useAuth();
+  const isGuest = Boolean(user?.is_anonymous);
+
+  // Plans for the «Crear» menu: loaded when the sidebar is first hovered (or the menu opens).
+  const loadCreatePlans = () => {
+    if (!user?.id) return;
+    const cached = createPlansCache;
+    if (cached && cached.userId === user.id && Date.now() - cached.at < 60_000) {
+      setCreatePlans(cached.plans);
+      return;
+    }
+    void listUserRelatedPlans({ userId: user.id, limit: 100 })
+      .then((plans) => {
+        createPlansCache = { userId: user.id, at: Date.now(), plans };
+        setCreatePlans(plans);
+      })
+      .catch(() => setCreatePlans((prev) => prev ?? []));
+  };
+
+  // The last plan opened breaks the tie between two plans in progress.
+  useEffect(() => {
+    const m = /^\/plans\/(\d+)/.exec(pathname);
+    try {
+      if (m) window.localStorage.setItem(LAST_PLAN_KEY, m[1]);
+      const saved = Number(window.localStorage.getItem(LAST_PLAN_KEY));
+      setLastPlanId(Number.isFinite(saved) && saved > 0 ? saved : null);
+    } catch { /* storage blocked: no tie-break */ }
+  }, [pathname]);
 
   useEffect(() => {
     if (!expensePickerOpen) return;
@@ -135,7 +176,8 @@ export default function AppSidebar({ onCreatePlan, onCreateGroup, hideMobileNav 
     setExpensePickerDragState({ progress: 0, dragging: false });
   }, [expensePickerOpen]);
 
-  const expanded = hovered;
+  // The menu lives outside the sidebar (portal): keep the sidebar open while it is.
+  const expanded = hovered || desktopCreateMenuOpen || profileMenuOpen;
   const loggedUserProfileImage = profile?.profile_image ?? null;
   const loggedUserInitial = (profile?.nombre?.trim()[0] || user?.email?.trim()[0] || "U").toUpperCase();
 
@@ -179,6 +221,7 @@ export default function AppSidebar({ onCreatePlan, onCreateGroup, hideMobileNav 
     setNotifPanelOpen(false);
     setMobileFabOpen(false);
     setDesktopCreateMenuOpen(false);
+    setProfileMenuOpen(false);
   }, [pathname]);
 
   useEffect(() => {
@@ -214,21 +257,21 @@ export default function AppSidebar({ onCreatePlan, onCreateGroup, hideMobileNav 
     return () => window.clearTimeout(timeoutId);
   }, [mobileFabOpen, mobileFabVisible]);
 
+  // «C» opens the «Crear» menu on desktop, unless the user is typing or a modal is open.
   useEffect(() => {
-    if (!desktopCreateMenuOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (desktopCreateRef.current && !desktopCreateRef.current.contains(e.target as Node)) {
-        setDesktopCreateMenuOpen(false);
-      }
+    const handler = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== "c" || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || e.repeat) return;
+      if (!window.matchMedia("(min-width: 768px)").matches || modalOpen || desktopCreateMenuOpen) return;
+      const el = e.target as HTMLElement | null;
+      if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+      if (document.querySelector("[role=dialog][aria-modal=true], [role=menu]")) return;
+      e.preventDefault();
+      loadCreatePlans();
+      setDesktopCreateMenuOpen(true);
     };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [desktopCreateMenuOpen]);
-
-  useEffect(() => {
-    if (expanded) return;
-    setDesktopCreateMenuOpen(false);
-  }, [expanded]);
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  });
 
   useEffect(() => {
     if (!searchPopoverOpen) return;
@@ -297,7 +340,22 @@ export default function AppSidebar({ onCreatePlan, onCreateGroup, hideMobileNav 
 
   const openCreateGroup = () => {
     setMobileFabOpen(false);
-    onCreateGroup?.();
+    setDesktopCreateMenuOpen(false);
+    if (onCreateGroup) {
+      onCreateGroup();
+      return;
+    }
+    router.push("/messages?nuevoGrupo=1");
+  };
+
+  const openActividadEnPlan = (planId: number) => {
+    const q = "tab=itinerario&nuevaActividad=";
+    router.push(Capacitor.isNativePlatform() ? `/plans/static?id=${planId}&${q}` : `/plans/${planId}?${q}`);
+  };
+
+  const joinWithCode = (code: string) => {
+    const c = encodeURIComponent(code);
+    router.push(Capacitor.isNativePlatform() ? `/join/static?code=${c}` : `/join/${c}`);
   };
 
   const openExpenseForPlan = (planId: number) => {
@@ -594,7 +652,7 @@ export default function AppSidebar({ onCreatePlan, onCreateGroup, hideMobileNav 
         <AddGastoSheet
           planId={selectedExpensePlanId}
           userId={user.id}
-          planName={expensePlans.find((plan) => plan.id === selectedExpensePlanId)?.title}
+          planName={(expensePlans.find((plan) => plan.id === selectedExpensePlanId) ?? createPlans?.find((plan) => plan.id === selectedExpensePlanId))?.title}
           onClose={() => {
             setSelectedExpensePlanId(null);
             if (expenseCreatedRef.current) {
@@ -607,11 +665,12 @@ export default function AppSidebar({ onCreatePlan, onCreateGroup, hideMobileNav 
         />
       )}
 
-      {/* Desktop sidebar */}
+      {/* Desktop sidebar: logo, «Crear», sections, and the account at the foot */}
       <aside
-        onMouseEnter={() => setHovered(true)}
+        ref={asideRef}
+        onMouseEnter={() => { setHovered(true); loadCreatePlans(); }}
         onMouseLeave={() => setHovered(false)}
-        className={`fixed left-0 top-0 z-30 hidden h-dvh border-r border-app bg-app transition-[width] duration-200 ease-out md:flex md:flex-col md:py-[var(--space-6)] ${
+        className={`fixed left-0 top-0 z-30 hidden h-dvh border-r border-app bg-app transition-[width] duration-200 ease-out md:flex md:flex-col md:pt-[var(--space-6)] ${
           expanded ? "w-[240px]" : "w-[102px]"
         }`}
       >
@@ -622,9 +681,39 @@ export default function AppSidebar({ onCreatePlan, onCreateGroup, hideMobileNav 
             <Image src="/logo-frimee.png" alt="Frimee" width={28} height={36} className="hidden h-9 w-auto [.dark_&]:block" priority unoptimized />
           </div>
 
-          {/* Nav items — icon always at same position */}
-          <div className="flex flex-1 flex-col justify-center">
-          <nav className="flex w-full flex-col gap-[var(--space-8)]">
+          {/* «Crear» and the sections, centred in the height left between logo and account */}
+          <div className="flex min-h-0 flex-1 flex-col justify-center">
+          {/* «Crear»: the main action, a real button above the sections */}
+          <button
+            ref={desktopCreateRef}
+            type="button"
+            aria-haspopup="menu"
+            aria-expanded={desktopCreateMenuOpen}
+            aria-label="Crear"
+            aria-keyshortcuts="C"
+            title={desktopCreateMenuOpen ? undefined : "Crear · C"}
+            onClick={() => {
+              if (!desktopCreateMenuOpen) loadCreatePlans();
+              setProfileMenuOpen(false);
+              setDesktopCreateMenuOpen((open) => !open);
+            }}
+            className={`mx-[28px] flex h-[46px] shrink-0 items-center overflow-hidden rounded-[8px] border transition-colors duration-[var(--duration-base)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-color)] focus-visible:ring-offset-2 ${
+              desktopCreateMenuOpen
+                ? "border-[var(--text-primary)] bg-[var(--text-primary)] text-[var(--bg)]"
+                : "border-[var(--border-strong)] text-app hover:bg-[var(--surface-2)]"
+            }`}
+          >
+            <span className="flex w-[44px] shrink-0 items-center justify-center">
+              <PlusIcon
+                className={`size-[22px] transition-transform duration-[var(--duration-base)] motion-reduce:transition-none ${desktopCreateMenuOpen ? "rotate-45 motion-reduce:rotate-0" : ""}`}
+                strokeWidth={NAV_ICON_STROKE}
+              />
+            </span>
+            {expanded && <span className="whitespace-nowrap pr-[var(--space-4)] text-body font-[var(--fw-semibold)]">Crear</span>}
+          </button>
+
+          {/* Sections */}
+          <nav aria-label="Principal" className="mt-[var(--space-10)] flex w-full flex-col gap-[var(--space-8)]">
             {items.slice(0, 1).map((item) =>
               renderSidebarRow({
                 key: item.key,
@@ -673,67 +762,91 @@ export default function AppSidebar({ onCreatePlan, onCreateGroup, hideMobileNav 
               badge: notificationBadge,
             })}
           </nav>
-
-          {/* Create button */}
-          <div ref={desktopCreateRef} className="relative mt-[var(--space-14)]">
-            <button
-              type="button"
-              aria-label="Crear"
-              aria-expanded={desktopCreateMenuOpen}
-              onClick={() => setDesktopCreateMenuOpen((open) => !open)}
-              className={`flex h-[32px] items-center rounded-[8px] text-app transition-colors duration-150 hover:bg-surface ${desktopCreateMenuOpen ? "bg-surface" : ""}`}
-            >
-              <div className="flex w-[102px] shrink-0 items-center justify-center">
-                <PlusIcon className="size-[26px]" strokeWidth={NAV_ICON_STROKE} />
-              </div>
-              {expanded && <span className="-ml-[14px] whitespace-nowrap pr-[var(--space-4)] text-body font-[var(--fw-medium)]">Crear</span>}
-            </button>
-
-            {desktopCreateMenuOpen && (
-              <div className="absolute left-[14px] top-[calc(100%+8px)] z-[80] w-[184px] overflow-hidden rounded-[8px] border border-app bg-app shadow-elev-3">
-                <button
-                  type="button"
-                  onClick={openCreatePlan}
-                  className="flex h-[44px] w-full items-center justify-between gap-3 border-b border-app px-4 text-left text-body-sm text-app transition-colors hover:bg-surface"
-                >
-                  <span>Crear plan</span>
-                  <PlansIcon className="size-5 text-muted" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void openCreateExpense()}
-                  className="flex h-[44px] w-full items-center justify-between gap-3 px-4 text-left text-body-sm text-app transition-colors hover:bg-surface"
-                >
-                  <span>Crear gasto</span>
-                  <CardIcon className="size-5 text-muted" />
-                </button>
-              </div>
-            )}
           </div>
 
-          <button
-            type="button"
-            aria-label="Perfil"
-            onClick={openProfile}
-            className="mt-[var(--space-8)] flex h-[32px] items-center rounded-[8px] text-app transition-colors duration-150 hover:bg-surface"
-          >
-            <div className="flex w-[102px] shrink-0 items-center justify-center">
-              {loggedUserProfileImage ? (
-                <span className={`block size-[28px] overflow-hidden rounded-full ${profileActive ? "border-2 border-current" : "border border-strong"}`}>
-                  <Image src={loggedUserProfileImage} alt="Foto de perfil" width={28} height={28} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
-                </span>
-              ) : (
-                <span className={`flex size-[28px] items-center justify-center rounded-full bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app ${profileActive ? "border-2 border-current" : "border border-strong"}`}>
-                  {loggedUserInitial}
-                </span>
+          {/* Account at the foot, apart from the daily sections */}
+          <div className="shrink-0 border-t border-app py-[var(--space-4)]">
+            <button
+              type="button"
+              ref={profileButtonRef}
+              aria-label={isGuest ? "Invitado. Menú de la cuenta" : `${profile?.nombre?.trim() || "Tu perfil"}. Menú de la cuenta`}
+              aria-haspopup="menu"
+              aria-expanded={profileMenuOpen}
+              onClick={() => {
+                setDesktopCreateMenuOpen(false);
+                setProfileMenuOpen((open) => !open);
+              }}
+              className={`flex h-[52px] w-full items-center text-app transition-colors duration-150 hover:bg-surface ${profileMenuOpen ? "bg-surface" : ""}`}
+            >
+              <div className="flex w-[102px] shrink-0 items-center justify-center">
+                {isGuest ? (
+                  <span className="flex size-[34px] items-center justify-center rounded-full border border-strong bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app">?</span>
+                ) : loggedUserProfileImage ? (
+                  <span className={`block size-[34px] overflow-hidden rounded-full ${profileActive ? "border-2 border-current" : "border border-strong"}`}>
+                    <Image src={loggedUserProfileImage} alt="" width={34} height={34} className="h-full w-full object-cover" unoptimized referrerPolicy="no-referrer" />
+                  </span>
+                ) : (
+                  <span className={`flex size-[34px] items-center justify-center rounded-full bg-surface-inset text-body-sm font-[var(--fw-semibold)] text-app ${profileActive ? "border-2 border-current" : "border border-strong"}`}>
+                    {loggedUserInitial}
+                  </span>
+                )}
+              </div>
+              {expanded && (
+                <>
+                  <span className="-ml-[14px] min-w-0 flex-1 truncate text-left text-body font-[var(--fw-medium)]">
+                    {isGuest ? "Invitado" : profile?.nombre?.trim() || "Tu perfil"}
+                  </span>
+                  <ChevronsUpDown className="mr-[var(--space-4)] size-[16px] shrink-0 text-muted" aria-hidden />
+                </>
               )}
-            </div>
-            {expanded && <span className="-ml-[14px] whitespace-nowrap pr-[var(--space-4)] text-body font-[var(--fw-medium)]">Perfil</span>}
-          </button>
-
+            </button>
           </div>
         </div>
       </aside>
+
+      <CreateMenu
+        open={desktopCreateMenuOpen}
+        onClose={(returnFocus) => {
+          setDesktopCreateMenuOpen(false);
+          if (returnFocus) desktopCreateRef.current?.focus();
+        }}
+        anchorRef={desktopCreateRef}
+        sidebarRef={asideRef}
+        plans={createPlans}
+        lastPlanId={lastPlanId}
+        planContext={planContext}
+        onActividadEnPlan={openActividadEnPlan}
+        onGastoEnPlan={openExpenseForPlan}
+        onPlanNuevo={openCreatePlan}
+        onGrupoNuevo={openCreateGroup}
+        onUnirme={joinWithCode}
+      />
+      <ProfileMenu
+        open={profileMenuOpen}
+        onClose={(returnFocus) => {
+          setProfileMenuOpen(false);
+          if (returnFocus) profileButtonRef.current?.focus();
+        }}
+        anchorRef={profileButtonRef}
+        sidebarRef={asideRef}
+        userId={user?.id ?? null}
+        isGuest={isGuest}
+        name={profile?.nombre?.trim() || "Tu perfil"}
+        handle={profile?.username ? `@${profile.username}` : (user?.email ?? null)}
+        image={loggedUserProfileImage}
+        initial={loggedUserInitial}
+        onOpenProfile={openProfile}
+        onOpenSettings={() => router.push("/settings")}
+        onSaveAccount={() => window.dispatchEvent(new Event("frimee:save-account"))}
+        onSignOut={async () => {
+          await signOut();
+          router.replace("/login");
+        }}
+        onLogin={async () => {
+          await signOut();
+          router.replace("/login");
+        }}
+      />
 
       <CreatePlanModal
         open={createModalOpen}

@@ -22,6 +22,7 @@ import { insertNotificacion, fetchPendingPlanInviteUserIds } from "@/services/ap
 import { syncPlanWidget } from "@/services/widget/planWidget";
 import { QRCodeSVG } from "qrcode.react";
 import AppSidebar from "@/components/common/AppSidebar";
+import type { CreateMenuPlanContext } from "@/components/common/CreateMenu";
 import PublishPlanModal from "@/components/plans/modals/PublishPlanModal";
 import PlanFotosTab from "@/components/plans/PlanFotosTab";
 import { PlanGastoDetailModal } from "@/components/plans/modals/PlanGastoDetailModal";
@@ -494,10 +495,10 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
 
     // From a chat message («Añadir al plan»): the add sheet with its title already written.
     // Only admins add activities (the database checks it too).
-    if (nuevaActividad && plan && !isPast && isAdmin) {
+    if (nuevaActividad !== null && plan && !isPast && isAdmin) {
       setActiveTab("itinerario");
       setEditingSubplan(null);
-      setAddSheetInitialTitulo(nuevaActividad);
+      setAddSheetInitialTitulo(nuevaActividad || undefined);
       setAddSheetInitialDate(nuevaFecha || undefined);
       setAddSheetInitialHora(nuevaHora || undefined);
       setAddSheetInitialTipo(isTipoSubplan(nuevoTipo) ? nuevoTipo : undefined);
@@ -1090,8 +1091,17 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
 
   // nav-04: as an overlay the sidebar stays outside the sliding layer and above it, so it never
   // slides along nor gets covered (the skeleton has none). As a page it scrolls with the page as before.
+  // «Crear» in the sidebar starts with this plan («En este plan»).
+  const sidebarPlanContext: CreateMenuPlanContext | undefined = plan ? {
+    planId: plan.id,
+    title: plan.titulo,
+    canEdit: !isPast && isAdmin,
+    onActividad: () => { setActiveTab("itinerario"); openCreateSubplan(); },
+    onGasto: () => { setActiveTab("gastos"); setShowAddGastoSheet(true); },
+    onInvitar: () => { void openInviteModal(); },
+  } : undefined;
   const fixedSidebar = isOverlayPresentation ? (
-    <div className="relative z-[1201]"><AppSidebar hideMobileNav={true} /></div>
+    <div className="relative z-[1201]"><AppSidebar hideMobileNav={true} planContext={sidebarPlanContext} /></div>
   ) : null;
 
   if (loading || planLoading || !membershipChecked) return (
@@ -1116,7 +1126,7 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
     {fixedSidebar}
     <div className={`${routeContainerClass} bg-app text-app ${routeIsMoving ? "will-change-transform" : ""}`} {...routeMotionProps}>
       <div className={`relative w-full ${activeTab === "chat" ? "h-dvh overflow-hidden" : "min-h-dvh"}`}>
-        {!isOverlayPresentation && <AppSidebar hideMobileNav={true} />}
+        {!isOverlayPresentation && <AppSidebar hideMobileNav={true} planContext={sidebarPlanContext} />}
         <main className={`${activeTab === "chat" ? "h-dvh overflow-hidden" : "pb-[max(var(--space-6),env(safe-area-inset-bottom))]"} md:py-0 md:pl-[102px]`}>
           <div className={`${activeTab === "chat" ? "h-full" : ""} md:grid md:grid-cols-[minmax(88px,1fr)_minmax(0,1536px)_minmax(88px,1fr)] xl:grid-cols-[minmax(180px,1fr)_minmax(0,1280px)_minmax(180px,1fr)] 2xl:grid-cols-[minmax(240px,1fr)_minmax(0,1240px)_minmax(240px,1fr)]`}>
             <div className={`${activeTab === "chat" ? "flex h-full min-h-0 flex-col" : ""} md:col-start-2`}>
