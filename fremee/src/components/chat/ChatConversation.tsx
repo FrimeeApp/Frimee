@@ -330,6 +330,7 @@ export function ChatConversation({
     msg?: MensajeRow;
     anchor?: { x: number; y: number } | null;
     inicial?: { titulo?: string; fecha?: string; lugar?: string } | null;
+    leerOrigen?: boolean;
   } | null>(null);
   // After adding: «Añadido a «Plan» · Ver · Deshacer» for a few seconds.
   const [addedToast, setAddedToast] = useState<{ planId: number; planTitulo: string; mensajeId: number } | null>(null);
@@ -828,10 +829,14 @@ export function ChatConversation({
     // A shared place: its name and coordinates as they are.
     if (mo?.type === "lugar") return { titulo: mo.nombre, lugar: mo.nombre, lat: mo.lat, lng: mo.lng };
     if (mo?.type === "tarjeta") return { titulo: mo.titulo, tipo: CARD_TIPO[mo.kind], lugar: mo.lugar ?? undefined };
-    // A decided poll (po-sistema): the winning option; the panel lets you pick what it is.
+    // A decided poll (po-sistema): the winning option; the panel lets you pick what it is. A yes/no
+    // poll is about its question («¿Partido mañana?» → «Partido mañana»), never a place called «Sí».
+    // This is only the fallback: the panel asks @frimee to read the poll with its conversation.
     if (mo?.type === "poll") {
       const w = pollWinner(mo);
-      return w ? { titulo: w, lugar: w } : null;
+      if (!w) return null;
+      if (/^(s[ií]|no)\b/i.test(w.trim())) return { titulo: mo.question.replace(/^[¿¡\s]+|[?!.\s]+$/g, "") };
+      return { titulo: w, lugar: w };
     }
     const s = sugerencias[m.id]?.plan;
     return s?.es_plan && s.titulo
@@ -888,7 +893,9 @@ export function ChatConversation({
     if (!planId) {
       closeOverlays();
       const p = planFrom(m);
-      setCreatePlan({ guarda: null, msg: m, anchor, inicial: p ? { titulo: p.titulo, fecha: p.fecha, lugar: p.lugar } : null });
+      // A poll's question + winner is read by @frimee; what is filled now is only a fallback.
+      const leerOrigen = parseMoment(m.texto)?.type === "poll";
+      setCreatePlan({ guarda: null, msg: m, anchor, leerOrigen, inicial: p ? { titulo: p.titulo, fecha: p.fecha, lugar: p.lugar } : null });
       return;
     }
     openAddPanel(m, anchor);
@@ -896,9 +903,10 @@ export function ChatConversation({
   /** Opens the «Añadir al plan» panel (it fills in with what @frimee read, or waits for it). */
   const openAddPanel = (m: MensajeRow, anchor: { x: number; y: number } | null = null) => {
     closeOverlays();
-    // A shared place or plan card is already exact; a text is read again with its conversation.
+    // A shared place or plan card is already exact; a text or a decided poll is read again with its
+    // conversation (a poll's date or place is often in the question or the messages around it).
     const mo = parseMoment(m.texto);
-    const conContexto = mo?.type !== "lugar" && mo?.type !== "tarjeta" && mo?.type !== "poll";
+    const conContexto = mo?.type !== "lugar" && mo?.type !== "tarjeta";
     setAddPanel({ msg: m, anchor, clientId: crypto.randomUUID(), ctx: conContexto ? { status: "loading" } : null });
     if (!conContexto) return;
     const settle = (ctx: { status: "done"; plan: PlanCompletado | null } | { status: "failed" }) =>
@@ -2490,7 +2498,7 @@ export function ChatConversation({
   const pinnedMsg = pinnedId ? messages.find((m) => m.id === pinnedId) ?? null : null;
 
   const hasAskedFrimee = messages.some(
-    (m) => m.sender_id === currentUserId && /@frimee/i.test(m.texto ?? ""),
+    (m) => m.sender_id === currentUserId && /@frimee\b/i.test(m.texto ?? ""),
   );
   const showAiHints = Boolean(planId) && !editingMsg && !text && !aiHintsDismissed && !hasAskedFrimee;
 
@@ -2745,6 +2753,7 @@ export function ChatConversation({
           guarda={createPlan.guarda}
           inicial={createPlan.inicial ?? null}
           origenId={createPlan.msg?.id ?? null}
+          leerOrigen={createPlan.leerOrigen ?? false}
           onClose={() => setCreatePlan(null)}
           onCreated={(r, g) => {
             setCreatePlan(null);
