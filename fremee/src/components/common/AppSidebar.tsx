@@ -657,7 +657,8 @@ export default function AppSidebar({ onCreatePlan, onCreateGroup, hideMobileNav 
         <div className="flex w-full flex-1 flex-col overflow-hidden">
           {/* Logo — icon always centered in the 102px zone */}
           <div className="flex h-[40px] w-[102px] shrink-0 items-center justify-center">
-            <span className="[font-family:var(--font-display-face)] text-[var(--font-h3)] font-normal leading-[var(--lh-h3)] tracking-[0.01em] text-app">Frimee</span>
+            <Image src="/logo-frimee-black.png" alt="Frimee" width={28} height={36} className="h-9 w-auto [.dark_&]:hidden" priority unoptimized />
+            <Image src="/logo-frimee.png" alt="Frimee" width={28} height={36} className="hidden h-9 w-auto [.dark_&]:block" priority unoptimized />
           </div>
 
           {/* Nav items — icon always at same position */}
