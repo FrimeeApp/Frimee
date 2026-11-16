@@ -129,6 +129,14 @@ const SCHEMA_COMPLETAR = {
   required: ["es_plan", "titulo", "fecha", "hora", "hora_fin", "lugar", "tipo"],
   additionalProperties: false,
 };
+/** How to read a decided poll (shared by completar and plan_nuevo). */
+const REGLAS_ENCUESTA = `Cuando el mensaje es una encuesta decidida («Encuesta: «pregunta» · opciones … · ganó «X»»), lo que se hace es pregunta + respuesta ganadora:
+- Si la ganadora es un sí («Sí», «Si, un mes», «Claro que sí»), se hace lo que propone la pregunta: «¿Vamos de viaje a Japón?» + «Si, un mes» → título «Viaje a Japón», sitio «Japón»; «¿Partido mañana?» + «Sí» → título «Partido», fecha de mañana, sin sitio. Lo que añade la respuesta («un mes») es un detalle: nunca va en el título ni en el sitio.
+- Si la ganadora es una opción entre varias, rellena con ella el hueco de la pregunta: «¿Dónde vamos?» + «Madrid» → título «Viaje a Madrid», sitio «Madrid»; «¿Dónde cenamos?» + «Casa Lucio» → «Cena en Casa Lucio», sitio «Casa Lucio»; «¿Qué día quedamos?» + «Sábado» → la fecha de ese sábado.
+- El sitio sale SOLO de la encuesta: no uses el destino del viaje ni sitios de otros mensajes; si la encuesta no nombra un sitio, deja el sitio en "".
+- Nunca uses «Sí», «No» ni la respuesta tal cual como título o sitio.
+- Los días relativos («mañana», «el viernes») cuentan desde la fecha en que se hizo la encuesta (su «cuando»).`;
+
 const SYSTEM_COMPLETAR = `Eres el asistente de Frimee, una app para organizar viajes en grupo. Alguien quiere añadir al plan la actividad de un mensaje del chat. Te paso ese mensaje (la línea que empieza por «ESTE») y la conversación de alrededor, en orden.
 Rellena la actividad con lo que diga ESTE mensaje y complétala con la conversación: a menudo la hora va en un mensaje y el sitio en el siguiente, o el día se dijo antes.
 Una propuesta cuenta aunque sea una pregunta y nadie haya contestado todavía: «¿Os va bien sobre las 9 de la noche?» → hora 21:00. La persona revisa la sugerencia antes de guardarla.
@@ -140,7 +148,18 @@ Las horas dichas en palabras pásalas a 24 h: «las 9 de la noche» → 21:00, �
 - hora: inicio, HH:MM en 24 h; si no, "".
 - hora_fin: solo si se dice cuándo termina («de 10 a 12», «hasta las 14»); si no, "".
 - lugar: nombre del sitio; si no, "".
-- tipo: el que mejor encaje; ACTIVIDAD si dudas.`;
+- tipo: el que mejor encaje; ACTIVIDAD si dudas.
+${REGLAS_ENCUESTA}`;
+
+/** A poll message as a line the model can read (the stored text is JSON). */
+function pollAsText(texto: string): string | null {
+  try {
+    const p = JSON.parse(texto) as { type?: string; question?: string; options?: string[]; resultado?: string; ganadora?: number };
+    if (p.type !== "poll" || !p.question || !Array.isArray(p.options)) return null;
+    const ganadora = p.resultado === "decidida" && typeof p.ganadora === "number" ? p.options[p.ganadora] : null;
+    return `Encuesta: «${p.question}» · opciones: ${p.options.map((o) => `«${o}»`).join(", ")}${ganadora ? ` · ganó «${ganadora}»` : ""}`;
+  } catch { return null; }
+}
 
 type MsgRow = { id: number; texto: string; created_at: string; sender_id: string | null; tipo: string };
 
@@ -170,7 +189,7 @@ async function completar(supabase: ReturnType<typeof createClient>, chat_id: str
   const { data: users } = await supabase.from("usuarios").select("id, nombre").in("id", senderIds);
   const names = new Map(((users ?? []) as Array<{ id: string; nombre: string }>).map((u) => [u.id, u.nombre]));
   const lines = rows.map((m) =>
-    `${m.id === mensajeId ? "ESTE → " : ""}${JSON.stringify({ cuando: m.created_at.slice(0, 16).replace("T", " "), autor: names.get(m.sender_id ?? "") ?? "?", texto: m.texto.slice(0, 600) })}`);
+    `${m.id === mensajeId ? "ESTE → " : ""}${JSON.stringify({ cuando: m.created_at.slice(0, 16).replace("T", " "), autor: names.get(m.sender_id ?? "") ?? "?", texto: (m.id === mensajeId ? pollAsText(m.texto) : null) ?? m.texto.slice(0, 600) })}`);
 
   const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
   if (!apiKey) return jsonResponse({ error: "Missing API key" }, 500);
@@ -217,9 +236,11 @@ const SYSTEM_PLAN_NUEVO = `Eres el asistente de Frimee, una app para organizar v
 - destino: la ciudad, pueblo, barrio, local o sitio (una discoteca o un restaurante también); "" si no se dice.
 - fecha_inicio y fecha_fin: YYYY-MM-DD. Deduce «el finde del 28», «el puente», «del 12 al 15», «el sábado» con la fecha de los mensajes y la de hoy; un finde es de viernes a domingo. «Este finde» o «el finde» es el próximo viernes a domingo; si ese finde ya ha terminado o termina hoy, el siguiente (el plan es para el futuro). Si solo hay un día, el mismo en las dos. "" si no se dice.
 - primer_id: el id del primer mensaje en el que empiezan a hablar de ESTE plan; 0 si no está claro.
-Si se propusieron varias opciones, usa la última en la que se pusieron de acuerdo, o la última propuesta si nadie la rechazó; si siguen enfrentadas, deja el campo en "".`;
+Si se propusieron varias opciones, usa la última en la que se pusieron de acuerdo, o la última propuesta si nadie la rechazó; si siguen enfrentadas, deja el campo en "".
+Si una línea empieza por «ORIGEN →», el plan se crea a partir de ESE mensaje: es el plan que hay que rellenar (hay_viaje true), aunque se hable de otros; el resto de la conversación solo completa lo que le falte (fechas, por ejemplo).
+${REGLAS_ENCUESTA}`;
 
-async function planNuevo(supabase: ReturnType<typeof createClient>, chat_id: string): Promise<Response> {
+async function planNuevo(supabase: ReturnType<typeof createClient>, chat_id: string, origenId: number | null): Promise<Response> {
   const desde = new Date(Date.now() - PLAN_NUEVO_DIAS * 86_400_000).toISOString();
   // Only what was said after the last plan made from this chat: that one already exists, so it is
   // never suggested again (its «Plan creado» mark is a moment JSON the model does not see).
@@ -235,14 +256,27 @@ async function planNuevo(supabase: ReturnType<typeof createClient>, chat_id: str
     .filter((m) => (m.tipo === "text" || m.tipo === "bot") && !m.texto.startsWith("{") && m.texto.trim().length > 0)
     .slice(0, PLAN_NUEVO_MAX)
     .reverse();
+  // The message «Crear plan» was opened from (a decided poll, a proposal): always in, marked ORIGEN,
+  // with a poll turned into readable text.
+  let origen: MsgRow | null = null;
+  if (origenId) {
+    const { data: o } = await supabase.from("mensajes").select("id, texto, created_at, sender_id, tipo")
+      .eq("chat_id", chat_id).eq("id", origenId).maybeSingle();
+    origen = (o as MsgRow | null) ?? null;
+    if (origen && !rows.some((m) => m.id === origen!.id)) {
+      rows.push(origen);
+      rows.sort((a, b) => a.id - b.id);
+    }
+  }
   if (rows.length === 0) return jsonResponse({ plan: null });
 
   const senderIds = [...new Set(rows.map((m) => m.sender_id).filter((x): x is string => Boolean(x)))];
   const { data: users } = await supabase.from("usuarios").select("id, nombre").in("id", senderIds);
   const names = new Map(((users ?? []) as Array<{ id: string; nombre: string }>).map((u) => [u.id, u.nombre]));
-  const lines = rows.map((m) => JSON.stringify({
-    id: m.id, cuando: m.created_at.slice(0, 16).replace("T", " "), autor: m.sender_id ? names.get(m.sender_id) ?? "?" : "Frimee", texto: m.texto.slice(0, 500),
-  }));
+  const lines = rows.map((m) => `${m.id === origen?.id ? "ORIGEN → " : ""}${JSON.stringify({
+    id: m.id, cuando: m.created_at.slice(0, 16).replace("T", " "), autor: m.sender_id ? names.get(m.sender_id) ?? "?" : "Frimee",
+    texto: (m.id === origen?.id ? pollAsText(m.texto) : null) ?? m.texto.slice(0, 500),
+  })}`);
 
   const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
   if (!apiKey) return jsonResponse({ error: "Missing API key" }, 500);
@@ -274,7 +308,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
 
   try {
-    const { chat_id, mensaje_ids, completar: completarId, plan_nuevo } = await req.json() as { chat_id?: string; mensaje_ids?: number[]; completar?: number; plan_nuevo?: boolean };
+    const { chat_id, mensaje_ids, completar: completarId, plan_nuevo, origen_id } = await req.json() as { chat_id?: string; mensaje_ids?: number[]; completar?: number; plan_nuevo?: boolean; origen_id?: number };
     const modoCompletar = typeof completarId === "number" && Number.isInteger(completarId) && completarId > 0;
     const modoPlan = plan_nuevo === true;
     if (!chat_id || (!modoCompletar && !modoPlan && !Array.isArray(mensaje_ids))) return jsonResponse({ error: "Faltan datos" }, 400);
@@ -292,7 +326,7 @@ serve(async (req) => {
     if (!member) return jsonResponse({ error: "No eres miembro de este chat" }, 403);
 
     if (modoCompletar) return await completar(supabase, chat_id, completarId);
-    if (modoPlan) return await planNuevo(supabase, chat_id);
+    if (modoPlan) return await planNuevo(supabase, chat_id, typeof origen_id === "number" && Number.isInteger(origen_id) && origen_id > 0 ? origen_id : null);
 
     const { data: stored } = await supabase
       .from("mensaje_sugerencias").select("mensaje_id").in("mensaje_id", ids);

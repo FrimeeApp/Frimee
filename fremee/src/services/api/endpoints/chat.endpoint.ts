@@ -606,9 +606,11 @@ export type PlanDesdeChatResult = {
 export type PlanNuevoSugerido = { titulo: string; destino: string; fecha_inicio: string; fecha_fin: string; primer_id: number };
 
 /** «Crear plan» from a chat: @frimee reads the latest conversation and suggests name, place and dates. */
-export async function sugerirPlanNuevoEndpoint(chatId: string): Promise<PlanNuevoSugerido | null> {
+/** `origenId`: the message «Crear plan» was opened from (a decided poll is read as question + winner). */
+export async function sugerirPlanNuevoEndpoint(chatId: string, origenId?: number | null): Promise<PlanNuevoSugerido | null> {
   const supabase = createBrowserSupabaseClient();
-  const { data, error } = await supabase.functions.invoke("chat-sugerencias", { body: { chat_id: chatId, plan_nuevo: true } });
+  const body = origenId ? { chat_id: chatId, plan_nuevo: true, origen_id: origenId } : { chat_id: chatId, plan_nuevo: true };
+  const { data, error } = await supabase.functions.invoke("chat-sugerencias", { body });
   if (error) throw new Error(error.message || "Error leyendo la conversación");
   return ((data as { plan?: PlanNuevoSugerido | null })?.plan) ?? null;
 }

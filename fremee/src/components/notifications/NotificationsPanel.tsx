@@ -134,14 +134,19 @@ function timeAgo(iso: string): string {
 }
 
 export function groupByPeriod(notifs: NotificacionDto[]): { label: string; items: NotificacionDto[] }[] {
-  const now = Date.now();
+  // By calendar day in local time, not by hours: something from 23:00 is «Ayer» at 10:00.
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   const DAY = 86_400_000;
-  const groups: Record<string, NotificacionDto[]> = { Hoy: [], "Esta semana": [], "Este mes": [], Anteriores: [] };
+  const groups: Record<string, NotificacionDto[]> = { Hoy: [], Ayer: [], "Esta semana": [], "Este mes": [], Anteriores: [] };
   for (const n of notifs) {
-    const age = now - new Date(n.created_at).getTime();
-    if (age < DAY) groups["Hoy"].push(n);
-    else if (age < 7 * DAY) groups["Esta semana"].push(n);
-    else if (age < 30 * DAY) groups["Este mes"].push(n);
+    const d = new Date(n.created_at);
+    const day = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    const daysAgo = Math.round((today - day) / DAY);
+    if (daysAgo <= 0) groups["Hoy"].push(n);
+    else if (daysAgo === 1) groups["Ayer"].push(n);
+    else if (daysAgo < 7) groups["Esta semana"].push(n);
+    else if (daysAgo < 30) groups["Este mes"].push(n);
     else groups["Anteriores"].push(n);
   }
   return Object.entries(groups)
@@ -180,11 +185,14 @@ export function NotifItem({
   n,
   onAction,
   onPlanAccepted,
+  onNavigate,
   edgePadding = "default",
 }: {
   n: NotificacionDto;
   onAction: (id: number) => void;
   onPlanAccepted?: (planId: string) => void;
+  /** Opening a link from the item (a poll's «Ver» / «Votar»): the panel closes first. */
+  onNavigate?: (href: string) => void;
   edgePadding?: "default" | "none";
 }) {
   const [acting, setActing] = useState(false);
@@ -294,7 +302,7 @@ export function NotifItem({
           {pollReopen?.href && (
             <button
               type="button"
-              onClick={() => router.push(pollReopen.href!)}
+              onClick={() => (onNavigate ? onNavigate(pollReopen.href!) : router.push(pollReopen.href!))}
               className="shrink-0 rounded-full bg-[var(--primary)] px-3 py-1 text-[14px] font-[var(--fw-semibold)] text-[var(--contrast)] transition-opacity hover:opacity-80"
             >
               {n.tipo === "poll_draw" ? "Ver" : "Votar"}
@@ -353,6 +361,7 @@ type NotificationsFeedProps = {
   active: boolean;
   onRead?: () => void;
   onPlanAccepted?: (planId: string) => void;
+  onNavigate?: (href: string) => void;
   className?: string;
   edgePadding?: "default" | "none";
 };
@@ -361,6 +370,7 @@ export function NotificationsFeed({
   active,
   onRead,
   onPlanAccepted,
+  onNavigate,
   className = "flex-1 overflow-y-auto overscroll-contain",
   edgePadding = "default",
 }: NotificationsFeedProps) {
@@ -459,6 +469,7 @@ export function NotificationsFeed({
                       setNotifs((prev) => prev.filter((x) => x.id !== id))
                     }
                     onPlanAccepted={handlePlanAccepted}
+                    onNavigate={onNavigate}
                   />
                 ))}
               </ul>
@@ -555,6 +566,10 @@ export default function NotificationsPanel({ open, onClose, onRead, desktopPosit
           onPlanAccepted={(planId) => {
             onClose();
             router.push(`/plans/${planId}`);
+          }}
+          onNavigate={(href) => {
+            onClose();
+            router.push(href);
           }}
         />
       </div>
