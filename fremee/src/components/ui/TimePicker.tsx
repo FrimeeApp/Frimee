@@ -243,7 +243,7 @@ function DesktopPicker({ value, onChange, label, variant = "row", suggested, inv
           role="listbox"
           aria-label="Horas"
           style={{ left: pos.left, top: pos.top, width: pos.width }}
-          className="fixed z-[200] max-h-[296px] overflow-y-auto overscroll-contain rounded-[8px] border border-app bg-[var(--bg)] p-[4px] shadow-[var(--shadow-md)] [animation:tp-caer_160ms_cubic-bezier(.2,0,0,1)_both] motion-reduce:animate-none"
+          className="fixed z-[1360] max-h-[296px] overflow-y-auto overscroll-contain rounded-[8px] border border-app bg-[var(--bg)] p-[4px] shadow-[var(--shadow-md)] [animation:tp-caer_160ms_cubic-bezier(.2,0,0,1)_both] motion-reduce:animate-none"
         >
           {draft !== null && draft.trim() !== "" && (
             <div className="-mx-[4px] -mt-[4px] mb-[4px] flex h-[32px] items-center border-b border-app px-[14px] text-[12px] text-[var(--text-secondary)]">
@@ -335,10 +335,10 @@ function PhonePicker({ value, onChange, label, subtitle, variant = "row", sugges
 
       <Drawer.Root open={open} onOpenChange={setOpen} repositionInputs={false}>
         <Drawer.Portal>
-          <Drawer.Overlay className="fixed inset-0 z-[110] bg-black/60" />
+          <Drawer.Overlay className="fixed inset-0 z-[1350] bg-black/60" />
           <Drawer.Content
             aria-describedby={undefined}
-            className="fixed inset-x-0 bottom-0 z-[111] flex max-h-[92dvh] flex-col overflow-y-auto rounded-t-[16px] border-t border-app bg-[var(--bg)] px-[16px] pb-[24px] pt-[8px] outline-none"
+            className="fixed inset-x-0 bottom-0 z-[1351] flex max-h-[92dvh] flex-col overflow-y-auto rounded-t-[16px] border-t border-app bg-[var(--bg)] px-[16px] pb-[24px] pt-[8px] outline-none"
             style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + var(--keyboard-height, 0px) + 24px)" }}
           >
             <div aria-hidden className="mx-auto mb-[4px] h-[4px] w-[36px] shrink-0 rounded-full bg-[var(--border)]" />
