@@ -76,7 +76,7 @@ import { PollCreatorModal } from "@/components/chat/PollCreatorModal";
 import { PLAN_WRITE_COMMANDS, VALID_TASK_CATEGORIES } from "@/components/chat/chat.constants";
 import { crearTareaEndpoint, misTareasEndpoint, todasTareasEndpoint, updateEstadoTareaEndpoint, recordarEndpoint, type TareaRow } from "@/services/api/endpoints/tareas.endpoint";
 import { getBalancesForPlanEndpoint } from "@/services/api/endpoints/gastos.endpoint";
-import { promoteToAdminEndpoint, demoteAdminEndpoint, kickMemberEndpoint, leavePlanEndpoint } from "@/services/api/endpoints/plans.endpoint";
+import { promoteToAdminEndpoint, demoteAdminEndpoint, expulsarPlanEndpoint, salirPlanEndpoint } from "@/services/api/endpoints/plans.endpoint";
 import { callFrimeeAssistant, type FrimeeHistoryEntry } from "@/services/api/endpoints/frimee.endpoint";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
 import { useBloqueos } from "@/hooks/useBloqueos";
@@ -439,6 +439,8 @@ export function ChatConversation({
   // Same for onLeave: a new function from the parent must not resubscribe the channel.
   const onLeaveRef = useRef(onLeave);
   useEffect(() => { onLeaveRef.current = onLeave; });
+  const onBackRef = useRef(onBack);
+  useEffect(() => { onBackRef.current = onBack; });
 
   const name = resolveChatName(chat, currentUserId);
   const avatar = resolveChatAvatar(chat, currentUserId);
@@ -513,7 +515,7 @@ export function ChatConversation({
       }
     })();
     void indicePromise.finally(() => markChatRead(chat.chat_id).then(() => { void channelRef.current?.send({ type: "broadcast", event: "read", payload: { user_id: currentUserId } }); }));
-  }, [chat.chat_id, currentUserId, onLeave]);
+  }, [chat.chat_id, currentUserId]);
 
   useEffect(() => {
     const supabase = supabaseRef.current;
@@ -562,7 +564,7 @@ export function ChatConversation({
       })
       .on("broadcast", { event: "kick_member" }, ({ payload }) => {
         const { user_id } = payload as { user_id: string };
-        if (user_id === currentUserId) onLeaveRef.current?.();
+        if (user_id === currentUserId) (onLeaveRef.current ?? onBackRef.current)?.();
       })
       .on("broadcast", { event: "poll_vote" }, ({ payload }) => {
         const { mensaje_id } = payload as { mensaje_id: number; option_index: number };
@@ -1183,7 +1185,7 @@ export function ChatConversation({
   const getFreshMembers = async (): Promise<typeof chat.miembros> => {
     try {
       const fresh = await getChatMiembros(chat.chat_id);
-      return fresh.map((m) => ({ id: m.user_id, nombre: m.nombre, username: null, profile_image: m.profile_image }));
+      return fresh.map((m) => ({ id: m.id, nombre: m.nombre, username: m.username, profile_image: m.profile_image }));
     } catch {
       return chat.miembros;
     }
@@ -1722,14 +1724,16 @@ export function ChatConversation({
       if (target.id === currentUserId) return "No puedes expulsarte a ti mismo. Usa /salir para abandonar el plan.";
 
       try {
-        const result = await kickMemberEndpoint(planId, target.id);
+        const { resultado: result, aviso } = await expulsarPlanEndpoint(planId, target.id);
         if (result === "not_admin") return "Solo los admins pueden expulsar miembros.";
         if (result === "cannot_kick_self") return "No puedes expulsarte a ti mismo.";
         if (result === "cannot_kick_owner") return "No puedes expulsar al creador del plan.";
         if (result === "target_not_member") return `${target.nombre} no está en este plan.`;
+        if (aviso) showMyServerMessage(aviso.mensaje_id, aviso.texto);
         void channelRef.current?.send({ type: "broadcast", event: "kick_member", payload: { user_id: target.id } });
         onMembersChanged?.();
-        return `${target.nombre} ha sido expulsado del plan.`;
+        // The notice already says it («Quitaste a Ana del plan»).
+        return aviso ? "" : `${target.nombre} ha sido expulsado del plan.`;
       } catch {
         return "No pude expulsar al usuario, inténtalo de nuevo.";
       }
@@ -1739,11 +1743,14 @@ export function ChatConversation({
       if (!planId) return "Este comando solo está disponible en el chat de un plan.";
 
       try {
-        const result = await leavePlanEndpoint(planId);
+        const { resultado: result, aviso } = await salirPlanEndpoint(planId);
         if (result === "not_member") return "No eres miembro de este plan.";
         if (result === "owner_cannot_leave") return "El creador del plan no puede abandonarlo.";
         if (result === "last_admin") return "Eres el único admin. Promueve a otro miembro con /admin @usuario antes de salir.";
-        onLeave?.();
+        // The others see «Ana salió del plan» live; then out of a chat that is no longer mine
+        // (Messages has no onLeave: back to the list).
+        if (aviso) showMyServerMessage(aviso.mensaje_id, aviso.texto);
+        (onLeave ?? onBack)?.();
         return "";
       } catch {
         return "No pude abandonar el plan, inténtalo de nuevo.";
@@ -1940,9 +1947,33 @@ export function ChatConversation({
               replyText = JSON.stringify(proposal);
             }
           }
+        } else if (result.command && !planId && /^\/(plan|actividad)\b/i.test(result.command)) {
+          // ia-09: a chat without a plan makes plans, and anyone can: the create flow opens for
+          // whoever asked, filled with what @frimee understood (nothing is created until they confirm).
+          const [titulo, when, lugar] = result.command.replace(/^\/(plan|actividad)\s*/i, "").split("|").map((x) => x.trim());
+          const fecha = /^\d{4}-\d{2}-\d{2}/.test(when ?? "") ? when.slice(0, 10) : undefined;
+          closeOverlays();
+          setCreatePlan({ guarda: null, inicial: { titulo: titulo || undefined, fecha, lugar: lugar || undefined } });
+          replyText = "Te dejo el plan preparado: revisa los datos y créalo.";
+        } else if (result.command && planId && !isAdmin && /^\/(tarea|actividad)\b/i.test(result.command)) {
+          // ia-09: only the plan's admins add activities and tasks (as in the form): no card they
+          // cannot accept, and no «ya está en el plan».
+          const adminNames = chat.miembros
+            .filter((m) => chatInfo?.admins.includes(m.id) && m.id !== currentUserId)
+            .map((m) => m.nombre.split(" ")[0]);
+          const que = /^\/tarea/i.test(result.command) ? "crear tareas" : "añadir actividades al plan";
+          replyText = `Solo un admin del plan puede ${que}.${adminNames.length > 0 ? ` Pídeselo a ${adminNames.length > 1 ? `${adminNames.slice(0, -1).join(", ")} o ${adminNames[adminNames.length - 1]}` : adminNames[0]}.` : ""}`;
         } else if (result.command && /^\/(gasto|tarea|actividad)\b/i.test(result.command)) {
           const proposal = await buildProposal(result.command, replyText);
-          replyText = typeof proposal === "string" ? proposal : JSON.stringify(proposal);
+          // ia-09: the same proposal still pending (e.g. «perfecto, deja esta hora») → no second card.
+          const repetida = typeof proposal !== "string" && messages.some((m) => {
+            const mo = parseMoment(m.texto);
+            return mo?.type === "propuesta" && mo.estado === "pendiente" && mo.kind === proposal.kind
+              && mo.titulo.toLowerCase() === proposal.titulo.toLowerCase() && mo.detalle === proposal.detalle;
+          });
+          replyText = repetida
+            ? "Ya está propuesta arriba: acéptala en la tarjeta para guardarla."
+            : typeof proposal === "string" ? proposal : JSON.stringify(proposal);
         } else if (result.command) {
           const cmdResult = await handleCommand(result.command);
           if (cmdResult) replyText = cmdResult;
@@ -1964,6 +1995,10 @@ export function ChatConversation({
         setMessages((prev) => prev.map((m) =>
           m.id === thinkingKey ? { ...m, id: botMsgId, _key: botMsgId, texto: replyText || "…" } : m
         ));
+        // Live for the others too (it was only saved: they saw it after reloading).
+        const botMsg: LocalMsg = { id: botMsgId, _key: botMsgId, sender_id: "frimee", sender_nombre: "Frimee", sender_profile_image: null, texto: replyText || "…", created_at: new Date().toISOString(), tipo: "bot" };
+        void channelRef.current?.send({ type: "broadcast", event: "new_message", payload: botMsg });
+        onNewMessageRef.current(botMsg);
 
         if (pollToCreate) {
           try {
@@ -1976,6 +2011,7 @@ export function ChatConversation({
             const errorId = await sendBotMensaje(chat.chat_id, "No pude crear la encuesta, inténtalo de nuevo.");
             const errorMsg: LocalMsg = { id: errorId, _key: errorId, sender_id: "frimee", sender_nombre: "Frimee", sender_profile_image: null, texto: "No pude crear la encuesta, inténtalo de nuevo.", created_at: new Date().toISOString(), tipo: "bot" };
             setMessages((prev) => prev.some((m) => m.id === errorId) ? prev : [...prev, errorMsg]);
+            void channelRef.current?.send({ type: "broadcast", event: "new_message", payload: errorMsg });
           }
         }
       } catch {

@@ -17,7 +17,7 @@ import {
 import { listGastosForPlanEndpoint, type GastoRow } from "@/services/api/endpoints/gastos.endpoint";
 import { formatMoney } from "@/lib/formatters";
 import { parseMoment } from "@/components/chat/bitacora/moments";
-import { eliminarPlanEndpoint, leavePlanEndpoint } from "@/services/api/endpoints/plans.endpoint";
+import { eliminarPlanEndpoint, salirPlanEndpoint } from "@/services/api/endpoints/plans.endpoint";
 import { fetchActiveFriends, type PublicUserProfileRow } from "@/services/api/endpoints/users.endpoint";
 import { uploadPlanCoverFile } from "@/services/firebase/upload";
 import { notifyChatAdded } from "@/components/chat/notifyChatAdded";
@@ -980,8 +980,9 @@ function ConfirmAction({ confirm, chat, name, other, planId, onNotice, onClose, 
       else if (confirm.kind === "quitar") notice = await quitarMiembroEndpoint(chat.chat_id, confirm.person.id);
       else if (confirm.kind === "eliminarPlan" && planId) await eliminarPlanEndpoint(planId);
       else if (isPlan && planId) {
-        const r = await leavePlanEndpoint(planId);
-        if (LEAVE_PLAN_REFUSED[r]) { setError(LEAVE_PLAN_REFUSED[r]); setBusy(false); return; }
+        const r = await salirPlanEndpoint(planId);
+        if (LEAVE_PLAN_REFUSED[r.resultado]) { setError(LEAVE_PLAN_REFUSED[r.resultado]); setBusy(false); return; }
+        notice = r.aviso;
       } else notice = await leaveChat(chat.chat_id);
       if (notice) onNotice(notice);
       onDone(confirm.kind, confirm.kind === "quitar" ? confirm.person : undefined);
