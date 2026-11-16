@@ -78,7 +78,7 @@ export function DayTimeline({
               <div className="relative flex gap-0 pb-[var(--space-2)]">
                 <div className={`${TIME_COL} pt-[2px] text-right`}>
                   {s.all_day ? (
-                    <span className="block text-[14px] font-[var(--fw-medium)] leading-[1.1] tracking-[0.01em] text-muted">Todo el día</span>
+                    <span className="block text-[14px] font-[var(--fw-medium)] leading-[1.1] tracking-[0.01em] text-muted">Sin hora</span>
                   ) : span ? (
                     <span className="block tabular-nums text-caption font-[var(--fw-medium)] tracking-[0.01em] text-muted">{hhmm(s.inicio_at)}</span>
                   ) : (
