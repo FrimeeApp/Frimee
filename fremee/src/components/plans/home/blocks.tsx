@@ -25,6 +25,7 @@ import {
   Pill,
   PlanCover,
   SERIF,
+  TEXT_BTN,
   TripProgress,
   hasPhoto,
 } from "./pieces";
@@ -42,7 +43,7 @@ type Common = {
 };
 
 function placeOf(plan: FeedPlanItemDto) {
-  return plan.locationName?.trim() || "";
+  return (plan.locationName?.trim() || "").replace(/\bParis\b/g, "París");
 }
 
 function rangeAndPlace(plan: FeedPlanItemDto, shortPlace = false) {
@@ -190,18 +191,34 @@ function SettleRow({ planId, userId, onOpen }: { planId: number; userId?: string
       done = true;
     }
   }
+  const icon = (
+    <span className={`flex w-11 shrink-0 ${done ? "text-[var(--chat-accent-text)]" : "text-muted"}`}>
+      {done ? <CircleCheck size={20} aria-hidden /> : <Wallet size={20} aria-hidden />}
+    </span>
+  );
+  if (!action) {
+    return (
+      <li className="flex min-h-11 items-center gap-3 border-t border-app">
+        {icon}
+        <span className="min-w-0 flex-1 truncate text-[16px] text-app">{text}</span>
+      </li>
+    );
+  }
   return (
-    <li className="flex min-h-11 items-center gap-3 border-t border-app">
-      <span className={`flex w-11 shrink-0 ${done ? "text-[var(--chat-accent-text)]" : "text-muted"}`}>
-        {done ? <CircleCheck size={20} aria-hidden /> : <Wallet size={20} aria-hidden />}
-      </span>
-      <span className="min-w-0 flex-1 truncate text-[16px] text-app">{text}</span>
-      {action && (
-        <button type="button" onClick={() => onOpen(planId, "gastos")} className={SMALL_BTN}>
-          {action}
-        </button>
-      )}
+    <li className="border-t border-app">
+      <CloseRow onClick={() => onOpen(planId, "gastos")} icon={icon} text={text} action={action} />
     </li>
+  );
+}
+
+/** Whole row is clickable; the turquoise text describes the destination. */
+function CloseRow({ onClick, icon, text, action }: { onClick: () => void; icon: React.ReactNode; text: string; action: string }) {
+  return (
+    <button type="button" onClick={onClick} className={`flex min-h-11 w-full items-center gap-3 text-left ${FOCUS}`}>
+      {icon}
+      <span className="min-w-0 flex-1 truncate text-[16px] text-app">{text}</span>
+      <span className={TEXT_BTN}>{action}</span>
+    </button>
   );
 }
 
@@ -252,16 +269,17 @@ function NowAgenda({
           <h4 className={`${LABEL} mb-1 mt-4`}>Para cerrar el viaje</h4>
           <ul>
             {(extra?.gastos ?? 0) > 0 && <SettleRow planId={plan.id} userId={userId} onOpen={onOpen} />}
-            <li className="flex min-h-11 items-center gap-3 border-t border-app">
-              <span className="flex w-11 shrink-0 text-muted">
-                <Images size={20} aria-hidden />
-              </span>
-              <span className="min-w-0 flex-1 truncate text-[16px] text-app">
-                {photos ? `${photos} ${photos === 1 ? "foto" : "fotos"} del viaje` : "Aún no hay fotos del viaje"}
-              </span>
-              <button type="button" onClick={() => onOpen(plan.id, "fotos")} className={SMALL_BTN}>
-                Añade las tuyas
-              </button>
+            <li className="border-t border-app">
+              <CloseRow
+                onClick={() => onOpen(plan.id, "fotos")}
+                icon={
+                  <span className="flex w-11 shrink-0 text-muted">
+                    <Images size={20} aria-hidden />
+                  </span>
+                }
+                text={photos ? `${photos} ${photos === 1 ? "foto" : "fotos"} del viaje` : "Aún no hay fotos del viaje"}
+                action="Añade las tuyas"
+              />
             </li>
           </ul>
         </>
