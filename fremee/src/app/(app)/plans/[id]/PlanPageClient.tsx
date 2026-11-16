@@ -40,6 +40,7 @@ import { isoDateOnly, groupByDay, normalizeDateKey, summarizeRecipients, getOccu
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
 import { CloseButton } from "@/components/ui/IconButton";
 import { Tabs } from "@/components/ui/Tabs";
+import { dateInputToIso, isPlanFinished, isoToDateInput } from "@/lib/plan-dates";
 const ChevronDownIcon = ChevronDown;
 
 const PLAN_ROUTE_TRANSITION_MS = 260;
@@ -205,7 +206,7 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
   }, [paramId]);
   const [activeTab, setActiveTab] = useState<Tab>("itinerario");
   const [plan, setPlan] = useState<PlanByIdRow | null>(initialCache?.plan ?? null);
-  const isPast = plan ? new Date(plan.fin_at) < new Date() : false;
+  const isPast = plan ? isPlanFinished(plan.fin_at) : false;
   const [isAdmin, setIsAdmin] = useState(initialCache?.isAdmin ?? false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [membershipChecked, setMembershipChecked] = useState(initialCache?.membershipChecked ?? false);
@@ -2712,8 +2713,8 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
           title: plan.titulo,
           description: plan.descripcion ?? "",
           location: plan.ubicacion_nombre ?? "",
-          startDate: plan.inicio_at.slice(0, 10),
-          endDate: plan.fin_at.slice(0, 10),
+          startDate: isoToDateInput(plan.inicio_at),
+          endDate: isoToDateInput(plan.fin_at),
           coverImageUrl: plan.foto_portada ?? null,
           visibility: (plan.visibilidad === "PÚBLICO" || plan.visibilidad === "SOLO_GRUPO") ? plan.visibilidad : "SOLO_GRUPO",
         };
@@ -2737,8 +2738,8 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
                 planId,
                 titulo: payload.title,
                 descripcion: "",
-                inicioAt: payload.startDate,
-                finAt: payload.endDate,
+                inicioAt: dateInputToIso(payload.startDate, 10),
+                finAt: dateInputToIso(payload.endDate, 18),
                 ubicacionNombre: payload.location,
                 allDay: true,
                 visibilidad: payload.visibility,

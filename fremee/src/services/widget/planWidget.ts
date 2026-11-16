@@ -1,6 +1,7 @@
 import { Capacitor, registerPlugin } from "@capacitor/core";
 import { fetchUserRelatedPlans } from "@/services/api/endpoints/plans.endpoint";
 
+import { isPlanFinished } from "@/lib/plan-dates";
 type WidgetPluginInterface = {
   updatePlanWidget(options: {
     title: string;
@@ -21,7 +22,7 @@ export async function syncPlanWidget(userId: string): Promise<void> {
     const now = new Date();
 
     const upcoming = plans
-      .filter((plan) => new Date(plan.fin_at) >= now)
+      .filter((plan) => !isPlanFinished(plan.fin_at, now))
       .sort((a, b) => new Date(a.inicio_at).getTime() - new Date(b.inicio_at).getTime())[0];
 
     if (!upcoming) {

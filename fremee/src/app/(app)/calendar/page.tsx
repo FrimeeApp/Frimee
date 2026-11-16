@@ -25,6 +25,7 @@ import { ES_MONTHS_SHORT } from "@/lib/date-labels";
 import { formatDateRange, formatTimeRange } from "@/lib/formatters";
 import { CloseButton, IconButton } from "@/components/ui/IconButton";
 
+import { dateInputToIso } from "@/lib/plan-dates";
 type PlanTab = "active" | "done";
 type CalendarViewMode = "month" | "week" | "day" | "year";
 
@@ -1734,11 +1735,6 @@ function startOfWeek(date: Date) {
 function formatMonthYearHeading(date: Date) {
   const label = date.toLocaleDateString("es-ES", { month: "long", year: "numeric" });
   return label.charAt(0).toUpperCase() + label.slice(1);
-}
-
-function dateInputToIso(dateInput: string, hour = 12) {
-  const [year, month, day] = dateInput.split("-").map(Number);
-  return new Date(year ?? 0, (month ?? 1) - 1, day ?? 1, hour, 0, 0).toISOString();
 }
 
 function startOfDay(date: Date) {
