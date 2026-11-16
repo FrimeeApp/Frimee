@@ -25,6 +25,8 @@ const nextConfig: NextConfig = {
     root: path.resolve(__dirname),
   },
   reactStrictMode: false,
+  // The dev «N» badge sits over the sidebar's profile at the bottom left.
+  devIndicators: false,
   reactCompiler: true,
   ...(allowedDevOrigins.length > 0 && {
     allowedDevOrigins,
