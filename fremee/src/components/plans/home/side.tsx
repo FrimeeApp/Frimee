@@ -189,7 +189,7 @@ export function TeToca({
         title: `Votar «${poll.pregunta}»`,
         meta: `${p.title} · faltas tú`,
         icon: "poll",
-        onClick: () => onOpen(p.id, "chat"),
+        onClick: () => onOpen(p.id, "chat", poll.mensaje_id),
       });
     }
   }
