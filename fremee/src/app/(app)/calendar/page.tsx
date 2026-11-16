@@ -49,11 +49,12 @@ function CalendarPageInner() {
     const isCapacitor = typeof window !== "undefined" && !!appWindow.Capacitor?.isNativePlatform?.();
     router.push(isCapacitor ? `/plans/static?id=${id}` : `/plans/${id}`);
   };
-  const openPlan = (id: number, tab?: PlanSectionTab) => {
+  const openPlan = (id: number, tab?: PlanSectionTab, messageId?: number) => {
     if (!tab) return navigateToPlan(id);
     const appWindow = window as Window & { Capacitor?: { isNativePlatform?: () => boolean } };
     const isCapacitor = !!appWindow.Capacitor?.isNativePlatform?.();
-    router.push(isCapacitor ? `/plans/static?id=${id}&tab=${tab}` : `/plans/${id}?tab=${tab}`);
+    const q = `tab=${tab}${messageId ? `&m=${messageId}` : ""}`;
+    router.push(isCapacitor ? `/plans/static?id=${id}&${q}` : `/plans/${id}?${q}`);
   };
   const view = searchParams.get("vista");
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);

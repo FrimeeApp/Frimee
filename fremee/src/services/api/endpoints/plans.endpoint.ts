@@ -120,12 +120,15 @@ export async function fetchPlanUserRol(planId: number, userId: string): Promise<
   return (data as "ADMIN" | "PARTICIPANTE" | null) ?? null;
 }
 
-export async function fetchPlanByJoinCode(joinCode: string): Promise<{ plan: PlanByIdRow; planId: number; alreadyMember: boolean } | null> {
+/** not_found · too_many_attempts (10 wrong codes in an hour) · not_allowed (removed from the plan). */
+export type JoinCodeError = "not_found" | "too_many_attempts" | "not_allowed";
+
+export async function fetchPlanByJoinCode(joinCode: string): Promise<{ plan: PlanByIdRow; planId: number; alreadyMember: boolean } | { error: JoinCodeError }> {
   const supabase = createBrowserSupabaseClient();
   const { data, error } = await supabase.rpc("fn_join_plan_by_code", { p_join_code: joinCode, p_preview_only: true });
   if (error) throw error;
-  const result = (typeof data === "string" ? JSON.parse(data) : data) as { plan_id?: number; plan?: PlanByIdRow; already_member?: boolean; error?: string };
-  if (result.error || !result.plan || !result.plan_id) return null;
+  const result = (typeof data === "string" ? JSON.parse(data) : data) as { plan_id?: number; plan?: PlanByIdRow; already_member?: boolean; error?: JoinCodeError };
+  if (result.error || !result.plan || !result.plan_id) return { error: result.error ?? "not_found" };
   return { plan: result.plan, planId: result.plan_id, alreadyMember: result.already_member ?? false };
 }
 

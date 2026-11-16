@@ -3,13 +3,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Maximize2, ChevronLeft, ChevronDown, UserPlus, Share2, Pencil, MapPin, Calendar, Plus, ExternalLink, Upload, Check, FileText, Download, QrCode } from "lucide-react";
+import { Maximize2, ChevronLeft, ChevronDown, UserPlus, Share2, Pencil, MapPin, Calendar, Plus, ExternalLink, Upload, Check, FileText, Download } from "lucide-react";
 import { useAuth } from "@/providers/AuthProvider";
 import { useCallContext } from "@/providers/CallProvider";
 import { ChatConversation, PhoneCallIcon, VideoCallIcon } from "@/components/chat/ChatConversation";
 import { fetchPlanChatItem, type ChatListItem } from "@/services/api/repositories/chat.repository";
 import { resolveChatName, resolveChatAvatar } from "@/services/api/repositories/chat.repository";
-import { fetchPlansByIds, fetchPlanMemberIds, fetchPlanUserRol, updatePlanEndpoint, type PlanByIdRow } from "@/services/api/endpoints/plans.endpoint";
+import { fetchPlansByIds, fetchPlanUserRol, updatePlanEndpoint, type PlanByIdRow } from "@/services/api/endpoints/plans.endpoint";
 import CreatePlanModal, { type EditPlanInitialValues } from "@/components/plans/modals/CreatePlanModal";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { fetchSubplanes, updateSubplanTransporte, updateSubplanViaje, type SubplanRow, type TipoSubplan, TIPOS_TRANSPORTE, isTipoSubplan } from "@/services/api/endpoints/subplanes.endpoint";
@@ -17,11 +17,10 @@ import { getBalancesForPlanEndpoint, listGastosForPlanEndpoint, pagarLiquidacion
 import DayRouteMap from "@/components/plans/DayRouteMap";
 import { findMissingLegs, useComputeMissingLegs } from "@/hooks/useComputeMissingLegs";
 import AddGastoSheet from "@/components/plans/modals/AddGastoSheet";
-import { fetchActiveFriends, type PublicUserProfileRow } from "@/services/api/endpoints/users.endpoint";
-import { insertNotificacion, fetchPendingPlanInviteUserIds } from "@/services/api/repositories/notifications.repository";
 import { syncPlanWidget } from "@/services/widget/planWidget";
-import { QRCodeSVG } from "qrcode.react";
 import AppSidebar from "@/components/common/AppSidebar";
+import InviteSheet from "@/components/plans/modals/InviteSheet";
+import type { CreateMenuPlanContext } from "@/components/common/CreateMenu";
 import PublishPlanModal from "@/components/plans/modals/PublishPlanModal";
 import PlanFotosTab from "@/components/plans/PlanFotosTab";
 import { PlanGastoDetailModal } from "@/components/plans/modals/PlanGastoDetailModal";
@@ -234,6 +233,8 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
   const [collapsedDaysReady, setCollapsedDaysReady] = useState(!!initialCache?.subplanes?.length);
   const [showAddSheet, setShowAddSheet] = useState(false);
   const [addSheetInitialTitulo, setAddSheetInitialTitulo] = useState<string | undefined>();
+  // ?tab=chat&m=<mensaje> («Te toca» → a poll): the chat opens at that message.
+  const [chatInitialMessageId, setChatInitialMessageId] = useState<number | undefined>();
   const [addSheetInitialDate, setAddSheetInitialDate] = useState<string | undefined>();
   const [addSheetInitialHora, setAddSheetInitialHora] = useState<string | undefined>();
   const [addSheetInitialTipo, setAddSheetInitialTipo] = useState<TipoSubplan | undefined>();
@@ -256,7 +257,6 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
   const [pagandoId, setPagandoId] = useState<number | null>(null);
   const [editingTransporteId, setEditingTransporteId] = useState<number | null>(null);
   const [showInviteModal, setShowInviteModal] = useState(false);
-  const { isClosing: inviteClosing, requestClose: closeInviteModal } = useModalCloseAnimation(() => setShowInviteModal(false), showInviteModal);
   const { isClosing: invoiceClosing, requestClose: closeInvoiceModal } = useModalCloseAnimation(() => setShowInvoiceModal(false), showInvoiceModal);
   const { isClosing: paymentClosing, requestClose: closePaymentModal } = useModalCloseAnimation(() => {
     setPagarDeuda(null);
@@ -459,17 +459,13 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
     }
   };
   const [showPublishModal, setShowPublishModal] = useState(false);
-  const [inviteFriends, setInviteFriends] = useState<PublicUserProfileRow[]>([]);
-  const [inviteFriendsLoading, setInviteFriendsLoading] = useState(false);
-  const [inviteSentIds, setInviteSentIds] = useState<Set<string>>(new Set());
-  const [inviteSendingIds, setInviteSendingIds] = useState<Set<string>>(new Set());
-  const [inviteLinkCopied, setInviteLinkCopied] = useState(false);
-  const [showQr, setShowQr] = useState(false);
 
   useEffect(() => {
     const tab = searchParams.get("tab");
     const createGasto = searchParams.get("createGasto");
     const nuevaActividad = searchParams.get("nuevaActividad");
+    const mensaje = Number(searchParams.get("m"));
+    if (tab === "chat" && Number.isFinite(mensaje) && mensaje > 0) setChatInitialMessageId(mensaje);
     const nuevaFecha = searchParams.get("fecha");
     const nuevaHora = searchParams.get("hora");
     const nuevoTipo = searchParams.get("tipo");
@@ -494,10 +490,10 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
 
     // From a chat message («Añadir al plan»): the add sheet with its title already written.
     // Only admins add activities (the database checks it too).
-    if (nuevaActividad && plan && !isPast && isAdmin) {
+    if (nuevaActividad !== null && plan && !isPast && isAdmin) {
       setActiveTab("itinerario");
       setEditingSubplan(null);
-      setAddSheetInitialTitulo(nuevaActividad);
+      setAddSheetInitialTitulo(nuevaActividad || undefined);
       setAddSheetInitialDate(nuevaFecha || undefined);
       setAddSheetInitialHora(nuevaHora || undefined);
       setAddSheetInitialTipo(isTipoSubplan(nuevoTipo) ? nuevoTipo : undefined);
@@ -676,25 +672,6 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
 
   const openInviteModal = async () => {
     setShowInviteModal(true);
-    setInviteSentIds(new Set());
-    setInviteSendingIds(new Set());
-    setInviteLinkCopied(false);
-    setShowQr(false);
-    setInviteFriendsLoading(true);
-    try {
-      const [friends, memberIds, pendingIds] = await Promise.all([
-        fetchActiveFriends(),
-        fetchPlanMemberIds(Number(id)),
-        fetchPendingPlanInviteUserIds(Number(id)),
-      ]);
-      const memberSet = new Set(memberIds);
-      setInviteFriends(friends.filter((f) => !memberSet.has(f.id)));
-      setInviteSentIds(new Set(pendingIds));
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setInviteFriendsLoading(false);
-    }
   };
 
   // From a chat's information («Invitar al plan», board gi-d-plan): the invite sheet, once.
@@ -708,35 +685,6 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
     const nextQuery = nextParams.toString();
     router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
   });
-
-  const handleInviteFriend = async (friendId: string) => {
-    if (!user?.id) return;
-    setInviteSendingIds((prev) => new Set(prev).add(friendId));
-    try {
-      await insertNotificacion({
-        userId: friendId,
-        tipo: "plan_invite",
-        actorId: user.id,
-        entityId: String(Number(id)),
-        entityType: "plan",
-      });
-      setInviteSentIds((prev) => new Set(prev).add(friendId));
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setInviteSendingIds((prev) => { const n = new Set(prev); n.delete(friendId); return n; });
-    }
-  };
-
-  const inviteLink = plan?.join_code ? `${typeof window !== "undefined" ? window.location.origin : ""}/join/${plan.join_code}` : null;
-
-  const handleCopyInviteLink = () => {
-    if (!inviteLink) return;
-    void navigator.clipboard.writeText(inviteLink).then(() => {
-      setInviteLinkCopied(true);
-      setTimeout(() => setInviteLinkCopied(false), 2000);
-    });
-  };
 
   const handleSubplanCreated = (s: SubplanRow) => {
     setSubplanes((prev) => {
@@ -1090,8 +1038,17 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
 
   // nav-04: as an overlay the sidebar stays outside the sliding layer and above it, so it never
   // slides along nor gets covered (the skeleton has none). As a page it scrolls with the page as before.
+  // «Crear» in the sidebar starts with this plan («En este plan»).
+  const sidebarPlanContext: CreateMenuPlanContext | undefined = plan ? {
+    planId: plan.id,
+    title: plan.titulo,
+    canEdit: !isPast && isAdmin,
+    onActividad: () => { setActiveTab("itinerario"); openCreateSubplan(); },
+    onGasto: () => { setActiveTab("gastos"); setShowAddGastoSheet(true); },
+    onInvitar: () => { void openInviteModal(); },
+  } : undefined;
   const fixedSidebar = isOverlayPresentation ? (
-    <div className="relative z-[1201]"><AppSidebar hideMobileNav={true} /></div>
+    <div className="relative z-[1201]"><AppSidebar hideMobileNav={true} planContext={sidebarPlanContext} /></div>
   ) : null;
 
   if (loading || planLoading || !membershipChecked) return (
@@ -1116,7 +1073,7 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
     {fixedSidebar}
     <div className={`${routeContainerClass} bg-app text-app ${routeIsMoving ? "will-change-transform" : ""}`} {...routeMotionProps}>
       <div className={`relative w-full ${activeTab === "chat" ? "h-dvh overflow-hidden" : "min-h-dvh"}`}>
-        {!isOverlayPresentation && <AppSidebar hideMobileNav={true} />}
+        {!isOverlayPresentation && <AppSidebar hideMobileNav={true} planContext={sidebarPlanContext} />}
         <main className={`${activeTab === "chat" ? "h-dvh overflow-hidden" : "pb-[max(var(--space-6),env(safe-area-inset-bottom))]"} md:py-0 md:pl-[102px]`}>
           <div className={`${activeTab === "chat" ? "h-full" : ""} md:grid md:grid-cols-[minmax(88px,1fr)_minmax(0,1536px)_minmax(88px,1fr)] xl:grid-cols-[minmax(180px,1fr)_minmax(0,1280px)_minmax(180px,1fr)] 2xl:grid-cols-[minmax(240px,1fr)_minmax(0,1240px)_minmax(240px,1fr)]`}>
             <div className={`${activeTab === "chat" ? "flex h-full min-h-0 flex-col" : ""} md:col-start-2`}>
@@ -1292,6 +1249,7 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
                   registerCallReload={(fn) => { reloadCallMessagesRef.current = fn; }}
                   containerClassName="flex min-h-0 flex-1 flex-col"
                   embedded
+                  initialMessageId={chatInitialMessageId}
                   planInfo={plan ? { titulo: plan.titulo, inicio_at: plan.inicio_at, fin_at: plan.fin_at, ubicacion_nombre: plan.ubicacion_nombre } : undefined}
                   planId={plan?.id}
                   isAdmin={isAdmin}
@@ -2223,99 +2181,15 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
         />
       )}
 
-      {showInviteModal && (
-        <div data-closing={inviteClosing ? "true" : "false"} className="app-modal-overlay fixed inset-0 z-[80] flex items-end justify-center px-4 pb-[max(var(--space-4),env(safe-area-inset-bottom))] sm:items-center" onClick={closeInviteModal}>
-          <div className="app-modal-panel w-full max-w-[440px] rounded-modal bg-[var(--bg)] shadow-elev-4" onClick={(e) => e.stopPropagation()}>
-            {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-app">
-              <p className="text-body font-[var(--fw-semibold)]">Invitar al plan</p>
-              <CloseButton onClick={closeInviteModal} />
-            </div>
-
-            {/* Friends list */}
-            <div className="px-2 pt-2 pb-1">
-              <p className="px-3 pb-1.5 text-[14px] font-[var(--fw-semibold)] uppercase tracking-wider text-muted">Amigos</p>
-              {inviteFriendsLoading ? (
-                <div className="flex justify-center py-6">
-                  <div className="size-[20px] animate-spin rounded-full border-2 border-[var(--text-primary)] border-t-transparent" />
-                </div>
-              ) : inviteFriends.length === 0 ? (
-                <p className="py-4 text-center text-body-sm text-muted">No hay amigos para invitar.</p>
-              ) : (
-                <div className="max-h-[calc(4*52px)] overflow-y-auto">
-                  {inviteFriends.map((friend) => {
-                    const sent = inviteSentIds.has(friend.id);
-                    const sending = inviteSendingIds.has(friend.id);
-                    const avatarLabel = (friend.nombre.trim()[0] || "?").toUpperCase();
-                    return (
-                      <div key={friend.id} className="flex h-[52px] w-full items-center gap-3 rounded-[8px] px-3">
-                        {friend.profile_image ? (
-                          <Image src={friend.profile_image} alt={friend.nombre} width={32} height={32} className="size-[32px] rounded-full object-cover" unoptimized referrerPolicy="no-referrer" />
-                        ) : (
-                          <div className="flex size-[32px] items-center justify-center rounded-full bg-[var(--text-primary)] text-[14px] font-[var(--fw-semibold)] text-contrast-token">{avatarLabel}</div>
-                        )}
-                        <span className="flex-1 text-body-sm font-[var(--fw-medium)]">{friend.nombre}</span>
-                        <button
-                          type="button"
-                          disabled={sent || sending}
-                          onClick={() => void handleInviteFriend(friend.id)}
-                          className={`rounded-full px-4 py-1.5 text-[14px] font-[var(--fw-semibold)] transition-all ${sent ? "bg-surface text-muted cursor-default" : "bg-[var(--text-primary)] text-contrast-token hover:opacity-80 disabled:opacity-50"}`}
-                        >
-                          {sending ? "..." : sent ? "Pendiente" : "Invitar"}
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Invite link */}
-            {inviteLink && (
-              <div className="px-5 py-3 border-t border-app">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-[14px] font-[var(--fw-semibold)] uppercase tracking-wider text-muted">Enlace de invitación</p>
-                  <button
-                    type="button"
-                    onClick={() => setShowQr((v) => !v)}
-                    className="flex items-center gap-1 text-[14px] text-muted hover:text-[var(--text-primary)] transition-colors"
-                  >
-                    <QrCode className="size-[14px]" aria-hidden />
-                    QR
-                  </button>
-                </div>
-                <div className="flex items-center gap-2 rounded-[8px] bg-surface px-3 py-2">
-                  <span className="flex-1 truncate text-[14px] text-muted">{inviteLink}</span>
-                  <button
-                    type="button"
-                    onClick={handleCopyInviteLink}
-                    className="shrink-0 rounded-full bg-[var(--text-primary)] px-3 py-1 text-[14px] font-[var(--fw-semibold)] text-contrast-token transition-all hover:opacity-80"
-                  >
-                    {inviteLinkCopied ? "¡Copiado!" : "Copiar"}
-                  </button>
-                </div>
-                {/* QR code */}
-                {showQr && (
-                  <div className="mt-3 flex justify-center">
-                    <div className="rounded-[12px] bg-white p-3 shadow-sm">
-                      <QRCodeSVG value={inviteLink} size={160} />
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="px-5 pb-4 pt-2">
-              <button
-                type="button"
-                onClick={closeInviteModal}
-                className="w-full rounded-full border border-app py-[10px] text-body-sm font-[var(--fw-semibold)] transition-opacity hover:opacity-70"
-              >
-                Cerrar
-              </button>
-            </div>
-          </div>
-        </div>
+      {showInviteModal && plan && user?.id && (
+        <InviteSheet
+          planId={plan.id}
+          planTitle={plan.titulo}
+          planDates={formatDateRange(plan.inicio_at, plan.fin_at)}
+          members={(planChat?.miembros ?? []).map((m) => ({ id: m.id, nombre: m.nombre, profile_image: m.profile_image ?? null }))}
+          currentUserId={user.id}
+          onClose={() => setShowInviteModal(false)}
+        />
       )}
 
       {showInvoiceModal && plan && (

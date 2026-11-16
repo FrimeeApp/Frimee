@@ -241,7 +241,7 @@ export function NotifItem({
         onAction(n.id);
         onPlanAccepted?.(n.entity_id);
       } else {
-        await rejectPlanInvite(n.id);
+        await rejectPlanInvite(Number(n.entity_id), n.id);
         onAction(n.id);
       }
     } catch (e) {
