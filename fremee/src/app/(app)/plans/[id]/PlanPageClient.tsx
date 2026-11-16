@@ -1087,21 +1087,35 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
     : "relative z-[1]";
   const isDayCollapsed = (dateKey: string) => !collapsedDaysReady || collapsedDays.has(dateKey);
 
+  // nav-04: as an overlay the sidebar stays outside the sliding layer and above it, so it never
+  // slides along nor gets covered (the skeleton has none). As a page it scrolls with the page as before.
+  const fixedSidebar = isOverlayPresentation ? (
+    <div className="relative z-[1201]"><AppSidebar hideMobileNav={true} /></div>
+  ) : null;
+
   if (loading || planLoading || !membershipChecked) return (
-    <div className={`${routeLoadingClass} will-change-transform`} {...routeMotionProps}>
-      <PlanDetailSkeleton />
-    </div>
+    <>
+      {fixedSidebar}
+      <div className={`${routeLoadingClass} will-change-transform`} {...routeMotionProps}>
+        <PlanDetailSkeleton />
+      </div>
+    </>
   );
   if (!plan) return (
-    <div className={`${routeLoadingClass} flex min-h-dvh items-center justify-center bg-app text-muted will-change-transform`} {...routeMotionProps}>
-      Plan no encontrado.
-    </div>
+    <>
+      {fixedSidebar}
+      <div className={`${routeLoadingClass} flex min-h-dvh items-center justify-center bg-app text-muted will-change-transform`} {...routeMotionProps}>
+        Plan no encontrado.
+      </div>
+    </>
   );
 
   return (
+    <>
+    {fixedSidebar}
     <div className={`${routeContainerClass} bg-app text-app ${routeIsMoving ? "will-change-transform" : ""}`} {...routeMotionProps}>
       <div className={`relative w-full ${activeTab === "chat" ? "h-dvh overflow-hidden" : "min-h-dvh"}`}>
-        <AppSidebar hideMobileNav={true} />
+        {!isOverlayPresentation && <AppSidebar hideMobileNav={true} />}
         <main className={`${activeTab === "chat" ? "h-dvh overflow-hidden" : "pb-[max(var(--space-6),env(safe-area-inset-bottom))]"} md:py-0 md:pl-[102px]`}>
           <div className={`${activeTab === "chat" ? "h-full" : ""} md:grid md:grid-cols-[minmax(88px,1fr)_minmax(0,1536px)_minmax(88px,1fr)] xl:grid-cols-[minmax(180px,1fr)_minmax(0,1280px)_minmax(180px,1fr)] 2xl:grid-cols-[minmax(240px,1fr)_minmax(0,1240px)_minmax(240px,1fr)]`}>
             <div className={`${activeTab === "chat" ? "flex h-full min-h-0 flex-col" : ""} md:col-start-2`}>
@@ -2837,5 +2851,6 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
         </div>
       )}
     </div>
+    </>
   );
 }

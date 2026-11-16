@@ -13,6 +13,7 @@ import PermissionSheet from "@/components/calls/PermissionSheet";
 import { useAuth } from "@/providers/AuthProvider";
 import { Capacitor } from "@capacitor/core";
 import { startRingback, stopRingback } from "@/lib/ringback";
+import { askCallNotifications, watchIncomingInBackground } from "@/lib/webIncomingAlert";
 import { canChooseCallOutput, resetCallAudio, setCallSpeaker } from "@/services/native/callNative";
 import { cancelIncomingCall, onCallNotificationAction, parseCallUrl, startRinging, stopRinging, startOngoingCall, stopOngoingCall, takePendingCallLink, updateOngoingCall } from "@/services/native/callNative";
 import { getLivekitUrl } from "@/config/external";
@@ -100,6 +101,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   ) => {
     cancelledOutgoingChatRef.current = null;
     clearEndReason();
+    askCallNotifications();
     setLastTarget({ chatId, nombre: participanteNombre, foto: participanteFoto, tipo, miembros });
     setOutgoingPending({ chatId });
     try {
@@ -232,6 +234,17 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       if (ringing) void stopRinging();
     };
   }, [ringingId]);
+
+  // ll-09: in a browser tab that is not on screen, a system notification + blinking title.
+  const ringingTexto = callState.status === "incoming"
+    ? { titulo: callState.tipo === "video" ? "Videollamada entrante" : "Llamada entrante", quien: callState.callerName }
+    : null;
+  const ringingTitulo = ringingTexto?.titulo;
+  const ringingQuien = ringingTexto?.quien;
+  useEffect(() => {
+    if (!ringingId || !ringingTitulo || !ringingQuien) return;
+    return watchIncomingInBackground({ titulo: ringingTitulo, quien: ringingQuien, tag: `llamada-${ringingId}` });
+  }, [ringingId, ringingTitulo, ringingQuien]);
 
   // The caller hears a ringback tone while the other side rings; it stops as soon as the call
   // leaves "outgoing" (answered, rejected, busy, no answer or hung up).
@@ -394,6 +407,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
           plan={callState.chatTipo === "PLAN" ? callState.chatNombre : null}
           group={callState.chatTipo === "GRUPO" ? callState.miembros : null}
           onAccept={(withCamera) => {
+            askCallNotifications();
             setIncomingMinimized(false);
             void acceptCall(withCamera);
           }}
