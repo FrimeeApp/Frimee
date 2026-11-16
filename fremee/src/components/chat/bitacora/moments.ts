@@ -185,6 +185,8 @@ export type NoticeMoment = {
   /** quitado / anadido / salio: who. */
   user_id?: string;
   user_nombre?: string;
+  /** Where (fn_chat_aviso_gente since 2.33): «del plan» in plan chats. Older notices: grupo. */
+  en?: "plan" | "grupo";
 };
 
 /**
@@ -252,11 +254,12 @@ export function noticeText(m: NoticeMoment, meId?: string): string {
   const yo = m.actor_id === meId;
   const aMi = m.user_id === meId;
   const quien = m.user_nombre ?? "alguien";
+  const donde = m.en === "plan" ? "del plan" : "del grupo";
   switch (m.clase) {
     case "renombrado": return yo ? `Cambiaste el nombre a «${m.nombre ?? ""}»` : `${m.actor_nombre} cambió el nombre a «${m.nombre ?? ""}»`;
     case "anadido": return aMi ? `${m.actor_nombre} te añadió` : yo ? `Añadiste a ${quien}` : `${m.actor_nombre} añadió a ${quien}`;
-    case "quitado": return aMi ? `${m.actor_nombre} te quitó del grupo` : yo ? `Quitaste a ${quien} del grupo` : `${m.actor_nombre} quitó a ${quien} del grupo`;
-    case "salio": return aMi ? "Saliste del grupo" : `${m.user_nombre ?? "Alguien"} salió del grupo`;
+    case "quitado": return aMi ? `${m.actor_nombre} te quitó ${donde}` : yo ? `Quitaste a ${quien} ${donde}` : `${m.actor_nombre} quitó a ${quien} ${donde}`;
+    case "salio": return aMi ? `Saliste ${donde}` : `${m.user_nombre ?? "Alguien"} salió ${donde}`;
     case "unio": return aMi ? "Te uniste al plan" : `${m.user_nombre ?? "Alguien"} se unió al plan`;
   }
 }

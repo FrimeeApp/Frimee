@@ -39,7 +39,7 @@ export type MensajeRow = {
 };
 
 export type ChatMiembro = {
-  user_id: string;
+  id: string;
   nombre: string;
   username: string | null;
   profile_image: string | null;
