@@ -54,7 +54,7 @@ export function buildGoogleMapsScriptUrl(apiKey: string | undefined, callback?: 
     v: "weekly",
     loading: "async",
     libraries: GOOGLE_MAPS_LIBRARIES.join(","),
-    // Keep place names in Spanish when users select a destination.
+    // Place names in Spanish («París», not «Paris») whatever the browser language.
     language: "es",
   });
   if (callback) {
