@@ -4,7 +4,8 @@ import { useMemo, useState } from "react";
 import { BarChart3, ChevronLeft, ChevronRight, UserPlus } from "lucide-react";
 import type { FeedPlanItemDto } from "@/services/api/dtos/plan.dto";
 import type { InicioInvitacion, InicioPlanExtra } from "@/services/api/endpoints/misPlanes.endpoint";
-import { daysBetween, planTiming, startOfDay } from "./homeSections";
+import { daysBetween, startOfDay } from "./homeSections";
+import { byPriority, kindOf, weekLane, type Kind } from "../calendar/calendarModel";
 import { CARD, FOCUS, LABEL, SERIF, TEXT_BTN } from "./pieces";
 import type { OpenPlan } from "./blocks";
 
@@ -13,58 +14,13 @@ const WEEKDAYS: Array<[string, string]> = [
   ["lu", "lunes"], ["ma", "martes"], ["mi", "miércoles"], ["ju", "jueves"], ["vi", "viernes"], ["sá", "sábado"], ["do", "domingo"],
 ];
 
-type BarStyle = "ongoing" | "upcoming" | "finished";
+type BarStyle = Kind;
 
 /** Only the plan in progress stands out: filled 4 px. Upcoming: thin 2 px outline. Finished: thin grey. */
 function barClass(kind: BarStyle) {
   if (kind === "ongoing") return "h-1 bg-[var(--chat-accent-text)]";
   if (kind === "upcoming") return "h-[2px] bg-[var(--chat-me)] shadow-[inset_0_0_0_1px_var(--chat-accent-text)]";
   return "h-[2px] bg-[var(--border-strong)]";
-}
-
-function kindOf(plan: FeedPlanItemDto): BarStyle {
-  const k = planTiming(plan).kind;
-  return k === "ongoing" ? "ongoing" : k === "upcoming" ? "upcoming" : "finished";
-}
-
-const KIND_ORDER: Record<BarStyle, number> = { ongoing: 0, upcoming: 1, finished: 2 };
-
-/** In progress first, then upcoming by start, then finished. */
-function byPriority(a: FeedPlanItemDto, b: FeedPlanItemDto) {
-  return KIND_ORDER[kindOf(a)] - KIND_ORDER[kindOf(b)] || new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime();
-}
-
-type Segment = { plan: FeedPlanItemDto; from: number; to: number; roundLeft: boolean; roundRight: boolean };
-
-/**
- * One lane per week, only on days of the shown month. Each day shows its first plan by priority;
- * consecutive days of the same plan join into one bar. Days with more than one plan get a dot.
- */
-function weekLane(plans: FeedPlanItemDto[], days: Date[], month: Date) {
-  const segments: Segment[] = [];
-  const dots: number[] = [];
-  let current: Segment | null = null;
-  for (let i = 0; i < days.length; i++) {
-    const d = days[i];
-    const inMonth = d.getMonth() === month.getMonth();
-    const covering = inMonth
-      ? plans.filter((p) => startOfDay(new Date(p.startsAt)) <= d && startOfDay(new Date(p.endsAt)) >= d)
-      : [];
-    if (covering.length > 1) dots.push(i);
-    const top = covering[0];
-    if (current && top && current.plan.id === top.id && current.to === i - 1) {
-      current.to = i;
-      continue;
-    }
-    if (current) segments.push(current);
-    current = top ? { plan: top, from: i, to: i, roundLeft: false, roundRight: false } : null;
-  }
-  if (current) segments.push(current);
-  for (const seg of segments) {
-    seg.roundLeft = startOfDay(new Date(seg.plan.startsAt)).getTime() === days[seg.from].getTime();
-    seg.roundRight = startOfDay(new Date(seg.plan.endsAt)).getTime() === days[seg.to].getTime();
-  }
-  return { segments, dots };
 }
 
 const LEGEND_MAX = 3;
