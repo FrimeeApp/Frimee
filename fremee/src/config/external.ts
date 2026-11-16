@@ -54,6 +54,8 @@ export function buildGoogleMapsScriptUrl(apiKey: string | undefined, callback?: 
     v: "weekly",
     loading: "async",
     libraries: GOOGLE_MAPS_LIBRARIES.join(","),
+    // Place names in Spanish («París», not «Paris») whatever the browser language.
+    language: "es",
   });
   if (callback) {
     params.set("callback", callback);
