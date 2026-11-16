@@ -187,10 +187,13 @@ export type NoticeMoment = {
   user_nombre?: string;
 };
 
-/** A message deleted for everyone (fn_mensaje_eliminar): by its author or by an admin. */
+/**
+ * A message deleted for everyone (fn_mensaje_eliminar): by its author or by an admin. «bloqueado»
+ * never comes from the database: it is how a group message from someone I blocked is drawn.
+ */
 export type DeletedMoment = {
   type: "eliminado";
-  por: "autor" | "admin";
+  por: "autor" | "admin" | "bloqueado";
 };
 
 export type Moment = PollMoment | TripSummaryMoment | ExpenseMoment | PlaceMoment | CardMoment | ProposalMoment | PlanMarkMoment | CopyMoment | PlanCreatedMoment | NoticeMoment | DeletedMoment | PollClosedMoment;
@@ -259,7 +262,9 @@ export function noticeText(m: NoticeMoment, meId?: string): string {
 }
 
 export const deletedText = (m: DeletedMoment) =>
-  m.por === "admin" ? "El admin eliminó este mensaje" : "Se eliminó este mensaje";
+  m.por === "admin" ? "El admin eliminó este mensaje"
+    : m.por === "bloqueado" ? "Mensaje de una persona bloqueada"
+    : "Se eliminó este mensaje";
 
 /** Text the bot history sends back to @frimee: what it said, never the JSON. */
 export function momentAsAssistantText(texto: string): string | null {
