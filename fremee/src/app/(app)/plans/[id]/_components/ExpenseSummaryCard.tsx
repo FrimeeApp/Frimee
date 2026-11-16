@@ -29,7 +29,7 @@ function balanceText(net: number, currency: string) {
 }
 
 /** Sidebar summary of the plan's expenses: total, balance and how it splits by category. Full detail lives in the Gastos tab. */
-export function ExpenseSummaryCard({ summary: s, onOpen }: { summary: ExpenseSummary; onOpen: () => void }) {
+export function ExpenseSummaryCard({ summary: s, onOpen, title = "Resumen gastos" }: { summary: ExpenseSummary; onOpen: () => void; title?: string }) {
   const balance = balanceText(s.net, s.currency);
   const shown = s.topCategories.reduce((sum, c) => sum + c.amount, 0);
   const rest = Math.max(s.total - shown, 0);
@@ -44,7 +44,7 @@ export function ExpenseSummaryCard({ summary: s, onOpen }: { summary: ExpenseSum
   return (
     <div className="hidden rounded-[16px] border border-app bg-surface px-[var(--space-4)] py-[var(--space-4)] md:block">
       <div className="flex items-center justify-between gap-[var(--space-3)]">
-        <h3 className="text-body font-[var(--fw-semibold)]">Resumen gastos</h3>
+        <h3 className="text-body font-[var(--fw-semibold)]">{title}</h3>
         <button
           type="button"
           onClick={onOpen}

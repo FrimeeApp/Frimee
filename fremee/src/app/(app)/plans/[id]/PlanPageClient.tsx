@@ -26,22 +26,24 @@ import PlanFotosTab from "@/components/plans/PlanFotosTab";
 import { PlanGastoDetailModal } from "@/components/plans/modals/PlanGastoDetailModal";
 import { uploadPlanAlbumFile, uploadPlanCoverFile } from "@/services/firebase/upload";
 import { addPlanFoto } from "@/services/api/repositories/plan-fotos.repository";
-import { formatMoney, formatExpenseDateTime, getInitial, formatDateRange, fmtTime, fmtDayHeader } from "@/lib/formatters";
-import { formatCompactRouteDistance, formatCompactRouteDuration } from "@/lib/route-formatters";
+import { formatMoney, formatExpenseDateTime, getInitial, formatDateRange } from "@/lib/formatters";
 import { createRealtimeTopic } from "@/lib/realtime";
 import { FIELD_LINE_CLS } from "@/lib/styles";
 import { buildGoogleMapsDirectionsUrl, buildWazeDirectionsUrl } from "@/config/external";
 import { FEED_ENABLED } from "@/config/app";
 import { PlanDetailSkeleton } from "./_components/PlanDetailSkeleton";
 import { ExpenseSummaryCard } from "./_components/ExpenseSummaryCard";
-import { AddSubplanSheet, TRANSPORT_MAP, TRANSPORT_LLEGADA, type AddSheetProps } from "./_components/AddSubplanSheet";
+import { AddSubplanSheet, TRANSPORT_MAP, type AddSheetProps } from "./_components/AddSubplanSheet";
 import { isoDateOnly, groupByDay, normalizeDateKey, summarizeRecipients, getOccupiedIntervals, timeToMin, mergeIntervals, type Interval } from "./_components/plan-utils";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
 import { CloseButton } from "@/components/ui/IconButton";
 import { Tabs } from "@/components/ui/Tabs";
 import { isPlanFinished, isoToPlanWhen, planWhenToIso } from "@/lib/plan-dates";
 import { PLACE_TBD } from "@/hooks/useCreatePlan";
-const ChevronDownIcon = ChevronDown;
+import { Itinerary, itineraryDayId } from "@/components/plans/itinerary/Itinerary";
+import { buildItinerary, localDayKey, tripProgressText } from "@/components/plans/itinerary/itineraryModel";
+import { MapPlaceholder, WhenVisible } from "@/components/plans/itinerary/parts";
+import TripOverviewMap from "@/components/plans/TripOverviewMap";
 
 const PLAN_ROUTE_TRANSITION_MS = 260;
 const PLAN_SWIPE_EDGE_PX = 32;
@@ -224,13 +226,12 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
       ? "invisible translate-y-[4px] opacity-0 motion-reduce:translate-y-0"
       : "visible translate-y-0 opacity-100 delay-[80ms] motion-reduce:delay-0";
   const MAP_FAB_TRANSITION = "flex transition-[opacity,transform,visibility] duration-[160ms] ease-[cubic-bezier(.2,0,0,1)] motion-reduce:duration-150";
-  const [collapsedDays, setCollapsedDays] = useState<Set<string>>(
-    () => new Set((initialCache?.subplanes?.length ? groupByDay(initialCache.subplanes) : []).map(([dateKey]) => dateKey)),
-  );
-  const collapsedDaysInitializedRef = useRef(!!initialCache?.subplanes?.length);
-  // Days the itinerary already listed: a reload only collapses days that were not there.
-  const knownDayKeysRef = useRef(new Set(groupByDay(initialCache?.subplanes ?? []).map(([dateKey]) => dateKey)));
-  const [collapsedDaysReady, setCollapsedDaysReady] = useState(!!initialCache?.subplanes?.length);
+  // Itinerary days the user has open. The first load opens one (it-sistema «Qué día va abierto»);
+  // days that appear later start folded.
+  const [openDays, setOpenDays] = useState<Set<string>>(() => new Set());
+  // Plan whose itinerary already opened its first day.
+  const openDaysPlanRef = useRef<number | null>(null);
+  const [subplanesReady, setSubplanesReady] = useState(!!initialCache?.subplanes?.length);
   const [showAddSheet, setShowAddSheet] = useState(false);
   const [addSheetInitialTitulo, setAddSheetInitialTitulo] = useState<string | undefined>();
   // ?tab=chat&m=<mensaje> («Te toca» → a poll): the chat opens at that message.
@@ -304,10 +305,7 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
         setSubplanes([]);
         setGastos([]);
         setBalances([]);
-        setCollapsedDays(new Set());
-        collapsedDaysInitializedRef.current = false;
-        knownDayKeysRef.current = new Set();
-        setCollapsedDaysReady(false);
+        setSubplanesReady(false);
       }
       return;
     }
@@ -317,15 +315,7 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
     setMembershipChecked(cached.membershipChecked);
     setPlanChat(cached.planChat);
     setPlanLoading(false);
-    if (cached.subplanes.length) {
-      const cachedDayKeys = groupByDay(cached.subplanes).map(([dateKey]) => dateKey);
-      setCollapsedDays(new Set(cachedDayKeys));
-      knownDayKeysRef.current = new Set(cachedDayKeys);
-      collapsedDaysInitializedRef.current = true;
-      setCollapsedDaysReady(true);
-    } else {
-      setCollapsedDaysReady(true);
-    }
+    setSubplanesReady(true);
     setSubplanes(cached.subplanes);
     setGastos(cached.gastos);
     setBalances(cached.balances);
@@ -586,6 +576,22 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
     return totals;
   }, [gastos]);
 
+  const itinerary = useMemo(
+    () => buildItinerary({
+      planStartIso: plan?.inicio_at ?? new Date().toISOString(),
+      planEndIso: plan?.fin_at ?? new Date().toISOString(),
+      rows: subplanes,
+      finished: isPast,
+    }),
+    [plan?.inicio_at, plan?.fin_at, subplanes, isPast],
+  );
+  // First load of a plan's itinerary: open today during the trip, else the first day with something.
+  useEffect(() => {
+    if (!plan || !subplanesReady || openDaysPlanRef.current === plan.id) return;
+    openDaysPlanRef.current = plan.id;
+    setOpenDays(new Set(itinerary.defaultOpen ? [itinerary.defaultOpen] : []));
+  }, [plan, subplanesReady, itinerary.defaultOpen]);
+
   const routeDayGroups = useMemo(() => groupByDay(subplanes), [subplanes]);
   const activeRouteDay = selectedMapDay ?? routeDayGroups[0]?.[0] ?? isoDateOnly(plan?.inicio_at ?? "");
   const routeDayItems = useMemo(
@@ -713,6 +719,7 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
   };
 
   const handleSubplanSaved = (saved: SubplanRow, original?: SubplanRow | null) => {
+    revealItineraryDay(localDayKey(saved.inicio_at));
     if (!original) {
       handleSubplanCreated(saved);
       return;
@@ -774,32 +781,27 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
     loadBalances();
   };
 
-  const toggleCollapsedDay = (dateKey: string) => {
-    setCollapsedDays((prev) => {
+  const toggleOpenDay = (dateKey: string) => {
+    setOpenDays((prev) => {
       const next = new Set(prev);
       if (next.has(dateKey)) next.delete(dateKey);
       else next.add(dateKey);
       return next;
     });
   };
+  const openItineraryDays = (keys: string[]) => setOpenDays((prev) => new Set([...prev, ...keys]));
+
+  // Opens the day of an activity just saved and scrolls to it (it-sistema «Crear»).
+  const revealItineraryDay = (dateKey: string) => {
+    openItineraryDays([dateKey]);
+    window.setTimeout(() => {
+      document.getElementById(itineraryDayId(dateKey))?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
+  };
 
   const applyLoadedSubplanes = useCallback((rows: SubplanRow[]) => {
     updatePlanDetailCache(user?.id, Number(id), { subplanes: rows });
-    const dayKeys = groupByDay(rows).map(([dateKey]) => dateKey);
-
-    if (!collapsedDaysInitializedRef.current) {
-      setCollapsedDays(new Set(dayKeys));
-      collapsedDaysInitializedRef.current = true;
-    } else {
-      // Keep the days the user opened; only a day that appears now starts collapsed.
-      const newDayKeys = dayKeys.filter((dateKey) => !knownDayKeysRef.current.has(dateKey));
-      if (newDayKeys.length > 0) {
-        setCollapsedDays((prev) => new Set([...prev, ...newDayKeys]));
-      }
-    }
-    knownDayKeysRef.current = new Set(dayKeys);
-
-    setCollapsedDaysReady(true);
+    setSubplanesReady(true);
     setSubplanes(rows);
   }, [id, user?.id]);
 
@@ -831,9 +833,9 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
   // day the map had not shown listed "Coche"/"A pie" without time or distance. Compute the
   // missing legs of every open day here (shared cache first, then Google).
   const missingLegs = useMemo(() => {
-    if (!collapsedDaysReady) return [];
-    const openDays = groupByDay(subplanes).filter(([dateKey]) => !collapsedDays.has(dateKey));
-    return findMissingLegs(openDays.map(([, items]) => items.map((s) => ({
+    if (!subplanesReady) return [];
+    const openDayItems = [...openDays].map((key) => itinerary.days.get(key)?.starts ?? []).filter((items) => items.length > 0);
+    return findMissingLegs(openDayItems.map((items) => items.map((s) => ({
       id: s.id,
       isTransport: TIPOS_TRANSPORTE.includes(s.tipo),
       transporte: s.transporte_llegada,
@@ -841,7 +843,7 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
       at: s.ubicacion_lat != null && s.ubicacion_lng != null ? { lat: s.ubicacion_lat, lng: s.ubicacion_lng } : null,
       end: s.ubicacion_fin_lat != null && s.ubicacion_fin_lng != null ? { lat: s.ubicacion_fin_lat, lng: s.ubicacion_fin_lng } : null,
     }))));
-  }, [subplanes, collapsedDays, collapsedDaysReady]);
+  }, [itinerary, openDays, subplanesReady]);
   useComputeMissingLegs(missingLegs, handleViajeComputed);
 
   const handleTransporteChange = async (subplanId: number, transporte: string | null) => {
@@ -1034,7 +1036,6 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
   const routeLoadingClass = isOverlayPresentation
     ? "fixed inset-0 z-[1200] overflow-y-auto overscroll-contain scrollbar-overlay-subtle"
     : "relative z-[1]";
-  const isDayCollapsed = (dateKey: string) => !collapsedDaysReady || collapsedDays.has(dateKey);
 
   // nav-04: as an overlay the sidebar stays outside the sliding layer and above it, so it never
   // slides along nor gets covered (the skeleton has none). As a page it scrolls with the page as before.
@@ -1143,7 +1144,7 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
               <div className="mt-[var(--space-2)] flex min-w-0 items-center gap-[var(--space-3)] pr-[132px] text-white/85 md:pr-[220px]">
                 <span className="flex shrink-0 items-center gap-[5px] text-body-sm">
                   <CalendarSmallIcon className="size-[14px] shrink-0" />
-                  {formatDateRange(plan.inicio_at, plan.fin_at)}
+                  {formatDateRange(plan.inicio_at, plan.fin_at)} · {tripProgressText(itinerary)}
                 </span>
                 <span className="flex min-w-0 items-center gap-[5px] text-body-sm">
                   <MapPinIcon className="size-[14px] shrink-0" />
@@ -1309,321 +1310,60 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
 
                 {/* Left column — itinerary */}
                 <div className="flex-1 min-w-0">
-                  {subplanes.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-[var(--space-16)] text-muted">
-                      <CalendarSmallIcon className="size-[40px] mb-[var(--space-3)] opacity-30" />
-                      <p className="text-body font-[var(--fw-medium)]">Sin actividades</p>
-                      <p className="text-body-sm mt-[var(--space-1)]">{isPast ? "Este plan ya ha finalizado" : "Añade la primera actividad del plan"}</p>
-                      {!isPast && isAdmin && (
-                      <button
-                        onClick={() => {
-                          setEditingSubplan(null);
-                          setAddSheetInitialTitulo(undefined);
-                          setAddSheetInitialDate(undefined);
-                          setShowAddSheet(true);
-                        }}
-                        className="mt-[var(--space-5)] hidden items-center gap-[var(--space-2)] rounded-chip border border-primary-token px-[var(--space-4)] py-[var(--space-2)] text-body-sm font-[var(--fw-medium)] text-primary-token transition-colors hover:bg-primary-token/10 md:flex"
-                      >
-                        <span className="text-lg leading-none">+</span> Añadir actividad
-                      </button>
-                      )}
-                    </div>
-                  ) : (
-                    <>
-                      {groupByDay(subplanes).map(([dateKey, items]) => (
-                        <div key={dateKey} className={`${isDayCollapsed(dateKey) ? "mb-[var(--space-4)]" : "mb-[var(--space-6)]"} last:mb-0`}>
-                          {/* Day header */}
-                          <div className={`-mx-[var(--page-margin-x)] border-b border-app px-[var(--page-margin-x)] md:mx-0 md:px-0 ${isDayCollapsed(dateKey) ? "pb-[var(--space-4)]" : "mb-[var(--space-5)] pb-[var(--space-4)]"}`}>
-                            {(() => {
-                              const dayHeaderLower = fmtDayHeader(items[0].inicio_at).toLocaleLowerCase("es-ES");
-                              const dayHeader = dayHeaderLower.charAt(0).toLocaleUpperCase("es-ES") + dayHeaderLower.slice(1);
-                              const dayExpense = dayExpenseTotals.get(dateKey);
-                              const daySummary = [
-                                `${items.length} actividad${items.length === 1 ? "" : "es"}`,
-                                dayExpense ? formatMoney(dayExpense.total, dayExpense.currency) : "Sin gastos",
-                              ].join(" · ");
-                              return (
-                                <button
-                                  type="button"
-                                  onClick={() => toggleCollapsedDay(dateKey)}
-                                  className="flex w-full min-w-0 items-start gap-[6px] text-left transition-colors hover:text-primary-token"
-                                  aria-expanded={!isDayCollapsed(dateKey)}
-                                  aria-label={isDayCollapsed(dateKey) ? `Desplegar ${dayHeader}` : `Plegar ${dayHeader}`}
-                                >
-                                  <span className="mt-[2px] inline-flex h-[20px] w-[20px] shrink-0 items-center justify-center text-muted">
-                                    <ChevronDownIcon className={`size-[15px] transition-transform ${isDayCollapsed(dateKey) ? "-rotate-90" : "rotate-0"}`} />
-                                  </span>
-                                  <span className="min-w-0">
-                                    <span
-                                      className="block font-[var(--fw-semibold)] text-app"
-                                      style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "var(--font-h4)", lineHeight: "1.15" }}
-                                    >
-                                      {dayHeader}
-                                    </span>
-                                    <span
-                                      className="mt-[6px] block font-[var(--fw-medium)] leading-[1.15] text-muted"
-                                      style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "var(--font-body-sm)" }}
-                                    >
-                                      {daySummary}
-                                    </span>
-                                  </span>
-                                </button>
-                              );
-                            })()}
-                          </div>
-
-                          {/* Timeline */}
-                          <div
-                            className={`grid overflow-hidden transition-[grid-template-rows,opacity,margin] duration-300 ease-out ${
-                              isDayCollapsed(dateKey)
-                                ? "mt-0 grid-rows-[0fr] opacity-0"
-                                : "mt-[var(--space-1)] grid-rows-[1fr] opacity-100"
-                            }`}
-                          >
-                            <div className="overflow-hidden">
-                              <div className="relative pl-0">
-                                {items.map((s, idx) => {
-                                  const isLast = idx === items.length - 1;
-                                  const nextTransporte = !isLast ? TRANSPORT_MAP[items[idx + 1]?.transporte_llegada ?? ""] : null;
-                                  const nextItem = !isLast ? items[idx + 1] : null;
-                                  const routeOrigin = s.ubicacion_fin_nombre ?? s.ubicacion_nombre ?? "";
-                                  const routeDestination = nextItem?.ubicacion_nombre ?? "";
-                                  const connectorMapsUrl = nextTransporte && routeDestination
-                                    ? buildGoogleMapsDirectionsUrl({
-                                        origin: routeOrigin,
-                                        destination: routeDestination,
-                                        travelMode: nextTransporte.googleMode ?? "driving",
-                                      })
-                                    : "";
-                                  const connectorWazeUrl = routeDestination ? buildWazeDirectionsUrl(routeDestination) : "";
-                                  const hasTravelMeta = !!(nextItem?.duracion_viaje || nextItem?.distancia_viaje);
-                                  const startTimeLabel = fmtTime(s.inicio_at);
-                                  const endTimeLabel = fmtTime(s.fin_at);
-                                  return (
-                                    <div key={s.id}>
-                                    <div className="relative flex gap-0 pb-[var(--space-2)]">
-                                      <div className="w-[54px] sm:w-[82px] shrink-0 pr-[var(--space-2)] pt-[2px] text-right">
-                                        {s.all_day ? (
-                                          <span className="block text-[14px] font-[var(--fw-medium)] leading-[1.1] tracking-[0.01em] text-muted">
-                                            Todo el día
-                                          </span>
-                                        ) : (
-                                          <div className="ml-auto flex w-fit flex-col items-start text-left leading-[1.05] text-muted">
-                                            <span className="block tabular-nums text-caption font-[var(--fw-medium)] tracking-[0.01em]">
-                                              {startTimeLabel} -
-                                            </span>
-                                            <span className="mt-[2px] block tabular-nums text-caption font-[var(--fw-medium)] tracking-[0.01em]">
-                                              {endTimeLabel}
-                                            </span>
-                                          </div>
-                                        )}
-                                      </div>
-
-                                      <div className="relative flex w-[28px] shrink-0 justify-center">
-                                        {idx > 0 && (
-                                          <div className="absolute left-1/2 top-0 h-[14px] w-[1.5px] -translate-x-1/2 bg-[var(--border)]" />
-                                        )}
-                                        {(!isLast || (isAdmin && !isPast)) && (
-                                          <div className="absolute left-1/2 top-[14px] bottom-[-8px] w-[1.5px] -translate-x-1/2 bg-[var(--border)]" />
-                                        )}
-                                        <div className="relative z-10 mt-[2px] flex h-[24px] w-[24px] items-center justify-center rounded-full border-[2px] border-primary-token bg-app">
-                                          <div className="h-[8px] w-[8px] rounded-full bg-primary-token" />
-                                        </div>
-                                      </div>
-
-                                      <div className="min-w-0 flex-1 pl-[var(--space-3)]">
-                                        <div className="flex items-start gap-[6px]">
-                                          <h4
-                                            className="min-w-0 shrink text-body font-[var(--fw-semibold)]"
-                                            style={{ fontFamily: "var(--font-inter), sans-serif" }}
-                                          >
-                                            {s.titulo}
-                                          </h4>
-                                          {!isPast && isAdmin && (
-                                            <button
-                                              type="button"
-                                              onClick={() => {
-                                                setEditingSubplan(s);
-                                                setAddSheetInitialTitulo(undefined);
-                                                setAddSheetInitialDate(undefined);
-                                                setShowAddSheet(true);
-                                              }}
-                                              className="mt-[1px] inline-flex h-[20px] w-[20px] shrink-0 items-center justify-center text-muted transition-colors hover:text-primary-token"
-                                              aria-label={`Editar ${s.titulo}`}
-                                            >
-                                              <EditIcon className="size-[14px]" />
-                                            </button>
-                                          )}
-                                        </div>
-                                        {s.descripcion && (
-                                          <p className="mt-[2px] text-body-sm text-muted line-clamp-2">{s.descripcion}</p>
-                                        )}
-                                        {s.ubicacion_nombre && !s.ubicacion_fin_nombre && (
-                                          <p className="mt-[4px] flex items-center gap-[4px] text-body-sm text-muted">
-                                            <MapPinIcon className="size-[13px] shrink-0" />
-                                            {s.ubicacion_nombre}
-                                          </p>
-                                        )}
-                                        {s.ubicacion_nombre && s.ubicacion_fin_nombre && (
-                                          <div className="mt-[4px] flex flex-col gap-[2px] text-body-sm text-muted">
-                                            <p className="flex items-center gap-[4px]">
-                                              <MapPinIcon className="size-[13px] shrink-0" />
-                                              {s.ubicacion_nombre}
-                                            </p>
-                                            <div className="pl-[18px] text-[14px] leading-none text-primary-token">↓</div>
-                                            <p className="flex items-center gap-[4px]">
-                                              <MapPinIcon className="size-[13px] shrink-0" />
-                                              {s.ubicacion_fin_nombre}
-                                            </p>
-                                          </div>
-                                        )}
-                                      </div>
-                                    </div>
-                                    {/* Transport connector between activities */}
-                                    {!isLast && (
-                                      <div className="relative flex gap-0 pb-[var(--space-4)]">
-                                        <div className="w-[54px] sm:w-[82px] shrink-0 pr-[var(--space-2)]" />
-                                        <div className="relative flex w-[28px] shrink-0 items-center justify-center">
-                                          <div className="absolute left-1/2 top-0 bottom-[-16px] w-[1.5px] -translate-x-1/2 bg-[var(--border)]" />
-                                          {nextTransporte ? (
-                                            <div className="relative z-10 flex h-[24px] w-[24px] items-center justify-center rounded-full border border-app bg-app text-muted">
-                                              <nextTransporte.Icon className="size-[14px]" />
-                                            </div>
-                                          ) : null}
-                                        </div>
-                                        <div className="min-w-0 flex-1 self-center pl-[var(--space-3)]">
-                                        {!isPast && nextItem && editingTransporteId === nextItem.id ? (
-                                          <div className="flex flex-wrap gap-[var(--space-2)]">
-                                            {TRANSPORT_LLEGADA.map((t) => (
-                                              <button
-                                                key={t.value}
-                                                onClick={() => handleTransporteChange(nextItem.id, t.value)}
-                                                className={`flex items-center gap-[6px] rounded-chip border px-[var(--space-2)] py-[4px] text-caption transition-colors ${
-                                                  nextItem.transporte_llegada === t.value
-                                                    ? "border-primary-token bg-primary-token/10 text-primary-token"
-                                                    : "border-app bg-surface-inset text-muted"
-                                                }`}
-                                              >
-                                                <t.Icon className="size-[14px] shrink-0" />
-                                                <span>{t.label}</span>
-                                              </button>
-                                            ))}
-                                            <button onClick={() => setEditingTransporteId(null)} className="text-caption text-muted px-[var(--space-2)]">✕</button>
-                                          </div>
-                                        ) : nextTransporte ? (
-                                          <div className="flex max-w-full items-center gap-[var(--space-2)]">
-                                            {isPast ? (
-                                              <span className={`${hasTravelMeta ? "flex" : "hidden md:flex"} min-w-0 items-center gap-[6px] rounded-full border border-app bg-surface px-[var(--space-3)] py-[7px] text-caption text-muted md:border-0 md:bg-transparent md:px-0 md:py-0`}>
-                                                <span className="hidden md:inline">{nextTransporte.label}</span>
-                                                {hasTravelMeta && (
-                                                  <>
-                                                    <span className="hidden text-muted opacity-40 md:inline">·</span>
-                                                    {nextItem?.duracion_viaje && <span>{formatCompactRouteDuration(nextItem.duracion_viaje)}</span>}
-                                                    {nextItem.distancia_viaje && (
-                                                      <span className="text-caption text-muted">{formatCompactRouteDistance(nextItem.distancia_viaje)}</span>
-                                                    )}
-                                                  </>
-                                                )}
-                                              </span>
-                                            ) : (
-                                              <button
-                                                onClick={() => nextItem && setEditingTransporteId(nextItem.id)}
-                                                className={`${hasTravelMeta ? "flex" : "hidden md:flex"} min-w-0 items-center gap-[6px] rounded-full border border-app bg-surface px-[var(--space-3)] py-[7px] text-caption text-muted transition-colors hover:text-primary-token md:border-0 md:bg-transparent md:px-0 md:py-0`}
-                                              >
-                                                <span className="hidden md:inline">{nextTransporte.label}</span>
-                                                {hasTravelMeta && (
-                                                  <>
-                                                    <span className="hidden text-muted opacity-40 md:inline">·</span>
-                                                    {nextItem?.duracion_viaje && <span>{formatCompactRouteDuration(nextItem.duracion_viaje)}</span>}
-                                                    {nextItem.distancia_viaje && (
-                                                      <span className="text-caption text-muted">{formatCompactRouteDistance(nextItem.distancia_viaje)}</span>
-                                                    )}
-                                                  </>
-                                                )}
-                                              </button>
-                                            )}
-                                            {connectorMapsUrl && (
-                                              <a
-                                                href={connectorMapsUrl}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-app bg-surface text-muted transition-colors active:bg-surface-inset md:size-auto md:border-0 md:bg-transparent md:active:bg-transparent"
-                                                title="Abrir en Google Maps"
-                                              >
-                                                <Image src="/brands/google-maps.svg" alt="Google Maps" width={18} height={18} className="size-[18px] md:size-[14px]" />
-                                              </a>
-                                            )}
-                                            {connectorWazeUrl && (
-                                              <a
-                                                href={connectorWazeUrl}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-app bg-surface text-muted transition-colors active:bg-surface-inset md:size-auto md:border-0 md:bg-transparent md:active:bg-transparent"
-                                                title="Abrir en Waze"
-                                              >
-                                                <Image src="/brands/waze-icon.svg" alt="Waze" width={18} height={18} className="size-[18px] md:size-[14px]" />
-                                              </a>
-                                            )}
-                                          </div>
-                                        ) : !isPast ? (
-                                          <button
-                                            onClick={() => setEditingTransporteId(items[idx + 1].id)}
-                                            className="text-caption text-muted hover:text-primary-token transition-colors"
-                                          >
-                                            + ¿Cómo llegas?
-                                          </button>
-                                        ) : null}
-                                        </div>
-                                      </div>
-                                    )}
-                                    </div>
-                                  );
-                                })}
-
-                                {!isPast && isAdmin && (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setEditingSubplan(null);
-                                      setAddSheetInitialTitulo(undefined);
-                                      setAddSheetInitialDate(dateKey);
-                                      setShowAddSheet(true);
-                                    }}
-                                    className="group relative flex w-full gap-0 bg-app pb-[var(--space-2)] pt-[var(--space-2)] text-left"
-                                    aria-label={`Añadir actividad en ${fmtDayHeader(items[0].inicio_at)}`}
-                                  >
-                                    <div className="w-[54px] sm:w-[82px] shrink-0 pr-[var(--space-2)]" />
-                                    <div className="relative flex w-[28px] shrink-0 justify-center">
-                                      <div className="absolute left-1/2 top-[-8px] h-[10px] w-[1.5px] -translate-x-1/2 bg-[var(--border)]" />
-                                      <div className="relative z-10 mt-[2px] flex h-[22px] w-[22px] items-center justify-center rounded-full border border-primary-token/35 bg-primary-token/10 text-primary-token transition-colors group-hover:border-primary-token/55 group-hover:bg-primary-token/16">
-                                        <PlusIcon className="size-[12px]" />
-                                      </div>
-                                    </div>
-                                    <div className="min-w-0 flex-1 self-center pl-[var(--space-3)]">
-                                      <span className="text-body-sm font-[var(--fw-regular)] text-primary-token transition-colors group-hover:text-primary-token">
-                                        Añadir actividad
-                                      </span>
-                                    </div>
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-
-                    </>
-                  )}
+                  <Itinerary
+                    model={itinerary}
+                    finished={isPast}
+                    canEdit={isAdmin}
+                    openDays={openDays}
+                    onToggleDay={toggleOpenDay}
+                    onOpenDays={openItineraryDays}
+                    dayExpenses={dayExpenseTotals}
+                    expenseTotal={{ total: expenseSummary.total, currency: expenseSummary.currency, count: expenseSummary.count }}
+                    editingTransporteId={editingTransporteId}
+                    onEditTransporte={setEditingTransporteId}
+                    onTransporteChange={handleTransporteChange}
+                    onEdit={(s) => {
+                      setEditingSubplan(s);
+                      setAddSheetInitialTitulo(undefined);
+                      setAddSheetInitialDate(undefined);
+                      setShowAddSheet(true);
+                    }}
+                    onAdd={(dateKey) => {
+                      setEditingSubplan(null);
+                      setAddSheetInitialTitulo(undefined);
+                      setAddSheetInitialDate(dateKey);
+                      setShowAddSheet(true);
+                    }}
+                    onOpenAlbum={() => setActiveTab("fotos")}
+                  />
                 </div>
 
                 {/* Right column — route map + expenses */}
                 <div className="lg:w-[340px] lg:shrink-0">
 
+                  {/* Finished trip: every stop on one map, built only when it scrolls into view. */}
+                  {isPast && subplanes.some((s) => s.ubicacion_nombre) && (
+                    <div className="mb-[var(--space-8)]">
+                      <h3 className="mb-[var(--space-3)] text-body font-[var(--fw-semibold)]">Recorrido del viaje</h3>
+                      <WhenVisible placeholderClassName="h-[320px] rounded-card border border-app bg-surface-inset">
+                        <TripOverviewMap subplanes={subplanes} heightClassName="h-[320px]" />
+                      </WhenVisible>
+                    </div>
+                  )}
+
+                  {/* No activities yet: the map is not loaded (it-sistema «Mapa»). */}
+                  {!isPast && subplanes.length === 0 && (
+                    <div className="mb-[var(--space-8)]">
+                      <h3 className="mb-[var(--space-3)] text-body font-[var(--fw-semibold)]">Ruta del día</h3>
+                      <MapPlaceholder />
+                    </div>
+                  )}
+
                   {/* Route map card */}
-                  {routeShouldShowMap && (
+                  {!isPast && subplanes.length > 0 && routeShouldShowMap && (
                     <div className="mb-[var(--space-8)]">
                       <div className="mb-[var(--space-3)] flex items-center justify-between">
-                        <h3 className="text-body font-[var(--fw-semibold)]" style={{ fontFamily: "var(--font-inter), sans-serif" }}>Ruta del Día</h3>
+                        <h3 className="text-body font-[var(--fw-semibold)]" style={{ fontFamily: "var(--font-inter), sans-serif" }}>Ruta del día</h3>
                       </div>
                       {routeDayGroups.length > 1 && (
                         <div className="mb-[var(--space-3)] flex flex-wrap gap-[var(--space-2)]">
@@ -1699,6 +1439,7 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
 
                   {/* Expenses summary */}
                   <ExpenseSummaryCard
+                    title={isPast ? "Cuentas del viaje" : "Resumen de gastos"}
                     summary={expenseSummary}
                     onOpen={() => setActiveTab("gastos")}
                   />
