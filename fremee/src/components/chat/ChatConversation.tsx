@@ -17,15 +17,16 @@ import {
   markChatRead,
   reactMensaje,
   pollVote,
-  pollGetVotes,
+  closePoll,
   resolveChatName,
   resolveChatAvatar,
   formatChatTime,
   type ChatListItem,
   type MensajeRow,
+  type PollCierre,
+  pollVotos,
 } from "@/services/api/repositories/chat.repository";
 import {
-  closePollEndpoint,
   getReaccionesEndpoint,
   pinMensajeEndpoint,
   getPinnedEndpoint,
@@ -50,10 +51,12 @@ import {
   eliminarMensajeEndpoint,
   type ChatInfo,
 } from "@/services/api/endpoints/chat.endpoint";
-import { parseMoment, momentPreview, momentAsAssistantText, formatEuros, noticeText, deletedText, type Moment, type ProposalMoment, type PlanCreatedMoment } from "@/components/chat/bitacora/moments";
+import { parseMoment, momentPreview, momentAsAssistantText, formatEuros, noticeText, deletedText, type Moment, type ProposalMoment, type PlanCreatedMoment, type PlanMarkMoment, type PollMoment as PollData } from "@/components/chat/bitacora/moments";
 import { ChatInfoPanel } from "@/components/chat/info/ChatInfoPanel";
 import { Sheet, useIsPhone } from "@/components/chat/bitacora/Sheet";
-import { PollMoment, emitPollVote } from "@/components/chat/bitacora/PollMoment";
+import { PollMoment, emitPollVote, pollState, pollWinner, type PollPlanAction } from "@/components/chat/bitacora/PollMoment";
+import { matchesText } from "@/lib/text-search";
+import { getOpenChat, setOpenChat } from "@/lib/open-chat";
 import { CallLine } from "@/components/chat/bitacora/CallLine";
 import { TripSummaryCard, ExpenseCard, PlanItemCard } from "@/components/chat/bitacora/MomentCards";
 import { PlaceCard } from "@/components/chat/bitacora/PlaceCard";
@@ -187,6 +190,7 @@ export function ChatConversation({
   chat,
   currentUserId,
   onBack,
+  backOnPhoneOnly,
   onNewMessage,
   onStartCall,
   onJoinCall,
@@ -210,6 +214,8 @@ export function ChatConversation({
   chat: ChatListItem;
   currentUserId: string;
   onBack: () => void;
+  /** Messages page: from md the list is beside the chat, so «‹» only on phones. */
+  backOnPhoneOnly?: boolean;
   onNewMessage: (msg: MensajeRow) => void;
   onStartCall?: (tipo: "audio" | "video") => void;
   onJoinCall?: (llamadaId: number, roomName: string, tipo: "audio" | "video") => void;
@@ -247,8 +253,6 @@ export function ChatConversation({
   // clientId: one per confirmation, so a retry never registers it twice.
   type PendingGasto = { clientId: string; planId: number; titulo: string; total: number; pagadoPorId: string; pagadoPorNombre: string; participantes: { user_id: string; nombre: string }[] };
   const pendingGastoRef = useRef<PendingGasto | null>(null);
-  type PendingPollWinner = { planId: number; winnerOption: string; question: string };
-  const pendingPollWinnerRef = useRef<PendingPollWinner | null>(null);
   const [sending, setSending] = useState(false);
   const [text, setText] = useState("");
   // Hidden until read from localStorage, so it never flashes for someone who closed it.
@@ -289,6 +293,15 @@ export function ChatConversation({
       .catch((e) => { console.error("[chat] Error leyendo la información del chat:", (e as { message?: string })?.message ?? String(e)); setChatInfoError(true); });
   }, [chat.chat_id]);
   useEffect(() => { setChatInfo(null); loadChatInfo(); }, [loadChatInfo]);
+  // The whole chat (its outer box, padding included): where a poll draw's board plays (po-*-cine).
+  const [drawHost, setDrawHost] = useState<HTMLDivElement | null>(null);
+  // This chat is on screen: the app-wide listener does not announce its draws again.
+  useEffect(() => {
+    setOpenChat(chat.chat_id);
+    return () => { if (getOpenChat() === chat.chat_id) setOpenChat(null); };
+  }, [chat.chat_id]);
+  // Admin of this chat: of its plan, or of its group (fn_chat_info). The DB checks it again.
+  const iAmAdmin = Boolean(isAdmin) || Boolean(chatInfo?.admins.includes(currentUserId));
   // «Eliminar»: for me, or for everyone (mine; an admin's with anyone's).
   const [deleting, setDeleting] = useState<MensajeRow | null>(null);
   // A notice arriving now (someone renamed, added, removed or left): the panel and the list catch up.
@@ -365,6 +378,11 @@ export function ChatConversation({
   const [audioError, setAudioError] = useState<string | null>(null);
   // A send that failed (chat-27): said above the composer, with «Reintentar» when it can be redone.
   const [sendError, setSendError] = useState<{ text: string; retry?: () => void } | null>(null);
+  // «Solo lo ves tú» (po-sistema): what a command could not do, over the composer; gone on the next send.
+  const [ephemeral, setEphemeral] = useState<string | null>(null);
+  // «/cerrar»: the highlighted poll in its list, and how each one is going (votes per option).
+  const [cerrarActive, setCerrarActive] = useState(0);
+  const [cerrarCounts, setCerrarCounts] = useState<Record<number, number[]>>({});
   const sendFail = (what: string) =>
     typeof navigator !== "undefined" && !navigator.onLine ? `Sin conexión: ${what}.` : `${what.charAt(0).toUpperCase()}${what.slice(1)}. Inténtalo de nuevo.`;
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -809,6 +827,11 @@ export function ChatConversation({
     // A shared place: its name and coordinates as they are.
     if (mo?.type === "lugar") return { titulo: mo.nombre, lugar: mo.nombre, lat: mo.lat, lng: mo.lng };
     if (mo?.type === "tarjeta") return { titulo: mo.titulo, tipo: CARD_TIPO[mo.kind], lugar: mo.lugar ?? undefined };
+    // A decided poll (po-sistema): the winning option; the panel lets you pick what it is.
+    if (mo?.type === "poll") {
+      const w = pollWinner(mo);
+      return w ? { titulo: w, lugar: w } : null;
+    }
     const s = sugerencias[m.id]?.plan;
     return s?.es_plan && s.titulo
       ? { titulo: s.titulo, fecha: s.fecha || undefined, hora: s.hora || undefined, tipo: s.tipo || undefined, lugar: s.lugar || undefined }
@@ -828,7 +851,13 @@ export function ChatConversation({
     const mo = parseMoment(x.texto);
     if (mo?.type === "plan_creado" && mo.origen_mensaje_id) sellados.set(mo.origen_mensaje_id, { plan: mo, hitoId: x.id });
   }
-  const puedePlan = (m: MensajeRow) => canPlan && !sellados.has(m.id);
+  // What was already added to the plan from a message (its «hito_plan» mark): never twice.
+  const anadidos = new Map<number, PlanMarkMoment>();
+  for (const x of messages) {
+    const mo = parseMoment(x.texto);
+    if (mo?.type === "hito_plan" && mo.origen_id) anadidos.set(mo.origen_id, mo);
+  }
+  const puedePlan = (m: MensajeRow) => canPlan && !sellados.has(m.id) && !anadidos.has(m.id);
   // Who joined a plan after it was made is not in its mark: ask which plans you are in now.
   const misPlanes = useMisPlanIds(currentUserId, !planId && sellados.size > 0);
   const enSellado = (s: { plan: PlanCreatedMoment }) =>
@@ -868,7 +897,7 @@ export function ChatConversation({
     closeOverlays();
     // A shared place or plan card is already exact; a text is read again with its conversation.
     const mo = parseMoment(m.texto);
-    const conContexto = mo?.type !== "lugar" && mo?.type !== "tarjeta";
+    const conContexto = mo?.type !== "lugar" && mo?.type !== "tarjeta" && mo?.type !== "poll";
     setAddPanel({ msg: m, anchor, clientId: crypto.randomUUID(), ctx: conContexto ? { status: "loading" } : null });
     if (!conContexto) return;
     const settle = (ctx: { status: "done"; plan: PlanCompletado | null } | { status: "failed" }) =>
@@ -949,14 +978,14 @@ export function ChatConversation({
   };
 
   /** Shows a message the server created for me (same as a sent one: local, broadcast, list). */
-  const showMyServerMessage = (id: number, texto: string) => {
+  const showMyServerMessage = (id: number, texto: string, scroll = true) => {
     const me = chat.miembros.find((m) => m.id === currentUserId);
     const msg: LocalMsg = { id, _key: id, sender_id: currentUserId, sender_nombre: me?.nombre ?? "", sender_profile_image: me?.profile_image ?? null, texto, created_at: new Date().toISOString() };
     sentMsgIdsRef.current.add(id);
     void channelRef.current?.send({ type: "broadcast", event: "new_message", payload: msg });
     setMessages((prev) => (prev.some((m) => m.id === id) ? prev : [...prev, msg]));
     onNewMessageRef.current(msg);
-    requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }));
+    if (scroll) requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }));
   };
 
   /** An expense and its card, in one transaction (never one without the other, never twice). */
@@ -1127,6 +1156,43 @@ export function ChatConversation({
 
   const WRITE_COMMANDS = PLAN_WRITE_COMMANDS;
 
+  /** A new poll from me (/votar, «Repetir la encuesta»). False if it could not be sent. */
+  const sendPollMessage = async (question: string, options: string[], expiresAt?: string): Promise<boolean> => {
+    const texto = JSON.stringify({ type: "poll", question, options, expires_at: expiresAt });
+    const me = chat.miembros.find((m) => m.id === currentUserId);
+    // Not -Date.now(): the /votar line written just before uses that same millisecond as its key.
+    const tempId = -Date.now() - 7;
+    const tempMsg: LocalMsg = {
+      id: tempId,
+      _key: tempId,
+      sender_id: currentUserId,
+      sender_nombre: me?.nombre ?? "",
+      sender_profile_image: me?.profile_image ?? null,
+      texto,
+      created_at: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, tempMsg]);
+    try {
+      const newId = await sendMensaje({ chatId: chat.chat_id, texto });
+      const realMsg: MensajeRow = { ...tempMsg, id: newId };
+      sentMsgIdsRef.current.add(newId);
+      void channelRef.current?.send({ type: "broadcast", event: "new_message", payload: realMsg });
+      setMessages((prev) => prev.map((m) => (m.id === tempId ? realMsg : m)));
+      onNewMessageRef.current(realMsg);
+      requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }));
+      return true;
+    } catch {
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+      return false;
+    }
+  };
+
+  /** What closing or deciding a poll leaves: its new texto, and the hidden «poll_cerrada» for the list. */
+  const applyPollCierre = (pollId: number, r: Partial<PollCierre>) => {
+    if (r.poll_texto) replaceMsgTexto(pollId, r.poll_texto);
+    if (r.aviso_id && r.aviso_texto) showMyServerMessage(r.aviso_id, r.aviso_texto, false);
+  };
+
   const handleCommand = async (cmd: string): Promise<string> => {
     const parts = cmd.slice(1).trim().split(/\s+/);
     const name = parts[0]?.toLowerCase();
@@ -1254,11 +1320,11 @@ export function ChatConversation({
         if (meDeben.length === 0 && debo.length === 0) return "No tienes deudas pendientes en este plan.";
 
         const lines: string[] = ["Tu saldo:"];
-        for (const b of meDeben) lines.push(`  ${b.from_nombre ?? "Alguien"} te debe ${b.importe.toFixed(2)}€`);
-        for (const b of debo) lines.push(`  Debes ${b.importe.toFixed(2)}€ a ${b.to_nombre ?? "Alguien"}`);
+        for (const b of meDeben) lines.push(`  ${b.from_nombre ?? "Alguien"} te debe ${formatEuros(b.importe)}`);
+        for (const b of debo) lines.push(`  Debes ${formatEuros(b.importe)} a ${b.to_nombre ?? "Alguien"}`);
 
         const total = meDeben.reduce((s, b) => s + b.importe, 0) - debo.reduce((s, b) => s + b.importe, 0);
-        lines.push(`  Balance total: ${total >= 0 ? "+" : ""}${total.toFixed(2)}€`);
+        lines.push(`  Balance total: ${total >= 0 ? "+" : ""}${formatEuros(total)}`);
         return lines.join("\n");
       } catch {
         return "No pude obtener tu saldo, inténtalo de nuevo.";
@@ -1270,7 +1336,7 @@ export function ChatConversation({
       try {
         const balances = await getBalancesForPlanEndpoint(planId);
         if (balances.length === 0) return "No hay deudas pendientes en este plan.";
-        const lines = ["Deudas del plan:", ...balances.map((b) => `  ${b.from_nombre ?? "?"} → ${b.to_nombre ?? "?"}: ${b.importe.toFixed(2)}€`)];
+        const lines = ["Deudas del plan:", ...balances.map((b) => `  ${b.from_nombre ?? "?"} → ${b.to_nombre ?? "?"}: ${formatEuros(b.importe)}`)];
         return lines.join("\n");
       } catch {
         return "No pude obtener las deudas, inténtalo de nuevo.";
@@ -1308,7 +1374,7 @@ export function ChatConversation({
           const creditor = creditors[0];
           const debtor = debtors[0];
           const amount = Math.min(creditor.amount, debtor.amount);
-          transfers.push(`  ${debtor.nombre} → ${creditor.nombre}: ${amount.toFixed(2)}€`);
+          transfers.push(`  ${debtor.nombre} → ${creditor.nombre}: ${formatEuros(amount)}`);
           creditor.amount -= amount;
           debtor.amount -= amount;
           if (creditor.amount < 0.01) creditors.shift();
@@ -1374,16 +1440,15 @@ export function ChatConversation({
         }
       }
 
-      const porPersona = (total / participantes.length).toFixed(2);
       const nombresParticipantes = participantes.map((p) => p.nombre).join(", ");
 
       pendingGastoRef.current = { clientId: crypto.randomUUID(), planId, titulo: concepto, total, pagadoPorId: pagador.user_id, pagadoPorNombre: pagador.nombre, participantes };
 
       return [
         `Confirmar gasto:`,
-        `${concepto.charAt(0).toUpperCase() + concepto.slice(1)} · ${total}€`,
+        `${concepto.charAt(0).toUpperCase() + concepto.slice(1)} · ${formatEuros(total)}`,
         `Pago: ${pagador.nombre}`,
-        `Divide entre: ${nombresParticipantes} (${porPersona}€ cada uno)`,
+        `Divide entre: ${nombresParticipantes} (${formatEuros(total / participantes.length)} cada uno)`,
         ``,
         `Responde "s" para confirmar o "n" para cancelar`,
       ].join("\n");
@@ -1447,32 +1512,11 @@ export function ChatConversation({
         restParts.pop();
       }
 
-      const options = restParts;
+      // Written by the app: «Sí» with its accent, however it was typed.
+      const options = restParts.map((o) => (/^s[ií]$/i.test(o) ? "Sí" : /^no$/i.test(o) ? "No" : o));
       if (options.length < 2) return "Indica al menos dos opciones. Ej: /votar ¿Vamos al Coliseo? Sí No";
 
-      const texto = JSON.stringify({ type: "poll", question, options, expires_at: expiresAt });
-      const me = chat.miembros.find((m) => m.id === currentUserId);
-      const tempId = -Date.now();
-      const tempMsg: LocalMsg = {
-        id: tempId,
-        _key: tempId,
-        sender_id: currentUserId,
-        sender_nombre: me?.nombre ?? "",
-        sender_profile_image: me?.profile_image ?? null,
-        texto,
-        created_at: new Date().toISOString(),
-      };
-      setMessages((prev) => [...prev, tempMsg]);
-      try {
-        const newId = await sendMensaje({ chatId: chat.chat_id, texto });
-        const realMsg: MensajeRow = { ...tempMsg, id: newId };
-        void channelRef.current?.send({ type: "broadcast", event: "new_message", payload: realMsg });
-        setMessages((prev) => prev.map((m) => (m.id === tempId ? realMsg : m)));
-        onNewMessageRef.current(realMsg);
-      } catch {
-        setMessages((prev) => prev.filter((m) => m.id !== tempId));
-        return "No pude crear la votación, inténtalo de nuevo.";
-      }
+      if (!(await sendPollMessage(question, options, expiresAt))) return "No pude crear la votación, inténtalo de nuevo.";
       return "";
     }
 
@@ -1522,7 +1566,8 @@ export function ChatConversation({
         return `Opción no válida. Usa /voto ${activePolls.length > 1 ? `${pollIndex + 1}-` : ""}1 – /voto ${activePolls.length > 1 ? `${pollIndex + 1}-` : ""}${poll.options.length}`;
 
       try {
-        await pollVote(pollMsg.id, optionIdx);
+        const r = await pollVote(pollMsg.id, optionIdx);
+        if (r.cerrada) applyPollCierre(pollMsg.id, r);
         emitPollVote(pollMsg.id);
         void channelRef.current?.send({ type: "broadcast", event: "poll_vote", payload: { mensaje_id: pollMsg.id, option_index: optionIdx } });
         return `Voto registrado: ${poll.options[optionIdx]}`;
@@ -1664,14 +1709,12 @@ export function ChatConversation({
     }
 
     if (name === "cerrar") {
-      if (!planId) return "Este comando solo está disponible en el chat de un plan.";
-
       const openPolls = messages
         .filter((m) => m.texto && isPollMessage(m.texto) && m.id > 0)
-        .map((m) => ({ msg: m, poll: JSON.parse(m.texto) as { question: string; options: string[]; expires_at?: string; closed?: boolean } }))
-        .filter(({ poll }) => !poll.closed);
+        .map((m) => ({ msg: m, poll: JSON.parse(m.texto) as PollData }))
+        .filter(({ poll }) => !poll.copiada_at && pollState(poll) === "abierta");
 
-      if (openPolls.length === 0) return "No hay ninguna votación activa en este plan.";
+      if (openPolls.length === 0) return "No hay ninguna encuesta abierta en este chat.";
 
       let targetPoll: typeof openPolls[0];
       if (openPolls.length === 1) {
@@ -1679,7 +1722,7 @@ export function ChatConversation({
       } else {
         const numStr = parts[1];
         if (!numStr) {
-          const lines = ["Hay varias votaciones activas. Indica cuál cerrar con /cerrar [n]:"];
+          const lines = ["Hay varias encuestas abiertas. Indica cuál cerrar con /cerrar [n]:"];
           openPolls.forEach(({ poll }, i) => lines.push(`  ${i + 1}. ${poll.question}`));
           return lines.join("\n");
         }
@@ -1689,71 +1732,19 @@ export function ChatConversation({
         targetPoll = openPolls[num - 1];
       }
 
-      const { msg: pollMsg, poll } = targetPoll;
+      const { msg: pollMsg } = targetPoll;
 
       const isBotPoll = pollMsg.sender_id === "frimee" || pollMsg.sender_id === null;
-      if (!isBotPoll && pollMsg.sender_id !== currentUserId && !isAdmin)
-        return "Solo el creador de la votación o un admin puede cerrarla.";
+      if (!isBotPoll && pollMsg.sender_id !== currentUserId && !iAmAdmin)
+        return "Solo quien creó la encuesta o un admin puede cerrarla.";
 
-      let votesData: Awaited<ReturnType<typeof pollGetVotes>> = [];
       try {
-        votesData = await pollGetVotes(pollMsg.id);
-      } catch {
-        return "No pude obtener los votos, inténtalo de nuevo.";
-      }
-
-      const votesMap: Record<number, number> = {};
-      for (const row of votesData) votesMap[row.option_index] = Number(row.vote_count);
-      const totalVotes = Object.values(votesMap).reduce((a, b) => a + b, 0);
-
-      const closedTexto = JSON.stringify({ ...poll, closed: true });
-      try {
-        await closePollEndpoint(pollMsg.id);
-        setMessages((prev) => prev.map((m) => m.id === pollMsg.id ? { ...m, texto: closedTexto } : m));
-        void channelRef.current?.send({ type: "broadcast", event: "edit_message", payload: { id: pollMsg.id, texto: closedTexto } });
+        applyPollCierre(pollMsg.id, await closePoll(pollMsg.id));
+        emitPollVote(pollMsg.id);
       } catch (err) {
-        console.error("[cerrar] fn_poll_close error:", err);
-        return "No pude cerrar la votación, inténtalo de nuevo.";
+        console.error("[cerrar] fn_poll_close:", (err as { message?: string })?.message ?? String(err));
+        return "No se ha cerrado la encuesta. Inténtalo de nuevo.";
       }
-
-      const sortedOptions = poll.options
-        .map((opt, idx) => ({ opt, count: votesMap[idx] ?? 0 }))
-        .sort((a, b) => b.count - a.count);
-
-      const resultLines = [`Votación cerrada: ${poll.question}`];
-      for (const { opt, count } of sortedOptions) {
-        const pct = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
-        resultLines.push(`  ${opt}: ${count} voto${count !== 1 ? "s" : ""} (${pct}%)`);
-      }
-
-      const maxVotes = sortedOptions[0]?.count ?? 0;
-      const winners = sortedOptions.filter((o) => o.count === maxVotes && maxVotes > 0);
-      let winnerOption: string | null = null;
-
-      if (totalVotes === 0) {
-        resultLines.push("Sin votos.");
-      } else if (winners.length > 1) {
-        resultLines.push(`Empate entre: ${winners.map((w) => w.opt).join(", ")}`);
-      } else {
-        winnerOption = winners[0].opt;
-        resultLines.push(`Ganadora: ${winnerOption}`);
-      }
-
-      const resultText = resultLines.join("\n");
-      try {
-        const newId = await sendMensaje({ chatId: chat.chat_id, texto: resultText });
-        const me = chat.miembros.find((m) => m.id === currentUserId);
-        const resultMsg: LocalMsg = { id: newId, _key: newId, sender_id: currentUserId, sender_nombre: me?.nombre ?? "", sender_profile_image: me?.profile_image ?? null, texto: resultText, created_at: new Date().toISOString() };
-        void channelRef.current?.send({ type: "broadcast", event: "new_message", payload: resultMsg });
-        setMessages((prev) => prev.some((m) => m.id === newId) ? prev : [...prev, resultMsg]);
-        onNewMessageRef.current(resultMsg);
-      } catch { /* resultados igual se muestran localmente */ }
-
-      if (winnerOption && isAdmin && !isPlanFinished) {
-        pendingPollWinnerRef.current = { planId, winnerOption, question: poll.question };
-        return `¿Añadir "${winnerOption}" al itinerario? Responde "s" para confirmar o "n" para cancelar`;
-      }
-
       return "";
     }
 
@@ -1770,6 +1761,7 @@ export function ChatConversation({
     const trimmed = (override ?? text).trim();
     if (!trimmed || sending) return;
     setSendError(null);
+    setEphemeral(null);
 
     if (pendingGastoRef.current && (isConfirm(trimmed) || isCancel(trimmed))) {
       const pending = pendingGastoRef.current;
@@ -1790,7 +1782,7 @@ export function ChatConversation({
           total: pending.total,
           pagadoPor: pending.pagadoPorId,
           participantes: pending.participantes.map((p) => p.user_id),
-          texto: `Gasto registrado: ${pending.titulo} ${pending.total}€ (pagado por ${pending.pagadoPorNombre}, dividido entre ${pending.participantes.length})`,
+          // No text: the server writes the expense card ({"type":"gasto"}), not «Gasto registrado: …».
         });
       } catch {
         const botMsg: LocalMsg = { id: -Date.now(), _key: -Date.now(), sender_id: "frimee", sender_nombre: "Frimee", sender_profile_image: null, texto: "No pude registrar el gasto, inténtalo de nuevo.", created_at: new Date().toISOString(), tipo: "bot" };
@@ -1952,16 +1944,12 @@ export function ChatConversation({
       return;
     }
 
-    if (pendingPollWinnerRef.current && (isConfirm(trimmed) || isCancel(trimmed))) {
-      const pending = pendingPollWinnerRef.current;
-      pendingPollWinnerRef.current = null;
+    // «/cerrar» is not a message (po-sistema): it runs and leaves the composer; if it cannot do
+    // anything, the answer is only for you.
+    if (/^\/cerrar\b/i.test(trimmed)) {
       setText("");
-      if (isCancel(trimmed)) {
-        const botMsg: LocalMsg = { id: -Date.now(), _key: -Date.now(), sender_id: "frimee", sender_nombre: "Frimee", sender_profile_image: null, texto: "Actividad descartada.", created_at: new Date().toISOString(), tipo: "bot" };
-        setMessages((prev) => [...prev, botMsg]);
-        return;
-      }
-      onAbrirActividad?.(pending.winnerOption);
+      const reply = await handleCommand(trimmed);
+      if (reply) setEphemeral(reply);
       return;
     }
 
@@ -2369,7 +2357,71 @@ export function ChatConversation({
     }
   };
 
+  // «/cerrar» (board po-m-comando): the open polls I can close, filtered by what follows the command.
+  // «/cerrar 2» keeps working for whoever knows it.
+  const cerrarQuery = /^\/cerrar(?:\s+(.*))?$/i.exec(text.trimStart());
+  const cerrarText = (cerrarQuery?.[1] ?? "").trim();
+  const cerrarOptions = !cerrarQuery || /^\d+$/.test(cerrarText) ? [] : messages.flatMap((m) => {
+    if (m.id <= 0) return [];
+    const p = parseMoment(m.texto);
+    if (p?.type !== "poll" || p.copiada_at || pollState(p) !== "abierta") return [];
+    const mayClose = m.sender_id === currentUserId || m.sender_id === null || m.sender_id === "frimee" || m.tipo === "bot" || iAmAdmin;
+    return mayClose && (!cerrarText || matchesText(p.question, cerrarText)) ? [{ msg: m, poll: p }] : [];
+  });
+  const cerrarOpen = cerrarOptions.length > 0;
+  const cerrarIds = cerrarOptions.map((o) => o.msg.id).join(",");
+  useEffect(() => {
+    if (!cerrarIds) return;
+    let alive = true;
+    for (const id of cerrarIds.split(",").map(Number)) {
+      if (cerrarCounts[id]) continue;
+      const opts = (parseMoment(messages.find((m) => m.id === id)?.texto) as PollData | null)?.options ?? [];
+      pollVotos(id)
+        .then((vs) => { if (alive) setCerrarCounts((c) => ({ ...c, [id]: opts.map((_, i) => vs.filter((v) => v.option_index === i).length) })); })
+        .catch(() => { /* the row just shows no tally */ });
+    }
+    return () => { alive = false; };
+    // Counts are fetched once per poll while the list is open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cerrarIds]);
+  useEffect(() => { setCerrarActive(0); }, [cerrarIds]);
+  /** «2 de 4 votos · empate ahora mismo» / «· gana viernes 28» / «· nadie ha votado». */
+  const cerrarTally = (id: number, poll: PollData) => {
+    const c = cerrarCounts[id];
+    if (!c) return "\u00a0";
+    const total = c.reduce((a, b) => a + b, 0);
+    const max = Math.max(0, ...c);
+    const top = c.map((n, i) => (n === max && max > 0 ? i : -1)).filter((i) => i >= 0);
+    const how = top.length === 0 ? "nadie ha votado" : top.length === 1 ? `gana ${poll.options[top[0]]}` : "empate ahora mismo";
+    return `${total} de ${Math.max(chat.miembros.length, total)} votos · ${how}`;
+  };
+  const closeFromCommand = async (m: MensajeRow) => {
+    setText("");
+    setEphemeral(null);
+    try {
+      applyPollCierre(m.id, await closePoll(m.id));
+      emitPollVote(m.id);
+    } catch (e) {
+      console.error("[cerrar] fn_poll_close:", (e as { message?: string })?.message ?? String(e));
+      setEphemeral("No se ha cerrado la encuesta. Inténtalo de nuevo.");
+    }
+  };
+
   const onKeyDown = (e: React.KeyboardEvent) => {
+    if (cerrarOpen) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        const n = cerrarOptions.length;
+        setCerrarActive((i) => (i + (e.key === "ArrowDown" ? 1 : n - 1)) % n);
+        return;
+      }
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        void closeFromCommand(cerrarOptions[Math.min(cerrarActive, cerrarOptions.length - 1)].msg);
+        return;
+      }
+      if (e.key === "Escape") { e.preventDefault(); setText(""); return; }
+    }
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void onSend(); }
     // ↑ on an empty composer edits your last message (board s-sistema · Gestos).
     if (e.key === "ArrowUp" && !text && !editingMsg) {
@@ -2472,7 +2524,11 @@ export function ChatConversation({
     const [y, mo, day] = d.split("-").map(Number);
     return new Date(y, mo - 1, day);
   };
-  const pollDecided = (p: { closed?: boolean; expires_at?: string }) => Boolean(p.closed || (p.expires_at && new Date(p.expires_at) < new Date()));
+  // Same rule as fn_momento_decidido (the «Decisiones» count): with a saved result only «decidida»
+  // counts (a tie is not a decision); older polls without it, closed or past their date.
+  const pollDecided = (p: PollData) => (p.resultado
+    ? p.resultado === "decidida"
+    : Boolean(p.closed || (p.expires_at && new Date(p.expires_at) < new Date())));
   const rulerMarks: RulerMark[] = [];
   if (indice) {
     for (const d of indice.dias) {
@@ -2483,6 +2539,8 @@ export function ChatConversation({
       const loaded = loadedReal.find((m) => m.id === h.id);
       const mo = loaded ? parseMoment(loaded.texto) : null;
       if (mo?.type === "propuesta" && mo.estado === "descartada") continue;
+      // Closed without votes: not a milestone (po-sistema), as in fn_chat_indice.
+      if (mo?.type === "poll" && mo.resultado === "sin_votos") continue;
       const decided = mo?.type === "poll" ? pollDecided(mo) : mo?.type === "propuesta" ? mo.estado === "aceptada" : h.estado === "decidido";
       rulerMarks.push({ kind: "hito", id: h.id, ord: h.ord, label: h.titulo ?? (h.tipo === "poll" ? "Encuesta" : "Propuesta de Frimee"), decided });
     }
@@ -2497,7 +2555,7 @@ export function ChatConversation({
         rulerMarks.push({ kind: "day", id: m.id, ord, label: chapterLabel(at, new Date(), trip) });
       }
       const mo = parseMoment(m.texto);
-      if (mo?.type === "poll") rulerMarks.push({ kind: "hito", id: m.id, ord, label: mo.question, decided: pollDecided(mo) });
+      if (mo?.type === "poll") { if (mo.resultado !== "sin_votos") rulerMarks.push({ kind: "hito", id: m.id, ord, label: mo.question, decided: pollDecided(mo) }); }
       else if (mo?.type === "propuesta" && mo.estado !== "descartada") rulerMarks.push({ kind: "hito", id: m.id, ord, label: mo.titulo, decided: mo.estado === "aceptada" });
       else if (mo?.type === "hito_plan") rulerMarks.push({ kind: "hito", id: m.id, ord, label: mo.titulo, decided: true });
       else if (mo?.type === "plan_creado") rulerMarks.push({ kind: "hito", id: m.id, ord, label: `Plan creado: ${mo.titulo}`, decided: true });
@@ -2570,7 +2628,7 @@ export function ChatConversation({
   const isDirectChat = chat.tipo === "DIRECTO";
 
   return (
-    <div className={`relative ${containerClassName ?? "flex h-[calc(100dvh-var(--space-20)-env(safe-area-inset-bottom))] flex-col md:h-[calc(100dvh-var(--space-16))]"} md:flex-row`}>
+    <div ref={setDrawHost} className={`relative ${containerClassName ?? "flex h-[calc(100dvh-var(--space-20)-env(safe-area-inset-bottom))] flex-col md:h-[calc(100dvh-var(--space-16))]"} md:flex-row`}>
     <div className="flex min-h-0 min-w-0 flex-1 flex-col" style={{ paddingBottom: "var(--keyboard-height, 0px)" }}>
       {/* Poll creator modal */}
       {showPollCreator && (
@@ -2654,7 +2712,7 @@ export function ChatConversation({
           <AddToPlanPanel
             status={status}
             prefill={prefill}
-            suggested={mo?.type !== "lugar" && mo?.type !== "tarjeta"}
+            suggested={mo?.type !== "lugar" && mo?.type !== "tarjeta" && mo?.type !== "poll"}
             plan={planId && planInfo ? { id: planId, titulo: planInfo.titulo, inicio_at: planInfo.inicio_at, fin_at: planInfo.fin_at, ubicacion_nombre: planInfo.ubicacion_nombre } : null}
             currentUserId={currentUserId}
             personas={personas}
@@ -2776,7 +2834,7 @@ export function ChatConversation({
       {!embedded && (
         <div className="border-b border-app bg-app pt-mobile-safe-top md:pt-0">
           <div className="flex min-h-[56px] min-w-0 items-center gap-[4px] px-[4px] md:min-h-[64px] md:px-[var(--space-2)]">
-            <button type="button" onClick={onBack} className="flex size-[44px] shrink-0 items-center justify-center rounded-[8px] text-app transition-colors hover:bg-surface" aria-label="Volver">
+            <button type="button" onClick={onBack} className={`flex size-[44px] shrink-0 items-center justify-center rounded-[8px] text-app transition-colors hover:bg-surface ${backOnPhoneOnly ? "md:hidden" : ""}`} aria-label="Volver">
               <BackIcon className="size-[22px]" />
             </button>
             <button type="button" onClick={() => { setInfoStart(null); setShowInfo((v) => (isPhone ? true : !v)); }} aria-label={`${name}. ${infoLabel}`} className="flex min-h-[44px] min-w-0 flex-1 items-center gap-[var(--space-3)] rounded-[8px] px-1 text-left transition-colors hover:bg-surface">
@@ -2968,7 +3026,7 @@ export function ChatConversation({
               // Desktop action bar (board d-acciones): on hover, or with the keyboard focus (:focus-visible,
               // so a click never leaves it showing). Inside the row, 4 px from its top, so it never covers the
               // message above. Mine: 8 px left of the block, at its top (on the right it would cover it).
-              const barBesideBlock = isMe && moment?.type !== "poll";
+              const barBesideBlock = isMe && moment?.type !== "poll" && moment?.type !== "gasto";
               const menuOpenHere = contextMenu?.msg.id === msg.id;
               const hoverBar = !isBot && msg.id > 0 && moment?.type !== "eliminado" ? (
                 <div
@@ -2994,8 +3052,19 @@ export function ChatConversation({
                       <DiamondIcon filled />
                     </button>
                   )}
+                  {/* A poll without a winner yet (open or tied): the diamond is there but waits. */}
+                  {moment?.type === "poll" && canPlan && !anadidos.has(msg.id) && !pollWinner(moment) && pollState(moment) !== "sin_votos" && (
+                    <span role="button" aria-disabled="true" aria-label="Añadir al plan, no disponible: aún no hay ganador" title="Aún no hay ganador · desempata primero" className="flex size-[36px] cursor-not-allowed items-center justify-center rounded-[6px] opacity-40">
+                      <DiamondIcon />
+                    </span>
+                  )}
+                  {anadidos.has(msg.id) && (
+                    <button type="button" aria-label="Ya está en el plan · Ver en el plan" title="Ya está en el plan" onClick={(e) => { e.stopPropagation(); router.push(`/plans/${anadidos.get(msg.id)!.plan_id}`); }} className="flex size-[36px] items-center justify-center rounded-[6px] transition-colors hover:bg-[var(--surface-2)]">
+                      <DiamondIcon filled />
+                    </button>
+                  )}
                   {puedePlan(msg) && planFrom(msg) && (
-                    <button type="button" aria-label={planId ? "Añadir al plan" : "Crear plan con esto"} title={planId ? "Añadir al plan · P" : "Crear plan con esto · P"} onClick={(e) => { e.stopPropagation(); addToPlan(msg, barAnchor(e)); }} className="flex size-[36px] items-center justify-center rounded-[6px] transition-colors hover:bg-[var(--surface-2)]">
+                    <button type="button" aria-label={planId ? "Añadir al plan" : "Crear plan con esto"} title={moment?.type === "poll" && planId ? `Añadir al plan · P · ${pollWinner(moment)}` : planId ? "Añadir al plan · P" : "Crear plan con esto · P"} onClick={(e) => { e.stopPropagation(); addToPlan(msg, barAnchor(e)); }} className="flex size-[36px] items-center justify-center rounded-[6px] transition-colors hover:bg-[var(--surface-2)]">
                       <DiamondIcon />
                     </button>
                   )}
@@ -3034,8 +3103,6 @@ export function ChatConversation({
                 </p>
               ) : moment?.type === "resumen_viaje" ? (
                 <TripSummaryCard data={moment} planTitle={planInfo?.titulo} planDates={trip ? tripRange(trip) : undefined} planId={planId} />
-              ) : moment?.type === "gasto" ? (
-                <ExpenseCard data={moment} planId={planId} />
               ) : moment?.type === "tarjeta" ? (
                 <PlanItemCard data={moment} isMe={isMe} tripStart={planId === moment.plan_id ? planInfo?.inicio_at : null} />
               ) : moment?.type === "lugar" ? (
@@ -3261,24 +3328,125 @@ export function ChatConversation({
                   </Fragment>
                 );
               }
-              if (moment?.type === "poll") {
-                const pollDecided = Boolean(moment.closed || (moment.expires_at && new Date(moment.expires_at) < new Date()));
+              if (moment?.type === "gasto") {
+                // Its own moment (not a bubble of whoever wrote it down): on the spine, for everyone.
+                const payer = moment.pagado_por_nombre.split(" ")[0];
+                const writer = msg.sender_nombre.split(" ")[0] || null;
+                const apuntadoPor = writer && writer !== payer ? (isMe ? "ti" : writer) : null;
                 return (
                   <Fragment key={(msg)._key ?? msg.id}>
                     {slot?.chapter && <DayChapter id={`day-${msg.id}`} label={slot.chapter} />}
-                    <article id={`msg-${msg.id}`} aria-label={`Encuesta, ${msgTime}`} className={`group/msg relative pl-[56px] pr-[var(--space-4)] ${slot?.chapter ? "mt-[4px]" : "mt-[14px]"} ${highlight} ${rowHover}`}>
+                    <article id={`msg-${msg.id}`} aria-label={`Gasto, ${msgTime}`} className={`group/msg relative pl-[56px] pr-[var(--space-4)] ${slot?.chapter ? "mt-[4px]" : "mt-[14px]"} ${highlight} ${rowHover}`}>
                       {hoverBar}
-                      <span aria-hidden className={`absolute left-[23px] top-[18px] size-[9px] rotate-45 ${pollDecided ? "bg-[var(--primary)]" : "border border-[var(--primary)] bg-[var(--bg)]"}`} />
-                      <div className={`relative max-w-[460px] transition-transform duration-200 ease-[cubic-bezier(.2,0,0,1)] ${lifted} outline-none`} {...gestureProps}>
+                      <span aria-hidden className="absolute left-[23px] top-[18px] size-[9px] rounded-full border border-[var(--text-secondary)] bg-[var(--bg)]" />
+                      <div className={`relative transition-transform duration-200 ease-[cubic-bezier(.2,0,0,1)] ${lifted} outline-none`} {...gestureProps}>
+                        <ExpenseCard data={moment} planId={planId} apuntadoPor={apuntadoPor} />
+                      </div>
+                      {reactionChip}
+                    </article>
+                  </Fragment>
+                );
+              }
+              if (moment?.type === "poll_cerrada") {
+                const chapter = slot?.chapter ? <DayChapter id={`day-${msg.id}`} label={slot.chapter} /> : null;
+                const who = msg.sender_id === currentUserId ? null : msg.sender_nombre.split(" ")[0] || "Alguien";
+                // The reopen line and the grey tie only matter while the poll is open again: once it is
+                // closed (decided, drawn…), its card tells the story and these go away.
+                const pollMsg = messages.find((x) => x.id === moment.poll_id);
+                const pollNow = pollMsg ? parseMoment(pollMsg.texto) : null;
+                const closedAgain = pollNow?.type === "poll" && pollState(pollNow) !== "abierta";
+                // «Ana ha reabierto «¿Dónde vamos?» para Lucía y Marcos · Ir a la encuesta»: the poll is
+                // open again where it was; this line at the end says so, so nobody has to look for it.
+                if (moment.resultado === "reabierta" && !closedAgain) {
+                  const para = (moment.para ?? []).map((p) => (p.id === currentUserId ? "ti" : p.nombre.split(" ")[0]));
+                  return (
+                    <Fragment key={(msg)._key ?? msg.id}>
+                      {chapter}
+                      <div id={`msg-${msg.id}`} className={`mt-[10px] flex justify-center px-[var(--space-4)] ${highlight}`}>
+                        <p className="max-w-[460px] text-center text-[13px] leading-[1.4] text-muted">
+                          {who ? `${who} ha reabierto` : "Has reabierto"} «{moment.pregunta ?? "la encuesta"}»{para.length ? ` para ${para.length > 1 ? `${para.slice(0, -1).join(", ")} y ${para[para.length - 1]}` : para[0]}` : ""} ·{" "}
+                          <button type="button" onClick={() => jumpToMessageRef.current(moment.poll_id)} className="min-h-[32px] font-[var(--fw-semibold)] text-[var(--chat-accent-text)] underline-offset-[3px] hover:underline">
+                            Ir a la encuesta
+                          </button>
+                        </p>
+                      </div>
+                    </Fragment>
+                  );
+                }
+                // A tie that was reopened afterwards stays as a grey milestone, without buttons.
+                const reopen = moment.resultado === "empate"
+                  ? messages.find((x) => x.id > msg.id && (() => { const r = parseMoment(x.texto); return r?.type === "poll_cerrada" && r.resultado === "reabierta" && r.poll_id === moment.poll_id; })())
+                  : undefined;
+                if (reopen && !closedAgain) {
+                  const by = reopen.sender_id === currentUserId ? "ti" : reopen.sender_nombre.split(" ")[0] || "alguien";
+                  const at = new Date(reopen.created_at).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+                  return (
+                    <Fragment key={(msg)._key ?? msg.id}>
+                      {chapter}
+                      <div id={`msg-${msg.id}`} className={`relative mt-[10px] pl-[56px] pr-[var(--space-4)] ${highlight}`}>
+                        <span aria-hidden className="absolute left-[23px] top-[6px] size-[9px] rotate-45 border border-[var(--text-secondary)] bg-[var(--bg)]" />
+                        <p className="text-[13px] text-muted">
+                          {moment.texto.replace(/^Encuesta cerrada · /, "")} · reabierta por {by} · {at}
+                        </p>
+                      </div>
+                    </Fragment>
+                  );
+                }
+                // Otherwise never drawn: the poll's own card shows the result; it feeds the list.
+                return chapter ? <Fragment key={(msg)._key ?? msg.id}>{chapter}</Fragment> : null;
+              }
+              if (moment?.type === "poll") {
+                const st = pollState(moment);
+                const winner = pollWinner(moment);
+                const botPoll = isBot || msg.sender_id === null || msg.sender_id === "frimee";
+                const mark = anadidos.get(msg.id);
+                const planAction: PollPlanAction | null = !winner ? null
+                  : mark ? { kind: "done", label: mark.tipo ? `En el plan · ${(MARK_TIPO[mark.tipo] ?? mark.tipo).toLowerCase()}` : "En el plan", onOpen: () => router.push(`/plans/${mark.plan_id}`) }
+                  : puedePlan(msg) ? { kind: "add", label: planId ? "Añadir al plan" : `Crear plan a ${winner}`, onClick: () => addToPlan(msg) }
+                  : null;
+                // Spine (po-sistema): open = small outline; decided = filled; tie = hollow; no votes = grey.
+                const spine = st === "abierta"
+                  ? (moment.desempate_de != null
+                    ? "left-[20px] top-[18px] size-[14px] rounded-[2px] border-2 border-[var(--primary)] bg-[var(--bg)]"
+                    : "left-[23px] top-[10px] size-[9px] border border-[var(--primary)] bg-[var(--bg)]")
+                  : st === "sin_votos" ? "left-[20px] top-[18px] size-[14px] rounded-[2px] border-2 border-[var(--text-secondary)] bg-[var(--bg)]"
+                  : st === "empate" ? "left-[20px] top-[18px] size-[14px] rounded-[2px] border-2 border-[var(--primary)] bg-[var(--bg)]"
+                  : "left-[20px] top-[18px] size-[14px] rounded-[2px] border-2 border-[var(--primary)] bg-[var(--primary)]";
+                const who = isMe ? "Tú" : botPoll ? "Frimee" : msg.sender_nombre.split(" ")[0] || "Alguien";
+                return (
+                  <Fragment key={(msg)._key ?? msg.id}>
+                    {slot?.chapter && <DayChapter id={`day-${msg.id}`} label={slot.chapter} />}
+                    <article id={`msg-${msg.id}`} aria-label={`Encuesta de ${who}, ${msgTime}`} className={`group/msg relative pl-[56px] pr-[var(--space-4)] ${slot?.chapter ? "mt-[4px]" : "mt-[14px]"} ${highlight} ${rowHover}`}>
+                      {hoverBar}
+                      <span aria-hidden className={`absolute rotate-45 ${spine}`} />
+                      <div className={`relative max-w-[560px] transition-transform duration-200 ease-[cubic-bezier(.2,0,0,1)] ${lifted} outline-none`} {...gestureProps}>
                         <PollMoment
                           mensajeId={msg.id}
                           poll={moment}
-                          askedBy={isMe ? "Preguntas tú" : `${isBot ? "Frimee" : msg.sender_nombre.split(" ")[0]} pregunta`}
-                          members={chat.miembros.length}
-                          onVote={(idx) => {
+                          author={who}
+                          time={msgTime}
+                          members={chat.miembros.map((m) => ({ id: m.id, nombre: m.id === currentUserId ? "Tú" : m.nombre }))}
+                          currentUserId={currentUserId}
+                          canManage={botPoll || isMe || iAmAdmin}
+                          canDecide={isMe || iAmAdmin}
+                          planAction={planAction}
+                          onVoted={(idx, r) => {
+                            if (r.cerrada) applyPollCierre(msg.id, r);
                             emitPollVote(msg.id);
                             void channelRef.current?.send({ type: "broadcast", event: "poll_vote", payload: { mensaje_id: msg.id, option_index: idx } });
                           }}
+                          onChanged={(r) => {
+                            applyPollCierre(msg.id, r);
+                            emitPollVote(msg.id);
+                          }}
+                          onDesempate={(r) => {
+                            replaceMsgTexto(msg.id, r.poll_texto);
+                            if (r.ya_existia) jumpToMessageRef.current(r.mensaje_id);
+                            else showMyServerMessage(r.mensaje_id, r.texto);
+                          }}
+                          onJumpTo={(id) => jumpToMessageRef.current(id)}
+                          onRepeat={() => { void sendPollMessage(moment.question, moment.options); }}
+                          drawHost={drawHost}
                         />
                       </div>
                       {reactionChip}
@@ -3334,8 +3502,10 @@ export function ChatConversation({
                     {hoverBar}
                     {startsTurn && (
                       isBot ? (
-                        <span aria-hidden className="absolute left-[13px] top-0 flex size-[28px] items-center justify-center overflow-hidden rounded-[8px] border border-[var(--chat-me-border)] bg-[var(--chat-me)]">
-                          <NextImage src="/Frimee_personaje.png" alt="" width={28} height={28} className="h-full w-full object-cover" />
+                        // The brand square with the compass (design system: the mascot only in access,
+                        // empty states and the cover).
+                        <span aria-hidden className="absolute left-[13px] top-0 flex size-[28px] items-center justify-center overflow-hidden rounded-[6px]">
+                          <NextImage src="/favicoon-frimee-green.svg" alt="" width={28} height={28} className="h-full w-full" />
                         </span>
                       ) : (
                         <span aria-hidden className="absolute left-[13px] top-0 flex size-[28px] items-center justify-center overflow-hidden rounded-full border border-app bg-[var(--surface-2)] text-[12px] font-[var(--fw-semibold)] text-app">
@@ -3442,7 +3612,41 @@ export function ChatConversation({
       </div>
 
       {/* Input area */}
-      <div className="px-[var(--space-3)] pb-[calc(env(safe-area-inset-bottom)+12px)] pt-[var(--space-2)] md:px-[var(--space-4)] md:pb-[var(--space-3)]">
+      <div className="relative px-[var(--space-3)] pb-[calc(env(safe-area-inset-bottom)+12px)] pt-[var(--space-2)] md:px-[var(--space-4)] md:pb-[var(--space-3)]">
+        {cerrarOpen && (
+          <div id="cerrar-lista" role="listbox" aria-label="Encuestas abiertas" className="absolute inset-x-[8px] bottom-full z-[8] mb-[6px] max-h-[50vh] overflow-y-auto rounded-[8px] border border-app bg-[var(--bg)] p-[4px] shadow-[0_8px_24px_rgba(0,0,0,0.25)] md:inset-x-[var(--space-4)] md:max-w-[560px]">
+            <p className="px-[10px] py-[6px] text-[12px] text-muted">/cerrar · cierra una encuesta y muestra el resultado</p>
+            {cerrarOptions.map(({ msg: m, poll: p }, i) => (
+              <div
+                key={m.id}
+                id={`cerrar-${m.id}`}
+                role="option"
+                aria-selected={i === cerrarActive}
+                onMouseDown={(e) => e.preventDefault()}
+                onMouseEnter={() => setCerrarActive(i)}
+                onClick={() => void closeFromCommand(m)}
+                className={`flex min-h-[52px] cursor-pointer items-center gap-[10px] rounded-[6px] px-[10px] py-[6px] ${i === cerrarActive ? "bg-[var(--surface-2)]" : ""}`}
+              >
+                <BarChart2 className="size-[18px] shrink-0 text-muted" aria-hidden />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[15px] font-[var(--fw-semibold)] text-app">{p.question}</p>
+                  <p className="text-[12px] tabular-nums text-muted">{cerrarTally(m.id, p)}</p>
+                </div>
+                {i === cerrarActive && <span className="hidden text-[12px] text-muted md:inline">Intro</span>}
+              </div>
+            ))}
+          </div>
+        )}
+        {ephemeral && (
+          <div role="status" className="mb-[var(--space-2)] flex items-start gap-[8px] rounded-[8px] border border-dashed border-[var(--border-strong)] bg-[var(--bg)] py-[10px] pl-[12px] pr-[4px] text-[14px] leading-[1.4] text-app">
+            <Info className="mt-[1px] size-[16px] shrink-0 text-muted" aria-hidden />
+            <div className="min-w-0 flex-1">
+              <p className="whitespace-pre-line">{ephemeral}</p>
+              <p className="text-[12px] text-muted">Solo lo ves tú</p>
+            </div>
+            <button type="button" onClick={() => setEphemeral(null)} aria-label="Cerrar aviso" title="Cerrar aviso" className="-my-[6px] flex size-[36px] shrink-0 items-center justify-center rounded-[8px] text-muted hover:bg-[var(--surface-2)]"><X className="size-[16px]" aria-hidden /></button>
+          </div>
+        )}
         {sendError && (
           <div role="alert" className="mb-[var(--space-2)] flex items-center gap-[8px] px-1 text-[13px] text-[var(--error)]">
             <span className="min-w-0 flex-1">{sendError.text}</span>
@@ -3573,6 +3777,10 @@ export function ChatConversation({
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                   onKeyDown={onKeyDown}
+                  role={cerrarOpen ? "combobox" : undefined}
+                  aria-expanded={cerrarOpen ? true : undefined}
+                  aria-controls={cerrarOpen ? "cerrar-lista" : undefined}
+                  aria-activedescendant={cerrarOpen ? `cerrar-${cerrarOptions[Math.min(cerrarActive, cerrarOptions.length - 1)]?.msg.id}` : undefined}
                   placeholder={editingMsg ? "Editar mensaje..." : planId ? "Escribe un mensaje o pregunta a @frimee..." : "Escribe un mensaje..."}
                   aria-label={editingMsg ? "Editar mensaje" : "Escribir mensaje"}
                   className="min-w-0 flex-1 bg-transparent py-[10px] text-[15px] text-app outline-none placeholder:text-muted"
@@ -3733,6 +3941,12 @@ function MediaBubble({ url, type, sending, time, isMe, onOpenLightbox }: { url: 
     </div>
   );
 }
+
+/** «En el plan · actividad»: the type the poll's winner was added as (AddToPlanPanel's types). */
+const MARK_TIPO: Record<string, string> = {
+  ACTIVIDAD: "Actividad", RESTAURANTE: "Restaurante", HOTEL: "Alojamiento", VUELO: "Vuelo",
+  TREN: "Tren", BUS: "Autobús", BARCO: "Barco", COCHE: "Coche", OTRO: "Otro",
+};
 
 function isPollMessage(texto: string): boolean {
   try { return JSON.parse(texto)?.type === "poll"; } catch { return false; }

@@ -13,6 +13,42 @@ export type PollMoment = {
   closed?: boolean;
   /** Copied into a plan's chat (closed, results as they were then). */
   copiada_at?: string;
+  // Saved by fn_poll_close / the automatic close (migration 20261116000001, board po-sistema).
+  resultado?: "decidida" | "empate" | "sin_votos";
+  ganadora?: number;
+  empatadas?: number[];
+  votos?: number[];
+  total?: number;
+  closed_at?: string;
+  /** Who closed it; absent when it closed itself because everybody voted. */
+  closed_by?: string;
+  closed_by_nombre?: string;
+  cierre?: "manual" | "auto";
+  /** «Decidir yo» after a tie. */
+  decidida_por?: string;
+  decidida_por_nombre?: string;
+  decidida_at?: string;
+  /** How a tie was settled: «Decidir yo» or the server's draw («Sortear»). */
+  decision?: "manual" | "sorteo";
+  /** «Reabrir para Lucía y Marcos»: open again, votes kept. */
+  reabierta_at?: string;
+  reabierta_por?: string;
+  reabierta_por_nombre?: string;
+  /** The tie-break poll created from this one, and the poll this one breaks the tie of. */
+  desempate_id?: number;
+  desempate_de?: number;
+  desempate_de_at?: string;
+};
+
+/** A poll was closed or decided: never drawn in the Bitácora, it feeds the Messages list. */
+export type PollClosedMoment = {
+  type: "poll_cerrada";
+  poll_id: number;
+  resultado: "decidida" | "empate" | "sin_votos" | "reabierta";
+  texto: string;
+  /** «reabierta»: the question and who it was reopened for (a line at the end of the chat). */
+  pregunta?: string;
+  para?: Array<{ id: string; nombre: string }>;
 };
 
 export type TripSummaryMoment = {
@@ -141,7 +177,7 @@ export type PlanCreatedMoment = {
  */
 export type NoticeMoment = {
   type: "aviso";
-  clase: "renombrado" | "quitado" | "anadido" | "salio";
+  clase: "renombrado" | "quitado" | "anadido" | "salio" | "unio";
   actor_id: string;
   actor_nombre: string;
   /** renombrado: the new name. */
@@ -157,9 +193,9 @@ export type DeletedMoment = {
   por: "autor" | "admin";
 };
 
-export type Moment = PollMoment | TripSummaryMoment | ExpenseMoment | PlaceMoment | CardMoment | ProposalMoment | PlanMarkMoment | CopyMoment | PlanCreatedMoment | NoticeMoment | DeletedMoment;
+export type Moment = PollMoment | TripSummaryMoment | ExpenseMoment | PlaceMoment | CardMoment | ProposalMoment | PlanMarkMoment | CopyMoment | PlanCreatedMoment | NoticeMoment | DeletedMoment | PollClosedMoment;
 
-const TYPES = new Set(["poll", "resumen_viaje", "gasto", "lugar", "tarjeta", "propuesta", "hito_plan", "copia_chat", "plan_creado", "aviso", "eliminado"]);
+const TYPES = new Set(["poll", "resumen_viaje", "gasto", "lugar", "tarjeta", "propuesta", "hito_plan", "copia_chat", "plan_creado", "aviso", "eliminado", "poll_cerrada"]);
 
 /** The moment inside a message's texto, or null for plain text. Never throws. */
 export function parseMoment(texto: string | null | undefined): Moment | null {
@@ -203,6 +239,7 @@ export function momentPreview(texto: string | null | undefined): string | null {
     case "plan_creado": return `Plan creado · ${m.titulo}`;
     case "aviso": return noticeText(m);
     case "eliminado": return deletedText(m);
+    case "poll_cerrada": return m.texto;
   }
 }
 
@@ -217,6 +254,7 @@ export function noticeText(m: NoticeMoment, meId?: string): string {
     case "anadido": return aMi ? `${m.actor_nombre} te añadió` : yo ? `Añadiste a ${quien}` : `${m.actor_nombre} añadió a ${quien}`;
     case "quitado": return aMi ? `${m.actor_nombre} te quitó del grupo` : yo ? `Quitaste a ${quien} del grupo` : `${m.actor_nombre} quitó a ${quien} del grupo`;
     case "salio": return aMi ? "Saliste del grupo" : `${m.user_nombre ?? "Alguien"} salió del grupo`;
+    case "unio": return aMi ? "Te uniste al plan" : `${m.user_nombre ?? "Alguien"} se unió al plan`;
   }
 }
 
