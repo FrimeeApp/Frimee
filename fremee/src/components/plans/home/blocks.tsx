@@ -211,7 +211,7 @@ function SettleRow({ planId, userId, onOpen }: { planId: number; userId?: string
   );
 }
 
-/** Whole row is clickable; the turquoise text describes the destination. */
+/** A «Para cerrar el viaje» row: the whole row is the button; the turquoise text says what happens. */
 function CloseRow({ onClick, icon, text, action }: { onClick: () => void; icon: React.ReactNode; text: string; action: string }) {
   return (
     <button type="button" onClick={onClick} className={`flex min-h-11 w-full items-center gap-3 text-left ${FOCUS}`}>
