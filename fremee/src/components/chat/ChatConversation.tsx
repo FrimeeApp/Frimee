@@ -83,6 +83,7 @@ import { ImageLightbox } from "@/components/ui/ImageLightbox";
 import { LinkifiedText } from "@/components/chat/bitacora/LinkifiedText";
 import dynamic from "next/dynamic";
 
+import { isPlanFinished as planFinished } from "@/lib/plan-dates";
 const EmojiMartPicker = dynamic(() => import("@emoji-mart/react"), { ssr: false });
 
 // Shown over the input in plan chats so people find out about the @frimee assistant.
@@ -1149,7 +1150,7 @@ export function ChatConversation({
 
   const CATEGORIAS_VALIDAS = VALID_TASK_CATEGORIES;
 
-  const isPlanFinished = planInfo?.fin_at ? new Date(planInfo.fin_at) < new Date() : false;
+  const isPlanFinished = planInfo?.fin_at ? planFinished(planInfo.fin_at) : false;
 
   const fmtEstado = (e: string) =>
     ({ hecho: "Hecho", pendiente: "Pendiente", en_progreso: "En progreso" }[e] ?? e);

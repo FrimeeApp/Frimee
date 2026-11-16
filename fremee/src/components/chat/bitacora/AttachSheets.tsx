@@ -8,6 +8,7 @@ import type { CardMoment, PlaceMoment } from "./moments";
 import { formatEuros } from "./moments";
 import { Sheet, sheetField, sheetLabel, sheetPrimaryButton } from "./Sheet";
 
+import { isPlanFinished } from "@/lib/plan-dates";
 const errMsg = (e: unknown) => (e as { message?: string })?.message ?? String(e);
 
 // ── Ubicación ─────────────────────────────────────────────────────────────────────────────────
@@ -194,9 +195,8 @@ export function InvitePlanSheet({
     fetchUserRelatedPlans({ userId: currentUserId, limit: 100 })
       .then((rows) => {
         if (cancelled) return;
-        const now = Date.now();
         setPlans(rows
-          .filter((p) => p.join_code && new Date(p.fin_at).getTime() >= now)
+          .filter((p) => p.join_code && !isPlanFinished(p.fin_at))
           .sort((a, b) => a.inicio_at.localeCompare(b.inicio_at)));
       })
       .catch((e) => { console.error("[chat] Error cargando planes:", errMsg(e)); if (!cancelled) setError("No se pudieron cargar tus planes. Inténtalo de nuevo."); });
@@ -267,8 +267,7 @@ export function ChoosePlanSheet({
     let cancelled = false;
     fetchUserRelatedPlans({ userId: currentUserId, limit: 100 })
       .then(async (rows) => {
-        const now = Date.now();
-        const ahead = rows.filter((p) => new Date(p.fin_at).getTime() >= now).sort((a, b) => a.inicio_at.localeCompare(b.inicio_at));
+        const ahead = rows.filter((p) => !isPlanFinished(p.fin_at)).sort((a, b) => a.inicio_at.localeCompare(b.inicio_at));
         const roles = await Promise.all(ahead.map((p) => fetchPlanUserRol(p.id, currentUserId).catch(() => null)));
         if (!cancelled) setPlans(ahead.map((p, i) => ({ ...p, admin: roles[i] === "ADMIN" })));
       })

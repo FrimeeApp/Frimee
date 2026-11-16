@@ -10,6 +10,7 @@ import { Sheet, useIsPhone } from "./Sheet";
 import { Sugerido, TimePicker } from "@/components/ui/TimePicker";
 import type { Guarda } from "./PlanFromChat";
 
+import { isPlanFinished } from "@/lib/plan-dates";
 /**
  * «Añadir al plan» from the chat (boards m-anadir, d-anadir, e-anadir, g-proponer): a panel that
  * opens at once when the diamond is pressed and fills in with what @frimee read in the message.
@@ -119,8 +120,7 @@ export function AddToPlanPanel({
     if (plan) return;
     let cancelled = false;
     void fetchUserRelatedPlans({ userId: currentUserId, limit: 100 }).then(async (rows) => {
-      const now = Date.now();
-      const ahead = rows.filter((p) => new Date(p.fin_at).getTime() >= now).sort((a, b) => a.inicio_at.localeCompare(b.inicio_at));
+      const ahead = rows.filter((p) => !isPlanFinished(p.fin_at)).sort((a, b) => a.inicio_at.localeCompare(b.inicio_at));
       const roles = await Promise.all(ahead.map((p) => fetchPlanUserRol(p.id, currentUserId).catch(() => null)));
       const mine = ahead.filter((_, i) => roles[i] === "ADMIN").map((p) => ({ id: p.id, titulo: p.titulo, inicio_at: p.inicio_at, fin_at: p.fin_at, ubicacion_nombre: p.ubicacion_nombre }));
       if (cancelled) return;
