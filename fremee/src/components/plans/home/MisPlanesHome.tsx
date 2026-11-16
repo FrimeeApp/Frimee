@@ -5,7 +5,8 @@ import { CalendarDays, Link2, Plus, Search } from "lucide-react";
 import type { FeedPlanItemDto } from "@/services/api/dtos/plan.dto";
 import type { MisPlanesInicio } from "@/services/api/endpoints/misPlanes.endpoint";
 import { buildHomeSections } from "./homeSections";
-import { CoverCard, FinishedLink, HeroBlock, LaterSpine, LaterTile, NowBlock, PlanRow, type OpenPlan } from "./blocks";
+import { CoverCard, FinishedLink, HeroBlock, LaterSpine, LaterTile, NowBlock, type OpenPlan } from "./blocks";
+import { PinnedStack } from "./PinnedStack";
 import { MiniMonth, TeToca } from "./side";
 import { AfterCard, CreateJoinFab, CreateJoinSheet, EmptyHome, GuestNotice } from "./actions";
 import { FILL_BTN, FOCUS, GHOST_BTN, LiveDot, SERIF, SectionTitle, TEXT_BTN } from "./pieces";
@@ -111,10 +112,7 @@ export function MisPlanesHome(props: Props) {
           {single && <AfterCard planTitle={hero.title} onCreate={onCreate} onJoin={() => setSheet("join")} />}
           {pinned.length > 0 && (
             <div className="mt-3">
-              <SectionTitle>Anclados</SectionTitle>
-              {pinned.map((p) => (
-                <PlanRow key={p.id} {...common(p)} />
-              ))}
+              <PinnedStack plans={pinned} extras={extras} onTogglePin={onTogglePin} onOpen={onOpen} userId={userId} />
             </div>
           )}
           {later.length > 0 && (
@@ -143,10 +141,6 @@ export function MisPlanesHome(props: Props) {
   );
 
   /* ───────────── Desktop ───────────── */
-  const desktopCards = [
-    ...(next ? [{ plan: next, label: "Siguiente" }] : []),
-    ...pinned.map((p) => ({ plan: p, label: "Anclado" })),
-  ];
   const desktop = (
     <div className="hidden md:block">
       <header className="flex h-14 items-center gap-3">
@@ -208,14 +202,17 @@ export function MisPlanesHome(props: Props) {
               </>
             )}
             {single && <AfterCard planTitle={hero.title} onCreate={onCreate} onJoin={() => setSheet("join")} />}
-            {desktopCards.length > 0 && (
+            {(next || pinned.length > 0) && (
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                {desktopCards.map(({ plan, label }) => (
-                  <div key={plan.id}>
-                    <h2 className="mt-4 flex h-8 items-center text-[12px] font-[var(--fw-semibold)] tracking-[.02em] text-muted">{label}</h2>
-                    <CoverCard {...common(plan)} label={label} desktop />
+                {next && (
+                  <div>
+                    <h2 className="mt-4 flex h-8 items-center text-[12px] font-[var(--fw-semibold)] tracking-[.02em] text-muted">Siguiente</h2>
+                    <CoverCard {...common(next)} label="Siguiente" desktop />
                   </div>
-                ))}
+                )}
+                {pinned.length > 0 && (
+                  <PinnedStack plans={pinned} extras={extras} onTogglePin={onTogglePin} onOpen={onOpen} userId={userId} desktop />
+                )}
               </div>
             )}
             {(laterPlans.length > 0 || finished.length > 0) && (
