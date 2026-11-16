@@ -40,12 +40,16 @@ export type EditPlanInitialValues = {
   visibility: CreatePlanPayload["visibility"];
 };
 
+/** Dates to start from when creating («Nuevo plan en estas fechas» in the calendar), YYYY-MM-DD. */
+export type CreatePlanDates = { startDate: string; endDate: string };
+
 type CreatePlanModalProps = {
   open: boolean;
   onClose: () => void;
   onCreate: (payload: CreatePlanPayload) => void | Promise<void>;
   currentUserId?: string;
   initialValues?: EditPlanInitialValues;
+  initialDates?: CreatePlanDates;
   mode?: "create" | "edit";
 };
 
@@ -269,7 +273,7 @@ function InlineRangeCalendar({
 
 // ─── Main modal ───────────────────────────────────────────────────────────────
 
-export default function CreatePlanModal({ open, onClose, onCreate, currentUserId, initialValues, mode = "create" }: CreatePlanModalProps) {
+export default function CreatePlanModal({ open, onClose, onCreate, currentUserId, initialValues, initialDates, mode = "create" }: CreatePlanModalProps) {
   const { isClosing, requestClose } = useModalCloseAnimation(onClose, open);
   const wasOpenRef = useRef(false);
   const coverInputRef = useRef<HTMLInputElement | null>(null);
@@ -342,8 +346,8 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
     const nextTitle = initialValues?.title ?? "";
     const nextDescription = initialValues?.description ?? "";
     const nextLocation = initialValues?.location ?? "";
-    const nextStartDate = initialValues?.startDate ?? toDateInputValue(today);
-    const nextEndDate = initialValues?.endDate ?? toDateInputValue(addDays(today, 1));
+    const nextStartDate = initialValues?.startDate ?? initialDates?.startDate ?? toDateInputValue(today);
+    const nextEndDate = initialValues?.endDate ?? initialDates?.endDate ?? toDateInputValue(addDays(today, 1));
     const nextVisibility = initialValues?.visibility ?? DEFAULT_VISIBILITY;
     const nextCoverImageUrl = initialValues?.coverImageUrl ?? null;
     setStep(1);
@@ -374,7 +378,7 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
       invitedFriendIds: [],
       selectedGroupIds: [],
     });
-  }, [initialValues]);
+  }, [initialValues, initialDates]);
 
   useEffect(() => {
     if (!open) {
