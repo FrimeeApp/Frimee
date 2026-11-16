@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Ban, Bell, BellOff, CalendarPlus, Camera, Check, ChevronLeft, ChevronRight, FileText, Image as ImageIcon, Link2, LogOut,
-  MapPin, MessageCircle, MoreHorizontal, Pencil, Plus, Star, Trash2, User, UserMinus, Users,
+  MapPin, MessageCircle, MoreHorizontal, Pencil, Plus, Star, Trash, Trash2, User, UserMinus, Users,
 } from "lucide-react";
 import {
   addChatMember, leaveChat, resolveChatAvatar, resolveChatName, updateChatFoto,
@@ -24,6 +24,8 @@ import { notifyChatAdded } from "@/components/chat/notifyChatAdded";
 import { PersonAvatar, firstName } from "@/components/chat/nuevo/people";
 import { Sheet } from "@/components/chat/bitacora/Sheet";
 import { InChatList, IN_CHAT_LABEL } from "@/components/chat/info/InChatList";
+import { BlockConfirm } from "@/components/chat/info/BlockConfirm";
+import { useBloqueos } from "@/hooks/useBloqueos";
 
 type Member = ChatListItem["miembros"][number];
 
@@ -34,6 +36,7 @@ const DB_MESSAGES = [
   "No eres miembro de este chat",
   "Solo quien creó el plan puede eliminarlo",
   "El plan tiene más personas: no se puede eliminar",
+  "No se ha podido añadir a esta persona",
 ];
 
 /** fn_plan_leave answers with a code instead of failing. */
@@ -165,6 +168,17 @@ export function ChatInfoPanel(props: ChatInfoPanelProps) {
   const subTitle = view === "add" ? "Añadir personas"
     : isList ? `${IN_CHAT_LABEL[view]}${info?.recuentos[view] ? ` · ${info.recuentos[view]}` : ""}` : null;
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
+  const { bloqueados, bloquear, desbloquear } = useBloqueos();
+  const [blockFor, setBlockFor] = useState<Member | null>(null);
+  const [blockError, setBlockError] = useState<string | null>(null);
+  // «Desbloquear» goes straight through (no sheet): only the error needs saying.
+  const unblock = (p: Member) => {
+    setBlockError(null);
+    desbloquear(p.id).catch((e) => {
+      logError("Error desbloqueando", e);
+      setBlockError(failText(e, "No se ha desbloqueado"));
+    });
+  };
   // Alone in a plan: inviting is what matters, and leaving would empty it (board feedback 15 nov).
   const alone = members.length <= 1;
 
@@ -227,6 +241,9 @@ export function ChatInfoPanel(props: ChatInfoPanelProps) {
           onProfile={(p) => router.push(`/profile/${p.id}`)}
           onWriteTo={props.onWriteTo}
           onRemove={(p) => setConfirm({ kind: "quitar", person: p })}
+          bloqueados={bloqueados}
+          onBlock={setBlockFor}
+          onUnblock={unblock}
         />
       )}
 
@@ -239,7 +256,14 @@ export function ChatInfoPanel(props: ChatInfoPanelProps) {
         {isPlan && alone ? (
           <DangerRow icon={<Trash2 className="size-[18px]" />} label="Eliminar el plan" hint="Eres la única persona del plan" onClick={() => setConfirm({ kind: "eliminarPlan" })} />
         ) : isDirecto ? (
-          <DangerRow icon={<Ban className="size-[18px]" />} label="Eliminar chat" hint={`Desaparece de tu lista; si ${firstName(other?.nombre ?? "te")} te escribe, vuelve`} onClick={() => setConfirm({ kind: "eliminar" })} />
+          <>
+            <DangerRow icon={<Trash className="size-[18px]" />} label="Eliminar chat" hint={`Desaparece de tu lista; si ${firstName(other?.nombre ?? "te")} te escribe, vuelve`} onClick={() => setConfirm({ kind: "eliminar" })} />
+            {other && (bloqueados.has(other.id) ? (
+              <DangerRow icon={<Ban className="size-[18px]" />} label="Desbloquear" onClick={() => unblock(other)} />
+            ) : (
+              <DangerRow icon={<Ban className="size-[18px]" />} label="Bloquear" onClick={() => setBlockFor(other)} />
+            ))}
+          </>
         ) : (
           <DangerRow
             icon={<LogOut className="size-[18px]" />}
@@ -248,6 +272,7 @@ export function ChatInfoPanel(props: ChatInfoPanelProps) {
             onClick={() => setConfirm({ kind: "salir" })}
           />
         )}
+        {blockError && <p role="alert" className="px-[8px] text-[13px] text-[var(--error)]">{blockError}</p>}
       </section>
     </div>
   );
@@ -275,6 +300,14 @@ export function ChatInfoPanel(props: ChatInfoPanelProps) {
           )}
           {body}
         </aside>
+      )}
+
+      {blockFor && (
+        <BlockConfirm
+          name={firstName(blockFor.nombre)}
+          onClose={() => setBlockFor(null)}
+          onConfirm={async () => { await bloquear(blockFor.id); setBlockFor(null); }}
+        />
       )}
 
       {confirm && (
@@ -669,7 +702,7 @@ function GastosSummary({ gastos, currentUserId, members, onOpen }: { gastos: Gas
 
 const PEOPLE_FOLD = 6;
 
-function PeopleSection({ chat, members, info, currentUserId, isPlan, canInvite, alone, onAdd, onProfile, onWriteTo, onRemove }: {
+function PeopleSection({ chat, members, info, currentUserId, isPlan, canInvite, alone, onAdd, onProfile, onWriteTo, onRemove, bloqueados, onBlock, onUnblock }: {
   chat: ChatListItem;
   members: Member[];
   info: ChatInfo | null;
@@ -681,6 +714,9 @@ function PeopleSection({ chat, members, info, currentUserId, isPlan, canInvite, 
   onProfile: (p: Member) => void;
   onWriteTo?: (p: Member) => void;
   onRemove: (p: Member) => void;
+  bloqueados: Set<string>;
+  onBlock: (p: Member) => void;
+  onUnblock: (p: Member) => void;
 }) {
   const [all, setAll] = useState(false);
   const [menuFor, setMenuFor] = useState<string | null>(null);
@@ -727,6 +763,9 @@ function PeopleSection({ chat, members, info, currentUserId, isPlan, canInvite, 
                 onProfile={() => { setMenuFor(null); onProfile(m); }}
                 onWriteTo={onWriteTo ? () => { setMenuFor(null); onWriteTo(m); } : undefined}
                 onRemove={chat.tipo === "GRUPO" && iAmAdmin ? () => { setMenuFor(null); onRemove(m); } : undefined}
+                blocked={bloqueados.has(m.id)}
+                onBlock={() => { setMenuFor(null); onBlock(m); }}
+                onUnblock={() => { setMenuFor(null); onUnblock(m); }}
               />
             )}
           </div>
@@ -741,14 +780,17 @@ function PeopleSection({ chat, members, info, currentUserId, isPlan, canInvite, 
   );
 }
 
-/** «⋯» of a person (board gi-d-menu): Ver perfil, Escribir a…, and (admins) Quitar del grupo in red. */
-function PersonMenu({ person, open, onToggle, onProfile, onWriteTo, onRemove }: {
+/** «⋯» of a person (board gi-d-menu): Ver perfil, Escribir a…, then in red Bloquear/Desbloquear and (admins) Quitar del grupo. */
+function PersonMenu({ person, open, onToggle, onProfile, onWriteTo, onRemove, blocked, onBlock, onUnblock }: {
   person: Member;
   open: boolean;
   onToggle: (open: boolean) => void;
   onProfile: () => void;
   onWriteTo?: () => void;
   onRemove?: () => void;
+  blocked: boolean;
+  onBlock: () => void;
+  onUnblock: () => void;
 }) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
@@ -788,11 +830,10 @@ function PersonMenu({ person, open, onToggle, onProfile, onWriteTo, onRemove }: 
         <div role="menu" aria-label={`Opciones de ${person.nombre}`} className="absolute right-0 top-[48px] z-10 w-[220px] rounded-[8px] border border-app bg-[var(--bg)] p-[4px] shadow-[0_8px_24px_rgba(0,0,0,0.25),0_2px_4px_rgba(0,0,0,0.15)]">
           <button type="button" role="menuitem" onClick={onProfile} className={`${item} text-app`}><User className="size-[18px] text-muted" aria-hidden />Ver perfil</button>
           {onWriteTo && <button type="button" role="menuitem" onClick={onWriteTo} className={`${item} text-app`}><MessageCircle className="size-[18px] text-muted" aria-hidden />Escribir a {firstName(person.nombre)}</button>}
+          <div aria-hidden className="my-[4px] h-px bg-[var(--border)]" />
+          <button type="button" role="menuitem" onClick={blocked ? onUnblock : onBlock} className={`${item} text-[var(--error)]`}><Ban className="size-[18px]" aria-hidden />{blocked ? "Desbloquear" : "Bloquear"}</button>
           {onRemove && (
-            <>
-              <div aria-hidden className="my-[4px] h-px bg-[var(--border)]" />
-              <button type="button" role="menuitem" onClick={onRemove} className={`${item} text-[var(--error)]`}><UserMinus className="size-[18px]" aria-hidden />Quitar del grupo</button>
-            </>
+            <button type="button" role="menuitem" onClick={onRemove} className={`${item} text-[var(--error)]`}><UserMinus className="size-[18px]" aria-hidden />Quitar del grupo</button>
           )}
         </div>
       )}

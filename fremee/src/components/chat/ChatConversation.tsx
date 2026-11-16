@@ -79,6 +79,7 @@ import { getBalancesForPlanEndpoint } from "@/services/api/endpoints/gastos.endp
 import { promoteToAdminEndpoint, demoteAdminEndpoint, kickMemberEndpoint, leavePlanEndpoint } from "@/services/api/endpoints/plans.endpoint";
 import { callFrimeeAssistant, type FrimeeHistoryEntry } from "@/services/api/endpoints/frimee.endpoint";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
+import { useBloqueos } from "@/hooks/useBloqueos";
 import { ImageLightbox } from "@/components/ui/ImageLightbox";
 import { LinkifiedText } from "@/components/chat/bitacora/LinkifiedText";
 import dynamic from "next/dynamic";
@@ -187,6 +188,26 @@ function formatDateLabel(date: Date): string {
   return date.toLocaleDateString("es-ES", { day: "numeric" });
 }
 
+/** How a «Se eliminó» moment is written; «bloqueado» is only ever drawn, never stored. */
+const TAPADO = JSON.stringify({ type: "eliminado", por: "bloqueado" });
+
+/**
+ * In groups and plans, what someone I blocked says is drawn as «Mensaje de una persona bloqueada»:
+ * no text, media or reply, and (being an «eliminado» moment) no actions or reactions. Quotes of
+ * those messages too. In their 1 a 1 (bloqueados = null) what they said before stays as it was.
+ */
+function taparBloqueados<T extends MensajeRow>(list: T[], bloqueados: Set<string> | null, me: string): T[] {
+  if (!bloqueados || bloqueados.size === 0) return list;
+  const tapados = new Set(list.filter((m) => m.sender_id !== me && bloqueados.has(m.sender_id)).map((m) => m.id));
+  return list.map((m) => {
+    if (tapados.has(m.id)) {
+      return { ...m, texto: TAPADO, audio_url: null, document_url: null, document_name: null, image_url: null, image_type: null, reply_to_id: null, reply_texto: null, reply_sender_nombre: null };
+    }
+    if (m.reply_to_id != null && tapados.has(m.reply_to_id)) return { ...m, reply_texto: TAPADO };
+    return m;
+  });
+}
+
 export function ChatConversation({
   chat,
   currentUserId,
@@ -244,6 +265,9 @@ export function ChatConversation({
 }) {
   type LocalMsg = MensajeRow & { _key?: number };
   const [messages, setMessages] = useState<LocalMsg[]>([]);
+  // Who I blocked: their group messages are covered, and in their 1 a 1 I cannot write.
+  const { bloqueados, desbloquear } = useBloqueos();
+  const [unblockError, setUnblockError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -2508,7 +2532,14 @@ export function ChatConversation({
   // Shown in time order: a message created out of order (the plan's welcome before the guest demo's
   // backdated ones) would otherwise open the same day twice.
   // In an old stretch, what arrives meanwhile waits below it until you go back to the latest.
-  const timelineMessages = inTimeOrder(detached ? messages.filter((m) => m.id > 0 && m.id <= detached.endId) : messages);
+  const timelineMessages = taparBloqueados(
+    inTimeOrder(detached ? messages.filter((m) => m.id > 0 && m.id <= detached.endId) : messages),
+    chat.tipo === "DIRECTO" ? null : bloqueados,
+    currentUserId,
+  );
+  const blockedOther = chat.tipo === "DIRECTO"
+    ? chat.miembros.find((m) => m.id !== currentUserId && bloqueados.has(m.id)) ?? null
+    : null;
   const timeline = buildTimeline(timelineMessages, trip);
   const tabStopId = focusMsgId != null && timelineMessages.some((m) => m.id === focusMsgId)
     ? focusMsgId
@@ -3621,7 +3652,28 @@ export function ChatConversation({
       )}
       </div>
 
-      {/* Input area */}
+      {/* Input area · in a 1 a 1 with someone I blocked, only the way back */}
+      {blockedOther ? (
+        <div className="px-[var(--space-3)] pb-[calc(env(safe-area-inset-bottom)+12px)] pt-[var(--space-2)] md:px-[var(--space-4)] md:pb-[var(--space-3)]">
+          <p className="flex min-h-[48px] flex-wrap items-center justify-center gap-x-[4px] text-center text-[14px] text-muted">
+            Has bloqueado a {blockedOther.nombre.split(" ")[0]} ·
+            <button
+              type="button"
+              onClick={() => {
+                setUnblockError(null);
+                desbloquear(blockedOther.id).catch((e) => {
+                  console.error("[chat] Error desbloqueando:", (e as { message?: string })?.message ?? String(e));
+                  setUnblockError(typeof navigator !== "undefined" && !navigator.onLine ? "Sin conexión. No se ha desbloqueado." : "No se ha desbloqueado. Inténtalo de nuevo.");
+                });
+              }}
+              className="min-h-[44px] px-[4px] font-[var(--fw-semibold)] text-[var(--chat-accent-text)]"
+            >
+              Desbloquear
+            </button>
+          </p>
+          {unblockError && <p role="alert" className="text-center text-[13px] text-[var(--error)]">{unblockError}</p>}
+        </div>
+      ) : (
       <div className="relative px-[var(--space-3)] pb-[calc(env(safe-area-inset-bottom)+12px)] pt-[var(--space-2)] md:px-[var(--space-4)] md:pb-[var(--space-3)]">
         {cerrarOpen && (
           <div id="cerrar-lista" role="listbox" aria-label="Encuestas abiertas" className="absolute inset-x-[8px] bottom-full z-[8] mb-[6px] max-h-[50vh] overflow-y-auto rounded-[8px] border border-app bg-[var(--bg)] p-[4px] shadow-[0_8px_24px_rgba(0,0,0,0.25)] md:inset-x-[var(--space-4)] md:max-w-[560px]">
@@ -3871,6 +3923,7 @@ export function ChatConversation({
           </div>
         </div>
       </div>
+      )}
     </div>
     {/* Desktop (board gi-d-grupo): next to the chat from 1280 px; over its right side below that. */}
     {showInfo && !isPhone && (
