@@ -8,7 +8,7 @@ import { useAuth } from "@/providers/AuthProvider";
 import { useToast } from "@/components/ui/Toaster";
 import type { CreatePlanPayload } from "@/components/plans/modals/CreatePlanModal";
 import { createPlan, listPlansByIdsInOrder } from "@/services/api/repositories/plans.repository";
-import { insertNotificacion } from "@/services/api/repositories/notifications.repository";
+import { invitePeople } from "@/services/api/repositories/invitations.repository";
 import { syncGoogleCalendarBidirectional } from "@/services/api/repositories/events.repository";
 import { resolveGoogleProviderToken } from "@/services/auth/googleProviderToken";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
@@ -62,13 +62,18 @@ export function useCreatePlan() {
         creadoPorUserId: user.id,
       });
 
-      const invited = payload.invited.filter((p) => p.id !== user.id);
-      if (invited.length) {
-        await Promise.allSettled(
-          invited.map((p) =>
-            insertNotificacion({ userId: p.id, tipo: "plan_invite", actorId: user.id, entityId: String(created.id), entityType: "plan" }),
-          ),
-        );
+      // Invitations go through fn_plan_invitar (checks friendship, blocks…); it says who got one.
+      const wanted = payload.invited.filter((p) => p.id !== user.id);
+      let invited = wanted;
+      let inviteFailed = false;
+      if (wanted.length) {
+        try {
+          const sent = new Set(await invitePeople(created.id, wanted.map((p) => p.id)));
+          invited = wanted.filter((p) => sent.has(p.id));
+        } catch {
+          invited = [];
+          inviteFailed = true;
+        }
       }
 
       if (settings?.google_sync_enabled && settings.google_sync_export_plans) {
@@ -93,7 +98,12 @@ export function useCreatePlan() {
 
       void syncPlanWidget(user.id).catch((error: unknown) => console.warn("[nuevo-plan] widget sync failed:", error));
 
-      toast(invited.length ? `Plan creado. Hemos invitado a ${namesSentence(invited.map((p) => p.name))}.` : "Plan creado.", "success");
+      toast(
+        inviteFailed
+          ? "Plan creado, pero no se pudieron enviar las invitaciones. Invita desde el plan."
+          : invited.length ? `Plan creado. Hemos invitado a ${namesSentence(invited.map((p) => p.name))}.` : "Plan creado.",
+        inviteFailed ? "error" : "success",
+      );
       router.push(Capacitor.isNativePlatform() ? `/plans/static?id=${created.id}` : `/plans/${created.id}`);
       return created;
     },

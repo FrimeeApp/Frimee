@@ -169,6 +169,15 @@ function MessagesPageContent() {
     window.history.replaceState(null, "", window.location.pathname);
   }, [chatParam, mParam]);
 
+  // /messages?nuevoGrupo=1: «Grupo nuevo» from the sidebar's «Crear» menu on another page.
+  const nuevoGrupoParam = searchParams.get("nuevoGrupo");
+  useEffect(() => {
+    if (nuevoGrupoParam !== "1") return;
+    openNewGroup();
+    window.history.replaceState(null, "", window.location.pathname);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per arrival with the parameter
+  }, [nuevoGrupoParam]);
+
   // Detectar cuando el usuario es añadido a un nuevo chat
   useEffect(() => {
     if (!user) return;

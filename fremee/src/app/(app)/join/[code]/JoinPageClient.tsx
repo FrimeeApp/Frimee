@@ -2,7 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { fetchPlanByJoinCode, joinPlanByCode, type PlanByIdRow } from "@/services/api/endpoints/plans.endpoint";
+import { fetchPlanByJoinCode, joinPlanByCode, type JoinCodeError, type PlanByIdRow } from "@/services/api/endpoints/plans.endpoint";
+
+const JOIN_ERRORS: Record<string, string> = {
+  not_found: "Este enlace de invitación no es válido o el plan ya no existe.",
+  too_many_attempts: "Has probado demasiados códigos. Vuelve a intentarlo dentro de una hora.",
+  not_allowed: "Ya no puedes unirte a este plan.",
+};
+const joinErrorText = (e: JoinCodeError | string) => JOIN_ERRORS[e] ?? "No se pudo unir al plan.";
 import { useAuth } from "@/providers/AuthProvider";
 
 export default function JoinPageClient() {
@@ -23,7 +30,7 @@ export default function JoinPageClient() {
     if (!code) return;
     fetchPlanByJoinCode(code)
       .then((result) => {
-        if (!result) { setError("Este enlace de invitación no es válido o ha expirado."); setLoading(false); return; }
+        if ("error" in result) { setError(joinErrorText(result.error)); setLoading(false); return; }
         if (result.alreadyMember) { router.replace(`/plans/${result.planId}`); return; }
         setPlan(result.plan);
         setPlanId(result.planId);
@@ -38,7 +45,7 @@ export default function JoinPageClient() {
     try {
       const result = await joinPlanByCode(code);
       if ("error" in result) {
-        setError("No se pudo unir al plan.");
+        setError(joinErrorText(result.error));
         return;
       }
       router.replace(`/plans/${"plan_id" in result ? result.plan_id : planId}`);
