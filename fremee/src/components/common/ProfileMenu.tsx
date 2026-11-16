@@ -182,7 +182,7 @@ export default function ProfileMenu(props: Props) {
       aria-label="Cuenta"
       onKeyDown={onKey}
       style={{ left: pos.left, bottom: pos.bottom }}
-      className="fixed z-[80] w-[280px] rounded-[8px] border border-app bg-app p-[6px] shadow-[var(--shadow-md)]"
+      className="fixed z-[1250] w-[280px] rounded-[8px] border border-app bg-app p-[6px] shadow-[var(--shadow-md)]"
     >
       {isGuest ? (
         <>

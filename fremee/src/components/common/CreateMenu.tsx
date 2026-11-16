@@ -251,7 +251,7 @@ export default function CreateMenu(props: Props) {
         role={view === "menu" ? "menu" : "dialog"}
         aria-label={view === "menu" ? "Crear" : "Unirme con enlace"}
         style={{ left: pos.left, top: pos.top, maxHeight: maxH }}
-        className="fixed z-[80] w-[292px] overflow-y-auto rounded-[8px] border border-app bg-app p-[6px] shadow-[var(--shadow-md)]"
+        className="fixed z-[1250] w-[292px] overflow-y-auto rounded-[8px] border border-app bg-app p-[6px] shadow-[var(--shadow-md)]"
       >
         {view === "menu" ? (
           groups.map((g, gi) => (
@@ -365,7 +365,7 @@ function SubmenuPlans({ ref, left, anchor, plans, loading, showSearch, query, on
       aria-label="Gasto en otro plan"
       onKeyDown={onKey}
       style={{ left, top, maxHeight: `calc(100dvh - ${top}px - 16px)` }}
-      className="fixed z-[81] flex w-[272px] flex-col rounded-[8px] border border-app bg-app p-[6px] shadow-[var(--shadow-md)]"
+      className="fixed z-[1251] flex w-[272px] flex-col rounded-[8px] border border-app bg-app p-[6px] shadow-[var(--shadow-md)]"
     >
       {showSearch && (
         <div className="relative mb-[6px]">
