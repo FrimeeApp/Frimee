@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import AppSidebar from "@/components/common/AppSidebar";
 import LoadingScreen from "@/components/common/LoadingScreen";
 import CreatePlanModal, { type CreatePlanDates, type CreatePlanPayload } from "@/components/plans/modals/CreatePlanModal";
+import { useCreatePlan } from "@/hooks/useCreatePlan";
 import { MisPlanesHome } from "@/components/plans/home/MisPlanesHome";
 import { AllPlansView } from "@/components/plans/home/AllPlansView";
 import { CalendarView } from "@/components/plans/calendar/CalendarView";
@@ -17,13 +18,10 @@ import { clearCachedGoogleProviderToken } from "@/services/auth/googleTokenCache
 import { resolveGoogleProviderToken } from "@/services/auth/googleProviderToken";
 import type { FeedPlanItemDto } from "@/services/api/dtos/plan.dto";
 import { syncGoogleCalendarBidirectional } from "@/services/api/repositories/events.repository";
-import { createPlan, listPlansByIdsInOrder, listUserRelatedPlans } from "@/services/api/repositories/plans.repository";
+import { listUserRelatedPlans } from "@/services/api/repositories/plans.repository";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
-import { insertNotificacion } from "@/services/api/repositories/notifications.repository";
-import { syncPlanWidget } from "@/services/widget/planWidget";
 import { STORAGE_KEYS } from "@/config/storage";
 
-import { dateInputToIso } from "@/lib/plan-dates";
 
 let calendarPlansCache: { userId: string; plans: FeedPlanItemDto[] } | null = null;
 
@@ -101,97 +99,21 @@ function CalendarPageInner() {
     setCreateModalOpen(true);
   };
 
+  // After creating, useCreatePlan has already gone to the new plan: replacing the URL here would undo it.
+  const createdRef = useRef(false);
   const closeCreateModal = () => {
     setCreateModalOpen(false);
-    if (createFromQuery === "1") {
+    if (createFromQuery === "1" && !createdRef.current) {
       router.replace("/calendar");
     }
+    createdRef.current = false;
   };
 
-  const [savingPlan, setSavingPlan] = useState(false);
-
-  const handleCreatePlan = async (payload: CreatePlanPayload) => {
-    if (!user?.id || savingPlan) return;
-
-    setSavingPlan(true);
-
-    try {
-      let coverUrl: string | null = null;
-
-      if (payload.coverFile) {
-        const { uploadPlanCoverFile } = await import("@/services/firebase/upload");
-        const { downloadUrl } = await uploadPlanCoverFile({ file: payload.coverFile, userId: user.id });
-        coverUrl = downloadUrl;
-      }
-
-      const startIso = dateInputToIso(payload.startDate, 10);
-      const endIso = dateInputToIso(payload.endDate, 18);
-
-      const created = await createPlan({
-        titulo: payload.title,
-        descripcion: `Plan en ${payload.location}`,
-        inicioAt: startIso,
-        finAt: endIso,
-        ubicacionNombre: payload.location,
-        fotoPortada: coverUrl,
-        allDay: true,
-        visibilidad: payload.visibility,
-        ownerUserId: user.id,
-        creadoPorUserId: user.id,
-      });
-
-      if (settings?.google_sync_enabled && settings.google_sync_export_plans) {
-        try {
-          const providerToken = await resolveGoogleProviderToken({
-            supabase,
-            session,
-            userId: user.id,
-            cachedToken: googleProviderToken,
-          });
-          if (providerToken) {
-            const [createdPlan] = await listPlansByIdsInOrder([created.id]);
-            if (createdPlan) {
-              const timeMin = startOfMonth(addMonths(new Date(), -12)).toISOString();
-              const timeMax = endOfMonth(addMonths(new Date(), 12)).toISOString();
-              await syncGoogleCalendarBidirectional({
-                userId: user.id,
-                accessToken: providerToken,
-                timeMin,
-                timeMax,
-                plans: [createdPlan],
-                googleSyncEnabled: settings.google_sync_enabled,
-                googleSyncExportPlans: settings.google_sync_export_plans,
-              });
-            }
-          }
-        } catch (syncErr) {
-          console.warn("[calendar] google sync after create failed:", syncErr);
-        }
-      }
-
-      if (payload.invitedFriendIds.length > 0) {
-        await Promise.allSettled(
-          payload.invitedFriendIds.map((friendId) =>
-            insertNotificacion({
-              userId: friendId,
-              tipo: "plan_invite",
-              actorId: user.id,
-              entityId: String(created.id),
-              entityType: "plan",
-            })
-          )
-        );
-      }
-
-      await syncPlanWidget(user.id);
-
-      setSavingPlan(false);
-      navigateToPlan(created.id);
-    } catch (err) {
-      console.error("[calendar] create plan error:", err);
-      setSavingPlan(false);
-      throw err;
-    }
+  const createPlan = useCreatePlan();
+  const createPlanFromForm = async (payload: CreatePlanPayload) => {
+    const created = await createPlan(payload);
+    createdRef.current = true;
+    return created;
   };
 
   useEffect(() => {
@@ -418,7 +340,7 @@ function CalendarPageInner() {
         </main>
       </div>
 
-      <CreatePlanModal open={createModalOpen} onClose={closeCreateModal} onCreate={handleCreatePlan} currentUserId={user?.id} initialDates={createDates} />
+      <CreatePlanModal open={createModalOpen} onClose={closeCreateModal} onCreate={createPlanFromForm} currentUserId={user?.id} initialDates={createDates} />
     </div>
   );
 }

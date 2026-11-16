@@ -43,7 +43,7 @@ type Common = {
 };
 
 function placeOf(plan: FeedPlanItemDto) {
-  return plan.locationName?.trim() || "";
+  return (plan.locationName?.trim() || "").replace(/\bParis\b/g, "París");
 }
 
 function rangeAndPlace(plan: FeedPlanItemDto, shortPlace = false) {

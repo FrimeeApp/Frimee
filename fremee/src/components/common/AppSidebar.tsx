@@ -7,10 +7,11 @@ import { useRouter, usePathname } from "next/navigation";
 import { Capacitor } from "@capacitor/core";
 import { useAuth } from "@/providers/AuthProvider";
 import CreatePlanModal, { type CreatePlanPayload } from "@/components/plans/modals/CreatePlanModal";
+import { useCreatePlan } from "@/hooks/useCreatePlan";
 import AddGastoSheet from "@/components/plans/modals/AddGastoSheet";
-import { createPlan, listUserRelatedPlans } from "@/services/api/repositories/plans.repository";
+import { listUserRelatedPlans } from "@/services/api/repositories/plans.repository";
 import type { FeedPlanItemDto } from "@/services/api/dtos/plan.dto";
-import { countNotificacionesNoLeidas, insertNotificacion } from "@/services/api/repositories/notifications.repository";
+import { countNotificacionesNoLeidas } from "@/services/api/repositories/notifications.repository";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import NotificationsPanel from "@/components/notifications/NotificationsPanel";
 import UserSearchSurface from "@/components/search/UserSearchSurface";
@@ -24,7 +25,7 @@ import { formatDateRange } from "@/lib/formatters";
 import { createRealtimeTopic } from "@/lib/realtime";
 import { getOpenChat } from "@/lib/open-chat";
 import { useToast } from "@/components/ui/Toaster";
-import { dateInputToIso, isPlanFinished } from "@/lib/plan-dates";
+import { isPlanFinished } from "@/lib/plan-dates";
 type IconProps = {
   className?: string;
   strokeWidth?: number;
@@ -313,50 +314,10 @@ export default function AppSidebar({ onCreatePlan, onCreateGroup, hideMobileNav 
     router.refresh();
   };
 
+  const createPlanFromForm = useCreatePlan();
   const handleCreatePlan = async (payload: CreatePlanPayload) => {
-    if (!user?.id) return;
-
-    let coverUrl: string | null = null;
-    if (payload.coverFile) {
-      const { uploadPlanCoverFile } = await import("@/services/firebase/upload");
-      const { downloadUrl } = await uploadPlanCoverFile({ file: payload.coverFile, userId: user.id });
-      coverUrl = downloadUrl;
-    }
-
-    const startIso = dateInputToIso(payload.startDate, 10);
-    const endIso = dateInputToIso(payload.endDate, 18);
-
-    const created = await createPlan({
-      titulo: payload.title,
-      descripcion: `Plan en ${payload.location}`,
-      inicioAt: startIso,
-      finAt: endIso,
-      ubicacionNombre: payload.location,
-      fotoPortada: coverUrl,
-      allDay: true,
-      visibilidad: payload.visibility,
-      ownerUserId: user.id,
-      creadoPorUserId: user.id,
-    });
-
-    // Enviar invitaciones a los amigos seleccionados
-    if (payload.invitedFriendIds.length > 0) {
-      await Promise.allSettled(
-        payload.invitedFriendIds.map((friendId) =>
-          insertNotificacion({
-            userId: friendId,
-            tipo: "plan_invite",
-            actorId: user.id,
-            entityId: String(created.id),
-            entityType: "plan",
-          })
-        )
-      );
-    }
-
+    await createPlanFromForm(payload);
     setCreateModalOpen(false);
-    const isCapacitor = Capacitor.isNativePlatform();
-    router.push(isCapacitor ? `/plans/static?id=${created.id}` : `/plans/${created.id}`);
   };
 
   const isActive = (href: string) => {
