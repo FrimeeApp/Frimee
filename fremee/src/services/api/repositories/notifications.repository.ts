@@ -86,11 +86,15 @@ export async function acceptPlanInvite(planId: number, notifId: number): Promise
     console.error("[acceptPlanInvite] error:", error.code, error.message, error.details);
     throw new Error(error.message || error.code || "Error aceptando invitación");
   }
+  // fn_accept_plan_invite already removes the notice; this only covers an old copy of it.
   await supabase.from("notificaciones").delete().eq("id", notifId);
 }
 
-export async function rejectPlanInvite(notifId: number): Promise<void> {
+/** Declines the invitation (it stays as RECHAZADA) and removes its notice. */
+export async function rejectPlanInvite(planId: number, notifId: number): Promise<void> {
   const supabase = createBrowserSupabaseClient();
+  const { error } = await supabase.rpc("fn_rechazar_plan_invite", { p_plan_id: planId });
+  if (error) throw new Error(error.message || error.code || "Error rechazando invitación");
   await supabase.from("notificaciones").delete().eq("id", notifId);
 }
 
