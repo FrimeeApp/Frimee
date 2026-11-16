@@ -2,6 +2,7 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 import { bloquearEndpoint, desbloquearEndpoint, misBloqueadosEndpoint } from "@/services/api/endpoints/bloqueos.endpoint";
+import { createBrowserSupabaseClient } from "@/services/supabase/client";
 
 /**
  * Who I have blocked, shared by every mounted component (profile, chat info, composer, group
@@ -27,8 +28,26 @@ function cargar() {
     });
 }
 
+// Per account: on sign-out or another account signing in on the same tab, it starts over (and a
+// first fetch that ran before the session existed is retried once the session is there).
+let usuario: string | null | undefined;
+let escuchandoSesion = false;
+function seguirSesion() {
+  if (escuchandoSesion) return;
+  escuchandoSesion = true;
+  createBrowserSupabaseClient().auth.onAuthStateChange((_event, session) => {
+    const id = session?.user?.id ?? null;
+    if (id === usuario) return;
+    usuario = id;
+    cargado = null;
+    publicar(VACIO);
+    if (id && oyentes.size > 0) cargar();
+  });
+}
+
 function suscribir(f: () => void) {
   oyentes.add(f);
+  seguirSesion();
   cargar();
   return () => { oyentes.delete(f); };
 }
