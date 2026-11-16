@@ -3,9 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
-  BusFront, CarFront, CarTaxiFront, ChevronLeft, CircleAlert, CircleEllipsis,
-  FerrisWheel, Footprints, Hotel, MapPin, Plane, Ship,
-  TrainFront, TramFront, UtensilsCrossed,
+  BusFront, CarFront, CarTaxiFront, Check, CircleAlert, CircleEllipsis,
+  FerrisWheel, Footprints, Hotel, LoaderCircle, MapPin, Plane, Search, Ship,
+  TrainFront, TramFront, UtensilsCrossed, X,
 } from "lucide-react";
 import {
   createSubplan, updateSubplan, deleteSubplan,
@@ -13,13 +13,13 @@ import {
 } from "@/services/api/endpoints/subplanes.endpoint";
 import { loadGoogleMapsScript } from "@/lib/googleMaps";
 import LocationAutocomplete, { type Coords } from "@/components/plans/LocationAutocomplete";
-import { FIELD_LINE_CLS } from "@/lib/styles";
 import { isoDateOnly, timeToMin, getOccupiedIntervals } from "./plan-utils";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
-import { CloseButton, IconButton } from "@/components/ui/IconButton";
 import { TimePicker } from "@/components/ui/TimePicker";
-import { ModalFeedback, type ModalFeedbackState } from "@/components/ui/ModalFeedback";
 import { DiscardChangesDialog } from "@/components/ui/DiscardChangesDialog";
+import { Wizard, WizardSection, WizardSummary } from "@/components/ui/Wizard";
+import { useToast } from "@/components/ui/Toaster";
+import { itineraryDayId } from "@/components/plans/itinerary/Itinerary";
 
 // ── Transport & activity constants ────────────────────────────────────────────
 
@@ -48,137 +48,156 @@ export const ACTIVITY_TYPE_OPTIONS = [
   { value: "OTRO",        label: "Otro",        Icon: CircleEllipsis    },
 ] as const satisfies ReadonlyArray<{ value: TipoSubplan; label: string; Icon: LucideIcon }>;
 
-// ── PlanInlineCalendar ────────────────────────────────────────────────────────
+const STEPS = ["Qué y dónde", "Cuándo", "Detalles"] as const;
+const DAY_MS = 86_400_000;
 
-function PlanInlineCalendar({
-  minDate, maxDate, startDate, endDate, onChange,
+// ── helpers ───────────────────────────────────────────────────────────────────
+
+const pad = (n: number) => String(n).padStart(2, "0");
+const minToHHMM = (m: number) => `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;
+const addDays = (d: string, n: number) => {
+  const x = new Date(`${d}T12:00:00`);
+  x.setDate(x.getDate() + n);
+  return `${x.getFullYear()}-${pad(x.getMonth() + 1)}-${pad(x.getDate())}`;
+};
+const daysBetween = (a: string, b: string) => Math.round((new Date(`${b}T12:00:00`).getTime() - new Date(`${a}T12:00:00`).getTime()) / DAY_MS);
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+const fmt = (d: string, o: Intl.DateTimeFormatOptions) => new Date(`${d}T12:00:00`).toLocaleDateString("es-ES", o).replace(/[.,]/g, "");
+/** «sáb 21 nov» */
+const fechaCorta = (d: string) => fmt(d, { weekday: "short", day: "numeric", month: "short" });
+/** «21 – 25 nov», «28 nov – 2 dic» */
+function rango(a: string, b: string) {
+  if (a === b) return fmt(a, { day: "numeric", month: "short" });
+  const sameMonth = a.slice(0, 7) === b.slice(0, 7);
+  return `${sameMonth ? fmt(a, { day: "numeric" }) : fmt(a, { day: "numeric", month: "short" })} – ${fmt(b, { day: "numeric", month: "short" })}`;
+}
+function duracionTxt(min: number) {
+  if (min <= 0) return null;
+  if (min < 60) return `${min} min`;
+  return `${Math.floor(min / 60)} h${min % 60 ? ` ${min % 60} min` : ""}`;
+}
+/** «Time Out Market, Avenida 24 de Julho, Lisboa» → main + secondary. */
+function splitPlace(text: string): { main: string; secondary: string } {
+  const i = text.indexOf(",");
+  return i < 0 ? { main: text.trim(), secondary: "" } : { main: text.slice(0, i).trim(), secondary: text.slice(i + 1).trim() };
+}
+/** The name we propose from the type and the place («Comida en Time Out Market»). */
+function proponerNombre(tipo: TipoSubplan | null, lugar: string, destino: string) {
+  if (tipo === "VUELO") return destino ? `Vuelo a ${destino}` : "";
+  if (tipo === "BARCO") return destino ? `Barco a ${destino}` : "";
+  if (!lugar) return "";
+  if (tipo === "RESTAURANTE") return `Comida en ${lugar}`;
+  return lugar;
+}
+
+// ── Place field: search, or the chosen place as a card ───────────────────────
+
+function PlaceField({
+  value, coords, onChange, placeholder, label,
 }: {
-  minDate: string; maxDate: string;
-  startDate: string; endDate: string | null;
-  onChange: (start: string, end: string | null) => void;
+  value: string; coords: Coords | null;
+  onChange: (v: string, c: Coords | null) => void;
+  placeholder: string; label: string;
 }) {
-  const [phase, setPhase] = useState<"start" | "end">("start");
-  const [hoverDate, setHoverDate] = useState<string | null>(null);
-
-  const parseYMD = (s: string) => new Date(s + "T12:00:00");
-
-  const handleDayClick = (dateStr: string) => {
-    if (dateStr < minDate || dateStr > maxDate) return;
-    if (phase === "start") {
-      onChange(dateStr, null);
-      setPhase("end");
-    } else {
-      if (dateStr === startDate) { onChange(startDate, null); setPhase("start"); }
-      else if (dateStr > startDate) { onChange(startDate, dateStr); setPhase("start"); }
-      else { onChange(dateStr, null); setPhase("end"); }
-    }
-  };
-
-  const hasRange = !!endDate && endDate !== startDate;
-  const previewEnd = phase === "end" && hoverDate && hoverDate > startDate ? hoverDate : null;
-
-  const renderMonth = (year: number, month: number) => {
-    const firstDay = new Date(year, month, 1);
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    let startDow = firstDay.getDay();
-    startDow = (startDow + 6) % 7;
-    const monthLabel = firstDay.toLocaleDateString("es-ES", { month: "long", year: "numeric" });
-
-    const cells: React.ReactNode[] = Array.from({ length: startDow }, (_, i) => <div key={`pad-${i}`} />);
-
-    for (let i = 0; i < daysInMonth; i++) {
-      const day = i + 1;
-      const mm = String(month + 1).padStart(2, "0");
-      const dd = String(day).padStart(2, "0");
-      const dateStr = `${year}-${mm}-${dd}`;
-      const isOutside = dateStr < minDate || dateStr > maxDate;
-      const isStart = dateStr === startDate;
-      const isEnd = hasRange && dateStr === endDate;
-      const inRange = hasRange && dateStr > startDate && dateStr < endDate;
-      const inPreview = !!previewEnd && dateStr > startDate && dateStr < previewEnd && !hasRange;
-      const isPreviewEnd = dateStr === previewEnd && !hasRange;
-
-      cells.push(
-        <div
-          key={dateStr}
-          className="relative flex h-12 items-center justify-center"
-          onClick={() => !isOutside && handleDayClick(dateStr)}
-          onMouseEnter={() => !isOutside && setHoverDate(dateStr)}
-          onMouseLeave={() => setHoverDate(null)}
-        >
-          {inRange && <div className="absolute inset-y-[4px] inset-x-0 bg-[var(--surface-2)]" />}
-          {!inRange && inPreview && <div className="absolute inset-y-[4px] inset-x-0 bg-[var(--surface-2)] opacity-50" />}
-          {isStart && (hasRange || !!previewEnd) && (
-            <div className={`absolute inset-y-[4px] left-1/2 right-0 bg-[var(--surface-2)] ${!hasRange ? "opacity-50" : ""}`} />
-          )}
-          {(isEnd || isPreviewEnd) && (
-            <div className={`absolute inset-y-[4px] left-0 right-1/2 bg-[var(--surface-2)] ${isPreviewEnd ? "opacity-50" : ""}`} />
-          )}
-          <div className={[
-            "relative z-10 flex size-10 items-center justify-center rounded-full text-[15px] font-[var(--fw-semibold)] select-none transition-colors",
-            isStart || isEnd ? "bg-[var(--text-primary)] text-[var(--bg)]" :
-            isPreviewEnd ? "bg-[var(--surface-2)] text-app" :
-            isOutside ? "cursor-default text-muted opacity-20" :
-            "cursor-pointer text-app hover:bg-[var(--surface-2)]",
-          ].join(" ")}>
-            {day}
-          </div>
-        </div>,
-      );
-    }
-
-    while (cells.length < 42) cells.push(<div key={`tail-${cells.length}`} />);
-
+  if (value && coords) {
+    const { main, secondary } = splitPlace(value);
     return (
-      <div key={`${year}-${month}`}>
-        <p className="mb-[var(--space-4)] text-center text-[15px] font-[var(--fw-bold)] capitalize text-app">{monthLabel}</p>
-        <div className="mb-[var(--space-1)] grid grid-cols-7 text-center">
-          {["L", "M", "X", "J", "V", "S", "D"].map((d) => (
-            <span key={d} className="py-1 text-[14px] font-[var(--fw-semibold)] text-muted">{d}</span>
-          ))}
+      <div className="wz-place">
+        <span className="wz-place-ic"><MapPin className="size-[18px]" aria-hidden /></span>
+        <div className="min-w-0 flex-1">
+          <div className="wz-ell text-[15px] font-semibold">{main}</div>
+          {secondary && <div className="wz-tm wz-ell">{secondary}</div>}
         </div>
-        <div className="grid grid-cols-7">{cells}</div>
+        <button type="button" className="wz-ib s" aria-label="Quitar el sitio" title="Quitar el sitio" onClick={() => onChange("", null)}>
+          <X className="size-[18px]" aria-hidden />
+        </button>
       </div>
+    );
+  }
+  return (
+    <div className="wz-fld wz-place-search">
+      <Search className="size-[18px] shrink-0 text-[var(--text-secondary)]" aria-hidden />
+      <LocationAutocomplete
+        value={value}
+        onChange={(v, c) => onChange(v, c ?? null)}
+        dropdownVariant="surface"
+        placeholder={placeholder}
+        inputClassName="h-11 text-[15px]"
+        className="min-w-0 flex-1"
+      />
+      <span className="sr-only">{label}</span>
+    </div>
+  );
+}
+
+// ── Days of the plan: one row up to 7 days, a week grid beyond ───────────────
+
+function DaysPicker({
+  days, start, end, range, busyDays, onPick,
+}: {
+  days: string[]; start: string; end: string | null; range: boolean;
+  busyDays: Set<string>; onPick: (d: string) => void;
+}) {
+  const selRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => { selRef.current?.scrollIntoView({ block: "nearest" }); }, []);
+  const realEnd = end ?? start;
+  const cell = (d: string, compact: boolean) => {
+    const on = d === start || d === realEnd;
+    const mid = d > start && d < realEnd;
+    const idx = days.indexOf(d) + 1;
+    const dot = busyDays.has(d);
+    const nice = fmt(d, { weekday: "long", day: "numeric", month: "long" });
+    return (
+      <button
+        key={d} type="button" ref={d === start ? selRef : undefined}
+        className={`wz-day ${on ? "on" : ""} ${mid ? "mid" : ""} ${dot ? "dot" : ""}`}
+        aria-pressed={on || mid}
+        aria-label={`${nice}, día ${idx}${dot ? ", con actividades" : ""}`}
+        onClick={() => onPick(d)}
+      >
+        {compact ? (
+          <><span className="n">{Number(d.slice(8))}</span><span className="d">D{idx}</span></>
+        ) : (
+          <><span className="w">{fmt(d, { weekday: "short" })} </span><span className="n">{Number(d.slice(8))}</span><span className="d">Día {idx}</span></>
+        )}
+      </button>
     );
   };
 
-  const startMonthDate = parseYMD(minDate);
-  const endMonthDate = parseYMD(maxDate);
-  const allMonths: { year: number; month: number }[] = [];
-  const cur = new Date(startMonthDate.getFullYear(), startMonthDate.getMonth(), 1);
-  const last = new Date(endMonthDate.getFullYear(), endMonthDate.getMonth(), 1);
-  while (cur <= last) {
-    allMonths.push({ year: cur.getFullYear(), month: cur.getMonth() });
-    cur.setMonth(cur.getMonth() + 1);
+  if (days.length <= 7) {
+    return (
+      <div role="group" aria-label="Día del plan" className="wz-days" style={{ gridTemplateColumns: `repeat(${Math.min(days.length, 5) || 1}, 1fr)` }}>
+        {days.map((d) => cell(d, false))}
+        {range && <span className="sr-only">Toca el primer y el último día.</span>}
+      </div>
+    );
   }
 
-  const totalMonths = allMonths.length;
-
+  // Weeks Monday–Sunday, one block per month.
+  const months: { key: string; label: string; cells: (string | null)[] }[] = [];
+  for (const d of days) {
+    const key = d.slice(0, 7);
+    let m = months[months.length - 1];
+    if (!m || m.key !== key) {
+      m = { key, label: fmt(d, { month: "long", year: "numeric" }), cells: [] };
+      const dow = (new Date(`${d}T12:00:00`).getDay() + 6) % 7;
+      for (let i = 0; i < dow; i++) m.cells.push(null);
+      months.push(m);
+    }
+    m.cells.push(d);
+  }
   return (
-    <div>
-      <div className="space-y-[var(--space-8)] md:hidden">
-        {allMonths.map(({ year, month }) => renderMonth(year, month))}
-      </div>
-      <div className="hidden md:block">
-        {totalMonths === 1 ? (
-          <div className="mx-auto max-w-[320px]">
-            {allMonths.map(({ year, month }) => renderMonth(year, month))}
+    <div className="wz-cal" role="group" aria-label="Día del plan">
+      <p className="wz-tm mb-1">D = día del viaje · punto = ya tiene actividades</p>
+      {months.map((m) => (
+        <div key={m.key} className="mb-3">
+          <div className="wz-cal-m">{m.label}</div>
+          <div className="wz-cal-g">
+            {["L", "M", "X", "J", "V", "S", "D"].map((w) => <span key={w} className="wz-cal-h" aria-hidden>{w}</span>)}
+            {m.cells.map((d, i) => d ? cell(d, true) : <span key={`p${i}`} />)}
           </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-[var(--space-8)]">
-            {allMonths.map(({ year, month }) => renderMonth(year, month))}
-          </div>
-        )}
-      </div>
-      <p className="mt-[var(--space-3)] text-center text-caption text-muted">
-        {!endDate || endDate === startDate
-          ? parseYMD(startDate).toLocaleDateString("es-ES", { day: "numeric", month: "short" })
-          : `${parseYMD(startDate).toLocaleDateString("es-ES", { day: "numeric", month: "short" })} → ${parseYMD(endDate).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}`
-        }
-        {phase === "end" && (!endDate || endDate === startDate) && (
-          <span className="ml-1 opacity-60">— elige fecha de fin o continúa</span>
-        )}
-      </p>
+        </div>
+      ))}
     </div>
   );
 }
@@ -189,6 +208,8 @@ export type AddSheetProps = {
   planId: number;
   planStartDate: string;
   planEndDate: string;
+  /** Shown in the header: «Nueva actividad · Escapada a Lisboa». */
+  planTitle?: string;
   subplanes: SubplanRow[];
   onClose: () => void;
   onSaved: (saved: SubplanRow, original?: SubplanRow | null) => void;
@@ -210,24 +231,19 @@ export type AddSheetProps = {
 };
 
 export function AddSubplanSheet({
-  planId, planStartDate, planEndDate, subplanes,
+  planId, planStartDate, planEndDate, planTitle, subplanes,
   onClose, onSaved, onDeleted, gastosCount = 0, initialTitulo, initialHora, initialTipo, initialUbicacion, initialDate, initialSubplan,
 }: AddSheetProps) {
   const { isClosing, requestClose } = useModalCloseAnimation(onClose);
-  const TOTAL_STEPS = 3;
-  const STEP_META = [
-    { title: "¿Qué hacéis?",   subtitle: "Tipo y lugar de la actividad" },
-    { title: "¿Cuándo?",       subtitle: "Fecha y horario" },
-    { title: initialSubplan ? "Editar actividad" : "¿Cómo se llama?", subtitle: "Dale un nombre a la actividad" },
-  ];
+  const { toast } = useToast();
 
   const toLocalDate = (iso: string) => {
     const d = new Date(iso);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   };
   const toLocalTime = (iso: string) => {
     const d = new Date(iso);
-    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
   };
   const minDate = toLocalDate(planStartDate);
   const maxDate = toLocalDate(planEndDate);
@@ -243,19 +259,21 @@ export function AddSubplanSheet({
     initialDate && initialDate >= minDate && initialDate <= maxDate ? initialDate :
     minDate;
   const horaFromMessage = !initialSubplan && initialHora && /^\d{2}:\d{2}$/.test(initialHora) ? initialHora : null;
-  // An hour later, within the day.
-  const horaMasUna = (h: string) => `${String(Math.min(23, Number(h.slice(0, 2)) + 1)).padStart(2, "0")}:${h.slice(3)}`;
-  const defaultHoraInicio = initialSubplan ? toLocalTime(initialSubplan.inicio_at) : horaFromMessage ?? (planIsAllDay ? "10:00" : planStartTime);
-  const defaultHoraFin    = initialSubplan ? toLocalTime(initialSubplan.fin_at)    : horaFromMessage ? horaMasUna(horaFromMessage) : (planIsAllDay ? "11:00" : planEndTime);
+  // Hours are optional: a new activity starts without them unless a chat message brought one.
+  const defaultHoraInicio = initialSubplan ? (initialSubplan.all_day ? "" : toLocalTime(initialSubplan.inicio_at)) : horaFromMessage ?? "";
+  const defaultHoraFin = initialSubplan ? (initialSubplan.all_day ? "" : toLocalTime(initialSubplan.fin_at))
+    : horaFromMessage ? minToHHMM(Math.min(timeToMin(horaFromMessage) + 60, 23 * 60 + 59)) : "";
 
   const [titulo,             setTitulo]             = useState(initialSubplan?.titulo ?? initialTitulo ?? "");
+  const [nombreTocado,       setNombreTocado]       = useState(Boolean(initialSubplan || initialTitulo));
   const [descripcion,        setDescripcion]        = useState(initialSubplan?.descripcion ?? "");
   const [fecha,              setFecha]              = useState(defaultDate);
   const [fechaFin,           setFechaFin]           = useState<string | null>(initialEndDate && initialEndDate !== defaultDate ? initialEndDate : null);
+  const [variosDias,         setVariosDias]         = useState(Boolean(initialEndDate && initialEndDate !== defaultDate));
+  const [esperandoFin,       setEsperandoFin]       = useState(false);
   const [horaInicio,         setHoraInicio]         = useState(defaultHoraInicio);
   const [horaFin,            setHoraFin]            = useState(defaultHoraFin);
-  const allDay = false;
-  const [tipo,               setTipo]               = useState<TipoSubplan>(initialSubplan?.tipo ?? initialTipo ?? "ACTIVIDAD");
+  const [tipo,               setTipo]               = useState<TipoSubplan | null>(initialSubplan?.tipo ?? initialTipo ?? null);
   const [ubicacion,          setUbicacion]          = useState(initialSubplan?.ubicacion_nombre ?? initialUbicacion?.nombre ?? "");
   const [ubicacionCoords,    setUbicacionCoords]    = useState<Coords | null>(
     initialSubplan?.ubicacion_lat != null && initialSubplan?.ubicacion_lng != null
@@ -263,6 +281,19 @@ export function AddSubplanSheet({
       : !initialSubplan && initialUbicacion?.lat != null && initialUbicacion?.lng != null
         ? { lat: initialUbicacion.lat, lng: initialUbicacion.lng } : null,
   );
+  const [ubicacionFin,       setUbicacionFin]       = useState(initialSubplan?.ubicacion_fin_nombre ?? "");
+  const [ubicacionFinCoords, setUbicacionFinCoords] = useState<Coords | null>(
+    initialSubplan?.ubicacion_fin_lat != null && initialSubplan?.ubicacion_fin_lng != null
+      ? { lat: initialSubplan.ubicacion_fin_lat, lng: initialSubplan.ubicacion_fin_lng } : null,
+  );
+  const [transporteLlegada,  setTransporteLlegada]  = useState<string | null>(initialSubplan?.transporte_llegada ?? null);
+  const [saving,             setSaving]             = useState(false);
+  const [saveError,          setSaveError]          = useState<string | null>(null);
+  const [discardOpen,        setDiscardOpen]        = useState(false);
+  const [deleteOpen,         setDeleteOpen]         = useState(false);
+  const [deleteGastos,       setDeleteGastos]       = useState(false);
+  const [step,               setStep]               = useState(1);
+  const [error,              setError]              = useState<string | null>(null);
 
   // A place read from a chat message has only a name: find it on Google Places (biased to the trip's
   // destination) and fill the first result in. It stays editable; if nothing is found, the name stays.
@@ -290,102 +321,95 @@ export function AddSubplanSheet({
     // Only once, when the sheet opens with a place from a message.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const [ubicacionFin,       setUbicacionFin]       = useState(initialSubplan?.ubicacion_fin_nombre ?? "");
-  const [ubicacionFinCoords, setUbicacionFinCoords] = useState<Coords | null>(
-    initialSubplan?.ubicacion_fin_lat != null && initialSubplan?.ubicacion_fin_lng != null
-      ? { lat: initialSubplan.ubicacion_fin_lat, lng: initialSubplan.ubicacion_fin_lng } : null,
-  );
-  const [transporteLlegada,  setTransporteLlegada]  = useState<string | null>(initialSubplan?.transporte_llegada ?? null);
-  const [feedbackState,      setFeedbackState]      = useState<ModalFeedbackState | null>(null);
-  const [discardOpen,        setDiscardOpen]        = useState(false);
-  const [deleteOpen,         setDeleteOpen]         = useState(false);
-  const [deleteGastos,       setDeleteGastos]       = useState(false);
-  const [wizardStep,        setWizardStep]         = useState(1);
-  const [error,              setError]              = useState<string | null>(null);
-  const sheetRef = useRef<HTMLDivElement>(null);
-  const savedResultRef = useRef<{ saved: SubplanRow; original: SubplanRow | null } | null>(null);
-  const deletedRef = useRef<SubplanRow | null>(null);
 
-  const planMonthCount = useMemo(() => {
-    const s = new Date(minDate + "T12:00:00");
-    const e = new Date(maxDate + "T12:00:00");
-    return (e.getFullYear() - s.getFullYear()) * 12 + (e.getMonth() - s.getMonth()) + 1;
+  const esTransporte = tipo != null && TIPOS_TRANSPORTE.includes(tipo);
+  const tipoMeta = ACTIVITY_TYPE_OPTIONS.find((t) => t.value === tipo);
+
+  // The proposed name follows the type and the place until the person types their own.
+  const lugarMain = splitPlace(ubicacion).main;
+  const destinoMain = splitPlace(ubicacionFin).main;
+  const propuesto = proponerNombre(tipo, lugarMain, destinoMain);
+  useEffect(() => {
+    if (!nombreTocado) setTitulo(propuesto);
+  }, [propuesto, nombreTocado]);
+
+  const planDays = useMemo(() => {
+    const out: string[] = [];
+    for (let d = minDate; d <= maxDate && out.length < 400; d = addDays(d, 1)) out.push(d);
+    return out;
   }, [minDate, maxDate]);
+  const busyDays = useMemo(
+    () => new Set(subplanes.filter((s) => s.id !== initialSubplan?.id).map((s) => isoDateOnly(s.inicio_at))),
+    [subplanes, initialSubplan?.id],
+  );
 
-  const hayActividadEseDia = subplanes.some((s) => s.id !== initialSubplan?.id && isoDateOnly(s.inicio_at) === fecha);
-  const esTransporte = TIPOS_TRANSPORTE.includes(tipo);
+  const hayActividadEseDia = busyDays.has(fecha);
+  const efectivaFechaFin = fechaFin ?? fecha;
+  const sinHora = !horaInicio && !horaFin;
+  const horasIncompletas = !sinHora && (!horaInicio || !horaFin);
 
   const clampedHoraInicio = (() => {
-    if (planIsAllDay) return horaInicio;
+    if (planIsAllDay || !horaInicio) return horaInicio;
     if (fecha === minDate && horaInicio < planStartTime) return planStartTime;
     if (fecha === maxDate && horaInicio > planEndTime)   return planEndTime;
     return horaInicio;
   })();
-
-  const efectivaFechaFin = fechaFin ?? fecha;
   const clampedHoraFin = (() => {
-    if (planIsAllDay) return horaFin;
+    if (planIsAllDay || !horaFin) return horaFin;
     if (efectivaFechaFin === maxDate && horaFin > planEndTime) return planEndTime;
-    if (efectivaFechaFin === fecha && horaFin <= clampedHoraInicio) {
-      const [hh, mm] = clampedHoraInicio.split(":").map(Number);
-      const totalMin = (hh ?? 0) * 60 + (mm ?? 0) + 60;
-      const maxTotal = planIsAllDay ? 23 * 60 + 59 : (Number(planEndTime.split(":")[0]) * 60 + Number(planEndTime.split(":")[1]));
-      const clamped = Math.min(totalMin, maxTotal);
-      return `${String(Math.floor(clamped / 60)).padStart(2, "0")}:${String(clamped % 60).padStart(2, "0")}`;
-    }
     return horaFin;
   })();
 
-  // ── Time fields (Design «Selector de hora») ──
-  const dayMs = 86_400_000;
-  const diaSiguienteRaw = new Date(new Date(`${fecha}T12:00:00`).getTime() + dayMs).toISOString().slice(0, 10);
-  const diaSiguiente = diaSiguienteRaw <= maxDate ? diaSiguienteRaw : null;
-  const fechaCorta = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString("es-ES", { weekday: "short", day: "numeric", month: "short" }).replace(/\./g, "");
-  const finAntesQueInicio = efectivaFechaFin === fecha && timeToMin(horaFin) <= timeToMin(horaInicio);
-  const duracionMin = Math.round((new Date(`${efectivaFechaFin}T12:00:00`).getTime() - new Date(`${fecha}T12:00:00`).getTime()) / dayMs) * 1440
-    + timeToMin(horaFin) - timeToMin(horaInicio);
-  const duracion = duracionMin <= 0 ? null
-    : duracionMin < 60 ? `${duracionMin} min`
-    : `${Math.floor(duracionMin / 60)} h${duracionMin % 60 ? ` ${duracionMin % 60} min` : ""}`;
-  const horaSubtitle = [fechaCorta(fecha), titulo.trim() || ubicacion.trim()].filter(Boolean).join(" · ");
+  const diaSiguiente = addDays(fecha, 1) <= maxDate ? addDays(fecha, 1) : null;
+  const finAntesQueInicio = !sinHora && !horasIncompletas && efectivaFechaFin === fecha && timeToMin(horaFin) <= timeToMin(horaInicio);
+  const duracionMin = sinHora || horasIncompletas ? 0 : daysBetween(fecha, efectivaFechaFin) * 1440 + timeToMin(horaFin) - timeToMin(horaInicio);
+  const duracion = duracionTxt(duracionMin);
+  const horaSubtitle = [cap(fechaCorta(fecha)), titulo.trim() || lugarMain].filter(Boolean).join(" · ");
+
   // Moving the start keeps the duration on the same day (an hour by default).
   const cambiarInicio = (v: string) => {
-    const dur = efectivaFechaFin === fecha && timeToMin(horaFin) > timeToMin(horaInicio) ? timeToMin(horaFin) - timeToMin(horaInicio) : 60;
+    const dur = horaInicio && horaFin && efectivaFechaFin === fecha && timeToMin(horaFin) > timeToMin(horaInicio)
+      ? timeToMin(horaFin) - timeToMin(horaInicio) : 60;
     setHoraInicio(v);
-    if (efectivaFechaFin === fecha) {
-      const fin = Math.min(timeToMin(v) + dur, 23 * 60 + 59);
-      setHoraFin(`${String(Math.floor(fin / 60)).padStart(2, "0")}:${String(fin % 60).padStart(2, "0")}`);
-    }
+    if (efectivaFechaFin === fecha || !horaFin) setHoraFin(minToHHMM(Math.min(timeToMin(v) + dur, 23 * 60 + 59)));
   };
 
-  const occupiedIntervals =fecha ? getOccupiedIntervals(subplanes.filter((s) => s.id !== initialSubplan?.id), fecha) : [];
-  const isSaving = feedbackState?.type === "loading";
-  const canSubmit = titulo.trim().length > 0 && fecha.length > 0 && fecha >= minDate && fecha <= maxDate && !isSaving;
+  const pickDay = (d: string) => {
+    setError(null);
+    if (!variosDias) { setFecha(d); setFechaFin(null); return; }
+    if (!esperandoFin || d < fecha) { setFecha(d); setFechaFin(null); setEsperandoFin(true); return; }
+    setFechaFin(d === fecha ? null : d);
+    setEsperandoFin(false);
+  };
 
-  const handleSubmit = async (e?: React.FormEvent) => {
-    e?.preventDefault();
-    if (!canSubmit) return;
-    if (fecha < minDate || fecha > maxDate) { setError(`La actividad debe estar entre el ${minDate} y el ${maxDate}.`); return; }
-    if (efectivaFechaFin > maxDate) { setError("La fecha de fin debe estar dentro del rango del plan."); return; }
-    if (!allDay && occupiedIntervals.length > 0) {
+  const occupiedIntervals = getOccupiedIntervals(subplanes.filter((s) => s.id !== initialSubplan?.id), fecha);
+  const canStep1 = tipo != null && titulo.trim().length > 0;
+  const canStep2 = !finAntesQueInicio && !horasIncompletas;
+
+  const handleSubmit = async () => {
+    if (saving || !tipo || !canStep1 || !canStep2) return;
+    if (fecha < minDate || fecha > maxDate || efectivaFechaFin > maxDate) { setError("La actividad tiene que estar dentro de las fechas del plan."); setStep(2); return; }
+    if (!sinHora && occupiedIntervals.length > 0 && efectivaFechaFin === fecha) {
       const newFrom = timeToMin(clampedHoraInicio);
       const newTo   = timeToMin(clampedHoraFin);
       if (occupiedIntervals.some((b) => newFrom < b.to && newTo > b.from)) {
         setError("Este horario se solapa con una actividad existente o su tiempo de viaje.");
+        setStep(2);
         return;
       }
     }
 
-    setFeedbackState({ type: "loading" });
+    setSaving(true);
+    setSaveError(null);
     try {
-      const inicioAt = `${fecha}T${clampedHoraInicio}:00`;
-      const finAt    = `${efectivaFechaFin}T${clampedHoraFin}:00`;
+      const inicioAt = `${fecha}T${sinHora ? "00:00" : clampedHoraInicio}:00`;
+      const finAt    = `${efectivaFechaFin}T${sinHora ? "23:59" : clampedHoraFin}:00`;
       const normalized = {
         titulo: titulo.trim(),
         descripcion: descripcion.trim(),
         inicio_at: new Date(inicioAt).toISOString(),
         fin_at: new Date(finAt).toISOString(),
-        all_day: allDay,
+        all_day: sinHora,
         tipo,
         ubicacion_nombre: ubicacion.trim(),
         ubicacion_fin_nombre: esTransporte ? ubicacionFin.trim() : null,
@@ -395,396 +419,370 @@ export function AddSubplanSheet({
         ubicacion_fin_lng: esTransporte ? (ubicacionFinCoords?.lng ?? null) : null,
         transporte_llegada: hayActividadEseDia ? transporteLlegada : null,
       };
+      const apiInput = {
+        titulo: normalized.titulo,
+        descripcion: normalized.descripcion,
+        inicioAt: normalized.inicio_at,
+        finAt: normalized.fin_at,
+        allDay: normalized.all_day,
+        tipo,
+        ubicacionNombre: normalized.ubicacion_nombre,
+        ubicacionFinNombre: normalized.ubicacion_fin_nombre,
+        ubicacionLat: normalized.ubicacion_lat,
+        ubicacionLng: normalized.ubicacion_lng,
+        ubicacionFinLat: normalized.ubicacion_fin_lat,
+        ubicacionFinLng: normalized.ubicacion_fin_lng,
+        transporteLlegada: normalized.transporte_llegada,
+      };
 
+      let saved: SubplanRow;
       if (initialSubplan) {
-        await updateSubplan({
-          subplanId: initialSubplan.id,
-          titulo: normalized.titulo,
-          descripcion: normalized.descripcion,
-          inicioAt: normalized.inicio_at,
-          finAt: normalized.fin_at,
-          allDay,
-          tipo,
-          ubicacionNombre: normalized.ubicacion_nombre,
-          ubicacionFinNombre: normalized.ubicacion_fin_nombre,
-          ubicacionLat: normalized.ubicacion_lat,
-          ubicacionLng: normalized.ubicacion_lng,
-          ubicacionFinLat: normalized.ubicacion_fin_lat,
-          ubicacionFinLng: normalized.ubicacion_fin_lng,
-          transporteLlegada: normalized.transporte_llegada,
-        });
-        savedResultRef.current = {
-          saved: { ...initialSubplan, ...normalized, ruta_polyline: null, duracion_viaje: null, distancia_viaje: null },
-          original: initialSubplan,
-        };
+        await updateSubplan({ subplanId: initialSubplan.id, ...apiInput });
+        saved = { ...initialSubplan, ...normalized, ruta_polyline: null, duracion_viaje: null, distancia_viaje: null };
       } else {
-        const newId = await createSubplan({
-          planId,
-          titulo: normalized.titulo,
-          descripcion: normalized.descripcion,
-          inicioAt: normalized.inicio_at,
-          finAt: normalized.fin_at,
-          allDay,
-          tipo,
-          ubicacionNombre: normalized.ubicacion_nombre,
-          ubicacionFinNombre: normalized.ubicacion_fin_nombre,
-          ubicacionLat: normalized.ubicacion_lat,
-          ubicacionLng: normalized.ubicacion_lng,
-          ubicacionFinLat: normalized.ubicacion_fin_lat,
-          ubicacionFinLng: normalized.ubicacion_fin_lng,
-          transporteLlegada: normalized.transporte_llegada,
-        });
-        savedResultRef.current = {
-          saved: {
-            id: newId, plan_id: planId, parent_subplan_id: null,
-            ...normalized,
-            ubicacion_direccion: null, ubicacion_fin_direccion: null,
-            duracion_viaje: null, distancia_viaje: null, ruta_polyline: null,
-            orden: 0, estado: "ACTIVO",
-            creado_por_user_id: "", created_at: new Date().toISOString(),
-          },
-          original: null,
+        const newId = await createSubplan({ planId, ...apiInput });
+        saved = {
+          id: newId, plan_id: planId, parent_subplan_id: null,
+          ...normalized,
+          ubicacion_direccion: null, ubicacion_fin_direccion: null,
+          duracion_viaje: null, distancia_viaje: null, ruta_polyline: null,
+          orden: 0, estado: "ACTIVO",
+          creado_por_user_id: "", created_at: new Date().toISOString(),
         };
       }
-      setFeedbackState({ type: "success", label: isEditing ? "Actividad guardada" : "Actividad creada" });
-    } catch (err) {
-      setFeedbackState({ type: "error", message: err instanceof Error ? err.message : `Error al ${isEditing ? "guardar" : "crear"} la actividad` });
+      onSaved(saved, initialSubplan ?? undefined);
+      const dayKey = fecha;
+      toast(
+        isEditing ? "Actividad guardada" : `Actividad creada el ${fechaCorta(fecha)}`,
+        "success",
+        { label: "Ver", onClick: () => document.getElementById(itineraryDayId(dayKey))?.scrollIntoView({ behavior: "smooth", block: "start" }) },
+      );
+      requestClose();
+    } catch {
+      setSaveError(`No se pudo ${isEditing ? "guardar" : "crear"} la actividad. Comprueba la conexión y vuelve a intentarlo. Lo que has escrito sigue aquí.`);
+      setSaving(false);
     }
   };
 
   const handleDelete = async () => {
     if (!initialSubplan) return;
     setDeleteOpen(false);
-    setFeedbackState({ type: "loading" });
+    setSaving(true);
     try {
       await deleteSubplan(initialSubplan.id, gastosCount > 0 && deleteGastos);
-      deletedRef.current = initialSubplan;
-      setFeedbackState({ type: "success", label: "Actividad eliminada" });
-    } catch (err) {
-      setFeedbackState({ type: "error", message: err instanceof Error ? err.message : "Error al eliminar la actividad" });
+      onDeleted?.(initialSubplan);
+      toast("Actividad eliminada", "success");
+      requestClose();
+    } catch {
+      setSaveError("No se pudo eliminar la actividad. Comprueba la conexión y vuelve a intentarlo.");
+      setSaving(false);
     }
   };
 
-  const canContinueWizard = wizardStep === 3 ? titulo.trim().length > 0 : wizardStep === 2 ? !finAntesQueInicio : true;
-  const isLastStep = wizardStep === TOTAL_STEPS;
-  const meta = STEP_META[wizardStep - 1];
-  const initialSnapshot = useMemo(() => JSON.stringify({
-    titulo: initialSubplan?.titulo ?? initialTitulo ?? "",
-    descripcion: initialSubplan?.descripcion ?? "",
-    fecha: defaultDate,
-    fechaFin: initialEndDate && initialEndDate !== defaultDate ? initialEndDate : null,
-    horaInicio: defaultHoraInicio,
-    horaFin: defaultHoraFin,
-    tipo: initialSubplan?.tipo ?? "ACTIVIDAD",
-    ubicacion: initialSubplan?.ubicacion_nombre ?? "",
-    ubicacionCoords: initialSubplan?.ubicacion_lat != null && initialSubplan?.ubicacion_lng != null
-      ? { lat: initialSubplan.ubicacion_lat, lng: initialSubplan.ubicacion_lng }
-      : null,
-    ubicacionFin: initialSubplan?.ubicacion_fin_nombre ?? "",
-    ubicacionFinCoords: initialSubplan?.ubicacion_fin_lat != null && initialSubplan?.ubicacion_fin_lng != null
-      ? { lat: initialSubplan.ubicacion_fin_lat, lng: initialSubplan.ubicacion_fin_lng }
-      : null,
+  const snapshot = (v: object) => JSON.stringify(v);
+  const initialSnapshot = useMemo(() => snapshot({
+    titulo: initialSubplan?.titulo ?? initialTitulo ?? "", descripcion: initialSubplan?.descripcion ?? "",
+    fecha: defaultDate, horaInicio: defaultHoraInicio, horaFin: defaultHoraFin,
+    tipo: initialSubplan?.tipo ?? initialTipo ?? null, ubicacion: initialSubplan?.ubicacion_nombre ?? initialUbicacion?.nombre ?? "",
     transporteLlegada: initialSubplan?.transporte_llegada ?? null,
-  }), [defaultDate, defaultHoraFin, defaultHoraInicio, initialEndDate, initialSubplan, initialTitulo]);
-  const currentSnapshot = JSON.stringify({
-    titulo,
-    descripcion,
-    fecha,
-    fechaFin,
-    horaInicio,
-    horaFin,
-    tipo,
-    ubicacion,
-    ubicacionCoords,
-    ubicacionFin,
-    ubicacionFinCoords,
-    transporteLlegada,
-  });
-  const hasProgress = wizardStep > 1 || currentSnapshot !== initialSnapshot;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), []);
+  const hasProgress = step > 1 || snapshot({
+    titulo: nombreTocado ? titulo : initialSubplan?.titulo ?? initialTitulo ?? "", descripcion, fecha, horaInicio, horaFin, tipo,
+    ubicacion: initialUbicacion && !initialSubplan ? initialUbicacion.nombre : ubicacion, transporteLlegada,
+  }) !== initialSnapshot;
 
   function requestDismiss() {
-    if (isSaving) return;
-    if (hasProgress) {
-      setDiscardOpen(true);
-      return;
-    }
+    if (saving || discardOpen || deleteOpen) return;
+    if (hasProgress) { setDiscardOpen(true); return; }
     requestClose();
   }
 
-  const handleAdvance = () => {
-    if (!canContinueWizard || isSaving) return;
-    if (isLastStep) { void handleSubmit(); }
-    else { setWizardStep((s) => s + 1); }
+  const advance = () => {
+    if (saving) return;
+    if (step === 1 && canStep1) setStep(2);
+    else if (step === 2 && canStep2) setStep(3);
+    else if (step === 3) void handleSubmit();
   };
 
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key !== "Enter") return;
-      if ((e.target as HTMLElement).tagName === "TEXTAREA") return;
-      e.preventDefault();
-      handleAdvance();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canContinueWizard, isSaving, isLastStep, wizardStep, titulo]);
+  // Enter in a field = main action (not in the description, nor while picking a place).
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key !== "Enter") return;
+    const t = e.target as HTMLElement;
+    if (t.tagName !== "INPUT" || t.closest(".wz-place-search")) return;
+    e.preventDefault();
+    advance();
+  };
+
+  // Radio group with arrows (types).
+  const tipoKeys = (e: React.KeyboardEvent, i: number) => {
+    const delta = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
+    if (!delta) return;
+    e.preventDefault();
+    const n = ACTIVITY_TYPE_OPTIONS.length;
+    const next = ACTIVITY_TYPE_OPTIONS[(i + delta + n) % n];
+    setTipo(next.value);
+    (e.currentTarget.parentElement?.children[(i + delta + n) % n] as HTMLElement | undefined)?.focus();
+  };
+
+  const fechaLarga = cap(fmt(fecha, { weekday: "short", day: "numeric", month: "short" }));
+  const horasTxt = sinHora || horasIncompletas ? null : `${clampedHoraInicio} – ${clampedHoraFin}`;
+  const summary = [
+    { key: "t", label: <>{tipoMeta && <tipoMeta.Icon className="size-[13px]" aria-hidden />}{tipoMeta?.label}</> },
+    ...(lugarMain ? [{ key: "l", label: <><MapPin className="size-[13px]" aria-hidden />{lugarMain}</> }] : []),
+    ...(step >= 3 ? [
+      { key: "f", label: fechaFin ? cap(rango(fecha, fechaFin)) : fechaLarga },
+      { key: "h", label: horasTxt ?? "Sin hora", missing: !horasTxt },
+    ] : []),
+  ];
+  const transporte = transporteLlegada ? TRANSPORT_MAP[transporteLlegada] : null;
+
+  const footer = (() => {
+    if (step === 1) {
+      return (
+        <>
+          {isEditing && onDeleted ? (
+            <button type="button" className="wz-tbtn" style={{ color: "var(--error)" }} disabled={saving} onClick={() => { setDeleteGastos(false); setDeleteOpen(true); }}>
+              Eliminar actividad
+            </button>
+          ) : (
+            <button type="button" className="wz-tbtn mute" onClick={requestDismiss}>Cancelar</button>
+          )}
+          <button type="button" className="wz-fbtn" disabled={!canStep1} onClick={advance}>Continuar</button>
+        </>
+      );
+    }
+    if (step === 2) {
+      return (
+        <>
+          <button type="button" className="wz-tbtn" disabled={!canStep2 || saving} onClick={() => void handleSubmit()}>
+            {isEditing ? "Guardar ya" : "Crear ya, sin detalles"}
+          </button>
+          <button type="button" className="wz-fbtn" disabled={!canStep2} onClick={advance}>Siguiente</button>
+        </>
+      );
+    }
+    return (
+      <>
+        <button type="button" className="wz-tbtn mute" disabled={saving} onClick={() => setStep(2)}>Atrás</button>
+        <button type="button" className="wz-fbtn" disabled={saving} onClick={() => void handleSubmit()}>
+          {saving ? <><LoaderCircle className="wz-spin size-[18px]" aria-hidden />{isEditing ? "Guardando…" : "Creando…"}</>
+            : saveError ? "Reintentar" : isEditing ? "Guardar cambios" : "Crear actividad"}
+        </button>
+      </>
+    );
+  })();
 
   return (
     <>
-      <div data-closing={isClosing ? "true" : "false"} className="app-modal-overlay fixed inset-0 z-40" onClick={isSaving ? undefined : requestDismiss} />
-      <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center" onClick={isSaving ? undefined : requestDismiss}>
-        <div
-          ref={sheetRef}
-          data-closing={isClosing ? "true" : "false"}
-          className={`relative app-modal-panel flex h-dvh w-full flex-col overflow-hidden bg-[var(--bg)] transition-[max-width] duration-[400ms] [transition-timing-function:var(--ease-standard)] md:h-auto md:max-h-[90dvh] md:rounded-[24px] md:shadow-elev-4 ${
-            wizardStep === 2
-              ? planMonthCount === 1 ? "md:max-w-[420px]" : "md:max-w-[760px]"
-              : "md:max-w-[520px]"
-          }`}
-          onClick={(e) => e.stopPropagation()}
-          role="dialog"
-          aria-modal="true"
-        >
-          {feedbackState && (
-            <ModalFeedback
-              state={feedbackState}
-              onSuccess={() => {
-                if (deletedRef.current) {
-                  onDeleted?.(deletedRef.current);
-                } else if (savedResultRef.current) {
-                  onSaved(savedResultRef.current.saved, savedResultRef.current.original ?? undefined);
-                }
-                requestClose();
-              }}
-              onDismissError={() => setFeedbackState(null)}
-            />
+      <Wizard
+        label={isEditing ? "Editar actividad" : "Nueva actividad"}
+        headTitle={[isEditing ? "Editar actividad" : "Nueva actividad", planTitle].filter(Boolean).join(" · ")}
+        steps={STEPS}
+        step={step}
+        onStep={setStep}
+        onBack={() => setStep((s) => Math.max(1, s - 1))}
+        onDismiss={requestDismiss}
+        isClosing={isClosing}
+        busy={saving}
+        footer={footer}
+      >
+        <fieldset disabled={saving} className="contents" onKeyDown={onKeyDown}>
+          {saveError && (
+            <div role="alert" className="wz-ban">
+              <CircleAlert className="mt-[1px] size-[18px] shrink-0" aria-hidden />
+              <span>{saveError}</span>
+            </div>
           )}
 
-          {/* Progress bar */}
-          <div className="h-[3px] w-full shrink-0 bg-[var(--surface-2)]">
-            <div
-              className="h-full bg-primary-token transition-all duration-[400ms] [transition-timing-function:var(--ease-standard)]"
-              style={{ width: `${(wizardStep / TOTAL_STEPS) * 100}%` }}
-            />
-          </div>
-
-          {/* Top nav */}
-          <div className="flex shrink-0 items-center justify-between px-[var(--space-5)] py-[var(--space-3)]">
-            {wizardStep > 1 ? (
-              <IconButton onClick={() => setWizardStep((s) => s - 1)} disabled={isSaving} tone="app" aria-label="Volver">
-                <ChevronLeft className="size-[18px]" aria-hidden />
-              </IconButton>
-            ) : (
-              <div className="size-11" aria-hidden="true" />
-            )}
-            <span className="text-caption font-[var(--fw-medium)] text-muted">{wizardStep} de {TOTAL_STEPS}</span>
-            <CloseButton onClick={requestDismiss} disabled={isSaving} tone="app" />
-          </div>
-
-          {/* Content */}
-          <div className="flex-1 overflow-y-auto px-[var(--space-6)] pb-[var(--space-8)] pt-[var(--space-2)]">
-            <div className="mb-[var(--space-6)]">
-              <h2 className="font-[var(--fw-bold)] leading-tight text-app" style={{ fontSize: "clamp(22px, 5vw, 28px)" }}>
-                {meta.title}
-              </h2>
-              <p className="mt-[var(--space-1)] text-body-sm text-muted">{meta.subtitle}</p>
-            </div>
-
-            {/* Step 1: Tipo + Ubicación */}
-            {wizardStep === 1 && (
-              <div className="space-y-[var(--space-6)]">
-                <div className="grid grid-cols-3 gap-[var(--space-2)] sm:gap-[var(--space-3)]">
-                  {ACTIVITY_TYPE_OPTIONS.map((t) => (
+          {step === 1 && (
+            <>
+              <h2 className="wz-title" tabIndex={-1}>¿Qué hacéis?</h2>
+              <WizardSection title="Tipo" id="wz-tipo" />
+              <div role="radiogroup" aria-labelledby="wz-tipo" className="wz-tiles">
+                {ACTIVITY_TYPE_OPTIONS.map((t, i) => {
+                  const on = tipo === t.value;
+                  return (
                     <button
-                      key={t.value} type="button" onClick={() => setTipo(t.value)}
-                      className={`flex flex-col items-start gap-[var(--space-2)] rounded-[14px] border-2 px-[var(--space-3)] py-[var(--space-3)] text-left transition-colors sm:rounded-[16px] sm:p-[var(--space-4)] ${
-                        tipo === t.value ? "border-[var(--primary)]/40 bg-[var(--primary)]/10" : "border-app bg-app hover:bg-surface"
-                      }`}
+                      key={t.value} type="button" role="radio" aria-checked={on}
+                      tabIndex={on || (tipo == null && i === 0) ? 0 : -1}
+                      data-autofocus={i === 0 ? "" : undefined}
+                      className="wz-tile" onClick={() => setTipo(t.value)} onKeyDown={(e) => tipoKeys(e, i)}
                     >
-                      <t.Icon className={`size-5 shrink-0 ${tipo === t.value ? "text-primary-token" : "text-muted"}`} strokeWidth={1.5} />
-                      <span className="text-[14px] leading-[1.15] font-[var(--fw-semibold)] text-app sm:text-body-sm">{t.label}</span>
+                      <span className="ti"><t.Icon className="size-[22px]" aria-hidden /></span>
+                      {t.label}
+                      {on && <span className="wz-tick" aria-hidden><Check className="size-[13px]" /></span>}
                     </button>
-                  ))}
-                </div>
-                <div>
-                  <p className="mb-[var(--space-2)] text-[14px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">
-                    {esTransporte ? "Origen" : "Ubicación"} <span className="normal-case font-[var(--fw-normal)]">(opcional)</span>
-                  </p>
-                  <div className={`group flex items-center gap-[var(--space-3)] ${FIELD_LINE_CLS}`}>
-                    <MapPin className="size-[16px] shrink-0 text-muted transition-colors group-focus-within:text-primary-token" aria-hidden />
-                    <LocationAutocomplete
-                      value={ubicacion}
-                      onChange={(v, coords) => { setUbicacion(v); setUbicacionCoords(coords ?? null); }}
-                      dropdownVariant="surface"
-                      placeholder={
-                        tipo === "VUELO" ? "Aeropuerto de salida" :
-                        tipo === "BARCO" ? "Puerto de salida" :
-                        tipo === "HOTEL" ? "Nombre del hotel" :
-                        tipo === "RESTAURANTE" ? "Nombre del restaurante" :
-                        "¿Dónde será?"
-                      }
+                  );
+                })}
+              </div>
+
+              <WizardSection title={esTransporte ? "Origen" : "Dónde"} optional />
+              <PlaceField
+                value={ubicacion} coords={ubicacionCoords}
+                onChange={(v, c) => { setUbicacion(v); setUbicacionCoords(c); }}
+                label={esTransporte ? "Origen" : "Buscar sitio o dirección"}
+                placeholder={
+                  tipo === "VUELO" ? "Aeropuerto de salida" :
+                  tipo === "BARCO" ? "Puerto de salida" :
+                  "Busca un sitio o una dirección"
+                }
+              />
+              {esTransporte && (
+                <>
+                  <WizardSection title="Destino" optional />
+                  <PlaceField
+                    value={ubicacionFin} coords={ubicacionFinCoords}
+                    onChange={(v, c) => { setUbicacionFin(v); setUbicacionFinCoords(c); }}
+                    label="Destino"
+                    placeholder={tipo === "VUELO" ? "Aeropuerto de llegada" : "Puerto de llegada"}
+                  />
+                </>
+              )}
+
+              <WizardSection title="Nombre" />
+              <div className="wz-fld">
+                <input
+                  aria-label="Nombre de la actividad"
+                  value={titulo}
+                  onChange={(e) => { setTitulo(e.target.value); setNombreTocado(true); }}
+                  placeholder="Ej.: Cena en Alfama"
+                  style={{ fontWeight: titulo ? 600 : 400 }}
+                />
+              </div>
+              {!nombreTocado && titulo && <p className="wz-tm mt-[6px]">Lo proponemos con el tipo y el sitio. Cámbialo si quieres.</p>}
+            </>
+          )}
+
+          {step === 2 && (
+            <>
+              <h2 className="wz-title" tabIndex={-1}>¿Cuándo?</h2>
+              <WizardSummary items={summary} />
+              <WizardSection
+                title="Día"
+                optional={rango(minDate, maxDate) + (planDays.length > 7 ? ` · ${planDays.length} días` : "")}
+                extra={planDays.length > 1 ? (
+                  <button
+                    type="button" role="switch" aria-checked={variosDias} className="wz-sw"
+                    onClick={() => { setVariosDias((v) => !v); setFechaFin(null); setEsperandoFin(!variosDias); }}
+                  >
+                    Varios días <i aria-hidden />
+                  </button>
+                ) : undefined}
+              />
+              <DaysPicker days={planDays} start={fecha} end={fechaFin} range={variosDias} busyDays={busyDays} onPick={pickDay} />
+              {variosDias && !fechaFin && <p className="wz-tm mt-2">Toca el primer y el último día.</p>}
+
+              <WizardSection
+                title="Horario" optional
+                extra={!sinHora ? <button type="button" className="wz-link" onClick={() => { setHoraInicio(""); setHoraFin(""); setError(null); }}>Borrar horas</button> : undefined}
+              />
+              <div>
+                <div className="flex min-h-[44px] items-center gap-3 border-t border-[var(--border)]">
+                  <span className="wz-tm w-[72px] flex-none">Inicio</span>
+                  <div className="min-w-0 flex-1">
+                    <TimePicker
+                      variant="row" label="Hora de inicio" subtitle={horaSubtitle} placeholder="Sin hora"
+                      value={horaInicio} onChange={cambiarInicio}
+                      minTime={fecha === minDate && !planIsAllDay ? planStartTime : undefined}
+                      maxTime={fecha === maxDate && !planIsAllDay ? planEndTime : undefined}
                     />
                   </div>
                 </div>
-                {esTransporte && (
-                  <div>
-                    <p className="mb-[var(--space-2)] text-[14px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Destino</p>
-                    <div className={`group flex items-center gap-[var(--space-3)] ${FIELD_LINE_CLS}`}>
-                      <MapPin className="size-[16px] shrink-0 text-primary-token" aria-hidden />
-                      <LocationAutocomplete
-                        value={ubicacionFin}
-                        onChange={(v, coords) => { setUbicacionFin(v); setUbicacionFinCoords(coords ?? null); }}
-                        dropdownVariant="surface"
-                        placeholder={tipo === "VUELO" ? "Aeropuerto de llegada" : "Puerto de llegada"}
-                      />
-                    </div>
+                <div className="flex min-h-[44px] items-center gap-3 border-y border-[var(--border)]">
+                  <span className="wz-tm w-[72px] flex-none">Fin</span>
+                  <div className="min-w-0 flex-1">
+                    <TimePicker
+                      variant="row" label="Hora de fin" subtitle={horaSubtitle} placeholder="Sin hora"
+                      value={horaFin} invalid={finAntesQueInicio}
+                      onChange={(v, o) => { setHoraFin(v); if (o?.nextDay && diaSiguiente) { setFechaFin(diaSiguiente); setVariosDias(true); } }}
+                      nextDayBefore={efectivaFechaFin === fecha && diaSiguiente && horaInicio ? horaInicio : undefined}
+                      maxTime={efectivaFechaFin === maxDate && !planIsAllDay ? planEndTime : undefined}
+                    />
                   </div>
-                )}
+                </div>
               </div>
-            )}
-
-            {/* Step 2: Cuándo */}
-            {wizardStep === 2 && (
-              <div className="space-y-[var(--space-6)]">
-                <PlanInlineCalendar
-                  key={`${minDate}-${maxDate}`}
-                  minDate={minDate} maxDate={maxDate}
-                  startDate={fecha} endDate={fechaFin}
-                  onChange={(start, end) => { setFecha(start); setFechaFin(end); }}
-                />
-                <div>
-                  <div className="grid grid-cols-2 gap-[var(--space-3)]">
-                    <div className="min-w-0">
-                      <p className="mb-[var(--space-2)] text-[14px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Inicio</p>
-                      <TimePicker
-                        variant="box" label="Hora de inicio" subtitle={horaSubtitle}
-                        value={horaInicio} onChange={cambiarInicio}
-                        minTime={fecha === minDate && !planIsAllDay ? planStartTime : undefined}
-                        maxTime={fecha === maxDate && !planIsAllDay ? planEndTime : undefined}
-                      />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="mb-[var(--space-2)] text-[14px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Fin</p>
-                      <TimePicker
-                        variant="box" label="Hora de fin" subtitle={horaSubtitle}
-                        value={horaFin} invalid={finAntesQueInicio}
-                        onChange={(v, o) => { setHoraFin(v); if (o?.nextDay && diaSiguiente) setFechaFin(diaSiguiente); }}
-                        nextDayBefore={efectivaFechaFin === fecha && diaSiguiente ? horaInicio : undefined}
-                        maxTime={efectivaFechaFin === maxDate && !planIsAllDay ? planEndTime : undefined}
-                      />
-                      {!finAntesQueInicio && duracion && <p className="mt-[6px] text-[12px] text-muted">Dura {duracion}</p>}
-                    </div>
-                  </div>
-                  {finAntesQueInicio && (
-                    <div role="alert" className="mt-[var(--space-2)] flex items-start gap-[8px] text-[13px] leading-[1.4] text-[var(--error)]">
-                      <CircleAlert aria-hidden className="mt-[1px] size-[16px] shrink-0" />
-                      <div>
-                        La hora de fin es anterior a la de inicio.
-                        {diaSiguiente && (
-                          <div className="mt-[2px]">
-                            <button type="button" onClick={() => setFechaFin(diaSiguiente)} className="min-h-[36px] text-[13px] font-[var(--fw-semibold)] text-[var(--chat-accent-text)]">
-                              Termina el {fechaCorta(diaSiguiente)}
-                            </button>
-                            <span className="text-[12px] text-muted"> o cambia la hora de fin</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-                {error && wizardStep === 2 && <p className="text-body-sm text-[var(--error)]">{error}</p>}
-              </div>
-            )}
-
-            {/* Step 3: Nombre */}
-            {wizardStep === 3 && (
-              <div className="space-y-[var(--space-5)]">
-                <div className={FIELD_LINE_CLS}>
-                  <input
-                    value={titulo} onChange={(e) => setTitulo(e.target.value)}
-                    placeholder={
-                      tipo === "VUELO" ? "Vuelo a París" :
-                      tipo === "HOTEL" ? "Hotel Marina Bay" :
-                      tipo === "RESTAURANTE" ? "Cena en La Trattoria" :
-                      tipo === "BARCO" ? "Ferry a Ibiza" :
-                      "Tarde en el museo"
-                    }
-                    autoFocus
-                    className="w-full bg-transparent text-[22px] font-[var(--fw-semibold)] text-app outline-none placeholder:text-muted"
-                  />
-                </div>
-                <div className="border-b border-app pb-[var(--space-1)] transition-colors focus-within:border-[var(--border-strong)]">
-                  <input
-                    value={descripcion} onChange={(e) => setDescripcion(e.target.value)}
-                    placeholder="Descripción breve (opcional)"
-                    className="w-full bg-transparent text-body-sm text-app outline-none placeholder:text-muted"
-                  />
-                </div>
-                {hayActividadEseDia && (
+              {finAntesQueInicio ? (
+                <div role="alert" className="wz-aviso">
+                  <CircleAlert aria-hidden className="mt-[1px] size-[16px] shrink-0" />
                   <div>
-                    <p className="mb-[var(--space-3)] text-[14px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">¿Cómo llegas?</p>
-                    <div className="grid grid-cols-3 gap-[var(--space-2)]">
-                      {TRANSPORT_LLEGADA.map((t) => (
-                        <button
-                          key={t.value} type="button"
-                          onClick={() => setTransporteLlegada(transporteLlegada === t.value ? null : t.value)}
-                          className={`flex flex-col items-center gap-[var(--space-1)] rounded-[14px] border-2 py-[var(--space-3)] transition-colors ${
-                            transporteLlegada === t.value ? "border-[var(--primary)]/40 bg-[var(--primary)]/10" : "border-app bg-app hover:bg-surface"
-                          }`}
-                        >
-                          <t.Icon className={`size-[18px] shrink-0 ${transporteLlegada === t.value ? "text-primary-token" : "text-muted"}`} strokeWidth={1.5} />
-                          <span className={`text-[14px] font-[var(--fw-semibold)] ${transporteLlegada === t.value ? "text-primary-token" : "text-app"}`}>{t.label}</span>
+                    La hora de fin es anterior a la de inicio.
+                    {diaSiguiente && (
+                      <div className="mt-[2px]">
+                        <button type="button" className="wz-link" onClick={() => { setFechaFin(diaSiguiente); setVariosDias(true); }}>
+                          Termina el {fechaCorta(diaSiguiente)}
                         </button>
-                      ))}
-                    </div>
+                        <span className="text-[12px] text-[var(--text-secondary)]"> o cambia la hora de fin</span>
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
+              ) : sinHora ? (
+                <p className="wz-tm mt-2">Sin hora, la actividad aparece arriba del día como «Sin hora».</p>
+              ) : horasIncompletas ? (
+                <p className="wz-tm mt-2">Falta la hora de {horaInicio ? "fin" : "inicio"}.</p>
+              ) : duracion && (
+                <p className="wz-tm mt-2">{fechaFin ? `Termina el ${fechaCorta(fechaFin)} · dura ${duracion}` : `Dura ${duracion}`}</p>
+              )}
+              {error && <p role="alert" className="wz-aviso">{error}</p>}
+            </>
+          )}
+
+          {step === 3 && (
+            <>
+              <h2 className="wz-title" tabIndex={-1}>Últimos detalles</h2>
+              <WizardSummary items={summary} />
+              <WizardSection title="Descripción" optional />
+              <div className="wz-fld">
+                <textarea
+                  aria-label="Descripción breve" rows={2}
+                  value={descripcion} onChange={(e) => setDescripcion(e.target.value)}
+                  placeholder="Ej.: reservar mesa"
+                />
               </div>
-            )}
+              {hayActividadEseDia && (
+                <>
+                  <WizardSection title="¿Cómo llegáis?" optional="opcional · toca otra vez para quitarlo" id="wz-llegada" />
+                  <div role="radiogroup" aria-labelledby="wz-llegada" className="wz-chips">
+                    {TRANSPORT_LLEGADA.map((t) => (
+                      <button
+                        key={t.value} type="button" role="radio" aria-checked={transporteLlegada === t.value} className="wz-chip"
+                        onClick={() => setTransporteLlegada(transporteLlegada === t.value ? null : t.value)}
+                      >
+                        <span className="ti"><t.Icon className="size-[18px]" aria-hidden /></span>{t.label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+              <WizardSection title="Así queda en el itinerario" />
+              <div className="wz-prev">
+                <div className="wz-tm mb-2">{fechaFin ? cap(rango(fecha, fechaFin)) : fechaLarga} · Día {planDays.indexOf(fecha) + 1}</div>
+                <div className="flex gap-3">
+                  <div className="wz-num-t w-[48px] flex-none text-right text-[12px] leading-[1.2] text-[var(--text-secondary)]">
+                    {horasTxt ? <>{clampedHoraInicio}<br />{clampedHoraFin}</> : "Sin hora"}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="wz-ell text-[15px] font-semibold">{titulo.trim()}</div>
+                    {lugarMain && <div className="wz-tm wz-ell">{[lugarMain, splitPlace(ubicacion).secondary.split(",")[0]].filter(Boolean).join(" · ")}</div>}
+                    {transporte && hayActividadEseDia && (
+                      <div className="wz-tm mt-1 flex items-center gap-1"><transporte.Icon className="size-[13px]" aria-hidden />{transporte.label}</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </fieldset>
+      </Wizard>
 
-            {error && isLastStep && <p className="text-body-sm text-[var(--error)]">{error}</p>}
-          </div>
-
-          {/* Footer */}
-          <div className="shrink-0 border-t border-app px-[var(--space-5)] py-[var(--space-4)]">
-            <div className="flex items-center justify-between">
-              {wizardStep === 2 ? (
-                <button
-                  type="button"
-                  onClick={() => { setFecha(defaultDate); setFechaFin(null); setHoraInicio(defaultHoraInicio); setHoraFin(defaultHoraFin); }}
-                  className="text-body-sm font-[var(--fw-semibold)] text-app underline underline-offset-2 transition-opacity hover:opacity-60"
-                >
-                  Restablecer
-                </button>
-              ) : isEditing && onDeleted ? (
-                <button
-                  type="button"
-                  disabled={isSaving}
-                  onClick={() => { setDeleteGastos(false); setDeleteOpen(true); }}
-                  className="text-body-sm font-[var(--fw-semibold)] text-[var(--error)] transition-opacity hover:opacity-60 disabled:opacity-[var(--disabled-opacity)]"
-                >
-                  Eliminar actividad
-                </button>
-              ) : <div />}
-              <button
-                type="button"
-                disabled={!canContinueWizard || (isLastStep && isSaving)}
-                onClick={handleAdvance}
-                className="rounded-[14px] bg-[var(--text-primary)] px-[var(--space-8)] py-[12px] text-body-sm font-[var(--fw-semibold)] text-contrast-token transition-opacity hover:opacity-85 disabled:opacity-[var(--disabled-opacity)]"
-              >
-                {isLastStep ? (isSaving ? "Guardando..." : isEditing ? "Guardar cambios" : "Crear actividad") : wizardStep === 2 ? "Siguiente" : "Continuar"}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
       <DiscardChangesDialog
         open={discardOpen}
+        title={isEditing ? "¿Descartar los cambios?" : "¿Descartar la actividad?"}
+        message="Se perderá lo que has rellenado."
+        cancelLabel="Seguir editando"
         onCancel={() => setDiscardOpen(false)}
-        onDiscard={() => {
-          setDiscardOpen(false);
-          requestClose();
-        }}
+        onDiscard={() => { setDiscardOpen(false); requestClose(); }}
       />
       <DiscardChangesDialog
         open={deleteOpen}

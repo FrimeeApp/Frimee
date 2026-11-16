@@ -1867,6 +1867,7 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
           planId={plan.id}
           planStartDate={plan.inicio_at}
           planEndDate={plan.fin_at}
+          planTitle={plan.titulo}
           subplanes={subplanes}
           onClose={() => {
             setShowAddSheet(false);
@@ -1893,6 +1894,7 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
         <AddGastoSheet
           planId={plan.id}
           userId={user.id}
+          planName={plan.titulo}
           onClose={() => setShowAddGastoSheet(false)}
           onCreated={() => {
             loadGastos();

@@ -1,7 +1,11 @@
 ﻿"use client";
 
-import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { LucideIcon } from "lucide-react";
+import {
+  BedDouble, Camera, CarFront, Check, CircleAlert, CircleEllipsis, LoaderCircle, Plus,
+  ReceiptText, Search, ShoppingBag, Ticket, Trash2, Upload, UtensilsCrossed, X,
+} from "lucide-react";
 import {
   createGastoEndpoint,
   fetchPlanMiembrosEndpoint,
@@ -11,151 +15,136 @@ import {
 } from "@/services/api/endpoints/gastos.endpoint";
 import { fetchSubplanes, type SubplanRow } from "@/services/api/endpoints/subplanes.endpoint";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
-import type { OcrResult, OcrItem } from "@/app/api/receipts/ocr/route";
-import { todayISO, limitDecimals, adjustNumericString } from "@/lib/form-helpers";
+import type { OcrResult } from "@/app/api/receipts/ocr/route";
+import { todayISO } from "@/lib/form-helpers";
+import { formatMoney } from "@/lib/formatters";
 import { buildInternalApiUrl } from "@/config/external";
-import { Avatar } from "@/components/ui/Avatar";
-import { FIELD_LINE_CLS } from "@/lib/styles";
 import { DatePickerField } from "@/components/ui/DatePickerField";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
-import { CloseButton, IconButton } from "@/components/ui/IconButton";
-import { CloseX } from "@/components/ui/CloseX";
-import { ModalFeedback, type ModalFeedbackState } from "@/components/ui/ModalFeedback";
 import { DiscardChangesDialog } from "@/components/ui/DiscardChangesDialog";
+import { Wizard, WizardSection, WizardSelect, WizardSummary } from "@/components/ui/Wizard";
+import { useToast } from "@/components/ui/Toaster";
 
 type CategoriaGasto = { id: number; nombre: string; icono: string | null; color: string | null };
 
-function StepperButtons({ onIncrement, onDecrement }: { onIncrement: () => void; onDecrement: () => void }) {
+const MONEDAS = ["EUR", "USD", "GBP", "MXN", "ARS", "COP", "CLP", "BRL"];
+const STEPS = ["Qué y cuánto", "Quién paga", "Reparto"] as const;
+
+/** The six visible groups; each keeps its detailed categories one tap below (nothing is removed). */
+const GRUPOS: { key: string; label: string; Icon: LucideIcon; ids: number[] }[] = [
+  { key: "comida",      label: "Comida",      Icon: UtensilsCrossed, ids: [13, 14, 15] },
+  { key: "alojamiento", label: "Alojamiento", Icon: BedDouble,       ids: [9, 10, 11, 12] },
+  { key: "transporte",  label: "Transporte",  Icon: CarFront,        ids: [1, 2, 3, 4, 5, 6, 7, 8] },
+  { key: "actividades", label: "Actividades", Icon: Ticket,          ids: [16, 17, 18, 19] },
+  { key: "compras",     label: "Compras",     Icon: ShoppingBag,     ids: [22, 23, 21] },
+  { key: "otros",       label: "Otros",       Icon: CircleEllipsis,  ids: [0, 20, 24] },
+];
+const grupoDe = (id: number) => GRUPOS.find((g) => g.ids.includes(id)) ?? GRUPOS[GRUPOS.length - 1];
+
+const METODOS: { value: MetodoReparto; label: string }[] = [
+  { value: "IGUAL",      label: "A partes iguales" },
+  { value: "PORCENTAJE", label: "Porcentaje" },
+  { value: "CANTIDAD",   label: "Cantidades" },
+  { value: "POR_ITEMS",  label: "Por ítems" },
+];
+
+type Item = { key: number; nombre: string; cantidad: number; subtotal: string; asignados: Set<string> };
+type TicketState = "vacio" | "leyendo" | "leido" | "error";
+
+/** «86,40» or «86.40» → 86.4 */
+const num = (s: string) => {
+  const n = parseFloat(s.replace(/\s/g, "").replace(",", "."));
+  return Number.isFinite(n) ? n : 0;
+};
+const r2 = (n: number) => Math.round(n * 100) / 100;
+/** 86.4 → «86,40» for an input. */
+const toInput = (n: number) => n.toFixed(2).replace(".", ",");
+const firstName = (m: PlanMiembro | undefined) => (m?.nombre ?? m?.username ?? "").split(" ")[0] || "Alguien";
+
+function Av({ m, me }: { m: PlanMiembro; me: boolean }) {
+  const name = me ? "Tú" : firstName(m);
   return (
-    <div className="flex shrink-0 flex-col items-center justify-center">
-      <button type="button" onClick={onIncrement} aria-label="Aumentar" className="flex h-3.5 w-3.5 items-center justify-center rounded text-muted hover:bg-surface hover:text-app transition-colors">
-        <svg className="h-2.5 w-2.5" viewBox="0 0 12 12" fill="none"><path d="M3 7.5 6 4.5l3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
-      </button>
-      <button type="button" onClick={onDecrement} aria-label="Disminuir" className="flex h-3.5 w-3.5 items-center justify-center rounded text-muted hover:bg-surface hover:text-app transition-colors">
-        <svg className="h-2.5 w-2.5" viewBox="0 0 12 12" fill="none"><path d="M3 4.5 6 7.5l3-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
-      </button>
-    </div>
+    <span className="wz-av" aria-hidden>
+      {/* eslint-disable-next-line @next/next/no-img-element -- 28 px avatar */}
+      {m.foto ? <img src={m.foto} alt="" /> : name[0]?.toUpperCase()}
+    </span>
   );
 }
-
-const MONEDAS = ["EUR", "USD", "GBP", "MXN", "ARS", "COP", "CLP", "BRL"];
-
-const METODOS: { value: MetodoReparto; label: string; desc: string }[] = [
-  { value: "IGUAL",      label: "A partes iguales", desc: "Cada uno paga lo mismo" },
-  { value: "PORCENTAJE", label: "Por porcentaje",   desc: "Cada uno paga un % del total" },
-  { value: "CANTIDAD",   label: "Cantidad fija",    desc: "Cada uno paga una cantidad exacta" },
-  { value: "POR_ITEMS",  label: "Por ítems",        desc: "Cada uno paga los ítems que consume" },
-];
-
-const TOTAL_STEPS = 3;
-const STEP_META = [
-  { title: "¿Qué es?",        subtitle: "Concepto, importe y fecha" },
-  { title: "¿Quién paga?",    subtitle: "Pagador y método de reparto" },
-  { title: "¿Cómo se reparte?", subtitle: "Asigna las partes entre los participantes" },
-];
-
-type ItemAsignacion = OcrItem & { asignados: Record<string, boolean> };
 
 type Props = {
   planId: number;
   userId: string;
   planName?: string;
+  /** Pre-selected date (YYYY-MM-DD), e.g. a day of the itinerary. */
+  initialDate?: string;
   onClose: () => void;
   onCreated: () => void;
 };
 
-// ── component ─────────────────────────────────────────────────────────────────
-
-export default function AddGastoSheet({ planId, userId, planName, onClose, onCreated }: Props) {
+export default function AddGastoSheet({ planId, userId, planName, initialDate, onClose, onCreated }: Props) {
   const { isClosing, requestClose } = useModalCloseAnimation(onClose);
+  const { toast } = useToast();
   const [step, setStep] = useState(1);
 
-  // ── form state ──
+  // ── step 1 ──
   const [titulo, setTitulo] = useState("");
   const [total, setTotal] = useState("");
   const [moneda, setMoneda] = useState("EUR");
-  const [fechaGasto, setFechaGasto] = useState(todayISO());
-  const [pagadoPor, setPagadoPor] = useState(userId);
-  const [metodo, setMetodo] = useState<MetodoReparto>("IGUAL");
-
-  // ── participants ──
-  const [miembros, setMiembros] = useState<PlanMiembro[]>([]);
-  const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
-  const [porcentajes, setPorcentajes] = useState<Record<string, string>>({});
-  const [cantidades, setCantidades] = useState<Record<string, string>>({});
-  const [items, setItems] = useState<ItemAsignacion[]>([]);
-
-  // ── OCR ──
-  const [ocrLoading, setOcrLoading] = useState(false);
-  const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
-  const [notAReceipt, setNotAReceipt] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // ── categorias ──
-  const [categorias, setCategorias] = useState<CategoriaGasto[]>([]);
+  const [fechaGasto, setFechaGasto] = useState(initialDate ?? todayISO());
   const [categoriaId, setCategoriaId] = useState<number>(0);
-  const [categoriaOpen, setCategoriaOpen] = useState(false);
-  const categoriaBtnRef = useRef<HTMLButtonElement>(null);
-
-  // ── subplanes ──
+  const [categorias, setCategorias] = useState<CategoriaGasto[]>([]);
   const [subplanes, setSubplanes] = useState<SubplanRow[]>([]);
   const [subplanId, setSubplanId] = useState<number | null>(null);
-  const [subplanOpen, setSubplanOpen] = useState(false);
-  const subplanBtnRef = useRef<HTMLButtonElement>(null);
+  /** Fields Frimee filled from the ticket and nobody has touched since. */
+  const [delTicket, setDelTicket] = useState<Set<"importe" | "concepto" | "fecha">>(new Set());
 
-  // ── UI ──
+  // ── ticket ──
+  const [ticket, setTicket] = useState<TicketState>("vacio");
+  const [ticketError, setTicketError] = useState<string | null>(null);
+  const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const ticketRun = useRef(0);
+
+  // ── step 2 ──
+  const [miembros, setMiembros] = useState<PlanMiembro[]>([]);
+  const [pagadoPor, setPagadoPor] = useState(userId);
+  const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
+  const [buscar, setBuscar] = useState("");
+
+  // ── step 3 ──
+  const [metodo, setMetodo] = useState<MetodoReparto>("IGUAL");
+  const [porcentajes, setPorcentajes] = useState<Record<string, string>>({});
+  const [cantidades, setCantidades] = useState<Record<string, string>>({});
+  const [items, setItems] = useState<Item[]>([]);
+  const itemKey = useRef(1);
+
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [feedbackState, setFeedbackState] = useState<ModalFeedbackState | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [discardOpen, setDiscardOpen] = useState(false);
-  const [participantesExpanded, setParticipantesExpanded] = useState(true);
-  const [participantesSearch, setParticipantesSearch] = useState("");
-  const [pagadorOpen, setPagadorOpen] = useState(false);
-  const [pagadorSearch, setPagadorSearch] = useState("");
-  const [itemPopoverIdx, setItemPopoverIdx] = useState<number | null>(null);
-  const [itemPopoverSearch, setItemPopoverSearch] = useState("");
-  const [itemPopoverStyle, setItemPopoverStyle] = useState<{ top?: number; bottom?: number; left: number; width: number } | null>(null);
-  const pagadorBtnRef = useRef<HTMLButtonElement>(null);
-  const itemPopoverBtnRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
-  // ── load data ──
+  // ── load ──
   useEffect(() => {
-    const supabase = createBrowserSupabaseClient();
-    supabase.from("categorias_gasto").select("id,nombre,icono,color").order("id")
+    createBrowserSupabaseClient().from("categorias_gasto").select("id,nombre,icono,color").order("id")
       .then(({ data }) => { if (data) setCategorias(data as CategoriaGasto[]); });
-  }, []);
-
-  useEffect(() => {
     fetchSubplanes(planId).then(setSubplanes).catch(() => {});
-  }, [planId]);
-
-  useEffect(() => {
     fetchPlanMiembrosEndpoint(planId)
-      .then((data) => {
-        setMiembros(data);
-        setSeleccionados(new Set(data.map((m) => m.user_id)));
-        const basePct = parseFloat((100 / data.length).toFixed(2));
-        const initPct: Record<string, string> = {};
-        const initCant: Record<string, string> = {};
-        data.forEach((m, i) => {
-          initPct[m.user_id] = i === data.length - 1
-            ? String(parseFloat((100 - basePct * (data.length - 1)).toFixed(2)))
-            : String(basePct);
-          initCant[m.user_id] = "";
-        });
-        setPorcentajes(initPct);
-        setCantidades(initCant);
-      })
+      .then((data) => { setMiembros(data); setSeleccionados(new Set(data.map((m) => m.user_id))); })
       .catch(() => {});
   }, [planId]);
 
-  // ── OCR ──
-  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setOcrLoading(true);
-    setError(null);
-    setNotAReceipt(false);
+  const totalNum = r2(num(total));
+  const nombreDe = (uid: string) => uid === userId ? "Tú" : firstName(miembros.find((m) => m.user_id === uid));
+  const participantes = miembros.filter((m) => seleccionados.has(m.user_id));
+  const n = participantes.length;
+  const pagador = miembros.find((m) => m.user_id === pagadoPor);
+  const fmt = (v: number) => formatMoney(v, moneda);
+
+  // ── ticket ──
+  async function leerTicket(file: File) {
+    const run = ++ticketRun.current;
+    setTicket("leyendo");
+    setTicketError(null);
     try {
       const { data: { session } } = await createBrowserSupabaseClient().auth.getSession();
       let fileToSend: File | Blob = file;
@@ -167,7 +156,7 @@ export default function AddGastoSheet({ planId, userId, planName, onClose, onCre
         canvas.height = bitmap.height;
         canvas.getContext("2d")!.drawImage(bitmap, 0, 0);
         bitmap.close();
-        fileToSend = await new Promise<Blob>((res) => canvas.toBlob((b) => res(b!), "image/jpeg", 0.92));
+        fileToSend = await new Promise<Blob>((res, rej) => canvas.toBlob((b) => b ? res(b) : rej(new Error("imagen")), "image/jpeg", 0.92));
       }
       const fd = new FormData();
       fd.append("file", fileToSend, isPdf ? file.name : "receipt.jpg");
@@ -175,90 +164,144 @@ export default function AddGastoSheet({ planId, userId, planName, onClose, onCre
       fd.append("user_id", userId);
       const res = await fetch(buildInternalApiUrl("/api/receipts/ocr"), {
         method: "POST",
-        headers: session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {},
+        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
         body: fd,
       });
-      const data = await res.json() as OcrResult;
-      if ("error" in data) throw new Error((data as { error: string }).error);
-      if (!data.is_receipt) setNotAReceipt(true);
-      if (data.comercio) setTitulo(data.comercio);
-      if (data.total != null) setTotal(String(data.total));
-      if (data.moneda) setMoneda(data.moneda);
-      if (data.fecha) setFechaGasto(data.fecha);
+      const data = await res.json() as OcrResult | { error: string };
+      if (run !== ticketRun.current) return;
+      if (!res.ok || "error" in data) throw new Error("ocr");
       if (data.url) setReceiptUrl(data.url);
-      if (data.items.length > 0) {
-        setMetodo("POR_ITEMS");
-        setItems(data.items.map((item) => ({ ...item, asignados: Object.fromEntries(miembros.map((m) => [m.user_id, false])) })));
+      if (!data.is_receipt) {
+        setTicket("error");
+        setTicketError("No parece un ticket");
+        return;
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al procesar el archivo");
-    } finally {
-      setOcrLoading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
+      // What the person already typed is never overwritten.
+      const filled = new Set<"importe" | "concepto" | "fecha">();
+      if (data.total != null && (!total.trim() || delTicket.has("importe"))) { setTotal(toInput(data.total)); filled.add("importe"); }
+      if (data.comercio && (!titulo.trim() || delTicket.has("concepto"))) { setTitulo(data.comercio); filled.add("concepto"); }
+      if (data.fecha) { setFechaGasto(data.fecha); filled.add("fecha"); }
+      if (data.moneda && MONEDAS.includes(data.moneda)) setMoneda(data.moneda);
+      setDelTicket(filled);
+      if (data.items.length > 0) {
+        setItems(data.items.map((it) => ({
+          key: itemKey.current++, nombre: it.cantidad > 1 ? `${it.nombre} ×${it.cantidad}` : it.nombre,
+          cantidad: 1, subtotal: toInput(it.subtotal), asignados: new Set(seleccionados),
+        })));
+        setMetodo("POR_ITEMS");
+      }
+      setTicket("leido");
+    } catch {
+      if (run !== ticketRun.current) return;
+      setTicket("error");
+      setTicketError(null);
     }
   }
+  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (f) void leerTicket(f);
+  };
+  const quitarTicket = () => { ticketRun.current++; setTicket("vacio"); setReceiptUrl(null); setTicketError(null); };
+  const itemsLeidos = items.length;
 
-  // ── items helpers ──
-  function addItem() {
-    setItems((prev) => [...prev, { nombre: "", precio_unitario: 0, cantidad: 1, subtotal: 0, asignados: Object.fromEntries(miembros.map((m) => [m.user_id, false])) }]);
-  }
+  // ── split maths ──
+  const igualCada = n > 0 ? r2(totalNum / n) : 0;
+  const redondeo = n > 0 ? Math.round((totalNum - igualCada * n) * 100) : 0;
 
-  function updateItem(idx: number, patch: Partial<ItemAsignacion>) {
-    setItems((prev) => prev.map((item, i) => {
-      if (i !== idx) return item;
-      const updated = { ...item, ...patch };
-      if ("precio_unitario" in patch || "cantidad" in patch) updated.subtotal = updated.precio_unitario * updated.cantidad;
-      return updated;
-    }));
-  }
+  const pctSum = participantes.reduce((a, m) => a + num(porcentajes[m.user_id] ?? ""), 0);
+  const pctFalta = r2(100 - pctSum);
+  const cantSum = r2(participantes.reduce((a, m) => a + num(cantidades[m.user_id] ?? ""), 0));
+  const cantFalta = r2(totalNum - cantSum);
+  const itemsSum = r2(items.reduce((a, it) => a + num(it.subtotal), 0));
+  const itemsFalta = r2(totalNum - itemsSum);
+  const itemSinGente = items.some((it) => num(it.subtotal) > 0 && ![...it.asignados].some((u) => seleccionados.has(u)));
 
-  function toggleItemUser(idx: number, uid: string) {
-    setItems((prev) => prev.map((item, i) => i !== idx ? item : { ...item, asignados: { ...item.asignados, [uid]: !item.asignados[uid] } }));
-  }
+  /** What each person pays under the chosen method. */
+  const porPersona = useMemo(() => {
+    const out = new Map<string, number>();
+    for (const m of participantes) out.set(m.user_id, 0);
+    if (metodo === "IGUAL") for (const m of participantes) out.set(m.user_id, igualCada);
+    if (metodo === "PORCENTAJE") for (const m of participantes) out.set(m.user_id, r2(totalNum * num(porcentajes[m.user_id] ?? "") / 100));
+    if (metodo === "CANTIDAD") for (const m of participantes) out.set(m.user_id, num(cantidades[m.user_id] ?? ""));
+    if (metodo === "POR_ITEMS") {
+      for (const it of items) {
+        const who = [...it.asignados].filter((u) => seleccionados.has(u));
+        if (who.length === 0) continue;
+        const each = num(it.subtotal) / who.length;
+        for (const u of who) out.set(u, (out.get(u) ?? 0) + each);
+      }
+      for (const [k, v] of out) out.set(k, r2(v));
+    }
+    return out;
+  }, [participantes, metodo, igualCada, totalNum, porcentajes, cantidades, items, seleccionados]);
 
-  function removeItem(idx: number) {
-    setItems((prev) => prev.filter((_, i) => i !== idx));
-  }
+  const cuadra =
+    metodo === "IGUAL" ? n > 0 :
+    metodo === "PORCENTAJE" ? Math.abs(pctFalta) < 0.01 :
+    metodo === "CANTIDAD" ? Math.abs(cantFalta) < 0.01 :
+    items.length > 0 && Math.abs(itemsFalta) < 0.01 && !itemSinGente;
 
-  // ── validation ──
-  const totalNum = parseFloat(total) || 0;
-  const itemsSum = items.reduce((acc, item) => acc + item.subtotal, 0);
-  const itemsSumMismatch = metodo === "POR_ITEMS" && totalNum > 0 && items.length > 0 && Math.abs(itemsSum - totalNum) > 0.01;
+  const igualar = () => {
+    if (n === 0) return;
+    const base = Math.floor((100 / n) * 100) / 100;
+    const next: Record<string, string> = { ...porcentajes };
+    participantes.forEach((m, i) => { next[m.user_id] = String(i === n - 1 ? r2(100 - base * (n - 1)) : base).replace(".", ","); });
+    setPorcentajes(next);
+  };
+  const repartirFalta = () => {
+    if (n === 0 || cantFalta <= 0) return;
+    const each = Math.floor((cantFalta / n) * 100) / 100;
+    const next = { ...cantidades };
+    participantes.forEach((m, i) => {
+      const add = i === n - 1 ? r2(cantFalta - each * (n - 1)) : each;
+      next[m.user_id] = toInput(r2(num(cantidades[m.user_id] ?? "") + add));
+    });
+    setCantidades(next);
+  };
+  const elegirMetodo = (m: MetodoReparto) => {
+    setMetodo(m);
+    if (m === "PORCENTAJE" && pctSum === 0) igualar();
+  };
 
-  function canContinue(): boolean {
-    if (step === 1) return titulo.trim().length > 0 && totalNum > 0;
-    if (step === 2) return true;
-    return true;
-  }
+  // ── items ──
+  const updItem = (key: number, patch: Partial<Item>) => setItems((p) => p.map((it) => it.key === key ? { ...it, ...patch } : it));
+  const toggleItemUser = (key: number, uid: string) => setItems((p) => p.map((it) => {
+    if (it.key !== key) return it;
+    const s = new Set(it.asignados);
+    if (s.has(uid)) s.delete(uid); else s.add(uid);
+    return { ...it, asignados: s };
+  }));
+  const addItem = (nombre = "", subtotal = "") =>
+    setItems((p) => [...p, { key: itemKey.current++, nombre, cantidad: 1, subtotal, asignados: new Set(seleccionados) }]);
 
+  // ── submit ──
   function buildParticipantes() {
-    if (metodo === "IGUAL") return Array.from(seleccionados).map((uid) => ({ user_id: uid }));
-    if (metodo === "PORCENTAJE") return miembros.filter((m) => parseFloat(porcentajes[m.user_id] || "0") > 0).map((m) => ({ user_id: m.user_id, porcentaje: parseFloat(porcentajes[m.user_id]) }));
-    if (metodo === "CANTIDAD") return miembros.filter((m) => parseFloat(cantidades[m.user_id] || "0") > 0).map((m) => ({ user_id: m.user_id, importe: parseFloat(cantidades[m.user_id]) }));
-    const uids = new Set<string>();
-    items.forEach((item) => Object.keys(item.asignados).forEach((uid) => { if (item.asignados[uid]) uids.add(uid); }));
-    return Array.from(uids).map((uid) => ({ user_id: uid }));
+    if (metodo === "IGUAL") return participantes.map((m) => ({ user_id: m.user_id }));
+    if (metodo === "PORCENTAJE") return participantes.filter((m) => num(porcentajes[m.user_id] ?? "") > 0).map((m) => ({ user_id: m.user_id, porcentaje: num(porcentajes[m.user_id]) }));
+    if (metodo === "CANTIDAD") return participantes.filter((m) => num(cantidades[m.user_id] ?? "") > 0).map((m) => ({ user_id: m.user_id, importe: num(cantidades[m.user_id]) }));
+    return participantes.filter((m) => (porPersona.get(m.user_id) ?? 0) > 0).map((m) => ({ user_id: m.user_id }));
   }
-
   function buildItems(): GastoItemInput[] {
-    return items.map((item) => {
-      const assigned = miembros.filter((m) => item.asignados[m.user_id]);
-      const perUser = assigned.length > 0 ? item.subtotal / assigned.length : 0;
-      return { nombre: item.nombre, precio_unitario: item.precio_unitario, cantidad: item.cantidad, subtotal: item.subtotal, usuarios: assigned.map((m) => ({ user_id: m.user_id, subtotal_asignado: perUser })) };
+    return items.filter((it) => num(it.subtotal) > 0).map((it) => {
+      const who = [...it.asignados].filter((u) => seleccionados.has(u));
+      const sub = num(it.subtotal);
+      return {
+        nombre: it.nombre.trim() || "Ítem", precio_unitario: sub, cantidad: 1, subtotal: sub,
+        usuarios: who.map((u) => ({ user_id: u, subtotal_asignado: r2(sub / who.length) })),
+      };
     });
   }
 
-  async function handleSubmit() {
-    if (itemsSumMismatch) { setError(`La suma de ítems (${itemsSum.toFixed(2)}) no coincide con el total (${totalNum.toFixed(2)})`); return; }
-    if (metodo === "PORCENTAJE") {
-      const sum = miembros.filter(m => porcentajes[m.user_id] !== undefined).reduce((a, m) => a + (parseFloat(porcentajes[m.user_id] ?? "0") || 0), 0);
-      if (Math.abs(sum - 100) > 0.01) { setError(`Los porcentajes deben sumar 100% (actual: ${sum.toFixed(1)}%)`); return; }
-    }
-    const participantes = buildParticipantes();
-    if (participantes.length === 0) { setError("Selecciona al menos un participante"); return; }
+  async function handleSubmit(forzarIgual = false) {
+    if (saving) return;
+    const m = forzarIgual ? "IGUAL" : metodo;
+    if (forzarIgual) setMetodo("IGUAL");
+    if (!forzarIgual && !cuadra) return;
+    const parts = m === "IGUAL" ? participantes.map((p) => ({ user_id: p.user_id })) : buildParticipantes();
+    if (parts.length === 0) return;
     setSaving(true);
-    setError(null);
-    setFeedbackState({ type: "loading" });
+    setSaveError(null);
     try {
       await createGastoEndpoint({
         plan_id: planId,
@@ -267,604 +310,457 @@ export default function AddGastoSheet({ planId, userId, planName, onClose, onCre
         fecha_gasto: fechaGasto,
         total: totalNum,
         moneda,
-        metodo_reparto: metodo,
-        participantes,
+        metodo_reparto: m,
+        participantes: parts,
         descripcion: undefined,
-        items: metodo === "POR_ITEMS" ? buildItems() : undefined,
+        items: m === "POR_ITEMS" ? buildItems() : undefined,
         receipt_url: receiptUrl ?? undefined,
         categoria_id: categoriaId,
         subplan_id: subplanId ?? undefined,
       });
-      setFeedbackState({ type: "success", label: "Gasto creado" });
-    } catch (err) {
-      setFeedbackState({ type: "error", message: err instanceof Error ? err.message : "Error al guardar el gasto" });
-    } finally {
+      const mio = m === "IGUAL" ? (seleccionados.has(userId) ? igualCada : 0) : (porPersona.get(userId) ?? 0);
+      const msg = pagadoPor === userId
+        ? (totalNum - mio > 0.005 ? `Gasto añadido · te deben ${fmt(r2(totalNum - mio))}` : "Gasto añadido")
+        : (mio > 0.005 ? `Gasto añadido · debes ${fmt(mio)} a ${firstName(pagador)}` : "Gasto añadido");
+      onCreated();
+      toast(msg, "success");
+      requestClose();
+    } catch {
+      setSaveError("No se pudo crear el gasto. Comprueba la conexión y vuelve a intentarlo. Lo que has escrito sigue aquí.");
       setSaving(false);
     }
   }
 
-  function handleNext() {
-    setError(null);
-    if (step < TOTAL_STEPS) setStep(s => s + 1);
-    else void handleSubmit();
-  }
+  // ── navigation ──
+  const canStep1 = titulo.trim().length > 0 && totalNum > 0;
+  const canStep2 = n > 0;
+  const advance = () => {
+    if (saving) return;
+    if (step === 1 && canStep1) setStep(2);
+    else if (step === 2 && canStep2) setStep(3);
+    else if (step === 3) void handleSubmit();
+  };
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key !== "Enter") return;
+    const t = e.target as HTMLElement;
+    if (t.tagName !== "INPUT" || t.closest("[data-no-enter]")) return;
+    e.preventDefault();
+    advance();
+  };
 
-  const meta = STEP_META[step - 1];
-  const fieldLineCls = FIELD_LINE_CLS;
-  const hasProgress =
-    step > 1 ||
-    titulo.trim().length > 0 ||
-    total.trim().length > 0 ||
-    receiptUrl !== null ||
-    items.length > 0 ||
-    subplanId !== null ||
-    metodo !== "IGUAL";
-
+  const hasProgress = step > 1 || titulo.trim() !== "" || total.trim() !== "" || ticket !== "vacio" || items.length > 0 || subplanId !== null;
   function requestDismiss() {
-    if (saving || ocrLoading) return;
-    if (hasProgress) {
-      setDiscardOpen(true);
-      return;
-    }
+    if (saving || discardOpen) return;
+    if (hasProgress) { setDiscardOpen(true); return; }
     requestClose();
   }
 
-  function openItemPopover(idx: number) {
-    if (itemPopoverIdx === idx) {
-      setItemPopoverIdx(null);
-      setItemPopoverStyle(null);
-      setItemPopoverSearch("");
-      return;
-    }
+  const radioKeys = <T,>(e: React.KeyboardEvent, list: readonly T[], i: number, pick: (v: T) => void) => {
+    const d = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
+    if (!d) return;
+    e.preventDefault();
+    const j = (i + d + list.length) % list.length;
+    pick(list[j]);
+    (e.currentTarget.parentElement?.children[j] as HTMLElement | undefined)?.focus();
+  };
 
-    const r = itemPopoverBtnRefs.current[idx]?.getBoundingClientRect();
-    const popoverH = 260;
-    const popoverW = 210;
-    const spaceBelow = r ? window.innerHeight - r.bottom - 8 : 0;
-    const showAbove = spaceBelow < popoverH && (r?.top ?? 0) > popoverH;
-    const top = showAbove ? undefined : (r ? r.bottom + 4 : 0);
-    const bottom = showAbove ? (r ? window.innerHeight - r.top + 4 : 0) : undefined;
-    const left = r ? Math.min(r.left, window.innerWidth - popoverW - 8) : 0;
+  const grupo = grupoDe(categoriaId);
+  const subcats = grupo.ids.map((id) => categorias.find((c) => c.id === id)).filter((c): c is CategoriaGasto => Boolean(c));
+  const miembrosVisibles = miembros.length > 8 && buscar.trim()
+    ? miembros.filter((m) => `${m.nombre ?? ""} ${m.username ?? ""}`.toLowerCase().includes(buscar.trim().toLowerCase()))
+    : miembros;
 
-    setItemPopoverIdx(idx);
-    setItemPopoverStyle({ top, bottom, left, width: popoverW });
-    setItemPopoverSearch("");
-  }
+  const summary = [
+    { key: "c", label: titulo.trim() },
+    { key: "i", label: fmt(totalNum) },
+    ...(step >= 3 ? [
+      { key: "p", label: <>{pagador && <Av m={pagador} me={pagadoPor === userId} />}{pagadoPor === userId ? "Pagaste tú" : `Pagó ${firstName(pagador)}`}</> },
+      { key: "n", label: `${n} ${n === 1 ? "persona" : "personas"}` },
+    ] : []),
+  ];
 
-  // ── shared dropdown renderer ──
-  function Dropdown({ btnRef, open, onClose: closeDropdown, items: dropdownItems }: {
-    btnRef: React.RefObject<HTMLButtonElement | null>;
-    open: boolean;
-    onClose: () => void;
-    items: { key: string | number; label: React.ReactNode; active: boolean; onClick: () => void }[];
-  }) {
-    if (!open) return null;
-    const r = btnRef.current?.getBoundingClientRect();
-    const maxH = 224;
-    const spaceBelow = r ? window.innerHeight - r.bottom - 8 : 0;
-    const showAbove = spaceBelow < maxH && (r?.top ?? 0) > maxH;
-    const top = showAbove ? undefined : (r ? r.bottom + 4 : 0);
-    const bottom = showAbove ? (r ? window.innerHeight - r.top + 4 : 0) : undefined;
-    const width = r?.width ?? 300;
-    const left = r ? Math.min(r.left, window.innerWidth - width - 8) : 0;
-    return createPortal(
-      <>
-        <div className="fixed inset-0 z-[9998]" onClick={closeDropdown} />
-        <div className="fixed z-[9999] max-h-56 overflow-y-auto rounded-xl border border-app bg-[var(--surface)] shadow-elev-3" style={{ top, bottom, left, width }}>
-          {dropdownItems.map(item => (
-            <button key={item.key} type="button" onClick={item.onClick} className={`flex w-full items-center px-4 py-2.5 text-left text-body-sm transition-colors hover:bg-surface-2 ${item.active ? "text-app font-[var(--fw-semibold)]" : "text-muted"}`}>
-              {item.label}
-            </button>
-          ))}
-        </div>
-      </>,
-      document.body
-    );
-  }
+  const footer = step === 1 ? (
+    <>
+      <button type="button" className="wz-tbtn mute" onClick={requestDismiss}>Cancelar</button>
+      <button type="button" className="wz-fbtn" disabled={!canStep1} onClick={advance}>Continuar</button>
+    </>
+  ) : step === 2 ? (
+    <>
+      <button type="button" className="wz-tbtn" disabled={!canStep2 || saving} onClick={() => void handleSubmit(true)}>
+        {saving ? "Creando…" : "Crear ya, a partes iguales"}
+      </button>
+      <button type="button" className="wz-fbtn" disabled={!canStep2} onClick={advance}>Ajustar reparto</button>
+    </>
+  ) : (
+    <>
+      <button type="button" className="wz-tbtn mute" disabled={saving} onClick={() => setStep(2)}>Atrás</button>
+      <button type="button" className="wz-fbtn" disabled={saving || !cuadra} onClick={() => void handleSubmit()}>
+        {saving ? <><LoaderCircle className="wz-spin size-[18px]" aria-hidden />Creando…</> : saveError ? "Reintentar" : "Crear gasto"}
+      </button>
+    </>
+  );
+
+  const Franja = ({ ok, children, action }: { ok: boolean; children: React.ReactNode; action?: React.ReactNode }) => (
+    <div className={ok ? "wz-ok" : "wz-warn"} role="status">
+      {ok ? <Check className="size-[16px] shrink-0" aria-hidden /> : <CircleAlert className="size-[16px] shrink-0 text-[var(--chat-missed)]" aria-hidden />}
+      <span className="flex-1">{children}</span>
+      {action}
+    </div>
+  );
 
   return (
     <>
-      <div data-closing={isClosing ? "true" : "false"} className="app-modal-overlay fixed inset-0 z-[1300]" />
-      <div
-        className="fixed inset-0 z-[1310] flex items-center justify-center p-0 md:p-[var(--space-4)]"
-        onClick={(e) => { if (e.target !== e.currentTarget) return; if (window.matchMedia("(min-width: 768px)").matches) requestDismiss(); }}
+      <Wizard
+        label="Nuevo gasto"
+        headTitle={["Nuevo gasto", planName].filter(Boolean).join(" · ")}
+        steps={STEPS}
+        step={step}
+        onStep={setStep}
+        onBack={() => setStep((s) => Math.max(1, s - 1))}
+        onDismiss={requestDismiss}
+        isClosing={isClosing}
+        busy={saving}
+        zClass="z-[1310]"
+        footer={footer}
       >
-        <div
-          data-closing={isClosing ? "true" : "false"}
-          className="app-modal-panel relative flex h-dvh w-full flex-col overflow-hidden bg-app pt-[env(safe-area-inset-top)] md:h-auto md:max-h-[92dvh] md:max-w-[620px] md:rounded-[22px] md:border md:border-app md:pt-0 md:shadow-elev-4"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {feedbackState && (
-            <ModalFeedback
-              state={feedbackState}
-              onSuccess={() => { onCreated(); requestClose(); }}
-              onDismissError={() => setFeedbackState(null)}
-            />
-          )}
-          {/* Progress bar */}
-          <div className="h-[3px] w-full shrink-0 bg-[var(--surface-2)]">
-            <div className="h-full bg-primary-token transition-all duration-[400ms] [transition-timing-function:var(--ease-standard)]" style={{ width: `${(step / TOTAL_STEPS) * 100}%` }} />
-          </div>
-
-          {/* Top nav */}
-          <div className="flex shrink-0 items-center justify-between pb-[var(--space-3)] pl-[max(var(--space-5),env(safe-area-inset-left))] pr-[max(var(--space-5),env(safe-area-inset-right))] pt-[var(--space-3)] md:px-[var(--space-5)]">
-            {step > 1 ? (
-              <IconButton onClick={() => setStep(s => s - 1)} tone="app" aria-label="Volver">
-                <svg viewBox="0 0 24 24" fill="none" className="size-[18px]"><path d="M15 19l-7-7 7-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
-              </IconButton>
-            ) : (
-              <div className="size-11" aria-hidden="true" />
-            )}
-            <span className="min-w-0 text-center">
-              <span className="block text-caption font-[var(--fw-medium)] text-muted">{step} de {TOTAL_STEPS}</span>
-              {planName && (
-                <span className="mt-[2px] block max-w-[200px] truncate text-[16px] font-[var(--fw-semibold)] text-app">
-                  {planName}
-                </span>
-              )}
-            </span>
-            {/* OCR button — only on step 1 */}
-            {false ? (
-              <div>
-                <input ref={fileInputRef} type="file" accept="image/*,.pdf" className="hidden" onChange={handleFileChange} />
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={ocrLoading}
-                  title="Leer ticket o factura"
-                  className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-caption font-[var(--fw-semibold)] transition-colors disabled:opacity-60 ${receiptUrl && !notAReceipt ? "border-success-token/30 bg-success-token/10 text-success-token" : "border-app bg-surface text-muted hover:border-primary-token hover:text-primary-token"}`}
-                >
-                  {ocrLoading ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" /> : receiptUrl && !notAReceipt ? <svg viewBox="0 0 24 24" fill="none" className="size-3.5" stroke="currentColor" strokeWidth="2"><path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round"/></svg> : <svg viewBox="0 0 24 24" fill="none" className="size-3.5" stroke="currentColor" strokeWidth="1.8"><path d="M12 16v-8M8 12l4-4 4 4" strokeLinecap="round" strokeLinejoin="round"/><rect x="3" y="3" width="18" height="18" rx="3"/></svg>}
-                  {ocrLoading ? "Analizando…" : receiptUrl && !notAReceipt ? "Ticket leído" : "Leer ticket"}
-                </button>
-              </div>
-            ) : (
-              <CloseButton onClick={requestDismiss} tone="app" />
-            )}
-          </div>
-
-          {/* Content */}
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain scrollbar-thin pb-[var(--space-8)] pl-[max(var(--space-6),env(safe-area-inset-left))] pr-[max(var(--space-6),env(safe-area-inset-right))] pt-[var(--space-2)] md:px-[var(--space-6)]">
-            {/* Step header */}
-            <div className="mb-[var(--space-8)] flex items-start justify-between gap-[var(--space-4)]">
-              <div className="min-w-0">
-                <h2 className="font-[var(--fw-bold)] leading-tight text-app" style={{ fontSize: "clamp(22px, 5vw, 28px)" }}>{meta.title}</h2>
-                <p className="mt-[var(--space-1)] text-body-sm text-muted">{meta.subtitle}</p>
-              </div>
-              {step === 1 && (
-                <div className="shrink-0 pt-1">
-                  <input ref={fileInputRef} type="file" accept="image/*,.pdf" className="hidden" onChange={handleFileChange} />
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={ocrLoading}
-                    title="Leer ticket o factura"
-                    className={`inline-flex items-center justify-center gap-1.5 rounded-[10px] border border-app px-3 py-1.5 text-caption font-[var(--fw-medium)] transition-colors disabled:opacity-60 ${receiptUrl && !notAReceipt ? "bg-surface text-app" : "bg-neutral-100 text-muted hover:bg-neutral-200 hover:text-app dark:bg-neutral-800 dark:hover:bg-neutral-700"}`}
-                  >
-                    {ocrLoading ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" /> : receiptUrl && !notAReceipt ? <svg viewBox="0 0 24 24" fill="none" className="size-3.5" stroke="currentColor" strokeWidth="2"><path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round"/></svg> : <svg viewBox="0 0 24 24" fill="none" className="size-3.5" stroke="currentColor" strokeWidth="1.8"><path d="M12 16v-8M8 12l4-4 4 4" strokeLinecap="round" strokeLinejoin="round"/><rect x="3" y="3" width="18" height="18" rx="3"/></svg>}
-                    {ocrLoading ? "Analizando..." : receiptUrl && !notAReceipt ? "Leido" : "Leer factura"}
-                  </button>
-                </div>
-              )}
+        <fieldset disabled={saving} className="contents" onKeyDown={onKeyDown}>
+          {saveError && (
+            <div role="alert" className="wz-ban">
+              <CircleAlert className="mt-[1px] size-[18px] shrink-0" aria-hidden />
+              <span>{saveError}</span>
             </div>
+          )}
 
-            {/* ── Step 1: Concepto + importe ── */}
-            {step === 1 && (
-              <div className="space-y-[var(--space-6)]">
-                <div className={`flex items-center gap-[var(--space-3)] ${fieldLineCls}`}>
-                  <input
-                    value={titulo}
-                    onChange={(e) => setTitulo(e.target.value)}
-                    placeholder="Concepto"
-                    autoFocus
-                    className="min-w-0 flex-1 bg-transparent text-[22px] font-[var(--fw-semibold)] text-app outline-none placeholder:text-muted"
+          {step === 1 && (
+            <>
+              <h2 className="wz-title" tabIndex={-1}>¿Qué es?</h2>
+              <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onFile} />
+              <input ref={fileRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={onFile} />
+              <div className="mt-4">
+                {ticket === "vacio" && (
+                  <div className="wz-ticket">
+                    <ReceiptText className="size-[22px] shrink-0 text-[var(--text-secondary)]" aria-hidden />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[15px] font-semibold">¿Tienes el ticket?</div>
+                      <div className="wz-tm">Frimee rellena concepto, importe, fecha e ítems</div>
+                    </div>
+                    <button type="button" className="wz-ib md:hidden" aria-label="Hacer foto al ticket" title="Hacer foto al ticket" onClick={() => cameraRef.current?.click()}>
+                      <Camera className="size-[20px]" aria-hidden />
+                    </button>
+                    <button type="button" className="wz-ib" aria-label="Subir el ticket" title="Subir el ticket" onClick={() => fileRef.current?.click()}>
+                      <Upload className="size-[20px]" aria-hidden />
+                    </button>
+                  </div>
+                )}
+                {ticket === "leyendo" && (
+                  <div className="wz-ticket">
+                    <LoaderCircle className="wz-spin size-[22px] shrink-0 text-[var(--chat-accent-text)]" aria-hidden />
+                    <div className="min-w-0 flex-1" role="status">
+                      <div className="text-[15px] font-semibold">Frimee está leyendo el ticket…</div>
+                      <div className="wz-tm">Puedes ir rellenando a mano mientras tanto</div>
+                    </div>
+                    <button type="button" className="wz-ib s" aria-label="Quitar el ticket" title="Quitar el ticket" onClick={quitarTicket}>
+                      <X className="size-[18px]" aria-hidden />
+                    </button>
+                  </div>
+                )}
+                {ticket === "leido" && (
+                  <div className="wz-ticket ok">
+                    <Check className="size-[22px] shrink-0 text-[var(--chat-accent-text)]" aria-hidden />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[15px] font-semibold">Ticket leído</div>
+                      <div className="wz-tm">
+                        Concepto, importe, fecha{itemsLeidos > 0 ? ` y ${itemsLeidos} ${itemsLeidos === 1 ? "ítem" : "ítems"}` : ""} · revísalos
+                      </div>
+                    </div>
+                    {receiptUrl && <a href={receiptUrl} target="_blank" rel="noreferrer" className="wz-tbtn px-2">Ver</a>}
+                    <button type="button" className="wz-ib s" aria-label="Quitar el ticket" title="Quitar el ticket" onClick={quitarTicket}>
+                      <X className="size-[18px]" aria-hidden />
+                    </button>
+                  </div>
+                )}
+                {ticket === "error" && (
+                  <div className="wz-ticket bad" role="alert">
+                    <CircleAlert className="size-[22px] shrink-0 text-[var(--chat-missed)]" aria-hidden />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[15px] font-semibold">{ticketError ?? "No se pudo leer el ticket"}</div>
+                      <div className="wz-tm">Hazle otra foto con más luz o rellénalo a mano</div>
+                    </div>
+                    <button type="button" className="wz-tbtn px-2" onClick={() => (window.matchMedia("(min-width: 768px)").matches ? fileRef : cameraRef).current?.click()}>
+                      Otra foto
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <WizardSection title="Importe" extra={delTicket.has("importe") ? <span className="wz-tag">Del ticket</span> : undefined} />
+              <div className="wz-amount">
+                <input
+                  aria-label="Importe" inputMode="decimal" placeholder="0,00" value={total} data-autofocus=""
+                  onChange={(e) => { setTotal(e.target.value.replace(/[^\d.,]/g, "")); setDelTicket((s) => { const x = new Set(s); x.delete("importe"); return x; }); }}
+                  onBlur={() => { if (totalNum > 0) setTotal(toInput(totalNum)); }}
+                />
+                <WizardSelect compact label="Moneda" value={moneda} options={MONEDAS.map((m) => ({ value: m, label: m }))} onChange={setMoneda} />
+              </div>
+
+              <WizardSection title="Concepto" extra={delTicket.has("concepto") ? <span className="wz-tag">Del ticket</span> : undefined} />
+              <div className="wz-fld">
+                <input
+                  aria-label="Concepto" placeholder="Ej.: Cena en Le Comptoir" value={titulo}
+                  onChange={(e) => { setTitulo(e.target.value); setDelTicket((s) => { const x = new Set(s); x.delete("concepto"); return x; }); }}
+                />
+              </div>
+
+              <WizardSection title="Fecha" extra={delTicket.has("fecha") ? <span className="wz-tag">Del ticket</span> : undefined} />
+              <div data-no-enter="">
+                <DatePickerField value={fechaGasto} onChange={(v) => { setFechaGasto(v); setDelTicket((s) => { const x = new Set(s); x.delete("fecha"); return x; }); }} />
+              </div>
+
+              <WizardSection title="Categoría" id="wz-cat" />
+              <div role="radiogroup" aria-labelledby="wz-cat" className="wz-chips">
+                {GRUPOS.map((g, i) => {
+                  const on = grupo.key === g.key;
+                  return (
+                    <button
+                      key={g.key} type="button" role="radio" aria-checked={on} tabIndex={on ? 0 : -1} className="wz-chip"
+                      onClick={() => setCategoriaId(g.ids[0])}
+                      onKeyDown={(e) => radioKeys(e, GRUPOS, i, (x) => setCategoriaId(x.ids[0]))}
+                    >
+                      <span className="ti"><g.Icon className="size-[18px]" aria-hidden /></span>{g.label}
+                    </button>
+                  );
+                })}
+              </div>
+              {subcats.length > 1 && (
+                <div className="wz-pills mt-2" role="radiogroup" aria-label={`Tipo de ${grupo.label.toLowerCase()}`}>
+                  {subcats.map((c) => (
+                    <button key={c.id} type="button" role="radio" aria-checked={categoriaId === c.id} className="wz-pill" onClick={() => setCategoriaId(c.id)}>
+                      {c.icono && <span aria-hidden>{c.icono}</span>}{c.nombre}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {subplanes.length > 0 && (
+                <>
+                  <WizardSection title="Actividad" optional />
+                  <WizardSelect
+                    label="Actividad del plan" value={subplanId ?? 0}
+                    options={[{ value: 0, label: "Sin actividad" }, ...subplanes.map((s) => ({ value: s.id, label: s.titulo }))]}
+                    onChange={(v) => setSubplanId(v || null)}
                   />
-                </div>
+                </>
+              )}
+            </>
+          )}
 
-                <div className="grid gap-[var(--space-5)] sm:grid-cols-2">
-                  <div>
-                    <p className="mb-[var(--space-2)] text-[13px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Importe</p>
-                    <div className={`${fieldLineCls} flex items-center gap-[var(--space-3)]`}>
-                      <input
-                        type="number" min="0" step="0.01" value={total}
-                        onChange={(e) => setTotal(limitDecimals(e.target.value))}
-                        placeholder="0.00"
-                        className="min-w-0 flex-1 bg-transparent text-body text-app outline-none placeholder:text-muted [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                      />
-                      <select value={moneda} onChange={(e) => setMoneda(e.target.value)} className="shrink-0 bg-transparent text-body text-app outline-none">
-                        {MONEDAS.map((m) => <option key={m}>{m}</option>)}
-                      </select>
-                    </div>
-                  </div>
-                  <div>
-                    <p className="mb-[var(--space-2)] text-[13px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Fecha</p>
-                    <div className={fieldLineCls}>
-                      <DatePickerField value={fechaGasto} onChange={setFechaGasto} />
-                    </div>
-                  </div>
+          {step === 2 && (
+            <>
+              <h2 className="wz-title" tabIndex={-1}>¿Quién paga?</h2>
+              <WizardSummary items={summary} />
+              {miembros.length > 8 && (
+                <div className="wz-fld mt-4" data-no-enter="">
+                  <Search className="size-[18px] shrink-0 text-[var(--text-secondary)]" aria-hidden />
+                  <input aria-label="Buscar personas" placeholder="Buscar personas" value={buscar} onChange={(e) => setBuscar(e.target.value)} />
                 </div>
-
-                {categorias.length > 0 && (() => {
-                  const selected = categorias.find(c => c.id === categoriaId);
+              )}
+              <WizardSection title="Pagó" id="wz-pago" />
+              <div className="wz-pills" role="radiogroup" aria-labelledby="wz-pago">
+                {miembrosVisibles.map((m, i) => {
+                  const on = pagadoPor === m.user_id;
                   return (
-                    <div>
-                      <p className="mb-[var(--space-2)] text-[13px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Categoría</p>
-                      <button ref={categoriaBtnRef} type="button" onClick={() => setCategoriaOpen(o => !o)} className={`${fieldLineCls} flex w-full items-center justify-between py-1 outline-none`}>
-                        <span className="text-app">{selected?.nombre ?? "Otros"}</span>
-                        <svg className={`shrink-0 text-muted transition-transform duration-200 ${categoriaOpen ? "rotate-180" : ""}`} width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                      </button>
-                      <Dropdown
-                        btnRef={categoriaBtnRef}
-                        open={categoriaOpen}
-                        onClose={() => setCategoriaOpen(false)}
-                        items={categorias.map(cat => ({ key: cat.id, label: <>{cat.icono && <span className="mr-2">{cat.icono}</span>}{cat.nombre}</>, active: categoriaId === cat.id, onClick: () => { setCategoriaId(cat.id); setCategoriaOpen(false); } }))}
-                      />
-                    </div>
+                    <button
+                      key={m.user_id} type="button" role="radio" aria-checked={on} tabIndex={on ? 0 : -1} className="wz-pill pl-1"
+                      onClick={() => setPagadoPor(m.user_id)}
+                      onKeyDown={(e) => radioKeys(e, miembrosVisibles, i, (x) => setPagadoPor(x.user_id))}
+                    >
+                      <Av m={m} me={m.user_id === userId} />{m.user_id === userId ? "Tú" : firstName(m)}
+                    </button>
                   );
-                })()}
-
-                {subplanes.length > 0 && (() => {
-                  const selected = subplanes.find(s => s.id === subplanId);
-                  return (
-                    <div>
-                      <p className="mb-[var(--space-2)] text-[13px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Subplan</p>
-                      <button ref={subplanBtnRef} type="button" onClick={() => setSubplanOpen(o => !o)} className={`${fieldLineCls} flex w-full items-center justify-between py-1 outline-none`}>
-                        <span className={selected ? "text-app" : "text-muted"}>{selected?.titulo ?? "Sin subplan"}</span>
-                        <svg className={`shrink-0 text-muted transition-transform duration-200 ${subplanOpen ? "rotate-180" : ""}`} width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                      </button>
-                      <Dropdown
-                        btnRef={subplanBtnRef}
-                        open={subplanOpen}
-                        onClose={() => setSubplanOpen(false)}
-                        items={[
-                          { key: "none", label: "Sin subplan", active: subplanId === null, onClick: () => { setSubplanId(null); setSubplanOpen(false); } },
-                          ...subplanes.map(s => ({ key: s.id, label: s.titulo, active: subplanId === s.id, onClick: () => { setSubplanId(s.id); setSubplanOpen(false); } })),
-                        ]}
-                      />
-                    </div>
-                  );
-                })()}
-
-                {false && (
-                <div>
-                  <p className="mb-[var(--space-2)] text-[13px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Descripción <span className="font-normal normal-case tracking-normal opacity-60">(opcional)</span></p>
-                </div>
-
-                )}
-
-                {notAReceipt && (
-                  <div className="flex items-start gap-[var(--space-2)] rounded-[12px] border border-[var(--warning,#f59e0b)]/30 bg-[var(--warning,#f59e0b)]/10 px-[var(--space-3)] py-[var(--space-2)]">
-                    <svg viewBox="0 0 24 24" fill="none" className="mt-0.5 size-4 shrink-0 text-[var(--warning,#f59e0b)]" stroke="currentColor" strokeWidth="2"><path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                    <p className="text-caption text-[var(--warning,#f59e0b)]">La imagen no parece un recibo. Puedes seguir, pero revisa los campos.</p>
-                  </div>
-                )}
+                })}
               </div>
-            )}
 
-            {/* ── Step 2: Pagador + método ── */}
-            {step === 2 && miembros.length > 0 && (
-              <div className="space-y-[var(--space-8)]">
-                {/* Pagador */}
-                <div>
-                  <p className="mb-[var(--space-3)] text-[13px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">¿Quién ha pagado?</p>
+              <WizardSection
+                title="Entre quién se reparte"
+                extra={
                   <button
-                    ref={pagadorBtnRef}
-                    type="button"
-                    onClick={() => { setPagadorOpen(o => !o); setPagadorSearch(""); }}
-                    className="flex w-full items-center gap-3 py-2 outline-none"
+                    type="button" className="wz-link" aria-pressed={n === miembros.length}
+                    onClick={() => setSeleccionados(n === miembros.length ? new Set() : new Set(miembros.map((m) => m.user_id)))}
                   >
-                    {(() => { const m = miembros.find(m => m.user_id === pagadoPor); return <Avatar src={m?.foto ?? null} name={m?.nombre ?? "?"} px={28} topMargin="" />; })()}
-                    <span className="flex-1 text-left text-body text-app">{miembros.find(m => m.user_id === pagadoPor)?.nombre ?? "Seleccionar"}</span>
-                    <svg className={`shrink-0 text-muted transition-transform duration-200 ${pagadorOpen ? "rotate-180" : ""}`} width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    {n === miembros.length ? "Todos" : "Elegir todos"} · {n} de {miembros.length}
                   </button>
-                  {pagadorOpen && (() => {
-                    const r = pagadorBtnRef.current?.getBoundingClientRect();
-                    const filtered = pagadorSearch ? miembros.filter(m => (m.nombre ?? "").toLowerCase().includes(pagadorSearch.toLowerCase())) : miembros;
-                    const popoverH = 260;
-                    const spaceBelow = r ? window.innerHeight - r.bottom - 8 : 0;
-                    const showAbove = spaceBelow < popoverH && (r?.top ?? 0) > popoverH;
-                    const top = showAbove ? undefined : (r ? r.bottom + 4 : 0);
-                    const bottom = showAbove ? (r ? window.innerHeight - r.top + 4 : 0) : undefined;
-                    const width = r?.width ?? 300;
-                    const left = r ? Math.min(r.left, window.innerWidth - width - 8) : 0;
-                    return createPortal(
-                      <>
-                        <div className="fixed inset-0 z-[9998]" onClick={() => setPagadorOpen(false)} />
-                        <div className="fixed z-[9999] rounded-xl border border-app bg-[var(--surface)] shadow-elev-3" style={{ top, bottom, left, width }}>
-                          <div className="border-b border-app px-3 py-2">
-                            <div className="flex h-9 items-center rounded-full border border-app bg-[var(--search-field-bg)] px-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-                              <input autoFocus value={pagadorSearch} onChange={e => setPagadorSearch(e.target.value)} placeholder="Buscar..." className="w-full bg-transparent text-body-sm text-app outline-none placeholder:text-muted" />
-                            </div>
-                          </div>
-                          <div className="max-h-48 overflow-y-auto">
-                            {filtered.map(m => (
-                              <button key={m.user_id} type="button" onClick={() => { setPagadoPor(m.user_id); setPagadorOpen(false); }} className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-surface-2 ${pagadoPor === m.user_id ? "text-app font-[var(--fw-semibold)]" : "text-muted"}`}>
-                                <Avatar src={m.foto} name={m.nombre ?? "?"} px={24} topMargin="" />
-                                <span className="text-body-sm">{m.nombre ?? m.user_id.slice(0, 8)}</span>
-                              </button>
-                            ))}
-                            {filtered.length === 0 && <p className="px-3 py-3 text-body-sm text-muted">Sin resultados</p>}
-                          </div>
-                        </div>
-                      </>,
-                      document.body
-                    );
-                  })()}
-                </div>
-
-                {/* Método */}
-                <div>
-                  <p className="mb-[var(--space-3)] text-[13px] font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Método de reparto</p>
-                  <div className="grid grid-cols-2 gap-[var(--space-2)] sm:grid-cols-4">
-                    {METODOS.map((m) => (
-                      <button
-                        key={m.value}
-                        type="button"
-                        onClick={() => {
-                          setMetodo(m.value);
-                          if (m.value === "PORCENTAJE" && miembros.length > 0) {
-                            const pct = parseFloat((100 / miembros.length).toFixed(2));
-                            const base: Record<string, string> = {};
-                            miembros.forEach((mb, i) => { base[mb.user_id] = i === miembros.length - 1 ? String(parseFloat((100 - pct * (miembros.length - 1)).toFixed(2))) : String(pct); });
-                            setPorcentajes(base);
-                          }
-                        }}
-                        className={`rounded-[14px] border px-[var(--space-3)] py-[var(--space-3)] text-left text-body-sm transition-colors ${metodo === m.value ? "border-[var(--text-primary)] bg-[var(--surface-2)] text-app font-[var(--fw-semibold)]" : "border-app bg-app text-muted hover:bg-surface hover:text-app"}`}
-                      >
-                        <span className="block font-[var(--fw-semibold)]">{m.label}</span>
-                      </button>
-                    ))}
-                  </div>
-                  <p className="mt-[var(--space-2)] text-body-sm text-muted">{METODOS.find(m => m.value === metodo)?.desc}</p>
-                </div>
+                }
+              />
+              <div className="wz-pills" role="group" aria-label="Entre quién">
+                {miembrosVisibles.map((m) => (
+                  <button
+                    key={m.user_id} type="button" aria-pressed={seleccionados.has(m.user_id)} className="wz-pill pl-1"
+                    onClick={() => setSeleccionados((s) => { const x = new Set(s); if (x.has(m.user_id)) x.delete(m.user_id); else x.add(m.user_id); return x; })}
+                  >
+                    <Av m={m} me={m.user_id === userId} />{m.user_id === userId ? "Tú" : firstName(m)}
+                  </button>
+                ))}
               </div>
-            )}
+              <p className="wz-tm mt-3">
+                {n > 0 ? `A partes iguales: ${fmt(igualCada)} cada uno. Puedes cambiarlo en el siguiente paso.` : "Elige al menos a una persona."}
+              </p>
+            </>
+          )}
 
-            {/* ── Step 3: Reparto ── */}
-            {step === 3 && miembros.length > 0 && (
-              <div className="space-y-[var(--space-4)]">
+          {step === 3 && (
+            <>
+              <h2 className="wz-title" tabIndex={-1}>¿Cómo se reparte?</h2>
+              <WizardSummary items={summary} />
+              <div role="radiogroup" aria-label="Cómo se reparte" className="wz-pills mt-4">
+                {METODOS.map((m, i) => (
+                  <button
+                    key={m.value} type="button" role="radio" aria-checked={metodo === m.value} tabIndex={metodo === m.value ? 0 : -1}
+                    className="wz-pill" onClick={() => elegirMetodo(m.value)}
+                    onKeyDown={(e) => radioKeys(e, METODOS, i, (x) => elegirMetodo(x.value))}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
 
-                {/* IGUAL */}
+              <div className="mt-4">
                 {metodo === "IGUAL" && (
-                  <div className="rounded-xl border border-app overflow-hidden">
-                    <div className="flex items-center bg-[var(--surface-2)]">
-                      <button type="button" onClick={() => setSeleccionados(seleccionados.size === miembros.length ? new Set() : new Set(miembros.map(m => m.user_id)))} className="flex flex-1 items-center justify-between px-3 py-2.5 text-body-sm font-[var(--fw-semibold)] text-app hover:bg-[var(--surface-inset)] transition-colors">
-                        <span>{seleccionados.size === miembros.length ? "Deseleccionar todos" : "Seleccionar todos"}</span>
-                        <span className="text-muted font-normal">{seleccionados.size}/{miembros.length}</span>
-                      </button>
-                      <button type="button" onClick={() => setParticipantesExpanded(v => !v)} className="flex size-11 shrink-0 items-center justify-center text-muted hover:text-app transition-colors border-l border-[var(--surface-inset)]">
-                        {participantesExpanded ? <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg> : <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>}
-                      </button>
-                    </div>
-                    {participantesExpanded && <div className="border-b border-[var(--surface-2)] px-3 py-2"><div className="flex h-9 items-center rounded-full border border-app bg-[var(--search-field-bg)] px-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"><input value={participantesSearch} onChange={e => setParticipantesSearch(e.target.value)} placeholder="Buscar participante..." className="w-full bg-transparent text-body-sm text-app outline-none placeholder:text-muted" /></div></div>}
-                    {participantesExpanded && (
-                      <div className="max-h-[220px] overflow-y-auto divide-y divide-[var(--surface-2)]">
-                        {miembros.filter(m => !participantesSearch || (m.nombre ?? "").toLowerCase().includes(participantesSearch.toLowerCase())).map((m) => {
-                          const checked = seleccionados.has(m.user_id);
-                          const part = checked && seleccionados.size > 0 ? totalNum / seleccionados.size : 0;
-                          return (
-                            <button key={m.user_id} type="button" onClick={() => setSeleccionados((prev) => { const next = new Set(prev); if (next.has(m.user_id)) next.delete(m.user_id); else next.add(m.user_id); return next; })} className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-[var(--surface-inset)]">
-                              <div className={`flex size-4 shrink-0 items-center justify-center rounded border ${checked ? "border-[var(--text-primary)] bg-[var(--text-primary)]" : "border-app"}`}>{checked && <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="var(--bg)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}</div>
-                              <Avatar src={m.foto} name={m.nombre ?? "?"} px={24} topMargin="" />
-                              <span className={`min-w-0 flex-1 truncate text-body-sm ${checked ? "text-app font-[var(--fw-medium)]" : "text-muted"}`}>{m.nombre ?? m.user_id.slice(0, 8)}</span>
-                              {checked && totalNum > 0 && <span className="shrink-0 text-caption text-app font-[var(--fw-semibold)]">{part.toFixed(2)} {moneda}</span>}
-                            </button>
-                          );
-                        })}
-                      </div>
+                  <>
+                    <p className="text-[15px] font-semibold">Cada uno paga {fmt(igualCada)}</p>
+                    {redondeo !== 0 && (
+                      <p className="wz-tm mt-1">
+                        {Math.abs(redondeo)} {Math.abs(redondeo) === 1 ? "céntimo" : "céntimos"} de redondeo para {pagadoPor === userId ? "ti" : firstName(pagador)}
+                      </p>
                     )}
-                  </div>
+                  </>
                 )}
+                {metodo === "PORCENTAJE" && (
+                  <Franja ok={Math.abs(pctFalta) < 0.01} action={<button type="button" className="wz-link" onClick={igualar}>Igualar</button>}>
+                    {Math.abs(pctFalta) < 0.01 ? `Cuadra: 100 %`
+                      : pctFalta > 0 ? `Falta un ${String(pctFalta).replace(".", ",")} % · ${fmt(r2(totalNum * pctFalta / 100))} sin asignar`
+                      : `Sobra un ${String(-pctFalta).replace(".", ",")} % · ${fmt(r2(totalNum * -pctFalta / 100))} de más`}
+                  </Franja>
+                )}
+                {metodo === "CANTIDAD" && (
+                  <Franja ok={Math.abs(cantFalta) < 0.01} action={cantFalta > 0.005 ? <button type="button" className="wz-link" onClick={repartirFalta}>Repartir lo que falta</button> : undefined}>
+                    {Math.abs(cantFalta) < 0.01 ? `Cuadra: ${fmt(cantSum)} de ${fmt(totalNum)}`
+                      : cantFalta > 0 ? `Faltan ${fmt(cantFalta)} · las cantidades suman ${fmt(cantSum)}`
+                      : `Sobran ${fmt(-cantFalta)} · las cantidades suman ${fmt(cantSum)}`}
+                  </Franja>
+                )}
+                {metodo === "POR_ITEMS" && items.length > 0 && (
+                  <Franja
+                    ok={Math.abs(itemsFalta) < 0.01 && !itemSinGente}
+                    action={itemsFalta > 0.005 ? <button type="button" className="wz-link" onClick={() => addItem("Resto (propina, servicio…)", toInput(itemsFalta))}>Repartir entre todos</button> : undefined}
+                  >
+                    {itemSinGente ? "Hay ítems sin nadie que los comparta"
+                      : Math.abs(itemsFalta) < 0.01 ? `Los ítems suman ${fmt(itemsSum)}${ticket === "leido" ? ", igual que el ticket" : ""}`
+                      : itemsFalta > 0 ? `Faltan ${fmt(itemsFalta)} · los ítems suman ${fmt(itemsSum)}`
+                      : `Sobran ${fmt(-itemsFalta)} · los ítems suman ${fmt(itemsSum)}`}
+                  </Franja>
+                )}
+              </div>
 
-                {/* PORCENTAJE */}
-                {metodo === "PORCENTAJE" && (() => {
-                  const sum = miembros.filter(m => porcentajes[m.user_id] !== undefined).reduce((a, m) => a + (parseFloat(porcentajes[m.user_id] ?? "0") || 0), 0);
-                  const isOk = Math.abs(sum - 100) < 0.01;
-                  return (
-                    <div className="rounded-xl border border-app overflow-hidden">
-                      <div className="flex items-center bg-[var(--surface-2)]">
-                        <button type="button" onClick={() => { const pct = parseFloat((100 / miembros.length).toFixed(2)); const base: Record<string, string> = {}; miembros.forEach((m, i) => { base[m.user_id] = i === miembros.length - 1 ? String(parseFloat((100 - pct * (miembros.length - 1)).toFixed(2))) : String(pct); }); setPorcentajes(base); }} className="flex-1 px-3 py-2.5 text-left text-body-sm text-muted hover:text-app transition-colors">Igualar</button>
-                        <span className={`px-3 text-body-sm font-[var(--fw-semibold)] ${isOk ? "text-[var(--success,#15803d)]" : sum > 100 ? "text-[var(--error,#dc2626)]" : "text-muted"}`}>{sum.toFixed(1)}% / 100%</span>
-                        <button type="button" onClick={() => setParticipantesExpanded(v => !v)} className="flex size-11 shrink-0 items-center justify-center text-muted hover:text-app transition-colors border-l border-[var(--surface-inset)]">
-                          {participantesExpanded ? <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg> : <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>}
-                        </button>
-                      </div>
-                      {participantesExpanded && <div className="border-b border-[var(--surface-2)] px-3 py-2"><div className="flex h-9 items-center rounded-full border border-app bg-[var(--search-field-bg)] px-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"><input value={participantesSearch} onChange={e => setParticipantesSearch(e.target.value)} placeholder="Buscar participante..." className="w-full bg-transparent text-body-sm text-app outline-none placeholder:text-muted" /></div></div>}
-                      {participantesExpanded && (
-                        <div className="max-h-[220px] overflow-y-auto divide-y divide-[var(--surface-2)]">
-                          {miembros.filter(m => !participantesSearch || (m.nombre ?? "").toLowerCase().includes(participantesSearch.toLowerCase())).map((m) => {
-                            const pct = parseFloat(porcentajes[m.user_id] ?? "0") || 0;
-                            const amount = totalNum * pct / 100;
-                            const checked = porcentajes[m.user_id] !== undefined;
-                            return (
-                              <div key={m.user_id} className={`flex items-center gap-3 px-3 py-2.5 ${!checked ? "opacity-40" : ""}`}>
-                                <button type="button" onClick={() => {
-                                  if (checked) {
-                                    setPorcentajes(prev => { const next = { ...prev }; delete next[m.user_id]; const remaining = miembros.filter(mb => next[mb.user_id] !== undefined); if (remaining.length > 0) { const pctEach = parseFloat((100 / remaining.length).toFixed(2)); remaining.forEach((mb, i) => { next[mb.user_id] = i === remaining.length - 1 ? String(parseFloat((100 - pctEach * (remaining.length - 1)).toFixed(2))) : String(pctEach); }); } return next; });
-                                  } else {
-                                    setPorcentajes(prev => { const next = { ...prev, [m.user_id]: "0" }; const participating = miembros.filter(mb => next[mb.user_id] !== undefined); const pctEach = parseFloat((100 / participating.length).toFixed(2)); participating.forEach((mb, i) => { next[mb.user_id] = i === participating.length - 1 ? String(parseFloat((100 - pctEach * (participating.length - 1)).toFixed(2))) : String(pctEach); }); return next; });
-                                  }
-                                }} className={`flex size-4 shrink-0 items-center justify-center rounded border ${checked ? "border-[var(--text-primary)] bg-[var(--text-primary)]" : "border-app"}`}>
-                                  {checked && <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="var(--bg)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                                </button>
-                                <Avatar src={m.foto} name={m.nombre ?? "?"} px={24} topMargin="" />
-                                <span className="min-w-0 flex-1 truncate text-body-sm text-app">{m.nombre ?? m.user_id.slice(0, 8)}</span>
-                                {pct > 0 && totalNum > 0 && <span className="shrink-0 text-caption text-app font-[var(--fw-semibold)]">{amount.toFixed(2)} {moneda}</span>}
-                                <div className="flex shrink-0 items-center gap-1">
-                                  <input type="number" min="0" max="100" step="1" value={porcentajes[m.user_id] ?? ""} onChange={(e) => setPorcentajes((prev) => ({ ...prev, [m.user_id]: e.target.value }))} placeholder="0" inputMode="numeric" className="w-10 bg-transparent text-right text-body-sm text-app outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
-                                  <span className="text-caption text-muted">%</span>
-                                  <StepperButtons onIncrement={() => setPorcentajes((prev) => ({ ...prev, [m.user_id]: adjustNumericString(prev[m.user_id] ?? "", 1, { min: 0, max: 100 }) }))} onDecrement={() => setPorcentajes((prev) => ({ ...prev, [m.user_id]: adjustNumericString(prev[m.user_id] ?? "", -1, { min: 0, max: 100 }) }))} />
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
+              {(metodo === "IGUAL" || metodo === "PORCENTAJE" || metodo === "CANTIDAD") && (
+                <div className="mt-3">
+                  {participantes.map((m) => (
+                    <div key={m.user_id} className="wz-row">
+                      <Av m={m} me={m.user_id === userId} />
+                      <span className="min-w-0 flex-1 wz-ell text-[15px]">{m.user_id === userId ? "Tú" : firstName(m)}</span>
+                      {metodo === "IGUAL" && <span className="wz-num-t text-[15px]">{fmt(igualCada)}</span>}
+                      {metodo === "PORCENTAJE" && (
+                        <>
+                          <span className="wz-num-t wz-tm">{fmt(porPersona.get(m.user_id) ?? 0)}</span>
+                          <label className="wz-num">
+                            <input inputMode="decimal" aria-label={`Porcentaje de ${nombreDe(m.user_id)}`} value={porcentajes[m.user_id] ?? ""}
+                              onChange={(e) => setPorcentajes((p) => ({ ...p, [m.user_id]: e.target.value.replace(/[^\d.,]/g, "") }))} />
+                            <span className="wz-tm">%</span>
+                          </label>
+                        </>
+                      )}
+                      {metodo === "CANTIDAD" && (
+                        <label className="wz-num">
+                          <input inputMode="decimal" aria-label={`Cantidad de ${nombreDe(m.user_id)}`} placeholder="0,00" value={cantidades[m.user_id] ?? ""}
+                            onChange={(e) => setCantidades((p) => ({ ...p, [m.user_id]: e.target.value.replace(/[^\d.,]/g, "") }))} />
+                          <span className="wz-tm">€</span>
+                        </label>
                       )}
                     </div>
-                  );
-                })()}
+                  ))}
+                </div>
+              )}
 
-                {/* CANTIDAD */}
-                {metodo === "CANTIDAD" && (() => {
-                  const sum = miembros.reduce((a, m) => a + (parseFloat(cantidades[m.user_id] || "0") || 0), 0);
-                  const isOk = totalNum <= 0 || Math.abs(sum - totalNum) < 0.01;
-                  const activeCount = miembros.filter(m => parseFloat(cantidades[m.user_id] || "0") > 0).length;
-                  return (
-                    <div className="rounded-xl border border-app overflow-hidden">
-                      <div className="flex items-center bg-[var(--surface-2)]">
-                        <span className="flex-1 px-3 py-2.5 text-body-sm text-muted">{activeCount} participante{activeCount !== 1 ? "s" : ""}</span>
-                        <span className={`px-3 text-body-sm font-[var(--fw-semibold)] ${isOk && sum > 0 ? "text-[var(--success,#15803d)]" : sum > totalNum && totalNum > 0 ? "text-[var(--error,#dc2626)]" : "text-muted"}`}>{sum.toFixed(2)}{totalNum > 0 ? ` / ${totalNum.toFixed(2)}` : ""} {moneda}</span>
-                        <button type="button" onClick={() => setParticipantesExpanded(v => !v)} className="flex size-11 shrink-0 items-center justify-center text-muted hover:text-app transition-colors border-l border-[var(--surface-inset)]">
-                          {participantesExpanded ? <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg> : <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>}
-                        </button>
-                      </div>
-                      {participantesExpanded && <div className="border-b border-[var(--surface-2)] px-3 py-2"><div className="flex h-9 items-center rounded-full border border-app bg-[var(--search-field-bg)] px-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"><input value={participantesSearch} onChange={e => setParticipantesSearch(e.target.value)} placeholder="Buscar participante..." className="w-full bg-transparent text-body-sm text-app outline-none placeholder:text-muted" /></div></div>}
-                      {participantesExpanded && (
-                        <div className="max-h-[220px] overflow-y-auto divide-y divide-[var(--surface-2)]">
-                          {miembros.filter(m => !participantesSearch || (m.nombre ?? "").toLowerCase().includes(participantesSearch.toLowerCase())).map((m) => {
-                            const val = cantidades[m.user_id] ?? "";
-                            const hasVal = parseFloat(val) > 0;
-                            return (
-                              <div key={m.user_id} className={`flex items-center gap-3 px-3 py-2.5 ${!hasVal ? "opacity-50" : ""}`}>
-                                <Avatar src={m.foto} name={m.nombre ?? "?"} px={24} topMargin="" />
-                                <span className="min-w-0 flex-1 truncate text-body-sm text-app">{m.nombre ?? m.user_id.slice(0, 8)}</span>
-                                <div className="flex shrink-0 items-center gap-1">
-                                  <input type="number" min="0" step="0.01" value={val} onChange={(e) => setCantidades((prev) => ({ ...prev, [m.user_id]: limitDecimals(e.target.value) }))} placeholder="0.00" inputMode="decimal" className="w-[52px] bg-transparent text-right text-body-sm text-app outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
-                                  <span className="text-caption text-muted">{moneda}</span>
-                                  <StepperButtons onIncrement={() => setCantidades((prev) => ({ ...prev, [m.user_id]: adjustNumericString(prev[m.user_id] ?? "", 0.01, { min: 0, decimals: 2 }) }))} onDecrement={() => setCantidades((prev) => ({ ...prev, [m.user_id]: adjustNumericString(prev[m.user_id] ?? "", -0.01, { min: 0, decimals: 2 }) }))} />
-                                </div>
-                              </div>
-                            );
-                          })}
+              {metodo === "POR_ITEMS" && (
+                <>
+                  <WizardSection
+                    title={ticket === "leido" && itemsLeidos > 0 ? `${itemsLeidos} ${itemsLeidos === 1 ? "ítem leído" : "ítems leídos"} del ticket` : "Ítems"}
+                    extra={<button type="button" className="wz-link" onClick={() => addItem()}><Plus className="mr-1 size-[14px]" aria-hidden />Añadir ítem</button>}
+                  />
+                  {items.length === 0 && <p className="wz-tm">Añade lo que pidió cada uno y toca a quién le toca.</p>}
+                  {items.map((it) => {
+                    const who = [...it.asignados].filter((u) => seleccionados.has(u));
+                    const sub = num(it.subtotal);
+                    return (
+                      <div key={it.key} className="wz-card mb-2 p-3">
+                        <div className="flex items-center gap-2">
+                          <input
+                            aria-label="Nombre del ítem" placeholder="Nombre" value={it.nombre}
+                            onChange={(e) => updItem(it.key, { nombre: e.target.value })}
+                            className="h-11 min-w-0 flex-1 bg-transparent text-[15px] font-semibold outline-none"
+                          />
+                          <label className="wz-num">
+                            <input inputMode="decimal" aria-label={`Precio de ${it.nombre || "ítem"}`} placeholder="0,00" value={it.subtotal}
+                              onChange={(e) => updItem(it.key, { subtotal: e.target.value.replace(/[^\d.,]/g, "") })} />
+                            <span className="wz-tm">€</span>
+                          </label>
+                          <button type="button" className="wz-ib s" aria-label={`Quitar ${it.nombre || "ítem"}`} title="Quitar" onClick={() => setItems((p) => p.filter((x) => x.key !== it.key))}>
+                            <Trash2 className="size-[16px]" aria-hidden />
+                          </button>
                         </div>
-                      )}
-                    </div>
-                  );
-                })()}
-
-                {/* POR_ITEMS */}
-                {metodo === "POR_ITEMS" && (
-                  <div className="space-y-[var(--space-3)]">
-                    <div className="flex items-center justify-between">
-                      <span className="text-body-sm text-muted">{items.length} ítem{items.length !== 1 ? "s" : ""}</span>
-                      <div className="flex items-center gap-[var(--space-3)]">
-                        {items.length > 0 && <span className={`text-caption font-[var(--fw-semibold)] ${itemsSumMismatch ? "text-[var(--error)]" : "text-muted"}`}>{itemsSum.toFixed(2)} {moneda}{totalNum > 0 ? ` / ${totalNum.toFixed(2)} ${moneda}` : ""}</span>}
-                        <button type="button" onClick={addItem} className="text-body-sm text-primary-token font-[var(--fw-medium)]">+ Añadir ítem</button>
-                      </div>
-                    </div>
-                    {itemsSumMismatch && (
-                      <div className="flex items-start gap-[var(--space-2)] rounded-[12px] border border-[var(--error)]/30 bg-[var(--error)]/10 px-[var(--space-3)] py-[var(--space-2)]">
-                        <svg viewBox="0 0 24 24" fill="none" className="mt-0.5 size-4 shrink-0 text-[var(--error)]" stroke="currentColor" strokeWidth="2"><path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                        <p className="text-caption text-[var(--error)]">La suma de ítems ({itemsSum.toFixed(2)} {moneda}) no coincide con el total ({totalNum.toFixed(2)} {moneda}).</p>
-                      </div>
-                    )}
-                    {items.length === 0 ? (
-                      <p className="py-[var(--space-4)] text-center text-body-sm text-muted">Sube un ticket para detectar ítems o añádelos manualmente.</p>
-                    ) : (
-                      <div className="flex flex-col gap-[var(--space-3)]">
-                        {items.map((item, idx) => (
-                          <div key={idx} className="rounded-[16px] border border-app px-[var(--space-3)] py-[var(--space-3)] space-y-[var(--space-3)]">
-                            <div className="flex items-center gap-[var(--space-2)]">
-                              <input value={item.nombre} onChange={(e) => updateItem(idx, { nombre: e.target.value })} placeholder="Nombre del ítem" className="min-w-0 flex-1 bg-transparent text-body-sm font-[var(--fw-medium)] text-app outline-none" />
-                              <IconButton
-                                onClick={() => removeItem(idx)}
-                                aria-label="Eliminar ítem"
-                                className="-mr-3 text-muted hover:text-[var(--error)]"
+                        <div className="mt-1 flex flex-wrap items-center gap-1" role="group" aria-label={`Quién comparte ${it.nombre || "el ítem"}`}>
+                          {participantes.map((m) => {
+                            const on = it.asignados.has(m.user_id);
+                            return (
+                              <button
+                                key={m.user_id} type="button" className="wz-avbtn" aria-pressed={on}
+                                aria-label={`${nombreDe(m.user_id)} ${on ? "comparte" : "no comparte"}`}
+                                onClick={() => toggleItemUser(it.key, m.user_id)}
                               >
-                                <CloseX />
-                              </IconButton>
-                            </div>
-                            <div className="flex flex-wrap items-center gap-[var(--space-3)] text-caption text-muted">
-                              <div className="flex items-center gap-1.5">
-                                <span>×</span>
-                                <input type="number" min="1" step="1" value={item.cantidad} onChange={(e) => updateItem(idx, { cantidad: parseInt(e.target.value) || 1 })} className="w-[36px] bg-transparent outline-none text-center [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
-                                <StepperButtons onIncrement={() => updateItem(idx, { cantidad: item.cantidad + 1 })} onDecrement={() => updateItem(idx, { cantidad: Math.max(1, item.cantidad - 1) })} />
-                                <span>ud</span>
-                              </div>
-                              <span>·</span>
-                              <div className="flex items-center gap-1.5">
-                                <input type="number" min="0" step="0.01" value={item.precio_unitario || ""} onChange={(e) => updateItem(idx, { precio_unitario: parseFloat(limitDecimals(e.target.value)) || 0 })} placeholder="0.00" className="w-[64px] bg-transparent outline-none text-right [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
-                                <StepperButtons onIncrement={() => updateItem(idx, { precio_unitario: parseFloat((item.precio_unitario + 0.01).toFixed(2)) })} onDecrement={() => updateItem(idx, { precio_unitario: parseFloat(Math.max(0, item.precio_unitario - 0.01).toFixed(2)) })} />
-                                <span>{moneda}</span>
-                              </div>
-                              <span>· Subtotal: <strong className="text-app">{item.subtotal.toFixed(2)} {moneda}</strong></span>
-                            </div>
-                            {/* Asignados */}
-                            <div className="flex items-center gap-2 flex-wrap">
-                              {miembros.filter(m => item.asignados[m.user_id]).map(m => (
-                                <button key={m.user_id} type="button" title={m.nombre ?? undefined} onClick={() => toggleItemUser(idx, m.user_id)} className="relative shrink-0 group">
-                                  <Avatar src={m.foto} name={m.nombre ?? "?"} px={26} topMargin="" />
-                                  <span className="absolute -top-0.5 -right-0.5 hidden group-hover:flex size-3.5 items-center justify-center rounded-full bg-[var(--error,#dc2626)] text-white"><svg width="7" height="7" viewBox="0 0 8 8" fill="none"><path d="M1 1l6 6M7 1L1 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></span>
-                                </button>
-                              ))}
-                              <div className="relative">
-                                <button ref={el => { itemPopoverBtnRefs.current[idx] = el; }} type="button" onClick={() => openItemPopover(idx)} className="flex size-[26px] items-center justify-center rounded-full border border-dashed border-app text-muted hover:border-[var(--text-primary)] hover:text-app transition-colors">
-                                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                                </button>
-                                {itemPopoverIdx === idx && itemPopoverStyle && (() => {
-                                  const allChecked = miembros.every(m => !!item.asignados[m.user_id]);
-                                  return createPortal(
-                                    <>
-                                      <div className="fixed inset-0 z-[9998]" onClick={() => { setItemPopoverIdx(null); setItemPopoverStyle(null); }} />
-                                      <div className="fixed z-[9999] rounded-xl border border-app bg-[var(--surface)] shadow-elev-3" style={itemPopoverStyle}>
-                                        <div className="flex items-center justify-between gap-2 border-b border-app px-3 py-2">
-                                          <div className="flex h-9 min-w-0 flex-1 items-center rounded-full border border-app bg-[var(--search-field-bg)] px-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-                                            <input autoFocus value={itemPopoverSearch} onChange={e => setItemPopoverSearch(e.target.value)} placeholder="Buscar..." className="min-w-0 flex-1 bg-transparent text-body-sm text-app outline-none placeholder:text-muted" />
-                                          </div>
-                                          <button type="button" onClick={() => { const patch: Record<string, boolean> = {}; miembros.forEach(m => { patch[m.user_id] = !allChecked; }); updateItem(idx, { asignados: patch }); }} className="shrink-0 text-caption text-muted hover:text-app transition-colors">{allChecked ? "Ninguno" : "Todos"}</button>
-                                        </div>
-                                        <div className="max-h-[200px] overflow-y-auto divide-y divide-[var(--surface-2)]">
-                                          {miembros.filter(m => !itemPopoverSearch || (m.nombre ?? "").toLowerCase().includes(itemPopoverSearch.toLowerCase())).map(m => {
-                                            const checked = !!item.asignados[m.user_id];
-                                            return (
-                                              <button key={m.user_id} type="button" onClick={() => toggleItemUser(idx, m.user_id)} className="flex w-full items-center gap-2.5 px-3 py-2 text-left hover:bg-[var(--surface-2)] transition-colors">
-                                                <div className={`flex size-4 shrink-0 items-center justify-center rounded border ${checked ? "border-[var(--text-primary)] bg-[var(--text-primary)]" : "border-app"}`}>{checked && <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="var(--bg)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}</div>
-                                                <Avatar src={m.foto} name={m.nombre ?? "?"} px={20} topMargin="" />
-                                                <span className="min-w-0 flex-1 truncate text-body-sm text-app">{m.nombre ?? m.user_id.slice(0, 8)}</span>
-                                              </button>
-                                            );
-                                          })}
-                                        </div>
-                                      </div>
-                                    </>,
-                                    document.body
-                                  );
-                                })()}
-                              </div>
-                              {miembros.filter(m => item.asignados[m.user_id]).length === 0 && <span className="text-caption text-muted">Nadie asignado</span>}
-                            </div>
-                          </div>
+                                <Av m={m} me={m.user_id === userId} />
+                              </button>
+                            );
+                          })}
+                          <span className="wz-tm ml-auto">
+                            {who.length === 0 ? "nadie" : who.length === 1 ? `solo ${who[0] === userId ? "tú" : nombreDe(who[0])}` : `${fmt(r2(sub / who.length))} cada uno`}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {items.length > 0 && (
+                    <>
+                      <WizardSection title="Le toca a cada uno" />
+                      <div className="wz-pills">
+                        {participantes.map((m) => (
+                          <span key={m.user_id} className="wz-pill pl-1"><Av m={m} me={m.user_id === userId} />{fmt(porPersona.get(m.user_id) ?? 0)}</span>
                         ))}
                       </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
+                    </>
+                  )}
+                </>
+              )}
+            </>
+          )}
+        </fieldset>
+      </Wizard>
 
-            {error && <p className="mt-[var(--space-4)] text-body-sm text-[var(--error)]">{error}</p>}
-          </div>
-
-          {/* Footer */}
-          <div className="flex shrink-0 items-center justify-end border-t border-app pb-[calc(var(--space-4)+env(safe-area-inset-bottom))] pl-[max(var(--page-margin-x),env(safe-area-inset-left))] pr-[max(var(--page-margin-x),env(safe-area-inset-right))] pt-[var(--space-4)] md:px-[var(--page-margin-x)] md:pb-[var(--space-4)]">
-            <button
-              type="button"
-              onClick={handleNext}
-              disabled={saving || ocrLoading || !canContinue()}
-              className="rounded-[14px] bg-[var(--text-primary)] px-[var(--space-8)] py-[12px] text-body-sm font-[var(--fw-semibold)] text-contrast-token transition-opacity hover:opacity-85 disabled:opacity-[var(--disabled-opacity)]"
-            >
-              {saving ? "Creando..." : step === TOTAL_STEPS ? "Crear gasto" : "Continuar"}
-            </button>
-          </div>
-        </div>
-      </div>
       <DiscardChangesDialog
         open={discardOpen}
+        title="¿Descartar el gasto?"
+        message="Se perderá lo que has rellenado."
+        cancelLabel="Seguir editando"
         onCancel={() => setDiscardOpen(false)}
-        onDiscard={() => {
-          setDiscardOpen(false);
-          requestClose();
-        }}
+        onDiscard={() => { setDiscardOpen(false); requestClose(); }}
       />
     </>
   );

@@ -1,5 +1,6 @@
 "use client";
 
+import { createPortal } from "react-dom";
 import type { ReactNode } from "react";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
 
@@ -29,7 +30,8 @@ export function DiscardChangesDialog({
 
   if (!open) return null;
 
-  return (
+  // Portal: rendered in place it stays under fixed layers like the plan page or the wizards.
+  return createPortal(
     <div
       data-closing={isClosing ? "true" : "false"}
       className="app-modal-overlay fixed inset-0 z-[1400] flex items-end justify-center px-4 pb-[max(var(--space-6),env(safe-area-inset-bottom))] sm:items-center"
@@ -62,6 +64,7 @@ export function DiscardChangesDialog({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

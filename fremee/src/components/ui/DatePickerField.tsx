@@ -57,7 +57,7 @@ export function DatePickerField({
           {formatDate(value)}
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="p-2">
+      <PopoverContent align="start" className="p-2 !z-[1360]">
         <CalendarRac
           value={isoToCalendarDate(value)}
           onChange={handleChange}
