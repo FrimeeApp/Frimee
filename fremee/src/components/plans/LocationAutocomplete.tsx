@@ -11,11 +11,15 @@ type PlaceSuggestion = {
     text: { toString(): string };
     mainText: { toString(): string };
     secondaryText?: { toString(): string };
+    types?: string[];
     toPlace(): { fetchFields(opts: { fields: string[] }): Promise<void>; location?: { lat(): number; lng(): number } };
   };
 };
 
 export type Coords = { lat: number; lng: number };
+
+/** The suggestion the person chose: «Lisboa» + «Portugal», with Google's place types. */
+export type PickedPlace = { text: string; main: string; secondary: string; types: string[] };
 
 export default function LocationAutocomplete({
   value,
@@ -26,6 +30,9 @@ export default function LocationAutocomplete({
   onEnter,
   dropdownVariant = "plain",
   autoFocus = false,
+  onPick,
+  inputClassName,
+  inputId,
 }: {
   value: string;
   onChange: (v: string, coords?: Coords) => void;
@@ -35,6 +42,10 @@ export default function LocationAutocomplete({
   onEnter?: () => void;
   dropdownVariant?: "plain" | "surface";
   autoFocus?: boolean;
+  /** Called once with the chosen suggestion (before its coordinates arrive through onChange). */
+  onPick?: (place: PickedPlace) => void;
+  inputClassName?: string;
+  inputId?: string;
 }) {
   const [mapsReady, setMapsReady] = useState(
     () =>
@@ -111,6 +122,12 @@ export default function LocationAutocomplete({
   const handleSelect = async (s: PlaceSuggestion) => {
     const text = s.placePrediction.text.toString();
     onChange(text);
+    onPick?.({
+      text,
+      main: s.placePrediction.mainText.toString(),
+      secondary: s.placePrediction.secondaryText?.toString() ?? "",
+      types: s.placePrediction.types ?? [],
+    });
     setSuggestions([]);
     setOpen(false);
     onCommit?.();
@@ -138,6 +155,7 @@ export default function LocationAutocomplete({
     >
       <input
         ref={inputRef}
+        id={inputId}
         value={value}
         autoFocus={autoFocus}
         onChange={(e) => handleChange(e.target.value)}
@@ -148,7 +166,7 @@ export default function LocationAutocomplete({
         inputMode="search"
         enterKeyHint="search"
         placeholder={placeholder}
-        className="w-full border-none bg-transparent text-body outline-none ring-0 focus:border-none focus:outline-none focus:ring-0 placeholder:text-muted"
+        className={inputClassName ?? "w-full border-none bg-transparent text-body outline-none ring-0 focus:border-none focus:outline-none focus:ring-0 placeholder:text-muted"}
       />
       {isMounted && open && suggestions.length > 0 && createPortal(
         <ul

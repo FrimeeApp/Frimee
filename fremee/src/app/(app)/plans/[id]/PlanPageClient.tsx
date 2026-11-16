@@ -40,7 +40,8 @@ import { isoDateOnly, groupByDay, normalizeDateKey, summarizeRecipients, getOccu
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
 import { CloseButton } from "@/components/ui/IconButton";
 import { Tabs } from "@/components/ui/Tabs";
-import { dateInputToIso, isPlanFinished, isoToDateInput } from "@/lib/plan-dates";
+import { isPlanFinished, isoToPlanWhen, planWhenToIso } from "@/lib/plan-dates";
+import { PLACE_TBD } from "@/hooks/useCreatePlan";
 const ChevronDownIcon = ChevronDown;
 
 const PLAN_ROUTE_TRANSITION_MS = 260;
@@ -2726,9 +2727,8 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
         const initialValues: EditPlanInitialValues = {
           title: plan.titulo,
           description: plan.descripcion ?? "",
-          location: plan.ubicacion_nombre ?? "",
-          startDate: isoToDateInput(plan.inicio_at),
-          endDate: isoToDateInput(plan.fin_at),
+          location: plan.ubicacion_nombre && plan.ubicacion_nombre !== PLACE_TBD ? plan.ubicacion_nombre : "",
+          when: isoToPlanWhen(plan.inicio_at, plan.fin_at, plan.all_day),
           coverImageUrl: plan.foto_portada ?? null,
           visibility: (plan.visibilidad === "PÚBLICO" || plan.visibilidad === "SOLO_GRUPO") ? plan.visibilidad : "SOLO_GRUPO",
         };
@@ -2748,14 +2748,15 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
                 coverUrl = downloadUrl;
               }
 
+              const { inicioAt, finAt } = planWhenToIso(payload.when);
               await updatePlanEndpoint({
                 planId,
                 titulo: payload.title,
-                descripcion: "",
-                inicioAt: dateInputToIso(payload.startDate, 10),
-                finAt: dateInputToIso(payload.endDate, 18),
-                ubicacionNombre: payload.location,
-                allDay: true,
+                descripcion: payload.description,
+                inicioAt,
+                finAt,
+                ubicacionNombre: payload.location || PLACE_TBD,
+                allDay: payload.when.allDay,
                 visibilidad: payload.visibility,
                 fotoPortada: coverUrl,
               });
