@@ -78,7 +78,7 @@ type Desde = { id: number; quien: string; at: string; total: number } | null;
  * open (a modal sheet blocks everything outside it), and the form keeps what you typed.
  */
 export function CreatePlanFlow({
-  chat, currentUserId, guarda, inicial, origenId, onClose, onCreated,
+  chat, currentUserId, guarda, inicial, origenId, leerOrigen = false, onClose, onCreated,
 }: {
   chat: ChatListItem;
   currentUserId: string;
@@ -87,6 +87,9 @@ export function CreatePlanFlow({
   inicial?: { titulo?: string; fecha?: string; lugar?: string } | null;
   /** The message whose diamond opened this: it loses its diamond once the plan exists. */
   origenId?: number | null;
+  /** The origin is a decided poll: @frimee reads it (question + winner) and its name and place
+   *  replace the fallback in `inicial`, unless you already touched them. */
+  leerOrigen?: boolean;
   onClose: () => void;
   /** After it exists: open its chat (and save what was being added, if anything). */
   onCreated: (r: PlanDesdeChatResult, guarda: Guarda | null) => void;
@@ -151,13 +154,13 @@ export function CreatePlanFlow({
   useEffect(() => {
     let cancelled = false;
     const tope = window.setTimeout(() => { cancelled = true; setLeyendo(false); }, 8000);
-    sugerirPlanNuevoEndpoint(chat.chat_id)
+    sugerirPlanNuevoEndpoint(chat.chat_id, origenId)
       .then((p) => {
         if (cancelled) return;
         if (!p?.fecha_inicio) setSinFechas(true);
         if (!p) return;
         const next = new Set<"titulo" | "fechas" | "donde">();
-        if (p.titulo && !tituloInicial && !touched.current.has("titulo")) { setTitulo(p.titulo); next.add("titulo"); }
+        if (p.titulo && (!tituloInicial || leerOrigen) && !touched.current.has("titulo")) { setTitulo(p.titulo); next.add("titulo"); }
         if (p.fecha_inicio) setSugFechas({ inicio: p.fecha_inicio, fin: p.fecha_fin || p.fecha_inicio });
         if (p.fecha_inicio && !touched.current.has("fechas") && !guarda?.fecha) {
           setInicio(p.fecha_inicio);
@@ -165,12 +168,17 @@ export function CreatePlanFlow({
           next.add("fechas");
         }
         if (p.destino && !touched.current.has("donde") && !guarda?.lugar) { setDonde(p.destino); next.add("donde"); }
+        // A poll whose winner names no place: drop the fallback place (it was the answer text).
+        else if (leerOrigen && !p.destino && !touched.current.has("donde") && !guarda?.lugar) {
+          setDonde("");
+          setSug((cur) => { const n = new Set(cur); n.delete("donde"); return n; });
+        }
         setSug((cur) => new Set([...cur, ...next]));
       })
       .catch((e) => console.error("[chat] sugerir plan:", errText(e)))
       .finally(() => { window.clearTimeout(tope); if (!cancelled) setLeyendo(false); });
     return () => { cancelled = true; window.clearTimeout(tope); };
-  }, [chat.chat_id, guarda?.fecha, guarda?.lugar, tituloInicial]);
+  }, [chat.chat_id, guarda?.fecha, guarda?.lugar, tituloInicial, origenId, leerOrigen]);
   // Your plans, to warn (never block) when you already have this one: same name, overlapping days.
   const [misPlanes, setMisPlanes] = useState<PlanByIdRow[]>([]);
   useEffect(() => {

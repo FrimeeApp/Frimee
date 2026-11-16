@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { Suspense, useEffect, useRef, useState, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import AppSidebar from "@/components/common/AppSidebar";
 import LoadingScreen from "@/components/common/LoadingScreen";
 import { useAuth } from "@/providers/AuthProvider";
@@ -28,6 +29,16 @@ import { ChatList, ChatListSkeleton, type ChatFilter } from "@/components/chat/l
 import { fetchPlanUserRol } from "@/services/api/endpoints/plans.endpoint";
 
 export default function MessagesPage() {
+  // useSearchParams needs a Suspense boundary; the page reacts to ?chat= while it is open.
+  return (
+    <Suspense fallback={<LoadingScreen />}>
+      <MessagesPageContent />
+    </Suspense>
+  );
+}
+
+function MessagesPageContent() {
+  const searchParams = useSearchParams();
   const { user, loading } = useAuth();
   const { toastError } = useToast();
   const { startCall, joinCall, callState } = useCallContext();
@@ -146,16 +157,17 @@ export default function MessagesPage() {
   }, [user, loadChats]);
 
   // /messages?chat=<id>[&m=<mensaje>] (a plan made from a chat, the link back to the original, a
-  // reopened poll from a notification): open it once, at that message if there is one.
+  // reopened poll from a notification, a draw notice): open it, at that message if there is one.
+  // Read through useSearchParams so it also works when Messages is already open on another chat.
+  const chatParam = searchParams.get("chat");
+  const mParam = searchParams.get("m");
   useEffect(() => {
-    const q = new URLSearchParams(window.location.search);
-    const id = q.get("chat");
-    if (!id) return;
-    const m = Number(q.get("m"));
-    if (Number.isFinite(m) && m > 0) setJumpTo({ chatId: id, mensajeId: m });
-    setSelectedChatId(id);
+    if (!chatParam) return;
+    const m = Number(mParam);
+    if (Number.isFinite(m) && m > 0) setJumpTo({ chatId: chatParam, mensajeId: m });
+    setSelectedChatId(chatParam);
     window.history.replaceState(null, "", window.location.pathname);
-  }, []);
+  }, [chatParam, mParam]);
 
   // Detectar cuando el usuario es añadido a un nuevo chat
   useEffect(() => {
