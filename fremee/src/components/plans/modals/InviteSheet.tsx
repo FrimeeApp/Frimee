@@ -138,6 +138,18 @@ export default function InviteSheet({ planId, planTitle, planDates, members, cur
     return () => { void supabase.removeChannel(channel); };
   }, [planId]);
 
+  // The page behind does not scroll while the window is open (the list scrolls on its own).
+  useEffect(() => {
+    const html = document.documentElement;
+    const prev = { html: html.style.overflow, body: document.body.style.overflow };
+    html.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+    return () => {
+      html.style.overflow = prev.html;
+      document.body.style.overflow = prev.body;
+    };
+  }, []);
+
   useEffect(() => {
     if (!copied) return;
     const t = window.setTimeout(() => setCopied(false), 2000);
@@ -521,7 +533,7 @@ export default function InviteSheet({ planId, planTitle, planDates, members, cur
 
   const body = (
     <div className="relative flex min-h-0 flex-1 flex-col" onClick={() => menuFor && setMenuFor(null)}>
-      <div className="min-h-0 flex-1 overflow-y-auto px-[16px] pb-[12px] pt-[12px]">{view === "lista" ? list : membersView}</div>
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-[16px] pb-[12px] pt-[12px]">{view === "lista" ? list : membersView}</div>
       {footer}
       {qrPanel}
     </div>
