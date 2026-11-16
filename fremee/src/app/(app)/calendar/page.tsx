@@ -1,12 +1,15 @@
 "use client";
 
 import { Suspense } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import AppSidebar from "@/components/common/AppSidebar";
 import LoadingScreen from "@/components/common/LoadingScreen";
 import CreatePlanModal, { type CreatePlanPayload } from "@/components/plans/modals/CreatePlanModal";
-import EmptyPlansWelcome from "@/components/plans/EmptyPlansWelcome";
+import { MisPlanesHome } from "@/components/plans/home/MisPlanesHome";
+import { AllPlansView } from "@/components/plans/home/AllPlansView";
+import type { PlanTab as PlanSectionTab } from "@/components/plans/home/blocks";
+import { fetchMisPlanesInicio, type MisPlanesInicio } from "@/services/api/endpoints/misPlanes.endpoint";
 import { useAuth } from "@/providers/AuthProvider";
 import { clearCachedGoogleProviderToken } from "@/services/auth/googleTokenCache";
 import { resolveGoogleProviderToken } from "@/services/auth/googleProviderToken";
@@ -17,16 +20,12 @@ import { createPlan, listPlansByIdsInOrder, listUserRelatedPlans } from "@/servi
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { insertNotificacion } from "@/services/api/repositories/notifications.repository";
 import { syncPlanWidget } from "@/services/widget/planWidget";
-import { Tabs } from "@/components/ui/Tabs";
-import { SearchInput } from "@/components/ui/SearchInput";
-import { DEFAULT_PLAN_COVER_IMAGE } from "@/config/app";
 import { STORAGE_KEYS } from "@/config/storage";
 import { ES_MONTHS_SHORT } from "@/lib/date-labels";
-import { formatDateRange, formatTimeRange } from "@/lib/formatters";
+import { formatTimeRange } from "@/lib/formatters";
 import { CloseButton, IconButton } from "@/components/ui/IconButton";
 
 import { dateInputToIso } from "@/lib/plan-dates";
-type PlanTab = "active" | "done";
 type CalendarViewMode = "month" | "week" | "day" | "year";
 
 let calendarPlansCache: { userId: string; plans: FeedPlanItemDto[] } | null = null;
@@ -56,18 +55,12 @@ type WeekPlanSegment = {
 const MONTHS_SHORT = ES_MONTHS_SHORT;
 const WEEK_DAYS = ["lu", "ma", "mi", "ju", "vi", "sá", "do"] as const;
 const WEEK_DAYS_MONDAY_SHORT = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"] as const;
-const MOBILE_CALENDAR_OPEN_KEY = STORAGE_KEYS.mobileCalendarOpen;
 const CALENDAR_DAY_SELECTED_CLASS = "bg-[color-mix(in_srgb,var(--primary)_72%,black_28%)] font-[var(--fw-semibold)] text-white";
 const CALENDAR_DAY_TODAY_CLASS = "border border-[color-mix(in_srgb,var(--primary)_42%,var(--border)_58%)] bg-[color-mix(in_srgb,var(--primary)_24%,var(--surface)_76%)] font-[var(--fw-semibold)] text-app";
-const CLICK_MOTION_CLASS = "transition-transform duration-150 ease-out active:translate-y-[1px] active:scale-[0.98]";
 const CALENDAR_DAY_BUTTON_CLASS = "transition-[color,background-color,border-color,transform] duration-150 ease-out active:translate-y-[1px] active:scale-[0.94]";
 const CALENDAR_PLAN_PILL_BASE_CLASS = "cursor-pointer overflow-hidden rounded-full border border-[color-mix(in_srgb,var(--primary)_24%,var(--border)_76%)] bg-[color-mix(in_srgb,var(--primary)_22%,var(--surface)_78%)] font-[var(--fw-semibold)] text-app transition-[opacity,transform] duration-150 ease-out hover:opacity-80 active:translate-y-[1px] active:scale-[0.98]";
 const CALENDAR_PLAN_PILL_COMPACT_CLASS = "h-[22px] px-1.5 text-[14px] leading-[22px]";
 // Desktop month sidebar: shorter rows so a whole month fits on a laptop screen.
-const CALENDAR_PLAN_PILL_SIDEBAR_CLASS = "h-[18px] px-1.5 text-[12px] leading-[18px]";
-const FINISHED_PLAN_IMAGE_CLASS = "grayscale-[45%] opacity-80 saturate-[0.75]";
-const FINISHED_PLAN_TITLE_CLASS = "text-muted";
-const ACTIVE_PLAN_TITLE_CLASS = "text-app";
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -97,47 +90,6 @@ function filterAndSortPlans({
     }
     return 0;
   });
-}
-
-function PlanPinButton({
-  pinned,
-  onToggle,
-  className,
-  compact = false,
-}: {
-  pinned: boolean;
-  onToggle: (event: MouseEvent<HTMLButtonElement>) => void;
-  className?: string;
-  compact?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      aria-label={pinned ? "Desanclar" : "Anclar"}
-      className={cx(
-        "z-10 flex items-center justify-center rounded-full bg-transparent transition-[opacity,transform] duration-150 ease-out hover:opacity-75 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-color)]",
-        compact ? "size-11" : "size-8",
-        !pinned && "opacity-95",
-        className
-      )}
-    >
-      <svg
-        viewBox="0 0 24 24"
-        fill="none"
-        className={compact ? "size-[22px]" : "size-5"}
-        aria-hidden="true"
-      >
-        <path
-          d="M8 4.5h8M10 4.5v4l-3 3v1h10v-1l-3-3v-4M12 12.5v7"
-          stroke="currentColor"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    </button>
-  );
 }
 
 function getCalendarDayStateClass({
@@ -182,18 +134,21 @@ function CalendarPageInner() {
     const isCapacitor = typeof window !== "undefined" && !!appWindow.Capacitor?.isNativePlatform?.();
     router.push(isCapacitor ? `/plans/static?id=${id}` : `/plans/${id}`);
   };
+  const openPlan = (id: number, tab?: PlanSectionTab) => {
+    if (!tab) return navigateToPlan(id);
+    const appWindow = window as Window & { Capacitor?: { isNativePlatform?: () => boolean } };
+    const isCapacitor = !!appWindow.Capacitor?.isNativePlatform?.();
+    router.push(isCapacitor ? `/plans/static?id=${id}&tab=${tab}` : `/plans/${id}?tab=${tab}`);
+  };
+  const view = searchParams.get("vista");
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   const [loading, setLoading] = useState(() => !calendarPlansCache);
 
   const [syncingGoogle, setSyncingGoogle] = useState(false);
   const [plans, setPlans] = useState<FeedPlanItemDto[]>(() => calendarPlansCache?.plans ?? []);
-  const [tab, setTab] = useState<PlanTab>("active");
-  const [planSearch, setPlanSearch] = useState("");
   const [monthDate, setMonthDate] = useState(() => startOfMonth(new Date()));
   const [viewMode, setViewMode] = useState<CalendarViewMode>("month");
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
-  const [calendarOpen, setCalendarOpen] = useState(true);
-  const [stripWeekOffset, setStripWeekOffset] = useState(0);
   const [pinnedPlanIds, setPinnedPlanIds] = useState<number[]>(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEYS.pinnedPlans);
@@ -246,22 +201,6 @@ function CalendarPageInner() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const isMobile = window.innerWidth < 768;
-    if (!isMobile) {
-      setCalendarOpen(true);
-      return;
-    }
-
-    try {
-      const stored = localStorage.getItem(MOBILE_CALENDAR_OPEN_KEY);
-      setCalendarOpen(stored === "true");
-    } catch {
-      setCalendarOpen(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
     const mediaQuery = window.matchMedia("(max-width: 767px)");
     const syncMobileViewMode = () => {
       if (mediaQuery.matches) {
@@ -274,34 +213,11 @@ function CalendarPageInner() {
     return () => mediaQuery.removeEventListener("change", syncMobileViewMode);
   }, []);
 
-  useEffect(() => {
-    if (typeof window === "undefined" || window.innerWidth >= 768) return;
-    try {
-      localStorage.setItem(MOBILE_CALENDAR_OPEN_KEY, String(calendarOpen));
-    } catch {
-      /* noop */
-    }
-  }, [calendarOpen]);
-
-  useEffect(() => {
-    const handleScroll = () => {
-      const isMobile = window.innerWidth < 1024;
-      if (isMobile) return;
-      if (window.scrollY > 60) {
-        setCalendarOpen(false);
-      } else if (window.scrollY < 10) {
-        setCalendarOpen(true);
-      }
-    };
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, [viewMode]);
-
   const togglePin = (planId: number) => {
     setPinnedPlanIds((prev) => {
       const next = prev.includes(planId)
         ? prev.filter((id) => id !== planId)
-        : prev.length < 3 ? [...prev, planId] : prev;
+        : [...prev, planId];
       try { localStorage.setItem(STORAGE_KEYS.pinnedPlans, JSON.stringify(next)); } catch { /* noop */ }
       return next;
     });
@@ -532,26 +448,32 @@ function CalendarPageInner() {
     void runGoogleSync();
   }, [authLoading, loading, runGoogleSync, settings?.google_sync_enabled, user?.id]);
 
+  const [inicio, setInicio] = useState<MisPlanesInicio | null>(null);
+  // Members, unread, open polls, today's activities and invitations (step 2.34). The home works without it.
+  useEffect(() => {
+    if (authLoading || !user?.id) return;
+    let cancelled = false;
+    fetchMisPlanesInicio()
+      .then((data) => {
+        if (!cancelled) setInicio(data);
+      })
+      .catch((error: unknown) => {
+        const e = error as { message?: string; code?: string };
+        console.error("[mis-planes] inicio", e?.code, e?.message ?? String(error));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, user?.id, reloadNonce, plans]);
+  const inicioExtras = useMemo(() => new Map((inicio?.planes ?? []).map((e) => [e.plan_id, e])), [inicio]);
+
   const mergedPlans = useMemo(() => {
     return [...localPlans, ...plans];
   }, [localPlans, plans]);
 
-  const tabPlans = useMemo(() => {
-    const now = new Date();
-    return mergedPlans.filter((plan) => {
-      const endsAt = new Date(plan.endsAt);
-      return tab === "active" ? endsAt >= now : endsAt < now;
-    });
-  }, [mergedPlans, tab]);
-
-  const filteredPlans = useMemo(
-    () => filterAndSortPlans({ plans: tabPlans, query: planSearch, pinnedPlanIds }),
-    [tabPlans, planSearch, pinnedPlanIds],
-  );
-
   const calendarPlans = useMemo(
-    () => filterAndSortPlans({ plans: mergedPlans, query: planSearch, pinnedPlanIds }),
-    [mergedPlans, planSearch, pinnedPlanIds],
+    () => filterAndSortPlans({ plans: mergedPlans, query: "", pinnedPlanIds }),
+    [mergedPlans, pinnedPlanIds],
   );
 
   const calendarCells = useMemo(() => buildCalendarCells(monthDate), [monthDate]);
@@ -637,35 +559,7 @@ function CalendarPageInner() {
   const monthLabel = `${MONTHS_SHORT[monthDate.getMonth()]} ${monthDate.getFullYear()}`;
   const yearValue = monthDate.getFullYear();
 
-  const stripWeeks = useMemo(() => {
-    const today = startOfDay(new Date());
-    const weekStart = addDays(startOfWeek(today), stripWeekOffset);
-    return [0, 1].map((weekOffset) =>
-      Array.from({ length: 7 }, (_, i) => {
-        const date = addDays(weekStart, weekOffset * 7 + i);
-        return { key: toDayKey(date), date, day: date.getDate(), isCurrentMonth: true };
-      })
-    );
-  }, [stripWeekOffset]);
-
-  const stripRangeLabel = useMemo(() => {
-    const first = stripWeeks[0]?.[0]?.date;
-    if (!first) return "";
-    return formatMonthYearHeading(first);
-  }, [stripWeeks]);
-
-  const stripCalendarWeeks = useMemo((): CalendarWeek[] =>
-    stripWeeks.map((days, i) => ({ key: `strip-week-${i}`, days })),
-  [stripWeeks]);
-
-  const stripWeekSegments = useMemo(
-    () => stripCalendarWeeks.map((week) => buildWeekPlanRows(week, calendarPlans)),
-    [stripCalendarWeeks, calendarPlans]
-  );
-
   if (authLoading) return <LoadingScreen />;
-
-  const showingFinishedPlans = tab === "done";
 
   return (
     <div className="min-h-dvh bg-app text-app">
@@ -673,439 +567,43 @@ function CalendarPageInner() {
         <AppSidebar onCreatePlan={() => setCreateModalOpen(true)} />
 
         <main
-          className={`min-h-[calc(100dvh-env(safe-area-inset-top)-clamp(56px,8dvh,64px)-env(safe-area-inset-bottom))] px-safe pb-[calc(clamp(56px,8dvh,64px)+env(safe-area-inset-bottom))] pt-mobile-safe-top transition-[padding] duration-[var(--duration-slow)] [transition-timing-function:var(--ease-standard)] md:min-h-0 md:py-[var(--space-10)] md:pr-[var(--space-14)]`}
+          className="min-h-[calc(100dvh-env(safe-area-inset-top)-clamp(56px,8dvh,64px)-env(safe-area-inset-bottom))] pb-[calc(clamp(56px,8dvh,64px)+env(safe-area-inset-bottom))] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] pt-mobile-safe-top md:min-h-0 md:pb-0 md:pl-[136px] md:pr-12 md:pt-9"
         >
-          <div className="mx-auto w-full max-w-[1120px]">
-
-            {/* Título */}
-            <h1 className="mb-[var(--space-6)] text-[var(--font-h2)] font-[var(--fw-regular)] leading-[1.15] text-app md:text-[var(--font-h1)]">
-              Mis planes
-            </h1>
-
-            {/* Tabs */}
-            <Tabs
-              tabs={[
-                { value: "active", label: "Activos" },
-                { value: "done", label: "Finalizados" },
-              ]}
-              value={tab}
-              onChange={(v) => setTab(v as PlanTab)}
-              className="mb-[var(--space-4)]"
-              fontWeight="var(--fw-semibold)"
-            />
-
-            {/* Buscador */}
-            <div className="mb-[var(--space-5)] grid grid-cols-1 gap-[var(--space-5)] md:grid-cols-[minmax(0,1fr)_300px] md:gap-[var(--space-8)]">
-              <div className="md:grid md:grid-cols-2 md:gap-x-[var(--space-5)]">
-                <SearchInput
-                  value={planSearch}
-                  onChange={setPlanSearch}
-                  placeholder="Buscar"
-                  className="h-[40px] w-full"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-[var(--space-5)] md:grid-cols-[minmax(0,1fr)_300px] md:gap-[var(--space-8)]">
-
-              {/* ── Calendario mobile: strip 2 semanas ── */}
-              {!loading && (
-                <div className="md:hidden md:col-start-2 md:row-start-1 mb-[var(--space-2)]">
-                  <div className="mb-[var(--space-3)] flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setStripWeekOffset((offset) => offset - 14)}
-                        aria-label="Ver dos semanas anteriores"
-                        className="flex size-8 items-center justify-center rounded-full text-muted transition-colors active:bg-surface-2 active:text-app"
-                      >
-                        <svg viewBox="0 0 24 24" fill="none" className="size-[15px]" aria-hidden="true">
-                          <path d="M15 19L8 12L15 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      </button>
-                      <span className="whitespace-nowrap text-center text-[15px] font-[var(--fw-semibold)] leading-tight text-app">
-                        {stripRangeLabel}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setStripWeekOffset((offset) => offset + 14)}
-                        aria-label="Ver dos semanas siguientes"
-                        className="flex size-8 items-center justify-center rounded-full text-muted transition-colors active:bg-surface-2 active:text-app"
-                      >
-                        <svg viewBox="0 0 24 24" fill="none" className="size-[15px]" aria-hidden="true">
-                          <path d="M9 5L16 12L9 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      </button>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setCalendarModalOpen(true)}
-                      aria-label="Ver calendario completo"
-                      className="flex size-8 items-center justify-center rounded-full text-muted transition-colors active:bg-surface-2 active:text-app"
-                    >
-                      <svg viewBox="0 0 24 24" fill="none" className="size-[13px]" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
-                      </svg>
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-7 mb-[var(--space-1)]">
-                    {WEEK_DAYS.map((d) => (
-                      <div key={d} className="text-center text-[10px] font-[var(--fw-semibold)] tracking-[0.04em] text-muted">
-                        {d}
-                      </div>
-                    ))}
-                  </div>
-                  {stripCalendarWeeks.map((week, wi) => (
-                    <div key={`strip-week-${wi}`} className={`relative ${wi > 0 ? "border-t border-app" : ""}`}>
-                      <div className="grid grid-cols-7 gap-x-1 py-[var(--space-2)]">
-                        {week.days.map((cell) => {
-                          const isToday = toDayKey(cell.date) === toDayKey(new Date());
-                          const isSelected = toDayKey(cell.date) === toDayKey(selectedDayValue);
-                          return (
-                            <button
-                              key={cell.key}
-                              type="button"
-                              onClick={() => {
-                                setSelectedDay(startOfDay(cell.date));
-                                setMonthDate(startOfMonth(cell.date));
-                                setViewMode("day");
-                                setCalendarModalOpen(true);
-                              }}
-                              className={cx(
-                                "flex h-8 w-8 items-center justify-center justify-self-center rounded-full text-[13px]",
-                                CALENDAR_DAY_BUTTON_CLASS,
-                                getCalendarDayStateClass({ isSelected, isToday, isCurrentMonth: cell.isCurrentMonth })
-                              )}
-                            >
-                              {cell.day}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      <div className="space-y-[3px] pb-[var(--space-2)]">
-                        {[0, 1].map((laneIndex) => {
-                          const lane = stripWeekSegments[wi]?.lanes[laneIndex] ?? [];
-                          return (
-                            <div key={`strip-${wi}-lane-${laneIndex}`} className="grid grid-cols-7 gap-x-1">
-                              {lane.length ? lane.map((segment) => {
-                                const segmentPlan = calendarPlans.find((plan) => plan.id === segment.planId);
-                                const targetDate = startOfDay(segmentPlan ? new Date(segmentPlan.startsAt) : selectedDayValue);
-                                return (
-                                  <div
-                                    key={segment.key}
-                                    className={cx(CALENDAR_PLAN_PILL_BASE_CLASS, CALENDAR_PLAN_PILL_COMPACT_CLASS)}
-                                    style={{ gridColumn: `${segment.startCol + 1} / ${segment.endCol + 2}` }}
-                                    title={segment.title}
-                                    onClick={() => {
-                                      setSelectedDay(targetDate);
-                                      setMonthDate(startOfMonth(targetDate));
-                                      setViewMode("day");
-                                      setCalendarModalOpen(true);
-                                    }}
-                                  >
-                                    <span className="block truncate">{segment.title}</span>
-                                  </div>
-                                );
-                              }) : <div className="h-[22px]" aria-hidden="true" />}
-                            </div>
-                          );
-                        })}
-                      </div>
-                      {stripWeekSegments[wi]?.hiddenCount ? (
-                        <p className="pointer-events-none absolute bottom-[var(--space-1)] right-0 text-[9px] leading-none text-muted">
-                          +{stripWeekSegments[wi].hiddenCount}
-                        </p>
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* ── Calendario desktop: sidebar sticky ── */}
-              {!loading && (
-                <aside className="hidden md:flex md:col-start-2 md:row-start-1 flex-col md:sticky md:top-[var(--space-6)] md:self-start">
-                  {/* Switcher + nav */}
-                  <div className="mb-[var(--space-3)] flex flex-col items-center gap-[var(--space-2)]">
-                    <ViewSwitcher viewMode={viewMode} setViewMode={setViewMode} />
-                    <div className="flex w-full items-center justify-between">
-                      <button type="button" aria-label="Anterior"
-                        onClick={() => {
-                          if (viewMode === "year") setMonthDate(new Date(yearValue - 1, monthDate.getMonth(), 1));
-                          else if (viewMode === "month") setMonthDate(addMonths(monthDate, -1));
-                          else if (viewMode === "week") { const d = addDays(selectedDayValue, -7); setSelectedDay(d); setMonthDate(startOfMonth(d)); }
-                          else { const d = addDays(selectedDayValue, -1); setSelectedDay(d); setMonthDate(startOfMonth(d)); }
-                        }}
-                        className="flex size-8 items-center justify-center text-muted transition-colors hover:text-app">
-                        <svg viewBox="0 0 24 24" fill="none" className="size-[14px]"><path d="M15 19L8 12L15 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                      </button>
-                      <span className="whitespace-nowrap text-left text-[22px] font-[var(--fw-semibold)] leading-tight text-app">
-                        {viewMode === "year" ? String(yearValue) : viewMode === "month" ? monthLabel : viewMode === "week" ? formatMonthYearHeading(selectedDayValue) : selectedDayValue.toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" })}
-                      </span>
-                      <button type="button" aria-label="Siguiente"
-                        onClick={() => {
-                          if (viewMode === "year") setMonthDate(new Date(yearValue + 1, monthDate.getMonth(), 1));
-                          else if (viewMode === "month") setMonthDate(addMonths(monthDate, 1));
-                          else if (viewMode === "week") { const d = addDays(selectedDayValue, 7); setSelectedDay(d); setMonthDate(startOfMonth(d)); }
-                          else { const d = addDays(selectedDayValue, 1); setSelectedDay(d); setMonthDate(startOfMonth(d)); }
-                        }}
-                        className="flex size-8 items-center justify-center text-muted transition-colors hover:text-app">
-                        <svg viewBox="0 0 24 24" fill="none" className="size-[14px]"><path d="M9 5L16 12L9 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                      </button>
-                    </div>
-                  </div>
-
-                  {viewMode === "year" ? (
-                    /* ── Sidebar: vista año ── */
-                    <div className="grid grid-cols-3 grid-rows-4 gap-x-[var(--space-3)] gap-y-[var(--space-5)]">
-                      {Array.from({ length: 12 }).map((_, i) => (
-                        <YearMonthMini
-                          key={i}
-                          year={yearValue}
-                          monthIndex={i}
-                          today={startOfDay(new Date())}
-                          selectedDay={selectedDayValue}
-                          compact
-                          onSelectDay={(day) => {
-                            setSelectedDay(startOfDay(day));
-                            setMonthDate(startOfMonth(day));
-                            setViewMode("day");
-                          }}
-                        />
-                      ))}
-                    </div>
-                  ) : viewMode === "month" ? (
-                    /* ── Sidebar: vista mes ── */
-                    <>
-                      <div className="grid grid-cols-7 gap-x-1 gap-y-2 border-b border-app pb-2 text-center">
-                        {WEEK_DAYS.map((weekDay) => (
-                          <div key={weekDay} className="text-[11px] font-[var(--fw-semibold)] tracking-[0.04em] text-muted">{weekDay}</div>
-                        ))}
-                      </div>
-                      <div className="mt-2">
-                        {calendarWeeks.map((week, weekIndex) => (
-                          <div key={week.key} className={`relative px-1 py-1 ${weekIndex === 0 ? "" : "border-t border-app"}`}>
-                            <div className="grid grid-cols-7 gap-x-1">
-                              {week.days.map((cell) => {
-                                const isCellToday = toDayKey(cell.date) === toDayKey(new Date());
-                                const isSelected = toDayKey(cell.date) === toDayKey(selectedDayValue);
-                                return (
-                                  <button type="button" key={cell.key}
-                                    onClick={() => { setSelectedDay(startOfDay(cell.date)); setMonthDate(startOfMonth(cell.date)); setViewMode("day"); }}
-                                    className={cx(
-                                      "flex h-6 w-6 items-center justify-center justify-self-center rounded-full text-[13px]",
-                                      CALENDAR_DAY_BUTTON_CLASS,
-                                      getCalendarDayStateClass({
-                                        isSelected,
-                                        isToday: isCellToday,
-                                        isCurrentMonth: cell.isCurrentMonth,
-                                        otherMonthClass: "text-tertiary",
-                                        hoverClass: "hover:bg-surface-inset",
-                                      })
-                                    )}
-                                  >{cell.day}</button>
-                                );
-                              })}
-                            </div>
-                            <div className="mt-1 space-y-[2px]">
-                              {[0, 1].map((laneIndex) => {
-                                const lane = weekSegments[weekIndex]?.lanes[laneIndex] ?? [];
-                                return (
-                                  <div key={`${week.key}-lane-${laneIndex}`} className="grid grid-cols-7 gap-x-1">
-                                    {lane.length ? lane.map((segment) => (
-                                      <div key={segment.key}
-                                        className={cx(CALENDAR_PLAN_PILL_BASE_CLASS, CALENDAR_PLAN_PILL_SIDEBAR_CLASS)}
-                                        style={{ gridColumn: `${segment.startCol + 1} / ${segment.endCol + 2}` }}
-                                        title={segment.title} onClick={() => navigateToPlan(segment.planId)}>
-                                        <span className="block truncate">{segment.title}</span>
-                                      </div>
-                                    )) : <div className="h-[18px]" aria-hidden="true" />}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                            {weekSegments[weekIndex]?.hiddenCount ? (
-                              <p className="pointer-events-none absolute bottom-1 right-1 text-[9px] leading-none text-muted">+{weekSegments[weekIndex].hiddenCount}</p>
-                            ) : null}
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  ) : viewMode === "week" ? (
-                    /* ── Sidebar: vista semana ── */
-                    <SidebarWeekAgenda
-                      days={Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(selectedDayValue), i))}
-                      plans={calendarPlans}
-                      onOpenPlan={navigateToPlan}
-                      onOpenDay={(day) => { setSelectedDay(startOfDay(day)); setMonthDate(startOfMonth(day)); setViewMode("day"); }}
-                    />
-                  ) : (
-                    /* ── Sidebar: vista día ── */
-                    <div className="flex flex-col">
-                      {toDayKey(selectedDayValue) !== toDayKey(new Date()) && (
-                        <button type="button"
-                          onClick={() => { setSelectedDay(startOfDay(new Date())); setMonthDate(startOfMonth(new Date())); }}
-                          className="mb-[var(--space-3)] self-start text-caption text-[var(--primary)]">Hoy</button>
-                      )}
-                      {(allDayPlans.length > 0 || allDayActivities.length > 0) && (
-                        <div className="mb-[var(--space-3)] grid grid-cols-[40px_minmax(0,1fr)] border-b border-app pb-[var(--space-2)]">
-                          <div className="pr-2 pt-[3px] text-right text-[10px] font-[var(--fw-semibold)] leading-tight text-muted">
-                            todo<br />el día
-                          </div>
-                          <div className="space-y-[4px]">
-                            {allDayPlans.map((plan) => (
-                              <button
-                                key={`sidebar-allday-${plan.id}`}
-                                type="button"
-                                onClick={() => navigateToPlan(plan.id)}
-                                className={cx(CALENDAR_PLAN_PILL_BASE_CLASS, CALENDAR_PLAN_PILL_COMPACT_CLASS, "block w-full text-left")}
-                              >
-                                <span className="block truncate">{plan.title}</span>
-                              </button>
-                            ))}
-                            {allDayActivities.map((activity) => (
-                              <DayActivityPill key={`sidebar-allday-act-${activity.id}`} activity={activity} onOpen={() => navigateToPlan(activity.planId)} />
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      <div ref={sidebarDayScrollRef} className="scrollbar-thin max-h-[420px] overflow-y-auto pr-1">
-                        <div className="relative">
-                          {Array.from({ length: 24 }).map((_, hour) => (
-                            <div key={`sidebar-hour-${hour}`} className="grid h-16 grid-cols-[40px_minmax(0,1fr)]">
-                              <div className="relative">
-                                <span className="absolute right-2 top-0 -translate-y-1/2 text-right text-[11px] leading-none text-muted">
-                                  {String(hour).padStart(2, "0")}:00
-                                </span>
-                              </div>
-                              <div className="border-t border-app/40" />
-                            </div>
-                          ))}
-                          <div className="pointer-events-none absolute inset-y-0 left-[48px] right-0">
-                            {timedDayPlans.map((plan) => {
-                              const startMinutes = getMinutesWithinDay(plan.startsAt, selectedDayValue);
-                              const endMinutes = getMinutesWithinDay(plan.endsAt, selectedDayValue, true);
-                              const duration = Math.max(endMinutes - startMinutes, 30);
-                              return (
-                                <div key={`sidebar-plan-${plan.id}`}
-                                  className="pointer-events-auto absolute left-1 right-1 cursor-pointer overflow-hidden rounded-[8px] bg-[var(--primary)]/15 px-2 py-1 text-app transition-[opacity,transform] duration-150 ease-out hover:opacity-90 active:translate-y-[1px] active:scale-[0.98]"
-                                  style={{ top: `${(startMinutes / 60) * 64}px`, height: `${Math.max((duration / 60) * 64, 24)}px` }}
-                                  onClick={() => navigateToPlan(plan.id)}>
-                                  <p className="truncate text-[12px] font-[var(--fw-semibold)]">{plan.title}</p>
-                                  <p className="mt-0.5 truncate text-[10px] text-muted">{formatTimeRange(clampDateTimeToDay(plan.startsAt, selectedDayValue).toISOString(), clampDateTimeToDay(plan.endsAt, selectedDayValue, true).toISOString())}</p>
-                                </div>
-                              );
-                            })}
-                            {timedDayActivities.map((activity) => (
-                              <DayActivityBlock key={`sidebar-act-${activity.id}`} activity={activity} day={selectedDayValue} onOpen={() => navigateToPlan(activity.planId)} />
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </aside>
-              )}
-
-              {/* ── Planes ── */}
-              <section className="md:col-start-1 md:row-start-1">
-                {loading ? (
-                  <PlanListSkeleton />
-                ) : mergedPlans.length === 0 && !planSearch.trim() ? (
-                  <EmptyPlansWelcome onCreatePlan={() => setCreateModalOpen(true)} onOpenPlan={navigateToPlan} />
-                ) : filteredPlans.length === 0 ? (
-                  <p className="pt-[var(--space-2)] text-body-sm text-muted">
-                    {planSearch.trim() ? "No hay planes con ese nombre." : "No hay planes para mostrar."}
-                  </p>
-                ) : (
-                  <>
-                    {/* Mobile: lista con divisores */}
-                    <div className="flex flex-col md:hidden">
-                      {filteredPlans.map((plan) => {
-                        return (
-                          <article
-                            key={`plan-mobile-${plan.id}`}
-                            className={cx("flex cursor-pointer items-stretch gap-3 hover:bg-surface-inset/50", CLICK_MOTION_CLASS)}
-                            onClick={() => navigateToPlan(plan.id)}
-                          >
-                            <div
-                              className={cx(
-                                "relative my-[var(--space-2)] size-[84px] shrink-0 self-start overflow-hidden rounded-[8px] bg-cover bg-center bg-no-repeat transition-[filter,opacity]",
-                                showingFinishedPlans && FINISHED_PLAN_IMAGE_CLASS
-                              )}
-                              style={{ backgroundImage: `url(${plan.coverImage ?? DEFAULT_PLAN_COVER_IMAGE.mobile})` }}
-                              role="img"
-                              aria-label={plan.title}
-                            />
-                            <div className="flex min-w-0 flex-1 items-start gap-2 py-[var(--space-2)]">
-                              <div className="min-w-0 flex-1">
-                                <p className={cx(
-                                  "truncate text-body-sm font-[var(--fw-semibold)]",
-                                  showingFinishedPlans ? FINISHED_PLAN_TITLE_CLASS : ACTIVE_PLAN_TITLE_CLASS
-                                )}>{plan.title}</p>
-                                <p className={cx("mt-[2px] text-caption", showingFinishedPlans ? "text-tertiary" : "text-muted")}>{formatDateRange(plan.startsAt, plan.endsAt)}</p>
-                              </div>
-                              <div className={cx("flex shrink-0 items-center gap-0 self-center", showingFinishedPlans ? "text-tertiary" : "text-muted")}>
-                                <PlanPinButton
-                                  pinned={pinnedPlanIds.includes(plan.id)}
-                                  onToggle={(e) => { e.stopPropagation(); togglePin(plan.id); }}
-                                  compact
-                                />
-                                <span className="flex size-11 shrink-0 items-center justify-center" aria-hidden="true">
-                                  <svg viewBox="0 0 24 24" fill="none" className="size-[22px]" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M9 18l6-6-6-6" />
-                                  </svg>
-                                </span>
-                              </div>
-                            </div>
-                          </article>
-                        );
-                      })}
-                    </div>
-
-                    {/* Desktop: grid sin borde */}
-                    <div className="hidden md:grid md:grid-cols-2 md:gap-x-[var(--space-5)] md:gap-y-[var(--space-6)]">
-                      {filteredPlans.map((plan) => {
-                        return (
-                          <article
-                            key={`plan-desktop-${plan.id}`}
-                            className={cx("group cursor-pointer", CLICK_MOTION_CLASS)}
-                            onClick={() => navigateToPlan(plan.id)}
-                          >
-                            <div
-                              className={cx(
-                                "relative h-[160px] w-full overflow-hidden rounded-[10px] bg-cover bg-center bg-no-repeat transition-[filter,opacity] group-hover:opacity-95",
-                                showingFinishedPlans && FINISHED_PLAN_IMAGE_CLASS
-                              )}
-                              style={{ backgroundImage: `url(${plan.coverImage ?? DEFAULT_PLAN_COVER_IMAGE.desktop})` }}
-                              role="img"
-                              aria-label={plan.title}
-                            >
-                              <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
-                              <PlanPinButton
-                                pinned={pinnedPlanIds.includes(plan.id)}
-                                onToggle={(e) => { e.stopPropagation(); togglePin(plan.id); }}
-                                className="absolute right-1 top-1 text-white hover:bg-white/10"
-                              />
-                            </div>
-                            <div className="pt-[var(--space-3)]">
-                              <p className={cx(
-                                "truncate text-[17px] font-[var(--fw-semibold)] leading-[1.2]",
-                                showingFinishedPlans ? FINISHED_PLAN_TITLE_CLASS : ACTIVE_PLAN_TITLE_CLASS
-                              )}>{plan.title}</p>
-                              <p className={cx("mt-[3px] text-caption", showingFinishedPlans ? "text-tertiary" : "text-muted")}>{formatDateRange(plan.startsAt, plan.endsAt)}</p>
-                              <p className="mt-[2px] truncate text-caption text-tertiary">
-                                {plan.creator.id === user?.id ? "Creado por ti" : `De ${plan.creator.name}`}
-                              </p>
-                            </div>
-                          </article>
-                        );
-                      })}
-                    </div>
-                  </>
-                )}
-              </section>
-
-            </div>
+          <div className="mx-auto w-full max-w-[1280px]">
+            {loading ? (
+              <PlanListSkeleton />
+            ) : view === "todos" ? (
+              <AllPlansView
+                plans={mergedPlans}
+                extras={inicioExtras}
+                pinnedIds={pinnedPlanIds}
+                onTogglePin={togglePin}
+                onOpen={openPlan}
+                onBack={() => router.replace("/calendar")}
+                userId={user?.id}
+                initialFilter={searchParams.get("filtro") === "finalizados" ? "finished" : "active"}
+                initialQuery={searchParams.get("q") ?? ""}
+              />
+            ) : (
+              <MisPlanesHome
+                plans={mergedPlans}
+                inicio={inicio}
+                pinnedIds={pinnedPlanIds}
+                onTogglePin={togglePin}
+                onOpen={openPlan}
+                onCreate={() => setCreateModalOpen(true)}
+                onOpenCalendar={() => setCalendarModalOpen(true)}
+                onOpenAll={(opts) => {
+                  const qs = new URLSearchParams({ vista: "todos" });
+                  if (opts?.finished) qs.set("filtro", "finalizados");
+                  if (opts?.query) qs.set("q", opts.query);
+                  router.push(`/calendar?${qs.toString()}`);
+                }}
+                onOpenInvitations={() => router.push("/notifications")}
+                userId={user?.id}
+                isGuest={Boolean(user?.is_anonymous)}
+              />
+            )}
           </div>
         </main>
       </div>
@@ -1219,76 +717,6 @@ function DayActivityPill({ activity, onOpen }: { activity: DayActivity; onOpen: 
       <span className="truncate font-[var(--fw-semibold)]">{activity.title}</span>
       <span className="truncate text-[12px] text-muted">{activity.planTitle}</span>
     </button>
-  );
-}
-
-type SidebarWeekProps = {
-  days: Date[];
-  plans: FeedPlanItemDto[];
-  onOpenPlan: (planId: number) => void;
-  onOpenDay: (day: Date) => void;
-};
-
-function plansOnDay(plans: FeedPlanItemDto[], day: Date) {
-  return plans
-    .filter((plan) => rangesOverlap(new Date(plan.startsAt), new Date(plan.endsAt), startOfDay(day), endOfDay(day)))
-    .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
-}
-
-/**
- * Week in the narrow desktop sidebar, as an agenda: one row per day with its plans.
- * Seven hour columns do not fit in ~360px; the expanded calendar keeps that layout.
- */
-function SidebarWeekAgenda({ days, plans, onOpenPlan, onOpenDay }: SidebarWeekProps) {
-  const todayKey = toDayKey(new Date());
-  return (
-    <ol className="flex flex-col">
-      {days.map((day, index) => {
-        const dayPlans = plansOnDay(plans, day);
-        const isToday = toDayKey(day) === todayKey;
-        return (
-          <li key={toDayKey(day)} className={cx("grid grid-cols-[52px_minmax(0,1fr)] gap-2 py-2", index > 0 && "border-t border-app")}>
-            <button
-              type="button"
-              onClick={() => onOpenDay(day)}
-              aria-label={day.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })}
-              className={cx("flex flex-col items-center gap-[2px] self-start rounded-[10px] py-1 hover:bg-surface-inset", CALENDAR_DAY_BUTTON_CLASS)}
-            >
-              <span className="text-[11px] font-[var(--fw-semibold)] uppercase tracking-[0.04em] text-muted">{WEEK_DAYS[index]}</span>
-              <span
-                className={cx(
-                  "flex h-7 w-7 items-center justify-center rounded-full text-[15px] font-[var(--fw-semibold)]",
-                  isToday ? "bg-[var(--primary)] text-[var(--text-on-primary,#fff)]" : "text-app",
-                )}
-              >
-                {day.getDate()}
-              </span>
-            </button>
-            <div className="flex min-w-0 flex-col justify-center gap-[4px] py-1 pr-1">
-              {dayPlans.length === 0 ? (
-                <span className="text-[13px] text-tertiary">Sin planes</span>
-              ) : (
-                dayPlans.map((plan) => (
-                  <button
-                    key={`week-${toDayKey(day)}-${plan.id}`}
-                    type="button"
-                    onClick={() => onOpenPlan(plan.id)}
-                    className={cx(CALENDAR_PLAN_PILL_BASE_CLASS, CALENDAR_PLAN_PILL_COMPACT_CLASS, "flex w-full items-center gap-1.5 text-left")}
-                  >
-                    {!plan.allDay && (
-                      <span className="shrink-0 text-[12px] font-normal text-muted">
-                        {new Date(plan.startsAt).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}
-                      </span>
-                    )}
-                    <span className="truncate">{plan.title}</span>
-                  </button>
-                ))
-              )}
-            </div>
-          </li>
-        );
-      })}
-    </ol>
   );
 }
 
