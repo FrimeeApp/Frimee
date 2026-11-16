@@ -702,14 +702,19 @@ grant execute on function public.fn_plan_desde_chat(uuid, uuid, text, timestampt
 
 -- (fn_foto_visible está en la sección 1: fn_chats_list ya la usa.)
 
--- La vista pública de usuarios (la usan gastos, miembros del plan, álbum, llamadas y la cartera).
+-- La vista pública de usuarios (la usan gastos, miembros del plan, álbum, llamadas y la cartera,
+-- esta última directamente desde la app). Mira bloqueos con un subselect y no con fn_foto_visible:
+-- las tablas de una vista se leen con los permisos de su dueño, pero las funciones se comprueban
+-- con los de quien la lee, y fn_foto_visible no es de authenticated.
 create or replace view public.usuarios_public as
- select id,
-    nombre,
-    public.fn_foto_visible(id, profile_image) as profile_image,
-    deleted_at,
-    username
-   from public.usuarios;
+ select u.id,
+    u.nombre,
+    case when exists (select 1 from public.bloqueos b
+                       where b.bloqueador_id = u.id and b.bloqueado_id = auth.uid())
+         then null else u.profile_image end as profile_image,
+    u.deleted_at,
+    u.username
+   from public.usuarios u;
 
 -- Funciones que leen la foto de usuarios directamente: igual que su última versión, con la foto
 -- pasada por fn_foto_visible.
