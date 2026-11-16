@@ -103,6 +103,9 @@ export type HomeSections = {
   activeCount: number;
 };
 
+/** At most this many plans pinned at once (only active plans count). */
+export const MAX_PINNED_PLANS = 5;
+
 export function buildHomeSections(plans: FeedPlanItemDto[], pinnedIds: number[], now = new Date()): HomeSections {
   const byStart = (a: FeedPlanItemDto, b: FeedPlanItemDto) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime();
   const active = plans.filter((p) => planTiming(p, now).kind !== "finished").sort(byStart);
@@ -125,7 +128,8 @@ export function buildHomeSections(plans: FeedPlanItemDto[], pinnedIds: number[],
   const activeById = new Map(active.map((p) => [p.id, p]));
   const pinned = pinnedIds
     .map((id) => activeById.get(id))
-    .filter((p): p is FeedPlanItemDto => Boolean(p) && !shown.has(p!.id));
+    .filter((p): p is FeedPlanItemDto => Boolean(p) && !shown.has(p!.id))
+    .sort(byStart);
   pinned.forEach((p) => shown.add(p.id));
 
   const later: MonthChapter[] = [];

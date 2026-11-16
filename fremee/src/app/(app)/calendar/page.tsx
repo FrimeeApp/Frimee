@@ -21,6 +21,8 @@ import { syncGoogleCalendarBidirectional } from "@/services/api/repositories/eve
 import { listUserRelatedPlans } from "@/services/api/repositories/plans.repository";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { STORAGE_KEYS } from "@/config/storage";
+import { useToast } from "@/components/ui/Toaster";
+import { MAX_PINNED_PLANS, planTiming } from "@/components/plans/home/homeSections";
 
 
 let calendarPlansCache: { userId: string; plans: FeedPlanItemDto[] } | null = null;
@@ -68,6 +70,7 @@ function CalendarPageInner() {
       return stored ? (JSON.parse(stored) as number[]) : [];
     } catch { return []; }
   });
+  const { toast } = useToast();
   const [reloadNonce, setReloadNonce] = useState(0);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [createDates, setCreateDates] = useState<CreatePlanDates | undefined>(undefined);
@@ -86,13 +89,22 @@ function CalendarPageInner() {
   }, [createFromQuery]);
 
   const togglePin = (planId: number) => {
-    setPinnedPlanIds((prev) => {
-      const next = prev.includes(planId)
-        ? prev.filter((id) => id !== planId)
-        : [...prev, planId];
+    const savePins = (next: number[]) => {
+      setPinnedPlanIds(next);
       try { localStorage.setItem(STORAGE_KEYS.pinnedPlans, JSON.stringify(next)); } catch { /* noop */ }
-      return next;
-    });
+    };
+    if (pinnedPlanIds.includes(planId)) {
+      savePins(pinnedPlanIds.filter((id) => id !== planId));
+      return;
+    }
+    // Only active plans count (and stay stored): a finished or deleted plan frees its place.
+    const activeIds = new Set(mergedPlans.filter((p) => planTiming(p).kind !== "finished").map((p) => p.id));
+    const activePins = pinnedPlanIds.filter((id) => activeIds.has(id));
+    if (activePins.length >= MAX_PINNED_PLANS) {
+      toast(`Puedes anclar hasta ${MAX_PINNED_PLANS} planes. Desancla uno para anclar este.`, "info");
+      return;
+    }
+    savePins([...activePins, planId]);
   };
 
   const openCreate = () => {
@@ -313,8 +325,9 @@ function CalendarPageInner() {
                 onTogglePin={togglePin}
                 onOpen={openPlan}
                 onBack={() => router.replace("/calendar")}
+                onCreate={openCreate}
                 userId={user?.id}
-                initialFilter={searchParams.get("filtro") === "finalizados" ? "finished" : "active"}
+                initialFilter={searchParams.get("filtro") === "finalizados" ? "finished" : "all"}
                 initialQuery={searchParams.get("q") ?? ""}
               />
             ) : (
