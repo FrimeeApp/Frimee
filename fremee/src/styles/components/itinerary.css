@@ -1,0 +1,16 @@
+/* Frimee · itinerary: the dot of the «Ahora» line beats softly (it-sistema «Hoy»). */
+
+@layer components {
+  .itinerary-now-dot {
+    animation: itinerary-latido 2400ms ease-in-out infinite;
+  }
+
+  @keyframes itinerary-latido {
+    0%, 100% { box-shadow: 0 0 0 3px var(--bg), 0 0 0 3px color-mix(in srgb, var(--primary) 0%, transparent); }
+    50% { box-shadow: 0 0 0 3px var(--bg), 0 0 0 7px color-mix(in srgb, var(--primary) 22%, transparent); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .itinerary-now-dot { animation: none; }
+  }
+}
