@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { useAuth } from "@/providers/AuthProvider";
 import { Input } from "@/components/ui/Input";
@@ -18,6 +19,8 @@ type Stage = "guest" | "pending_email" | "pending_password";
  */
 export function GuestBanner() {
   const { user } = useAuth();
+  // «Mis planes» shows its own notice under the title (hideable), so the pill would repeat it.
+  const onMisPlanes = usePathname() === "/calendar";
 
   const stage: Stage | null = !user
     ? null
@@ -71,20 +74,24 @@ export function GuestBanner() {
 
   return (
     <>
-      {/* Phones: in the page flow, so it pushes the screen down instead of covering its header.
-          From md it floats over the top, where the layout leaves room for it. */}
-      <div className="relative z-[60] flex justify-center px-[var(--space-4)] pb-[var(--space-2)] pt-[calc(env(safe-area-inset-top)+var(--space-2))] md:pointer-events-none md:fixed md:inset-x-0 md:top-[calc(env(safe-area-inset-top)+var(--space-2))] md:p-0 md:px-[var(--space-4)]">
-        <div className="pointer-events-auto flex max-w-full items-center gap-[var(--space-3)] rounded-full border border-app bg-app py-[6px] pl-[var(--space-4)] pr-[6px] text-body-sm shadow-elev-2">
-          <span className="truncate text-muted">{label}</span>
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            className="shrink-0 rounded-full bg-[var(--text-primary)] px-[var(--space-3)] py-[4px] font-[var(--fw-semibold)] text-contrast-token transition-opacity hover:opacity-85"
-          >
-            {action}
-          </button>
-        </div>
-      </div>
+      {!(onMisPlanes && stage === "guest") && (
+        <>
+          {/* Phones: in the page flow, so it pushes the screen down instead of covering its header.
+              From md it floats over the top, where the layout leaves room for it. */}
+          <div className="relative z-[60] flex justify-center px-[var(--space-4)] pb-[var(--space-2)] pt-[calc(env(safe-area-inset-top)+var(--space-2))] md:pointer-events-none md:fixed md:inset-x-0 md:top-[calc(env(safe-area-inset-top)+var(--space-2))] md:p-0 md:px-[var(--space-4)]">
+            <div className="pointer-events-auto flex max-w-full items-center gap-[var(--space-3)] rounded-full border border-app bg-app py-[6px] pl-[var(--space-4)] pr-[6px] text-body-sm shadow-elev-2">
+              <span className="truncate text-muted">{label}</span>
+              <button
+                type="button"
+                onClick={() => setOpen(true)}
+                className="shrink-0 rounded-full bg-[var(--text-primary)] px-[var(--space-3)] py-[4px] font-[var(--fw-semibold)] text-contrast-token transition-opacity hover:opacity-85"
+              >
+                {action}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
       {open && (
         <SaveAccountDialog
           stage={stage === "pending_password" ? "password" : "email"}
