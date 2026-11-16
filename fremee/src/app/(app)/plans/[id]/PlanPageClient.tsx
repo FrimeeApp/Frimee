@@ -235,6 +235,8 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
   const [collapsedDaysReady, setCollapsedDaysReady] = useState(!!initialCache?.subplanes?.length);
   const [showAddSheet, setShowAddSheet] = useState(false);
   const [addSheetInitialTitulo, setAddSheetInitialTitulo] = useState<string | undefined>();
+  // ?tab=chat&m=<mensaje> («Te toca» → a poll): the chat opens at that message.
+  const [chatInitialMessageId, setChatInitialMessageId] = useState<number | undefined>();
   const [addSheetInitialDate, setAddSheetInitialDate] = useState<string | undefined>();
   const [addSheetInitialHora, setAddSheetInitialHora] = useState<string | undefined>();
   const [addSheetInitialTipo, setAddSheetInitialTipo] = useState<TipoSubplan | undefined>();
@@ -471,6 +473,8 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
     const tab = searchParams.get("tab");
     const createGasto = searchParams.get("createGasto");
     const nuevaActividad = searchParams.get("nuevaActividad");
+    const mensaje = Number(searchParams.get("m"));
+    if (tab === "chat" && Number.isFinite(mensaje) && mensaje > 0) setChatInitialMessageId(mensaje);
     const nuevaFecha = searchParams.get("fecha");
     const nuevaHora = searchParams.get("hora");
     const nuevoTipo = searchParams.get("tipo");
@@ -1302,6 +1306,7 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
                   registerCallReload={(fn) => { reloadCallMessagesRef.current = fn; }}
                   containerClassName="flex min-h-0 flex-1 flex-col"
                   embedded
+                  initialMessageId={chatInitialMessageId}
                   planInfo={plan ? { titulo: plan.titulo, inicio_at: plan.inicio_at, fin_at: plan.fin_at, ubicacion_nombre: plan.ubicacion_nombre } : undefined}
                   planId={plan?.id}
                   isAdmin={isAdmin}

@@ -31,7 +31,8 @@ import {
 } from "./pieces";
 
 export type PlanTab = "itinerario" | "chat" | "gastos" | "fotos";
-export type OpenPlan = (planId: number, tab?: PlanTab) => void;
+/** messageId: with tab «chat», the message to scroll to (a poll from «Te toca»). */
+export type OpenPlan = (planId: number, tab?: PlanTab, messageId?: number) => void;
 
 type Common = {
   plan: FeedPlanItemDto;
@@ -592,24 +593,24 @@ export function LaterSpine({
 }
 
 /** Desktop «Más adelante» tile. */
-export function LaterTile({ plan, onOpen, userId }: { plan: FeedPlanItemDto; onOpen: OpenPlan; userId?: string }) {
+export function LaterTile({ plan, onOpen, userId, pinned, onTogglePin }: { plan: FeedPlanItemDto; onOpen: OpenPlan; userId?: string; pinned: boolean; onTogglePin: () => void }) {
   const mine = plan.creator.id === userId || plan.ownerUserId === userId;
   const meta = [formatPlanRange(plan.startsAt, plan.endsAt), placeOf(plan).split(",")[0], mine ? null : `de ${plan.creator.name.split(" ")[0]}`]
     .filter(Boolean)
     .join(" · ");
+  // The pin sits beside the link, not inside it (no button inside a link).
   return (
-    <OpenLink
-      plan={plan}
-      onOpen={onOpen}
-      className="flex min-h-[76px] items-center gap-3 rounded-[8px] border border-app py-1.5 pl-1.5 pr-3 transition-[transform,background-color] duration-[120ms] hover:bg-surface-2 active:scale-[.98]"
-    >
-      <PlanCover plan={plan} variant="thumb" className="size-16 shrink-0 rounded-[8px]" />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-[16px] font-[var(--fw-semibold)] text-app">{plan.title}</span>
-        <span className="block truncate text-[14px] text-muted">{meta}</span>
-      </span>
-      <span className="shrink-0 text-[12px] text-muted">{countdownText(plan)}</span>
-    </OpenLink>
+    <div className="flex min-h-[76px] items-center rounded-[8px] border border-app transition-[transform,background-color] duration-[120ms] hover:bg-surface-2 has-[a:active]:scale-[.98]">
+      <OpenLink plan={plan} onOpen={onOpen} className="flex min-w-0 flex-1 items-center gap-3 self-stretch rounded-[8px] py-1.5 pl-1.5">
+        <PlanCover plan={plan} variant="thumb" className="size-16 shrink-0 rounded-[8px]" />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[16px] font-[var(--fw-semibold)] text-app">{plan.title}</span>
+          <span className="block truncate text-[14px] text-muted">{meta}</span>
+        </span>
+        <span className="shrink-0 text-[12px] text-muted">{countdownText(plan)}</span>
+      </OpenLink>
+      <PinButton pinned={pinned} onToggle={onTogglePin} />
+    </div>
   );
 }
 
