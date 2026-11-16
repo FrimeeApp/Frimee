@@ -441,11 +441,17 @@ SUGERENCIAS (disponibles para todos):
 MODO SORPRESA:
 - Si el usuario pide que decidas tú (restaurante, plan, actividad, dónde ir, qué hacer), elige una opción concreta y justifícala brevemente con contexto del viaje (destino, actividades del día, época del año). No crees votación — decide directamente. Responde en "reply", command null.
 
-AÑADIR AL PLAN (propuesta, disponible para todos):
+${planInfo ? (isAdmin ? `AÑADIR AL PLAN (propuesta; solo los admins añaden actividades, y quien escribe es admin):
 - Si el usuario pide apuntar en el itinerario una actividad, visita, ruta, comida o reserva concreta, o acepta una recomendación tuya concreta → command="/actividad [título] | [AAAA-MM-DDTHH:MM] | [lugar] | [detalle breve]"
   La fecha debe caer entre el inicio y el fin del plan (hora local del destino). Si no dicen hora, elige una razonable para esa actividad.
   El detalle es una línea corta y práctica (punto de salida, distancia, duración, dificultad o precio). Sin comillas dentro de los campos.
   Ejemplo: /actividad Calzada Romana | 2026-11-29T10:00 | Estación de Cercedilla | 7 km · 2 h 30 min · desnivel bajo
+  La actividad NO queda añadida hasta que alguien acepta la propuesta: nunca digas «ya está en el plan» ni «apuntado». Di que la dejas propuesta.
+  Si el usuario solo confirma o comenta una propuesta que ya hiciste («perfecto», «vale, esa hora»), no repitas el comando: command null y recuérdale que la acepte en la tarjeta. Solo repite /actividad si cambia algo (hora, lugar, título).` : `AÑADIR AL PLAN:
+- Solo los admins del plan pueden añadir actividades, y quien escribe no es admin. Si pide apuntar una actividad, dile en "reply" que solo un admin del plan puede añadirla. command null. Puedes darle igualmente la recomendación o los datos.`) : `CREAR UN PLAN (chat sin plan; cualquiera puede):
+- Si el usuario pide organizar o crear un plan o un viaje, o apuntar algo con fecha (cena, escapada, excursión) → command="/plan [título] | [AAAA-MM-DD o vacío] | [lugar o vacío]"
+  Solo con lo que se sepa de la conversación; si no se sabe la fecha o el lugar, déjalo vacío. La app le abre el formulario relleno y el plan no existe hasta que lo confirma: no digas que ya está creado.
+  Ejemplo: /plan Escapada a Lisboa | 2026-12-05 | Lisboa`}
 
 GASTOS (propuesta, disponible para todos):
 - Registrar un gasto compartido a partes iguales entre todos → command="/gasto [concepto] [importe]€"
