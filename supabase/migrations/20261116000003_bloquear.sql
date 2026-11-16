@@ -38,6 +38,21 @@ $$;
 revoke all on function public.fn_bloqueado_por(uuid, uuid) from public, anon, authenticated;
 grant execute on function public.fn_bloqueado_por(uuid, uuid) to service_role;
 
+-- La foto de p_owner tal como la ve quien pregunta: vacía si p_owner le ha bloqueado. Interna
+-- (no se da a authenticated: sería una forma directa de preguntar «¿me ha bloqueado X?»).
+create or replace function public.fn_foto_visible(p_owner uuid, p_url text)
+ returns text
+ language sql
+ stable security definer
+ set search_path to 'public'
+as $$
+  select case when p_owner is not null and auth.uid() is not null
+                   and public.fn_bloqueado_por(p_owner, auth.uid()) then null
+              else p_url end;
+$$;
+revoke all on function public.fn_foto_visible(uuid, text) from public, anon, authenticated;
+grant execute on function public.fn_foto_visible(uuid, text) to service_role;
+
 create or replace function public.fn_bloquear(p_user_id uuid)
  returns void
  language plpgsql
@@ -685,20 +700,7 @@ grant execute on function public.fn_plan_desde_chat(uuid, uuid, text, timestampt
 
 -- ───────────────────── 4) Foto de perfil y listas de amigos ─────────────────────
 
--- La foto de p_owner tal como la ve quien pregunta: vacía si p_owner le ha bloqueado. Interna
--- (no se da a authenticated: sería una forma directa de preguntar «¿me ha bloqueado X?»).
-create or replace function public.fn_foto_visible(p_owner uuid, p_url text)
- returns text
- language sql
- stable security definer
- set search_path to 'public'
-as $$
-  select case when p_owner is not null and auth.uid() is not null
-                   and public.fn_bloqueado_por(p_owner, auth.uid()) then null
-              else p_url end;
-$$;
-revoke all on function public.fn_foto_visible(uuid, text) from public, anon, authenticated;
-grant execute on function public.fn_foto_visible(uuid, text) to service_role;
+-- (fn_foto_visible está en la sección 1: fn_chats_list ya la usa.)
 
 -- La vista pública de usuarios (la usan gastos, miembros del plan, álbum, llamadas y la cartera).
 create or replace view public.usuarios_public as
