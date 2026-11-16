@@ -209,10 +209,56 @@ export async function addChatMemberEndpoint(chatId: string, userId: string): Pro
   return (data ?? null) as ChatNotice;
 }
 
-export async function closePollEndpoint(mensajeId: number): Promise<void> {
+/** What closing or deciding a poll leaves: the poll's new texto and the hidden «poll_cerrada». */
+export type PollCierre = { poll_texto: string; aviso_id?: number; aviso_texto?: string; ya_cerrada?: boolean };
+
+export async function closePollEndpoint(mensajeId: number): Promise<PollCierre> {
   const supabase = createBrowserSupabaseClient();
-  const { error } = await supabase.rpc("fn_poll_close", { p_mensaje_id: mensajeId });
+  const { data, error } = await supabase.rpc("fn_poll_close", { p_mensaje_id: mensajeId });
   if (error) throw error;
+  return data as PollCierre;
+}
+
+export async function pollDecidirEndpoint(mensajeId: number, optionIndex: number): Promise<PollCierre> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_poll_decidir", { p_mensaje_id: mensajeId, p_option_index: optionIndex });
+  if (error) throw error;
+  return data as PollCierre;
+}
+
+/** «Reabrir para…» a tie while people are missing: votes kept, they get a notification. */
+export async function pollReabrirEndpoint(mensajeId: number): Promise<PollCierre> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_poll_reabrir", { p_mensaje_id: mensajeId });
+  if (error) throw error;
+  return data as PollCierre;
+}
+
+/** «Sortear» a tie once everybody voted: the server draws, once, for everybody. */
+export async function pollSortearEndpoint(mensajeId: number): Promise<PollCierre> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_poll_sortear", { p_mensaje_id: mensajeId });
+  if (error) throw error;
+  return data as PollCierre;
+}
+
+/** «Desempatar»: the new poll (or the one that already existed) and the tied poll's new texto. */
+export type PollDesempate = { mensaje_id: number; texto: string; poll_texto: string; ya_existia: boolean };
+
+export async function pollDesempatarEndpoint(mensajeId: number): Promise<PollDesempate> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_poll_desempatar", { p_mensaje_id: mensajeId });
+  if (error) throw error;
+  return data as PollDesempate;
+}
+
+export type PollVoto = { user_id: string; nombre: string; option_index: number };
+
+export async function pollVotosEndpoint(mensajeId: number): Promise<PollVoto[]> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_poll_votos", { p_mensaje_id: mensajeId });
+  if (error) throw error;
+  return (data ?? []) as PollVoto[];
 }
 
 export async function editMensajeEndpoint(mensajeId: number, texto: string): Promise<void> {
@@ -252,13 +298,17 @@ export async function getMyReaccionesEndpoint(
   return (data ?? []) as Array<{ mensaje_id: number; emoji: string }>;
 }
 
-export async function pollVoteEndpoint(mensajeId: number, optionIndex: number): Promise<void> {
+/** Voting can close the poll (everybody voted): then it brings what closing leaves. */
+export type PollVoteResult = { cerrada: boolean } & Partial<PollCierre>;
+
+export async function pollVoteEndpoint(mensajeId: number, optionIndex: number): Promise<PollVoteResult> {
   const supabase = createBrowserSupabaseClient();
-  const { error } = await supabase.rpc("fn_poll_vote", {
+  const { data, error } = await supabase.rpc("fn_poll_vote", {
     p_mensaje_id: mensajeId,
     p_option_index: optionIndex,
   });
   if (error) throw error;
+  return (data ?? { cerrada: false }) as PollVoteResult;
 }
 
 export async function pollGetVotesEndpoint(
