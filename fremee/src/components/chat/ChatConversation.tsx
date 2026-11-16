@@ -1947,9 +1947,33 @@ export function ChatConversation({
               replyText = JSON.stringify(proposal);
             }
           }
+        } else if (result.command && !planId && /^\/(plan|actividad)\b/i.test(result.command)) {
+          // ia-09: a chat without a plan makes plans, and anyone can: the create flow opens for
+          // whoever asked, filled with what @frimee understood (nothing is created until they confirm).
+          const [titulo, when, lugar] = result.command.replace(/^\/(plan|actividad)\s*/i, "").split("|").map((x) => x.trim());
+          const fecha = /^\d{4}-\d{2}-\d{2}/.test(when ?? "") ? when.slice(0, 10) : undefined;
+          closeOverlays();
+          setCreatePlan({ guarda: null, inicial: { titulo: titulo || undefined, fecha, lugar: lugar || undefined } });
+          replyText = "Te dejo el plan preparado: revisa los datos y créalo.";
+        } else if (result.command && planId && !isAdmin && /^\/(tarea|actividad)\b/i.test(result.command)) {
+          // ia-09: only the plan's admins add activities and tasks (as in the form): no card they
+          // cannot accept, and no «ya está en el plan».
+          const adminNames = chat.miembros
+            .filter((m) => chatInfo?.admins.includes(m.id) && m.id !== currentUserId)
+            .map((m) => m.nombre.split(" ")[0]);
+          const que = /^\/tarea/i.test(result.command) ? "crear tareas" : "añadir actividades al plan";
+          replyText = `Solo un admin del plan puede ${que}.${adminNames.length > 0 ? ` Pídeselo a ${adminNames.length > 1 ? `${adminNames.slice(0, -1).join(", ")} o ${adminNames[adminNames.length - 1]}` : adminNames[0]}.` : ""}`;
         } else if (result.command && /^\/(gasto|tarea|actividad)\b/i.test(result.command)) {
           const proposal = await buildProposal(result.command, replyText);
-          replyText = typeof proposal === "string" ? proposal : JSON.stringify(proposal);
+          // ia-09: the same proposal still pending (e.g. «perfecto, deja esta hora») → no second card.
+          const repetida = typeof proposal !== "string" && messages.some((m) => {
+            const mo = parseMoment(m.texto);
+            return mo?.type === "propuesta" && mo.estado === "pendiente" && mo.kind === proposal.kind
+              && mo.titulo.toLowerCase() === proposal.titulo.toLowerCase() && mo.detalle === proposal.detalle;
+          });
+          replyText = repetida
+            ? "Ya está propuesta arriba: acéptala en la tarjeta para guardarla."
+            : typeof proposal === "string" ? proposal : JSON.stringify(proposal);
         } else if (result.command) {
           const cmdResult = await handleCommand(result.command);
           if (cmdResult) replyText = cmdResult;
