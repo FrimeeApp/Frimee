@@ -268,6 +268,9 @@ export function ChatConversation({
   // Who I blocked: their group messages are covered, and in their 1 a 1 I cannot write.
   const { bloqueados, desbloquear } = useBloqueos();
   const [unblockError, setUnblockError] = useState<string | null>(null);
+  // Who I blocked, only in a 1 a 1 (null elsewhere): read inside the realtime handlers.
+  const bloqueadosDirectoRef = useRef<Set<string> | null>(null);
+  useEffect(() => { bloqueadosDirectoRef.current = chat.tipo === "DIRECTO" ? bloqueados : null; }, [bloqueados, chat.tipo]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -528,6 +531,9 @@ export function ChatConversation({
       .channel(topic)
       .on("broadcast", { event: "new_message" }, ({ payload }) => {
         const msg = payload as MensajeRow;
+        // The sender broadcasts it themselves: in a 1 a 1 with someone I blocked it must not show
+        // (the database already keeps it from me; in groups it is drawn covered).
+        if (bloqueadosDirectoRef.current?.has(msg.sender_id)) return;
         if (sentMsgIdsRef.current.has(msg.id)) {
           sentMsgIdsRef.current.delete(msg.id);
           return;

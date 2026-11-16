@@ -227,6 +227,9 @@ as $$
     c.nombre::text,
     c.foto::text,
     case
+      -- En grupos y planes, lo último de alguien a quien he bloqueado sale tapado, como en el chat.
+      when c.tipo <> 'DIRECTO' and uv.sender_id is not null and public.fn_bloqueado_por(auth.uid(), uv.sender_id)
+        then 'Mensaje de una persona bloqueada'
       when tapado.si then public.fn_mensaje_preview(uv.texto, uv.audio_url, uv.document_url, uv.document_name, uv.image_url, uv.image_type)
       when cm_me.vaciado_hasta is not null
            and not exists (select 1 from mensajes m where m.chat_id = c.id and m.id > cm_me.vaciado_hasta)
@@ -269,7 +272,7 @@ as $$
   left join plan p on p.id = c.plan_id and p.deleted_at is null
   -- Último mensaje que veo.
   left join lateral (
-    select m.texto, m.audio_url, m.document_url, m.document_name, m.image_url, m.image_type, m.created_at, m.id
+    select m.texto, m.audio_url, m.document_url, m.document_name, m.image_url, m.image_type, m.created_at, m.id, m.sender_id
       from mensajes m
      where m.chat_id = c.id
        and m.id > coalesce(cm_me.vaciado_hasta, 0)
