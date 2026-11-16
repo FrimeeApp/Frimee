@@ -5,7 +5,7 @@ import type { SubplanRow } from "@/services/api/endpoints/subplanes.endpoint";
 import { TIPOS_TRANSPORTE } from "@/services/api/endpoints/subplanes.endpoint";
 import { getGoogleMaps, loadGoogleMapsScript } from "@/lib/googleMaps";
 
-type Props = { subplanes: SubplanRow[] };
+type Props = { subplanes: SubplanRow[]; heightClassName?: string };
 type Coord = google.maps.LatLngLiteral;
 type GoogleMapsApi = typeof google.maps;
 type Point = { name: string; isDestination?: boolean; subplanIdx: number; coords: Coord | null };
@@ -109,7 +109,7 @@ function drawRoute(
   });
 }
 
-export default function TripOverviewMap({ subplanes }: Props) {
+export default function TripOverviewMap({ subplanes, heightClassName = "h-[600px]" }: Props) {
   const mapRef = useRef<HTMLDivElement>(null);
   const abortedRef = useRef(false);
   const [loading, setLoading] = useState(false);
@@ -240,7 +240,7 @@ export default function TripOverviewMap({ subplanes }: Props) {
 
   return (
     <div className="overflow-hidden rounded-card border border-app">
-      <div className="relative h-[600px] w-full bg-surface-inset">
+      <div className={`relative ${heightClassName} w-full bg-surface-inset`}>
         <div ref={mapRef} className={`absolute inset-0 ${loading ? "opacity-0" : "opacity-100"}`} />
         {loading && (
           <div className="absolute inset-0 flex items-center justify-center bg-surface-inset text-body-sm text-muted">
