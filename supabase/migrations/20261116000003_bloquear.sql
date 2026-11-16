@@ -106,7 +106,11 @@ create or replace function public.fn_trigger_mensaje_bloqueo_antes()
  set search_path to 'public'
 as $$
 begin
+  -- Momentos del sistema (JSON: el hito «Plan creado»…) y registros de llamada pasan: no son
+  -- mensajes que escribas tú, y bloquearlos rompería crear un plan desde ese 1 a 1.
   if new.sender_id is not null
+     and left(coalesce(new.texto, ''), 1) <> '{'
+     and coalesce(new.tipo, '') not like 'call\_%'
      and exists (select 1 from chat c where c.id = new.chat_id and c.tipo = 'DIRECTO')
      and exists (select 1 from chat_miembro cm
                    join bloqueos b on b.bloqueador_id = new.sender_id and b.bloqueado_id = cm.user_id
@@ -157,9 +161,9 @@ create trigger trg_mensaje_bloqueo_despues
 drop policy if exists mensajes_select on public.mensajes;
 create policy mensajes_select on public.mensajes for select using (
   exists (select 1 from public.chat_miembro
-           where chat_miembro.chat_id = mensajes.chat_id and chat_miembro.user_id = auth.uid())
+           where chat_miembro.chat_id = mensajes.chat_id and chat_miembro.user_id = (select auth.uid()))
   and not exists (select 1 from public.mensaje_oculto o
-                   where o.user_id = auth.uid() and o.mensaje_id = mensajes.id)
+                   where o.user_id = (select auth.uid()) and o.mensaje_id = mensajes.id)
 );
 
 -- Vista previa de un mensaje en la lista de chats (la misma que pone fn_mensaje_send).
@@ -228,7 +232,9 @@ as $$
     c.foto::text,
     case
       -- En grupos y planes, lo último de alguien a quien he bloqueado sale tapado, como en el chat.
+      -- (Solo mensajes normales: sus encuestas, gastos, avisos o llamadas se ven como siempre.)
       when c.tipo <> 'DIRECTO' and uv.sender_id is not null and public.fn_bloqueado_por(auth.uid(), uv.sender_id)
+           and left(coalesce(uv.texto, ''), 1) <> '{' and coalesce(uv.tipo, '') not like 'call\_%'
         then 'Mensaje de una persona bloqueada'
       when tapado.si then public.fn_mensaje_preview(uv.texto, uv.audio_url, uv.document_url, uv.document_name, uv.image_url, uv.image_type)
       when cm_me.vaciado_hasta is not null
@@ -272,7 +278,7 @@ as $$
   left join plan p on p.id = c.plan_id and p.deleted_at is null
   -- Último mensaje que veo.
   left join lateral (
-    select m.texto, m.audio_url, m.document_url, m.document_name, m.image_url, m.image_type, m.created_at, m.id, m.sender_id
+    select m.texto, m.audio_url, m.document_url, m.document_name, m.image_url, m.image_type, m.created_at, m.id, m.sender_id, m.tipo
       from mensajes m
      where m.chat_id = c.id
        and m.id > coalesce(cm_me.vaciado_hasta, 0)
@@ -281,11 +287,12 @@ as $$
      limit 1
   ) uv on true
   -- ¿Hay algo oculto para mí más nuevo que lo último que veo?
+  -- (Todo lo que hay por encima de lo último que veo, y de lo vaciado, está oculto para mí: así
+  -- usa el índice del chat y no recorre todos mis mensajes ocultos.)
   cross join lateral (
     select exists (
-      select 1 from mensaje_oculto o
-        join mensajes m on m.id = o.mensaje_id
-       where o.user_id = auth.uid() and m.chat_id = c.id and m.id > coalesce(uv.id, 0)
+      select 1 from mensajes m
+       where m.chat_id = c.id and m.id > greatest(coalesce(uv.id, 0), coalesce(cm_me.vaciado_hasta, 0))
     ) as si
   ) tapado
   where (c.tipo <> 'DIRECTO'
@@ -346,8 +353,9 @@ create trigger trg_notificacion_bloqueo
   for each row execute function public.fn_trigger_notificacion_bloqueo();
 
 -- ¿Esta llamada 1 a 1 es de alguien a quien p_yo ha bloqueado? Entonces a p_yo no le suena (ni push
--- ni en la app); a quien llama le sigue sonando hasta que caduca como perdida.
-create or replace function public.fn_llamada_tapada(p_chat_id uuid, p_iniciador uuid, p_yo uuid)
+-- ni en la app); a quien llama le sigue sonando hasta que caduca como perdida. Interna: con p_yo
+-- libre serviría para preguntar «¿me ha bloqueado X?».
+create or replace function public.fn_llamada_tapada_para(p_chat_id uuid, p_iniciador uuid, p_yo uuid)
  returns boolean
  language sql
  stable security definer
@@ -356,14 +364,28 @@ as $$
   select exists (select 1 from chat c where c.id = p_chat_id and c.tipo = 'DIRECTO')
      and public.fn_bloqueado_por(p_yo, p_iniciador);
 $$;
-revoke all on function public.fn_llamada_tapada(uuid, uuid, uuid) from public, anon;
-grant execute on function public.fn_llamada_tapada(uuid, uuid, uuid) to authenticated, service_role;
+revoke all on function public.fn_llamada_tapada_para(uuid, uuid, uuid) from public, anon, authenticated;
+grant execute on function public.fn_llamada_tapada_para(uuid, uuid, uuid) to service_role;
+
+-- La de la política: solo responde «¿he bloqueado YO a quien llama?» (eso ya lo sé, no revela nada).
+create or replace function public.fn_llamada_tapada(p_chat_id uuid, p_iniciador uuid)
+ returns boolean
+ language sql
+ stable security definer
+ set search_path to 'public'
+as $$
+  select public.fn_llamada_tapada_para(p_chat_id, p_iniciador, auth.uid());
+$$;
+revoke all on function public.fn_llamada_tapada(uuid, uuid) from public, anon;
+grant execute on function public.fn_llamada_tapada(uuid, uuid) to authenticated, service_role;
 
 drop policy if exists "llamadas: select" on public.llamadas;
 create policy "llamadas: select" on public.llamadas for select to authenticated using (
   public.is_chat_member(chat_id)
-  and not public.fn_llamada_tapada(chat_id, iniciado_por_user_id, auth.uid())
+  and not public.fn_llamada_tapada(chat_id, iniciado_por_user_id)
 );
+-- La primera versión de esta migración (aplicada en dev) la dejaba pública con tres argumentos.
+drop function if exists public.fn_llamada_tapada(uuid, uuid, uuid);
 
 create or replace function public.fn_trigger_call_push()
 returns trigger
@@ -385,7 +407,7 @@ begin
   -- 1 a 1 con quien ha bloqueado a quien llama: no se avisa a su móvil.
   if exists (select 1 from chat_miembro cm
               where cm.chat_id = new.chat_id and cm.user_id <> new.iniciado_por_user_id
-                and public.fn_llamada_tapada(new.chat_id, new.iniciado_por_user_id, cm.user_id)) then
+                and public.fn_llamada_tapada_para(new.chat_id, new.iniciado_por_user_id, cm.user_id)) then
     return new;
   end if;
 
@@ -481,7 +503,7 @@ begin
     raise exception 'No eres miembro de este chat' using errcode = '42501';
   end if;
   if public.fn_bloqueado_por(p_user_id, auth.uid()) then
-    raise exception 'No se ha podido añadir a esta persona' using errcode = '22023';
+    raise exception 'No se ha podido añadir' using errcode = '22023';
   end if;
 
   insert into chat_miembro (chat_id, user_id)
@@ -1023,4 +1045,103 @@ as $$
                         or (b.bloqueador_id = f.id and b.bloqueado_id = auth.uid()))
   order by coalesce(j.n, 0) desc, j.ultima desc nulls last, f.created_at desc, u.nombre
   limit least(greatest(coalesce(p_limit, 5), 1), 20);
+$$;
+
+-- fn_balances_for_plan (de 20261108000001_lock_definer_functions.sql)
+CREATE OR REPLACE FUNCTION public.fn_balances_for_plan(p_plan_id bigint)
+ RETURNS TABLE(liquidacion_id bigint, from_user_id uuid, from_nombre text, from_profile_image text, to_user_id uuid, to_nombre text, to_profile_image text, importe numeric)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+BEGIN
+  perform public.assert_allowed(coalesce(auth.role(), '') = 'service_role' or public.is_plan_member(p_plan_id));
+  RETURN QUERY
+  SELECT
+    l.id,
+    l.from_user_id,
+    COALESCE(uf.nombre, 'Desconocido')::text,
+    COALESCE(public.fn_foto_visible(uf.id, uf.profile_image), '')::text,
+    l.to_user_id,
+    COALESCE(ut.nombre, 'Desconocido')::text,
+    COALESCE(public.fn_foto_visible(ut.id, ut.profile_image), '')::text,
+    l.importe
+  FROM liquidaciones l
+  LEFT JOIN usuarios uf ON uf.id = l.from_user_id
+  LEFT JOIN usuarios ut ON ut.id = l.to_user_id
+  WHERE l.plan_id = p_plan_id
+    AND l.estado::text = 'PENDIENTE'
+    AND l.importe > 0.01
+    AND EXISTS (SELECT 1 FROM plan_usuarios pu WHERE pu.plan_id = p_plan_id AND pu.user_id = l.from_user_id)
+    AND EXISTS (SELECT 1 FROM plan_usuarios pu WHERE pu.plan_id = p_plan_id AND pu.user_id = l.to_user_id);
+END;
+$function$;
+
+-- fn_get_plan_by_join_code (de 20261026000000_baseline.sql)
+CREATE OR REPLACE FUNCTION public.fn_get_plan_by_join_code(p_join_code text) RETURNS json
+    LANGUAGE plpgsql SECURITY DEFINER
+    AS $$
+DECLARE
+  v_result json;
+BEGIN
+  SELECT row_to_json(r) INTO v_result
+  FROM (
+    SELECT
+      p.id, p.created_at, p.titulo, p.descripcion, p.visibilidad,
+      p.inicio_at, p.fin_at, p.all_day, p.ubicacion_nombre, p.foto_portada,
+      p.owner_user_id, p.creado_por_user_id, p.join_code,
+      u.nombre AS creador_nombre, public.fn_foto_visible(u.id, u.profile_image) AS creador_profile_image
+    FROM planes p
+    LEFT JOIN usuarios u ON u.id = p.creado_por_user_id
+    WHERE p.join_code = p_join_code
+      AND p.deleted_at IS NULL
+      AND p.estado = 'ACTIVO'
+    LIMIT 1
+  ) r;
+  RETURN v_result;
+END;
+$$;
+
+-- fn_join_plan_by_code (de 20261026000000_baseline.sql)
+CREATE OR REPLACE FUNCTION public.fn_join_plan_by_code(p_join_code text, p_preview_only boolean DEFAULT false) RETURNS json
+    LANGUAGE plpgsql SECURITY DEFINER
+    AS $$
+DECLARE
+  v_plan_id bigint;
+  v_plan json;
+  v_user_id uuid := auth.uid();
+  v_already_member boolean := false;
+BEGIN
+  SELECT p.id INTO v_plan_id
+  FROM plan p
+  WHERE p.join_code = p_join_code AND p.deleted_at IS NULL AND p.estado = 'ACTIVO';
+
+  IF v_plan_id IS NULL THEN
+    RETURN json_build_object('error', 'not_found');
+  END IF;
+
+  SELECT EXISTS (
+    SELECT 1 FROM plan_usuarios
+    WHERE plan_id = v_plan_id AND user_id = v_user_id
+  ) INTO v_already_member;
+
+  IF NOT p_preview_only AND NOT v_already_member THEN
+    INSERT INTO plan_usuarios (plan_id, user_id, rol, estado)
+    VALUES (v_plan_id, v_user_id, 'PARTICIPANTE', 'PARTICIPA')
+    ON CONFLICT (plan_id, user_id) DO NOTHING;
+  END IF;
+
+  SELECT row_to_json(r) INTO v_plan
+  FROM (
+    SELECT p.id, p.titulo, p.descripcion, p.visibilidad,
+      p.inicio_at, p.fin_at, p.all_day, p.ubicacion_nombre,
+      p.foto_portada, p.owner_user_id, p.creado_por_user_id, p.join_code,
+      u.nombre AS creador_nombre, public.fn_foto_visible(u.id, u.profile_image) AS creador_profile_image
+    FROM plan p
+    LEFT JOIN usuarios u ON u.id = p.creado_por_user_id
+    WHERE p.id = v_plan_id
+  ) r;
+
+  RETURN json_build_object('plan_id', v_plan_id, 'plan', v_plan, 'already_member', v_already_member);
+END;
 $$;

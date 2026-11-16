@@ -36,7 +36,6 @@ const DB_MESSAGES = [
   "No eres miembro de este chat",
   "Solo quien creó el plan puede eliminarlo",
   "El plan tiene más personas: no se puede eliminar",
-  "No se ha podido añadir a esta persona",
 ];
 
 /** fn_plan_leave answers with a code instead of failing. */
@@ -761,7 +760,7 @@ function PeopleSection({ chat, members, info, currentUserId, isPlan, canInvite, 
                 open={menuFor === m.id}
                 onToggle={(o) => setMenuFor(o ? m.id : null)}
                 onProfile={() => { setMenuFor(null); onProfile(m); }}
-                onWriteTo={onWriteTo ? () => { setMenuFor(null); onWriteTo(m); } : undefined}
+                onWriteTo={onWriteTo && !bloqueados.has(m.id) ? () => { setMenuFor(null); onWriteTo(m); } : undefined}
                 onRemove={chat.tipo === "GRUPO" && iAmAdmin ? () => { setMenuFor(null); onRemove(m); } : undefined}
                 blocked={bloqueados.has(m.id)}
                 onBlock={() => { setMenuFor(null); onBlock(m); }}
