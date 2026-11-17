@@ -150,6 +150,10 @@ function CalendarPageInner() {
       hasLoadedOnceRef.current = false;
     }
 
+    // A plan opens as a layer over this page, which stays mounted underneath: reload the list when the
+    // layer closes, or a plan just created would not show up until the page is refreshed.
+    if (!onCalendar) return;
+
     let cancelled = false;
 
     const load = async () => {
@@ -193,7 +197,25 @@ function CalendarPageInner() {
     return () => {
       cancelled = true;
     };
-  }, [authLoading, user?.id, reloadNonce]);
+  }, [authLoading, user?.id, reloadNonce, onCalendar]);
+
+  // A phone browser restores this page from memory when coming back (back button, tab switch):
+  // nothing remounts, so ask for the list again.
+  useEffect(() => {
+    const refresh = () => setReloadNonce((n) => n + 1);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) refresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("pageshow", onPageShow);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("pageshow", onPageShow);
+    };
+  }, []);
 
   const runGoogleSync = useCallback(async () => {
     if (!user?.id || syncingGoogle) return;
