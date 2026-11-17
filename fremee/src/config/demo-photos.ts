@@ -1,5 +1,5 @@
 /**
- * Photos of the guest demo trip (public/demo/lisboa), from Wikimedia Commons.
+ * Photos of the guest demo trips (public/demo/lisboa and public/demo/roma), from Wikimedia Commons.
  * Resized and converted to WebP (the miradouro one also cropped to 3:2); CC BY-SA
  * adaptations keep the same licence. The album shows these credits next to them.
  * Real trips only ever show photos their members uploaded.
@@ -15,7 +15,9 @@ export type DemoPhotoCredit = {
 const BY_2 = "https://creativecommons.org/licenses/by/2.0/";
 const BY_4 = "https://creativecommons.org/licenses/by/4.0/";
 const BY_SA_2 = "https://creativecommons.org/licenses/by-sa/2.0/";
+const BY_SA_3 = "https://creativecommons.org/licenses/by-sa/3.0/";
 const BY_SA_4 = "https://creativecommons.org/licenses/by-sa/4.0/";
+const CC0 = "https://creativecommons.org/publicdomain/zero/1.0/";
 
 export const DEMO_PHOTO_CREDITS: Record<string, DemoPhotoCredit> = {
   "/demo/lisboa/hotel.webp": {
@@ -95,5 +97,41 @@ export const DEMO_PHOTO_CREDITS: Record<string, DemoPhotoCredit> = {
     licencia: "CC BY 4.0",
     licenciaUrl: BY_4,
     fuente: "https://commons.wikimedia.org/wiki/File:Pal%C3%A1cio_Nacional_da_Pena,_Sintra,_Portugal,_20250606_1155_0102.jpg",
+  },
+  "/demo/roma/coliseo.webp": {
+    autor: "Wilfredor",
+    licencia: "CC0",
+    licenciaUrl: CC0,
+    fuente: "https://commons.wikimedia.org/wiki/File:Colosseum_of_Rome_and_Roman_forum.jpg",
+  },
+  "/demo/roma/trevi.webp": {
+    autor: "Diego Delso",
+    licencia: "CC BY-SA 4.0",
+    licenciaUrl: BY_SA_4,
+    fuente: "https://commons.wikimedia.org/wiki/File:Fuente_de_Trevi,_Roma,_Italia,_2022-09-15,_DD_02.jpg",
+  },
+  "/demo/roma/san-pedro.webp": {
+    autor: "Diliff",
+    licencia: "CC BY-SA 3.0",
+    licenciaUrl: BY_SA_3,
+    fuente: "https://commons.wikimedia.org/wiki/File:St_Peter%27s_Square,_Vatican_City_-_April_2007.jpg",
+  },
+  "/demo/roma/trastevere.webp": {
+    autor: "Krzysztof Golik",
+    licencia: "CC BY-SA 4.0",
+    licenciaUrl: BY_SA_4,
+    fuente: "https://commons.wikimedia.org/wiki/File:Santa_Maria_in_Trastevere_church_in_Rome_(13).jpg",
+  },
+  "/demo/roma/navona.webp": {
+    autor: "Dietmar Rabich",
+    licencia: "CC BY-SA 4.0",
+    licenciaUrl: BY_SA_4,
+    fuente: "https://commons.wikimedia.org/wiki/File:Rome_(Italy),_Piazza_Navona_--_2013_--_4418.jpg",
+  },
+  "/demo/roma/escalinata.webp": {
+    autor: "Diego Delso",
+    licencia: "CC BY-SA 4.0",
+    licenciaUrl: BY_SA_4,
+    fuente: "https://commons.wikimedia.org/wiki/File:Escalinata_de_la_plaza_de_Espa%C3%B1a,_Roma,_Italia,_2022-09-14,_DD_21.jpg",
   },
 };
