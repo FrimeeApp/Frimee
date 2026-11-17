@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import { Maximize2, X } from "lucide-react";
 import type { SubplanRow } from "@/services/api/endpoints/subplanes.endpoint";
 import { TIPOS_TRANSPORTE } from "@/services/api/endpoints/subplanes.endpoint";
 import { getGoogleMaps, loadGoogleMapsScript } from "@/lib/googleMaps";
@@ -114,6 +115,9 @@ export default function TripOverviewMap({ subplanes, heightClassName = "h-[600px
   const abortedRef = useRef(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  const mapObjRef = useRef<google.maps.Map | null>(null);
+  const focusRef = useRef<google.maps.LatLngBounds | null>(null);
 
   const days = [...new Set(subplanes.filter(s => s.ubicacion_nombre).map(s => isoDateOnly(s.inicio_at)))].sort();
   const hasPoints = days.length > 0;
@@ -140,6 +144,9 @@ export default function TripOverviewMap({ subplanes, heightClassName = "h-[600px
         styles: darkMapStyles,
       });
       const bounds = new maps.LatLngBounds();
+      // The view frames the stops at the destination: flights and boats (and where they leave
+      // from) would pull it out to the whole country. Only a trip of just transport uses them.
+      const focus = new maps.LatLngBounds();
 
       for (let di = 0; di < days.length; di++) {
         const date = days[di];
@@ -163,6 +170,8 @@ export default function TripOverviewMap({ subplanes, heightClassName = "h-[600px
         coords.forEach((coord, i) => {
           if (!coord) return;
           bounds.extend(coord);
+          const stop = items[points[i].subplanIdx];
+          if (!points[i].isDestination && !TIPOS_TRANSPORTE.includes(stop?.tipo)) focus.extend(coord);
           new maps.Marker({
             position: coord,
             map,
@@ -207,8 +216,11 @@ export default function TripOverviewMap({ subplanes, heightClassName = "h-[600px
       }
 
       if (abortedRef.current) return;
-      if (!bounds.isEmpty()) {
-        map.fitBounds(bounds, 48);
+      const view = focus.isEmpty() ? bounds : focus;
+      mapObjRef.current = map;
+      focusRef.current = view.isEmpty() ? null : view;
+      if (!view.isEmpty()) {
+        map.fitBounds(view, 48);
         await waitForMapIdle(map);
       }
       if (abortedRef.current) return;
@@ -230,6 +242,17 @@ export default function TripOverviewMap({ subplanes, heightClassName = "h-[600px
     return () => { abortedRef.current = true; };
   }, [renderMap]);
 
+  // Full screen: the same map grows over the page; it frames the destination again at its new size.
+  useEffect(() => {
+    const map = mapObjRef.current;
+    const view = focusRef.current;
+    if (map && view) requestAnimationFrame(() => map.fitBounds(view, 48));
+    if (!expanded) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setExpanded(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [expanded]);
+
   if (!hasPoints) {
     return (
       <div className="flex h-[400px] items-center justify-center rounded-card border border-app bg-surface-inset text-body-sm text-muted">
@@ -239,8 +262,8 @@ export default function TripOverviewMap({ subplanes, heightClassName = "h-[600px
   }
 
   return (
-    <div className="overflow-hidden rounded-card border border-app">
-      <div className={`relative ${heightClassName} w-full bg-surface-inset`}>
+    <div className={expanded ? "fixed inset-0 z-[85] bg-app" : "overflow-hidden rounded-card border border-app"}>
+      <div className={`relative ${expanded ? "h-full" : heightClassName} w-full bg-surface-inset`}>
         <div ref={mapRef} className={`absolute inset-0 ${loading ? "opacity-0" : "opacity-100"}`} />
         {loading && (
           <div className="absolute inset-0 flex items-center justify-center bg-surface-inset text-body-sm text-muted">
@@ -251,6 +274,17 @@ export default function TripOverviewMap({ subplanes, heightClassName = "h-[600px
           <div className="absolute inset-0 flex items-center justify-center bg-surface-inset text-body-sm text-[var(--error)]">
             {error}
           </div>
+        )}
+        {!loading && !error && (
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            className={`absolute z-10 flex items-center justify-center rounded-full border border-white/12 bg-black/58 text-white shadow-[0_8px_20px_rgba(0,0,0,0.34)] backdrop-blur-sm transition-transform hover:scale-[1.04] hover:bg-black/66 ${expanded ? "right-[max(var(--space-3),env(safe-area-inset-right))] top-[calc(env(safe-area-inset-top)+var(--space-3))] size-[38px]" : "right-3 top-3 size-[34px]"}`}
+            title={expanded ? "Cerrar pantalla completa" : "Ver mapa en pantalla completa"}
+            aria-label={expanded ? "Cerrar pantalla completa" : "Ver mapa en pantalla completa"}
+          >
+            {expanded ? <X className="size-[18px]" strokeWidth={1.9} /> : <Maximize2 className="size-[16px]" strokeWidth={1.9} />}
+          </button>
         )}
         {days.length > 1 && !loading && (
           <div className="absolute bottom-3 left-3 flex flex-col gap-1 rounded-[8px] bg-[#1a1a2e]/90 px-3 py-2 backdrop-blur-sm">
