@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { usePathname } from "next/navigation";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { useAuth } from "@/providers/AuthProvider";
 import { Input } from "@/components/ui/Input";
@@ -19,8 +18,6 @@ type Stage = "guest" | "pending_email" | "pending_password";
  */
 export function GuestBanner() {
   const { user } = useAuth();
-  // «Mis planes» shows its own notice under the title (hideable), so the pill would repeat it.
-  const onMisPlanes = usePathname() === "/calendar";
 
   const stage: Stage | null = !user
     ? null
@@ -74,7 +71,8 @@ export function GuestBanner() {
 
   return (
     <>
-      {!(onMisPlanes && stage === "guest") && (
+      {/* Plain guest: only in the profile menu (desktop) and on their profile (phones). */}
+      {stage !== "guest" && (
         <>
           {/* Phones: in the page flow, so it pushes the screen down instead of covering its header.
               From md it floats over the top, where the layout leaves room for it. */}

@@ -8,7 +8,7 @@ import { buildHomeSections } from "./homeSections";
 import { CoverCard, FinishedLink, HeroBlock, LaterSpine, LaterTile, NowBlock, type OpenPlan } from "./blocks";
 import { PinnedStack } from "./PinnedStack";
 import { MiniMonth, TeToca } from "./side";
-import { AfterCard, CreateJoinFab, CreateJoinSheet, EmptyHome, GuestNotice } from "./actions";
+import { AfterCard, CreateJoinFab, CreateJoinSheet, EmptyHome } from "./actions";
 import { FILL_BTN, FOCUS, GHOST_BTN, LiveDot, SERIF, SectionTitle, TEXT_BTN } from "./pieces";
 
 type Props = {
@@ -27,7 +27,7 @@ type Props = {
 };
 
 export function MisPlanesHome(props: Props) {
-  const { plans, inicio, pinnedIds, onTogglePin, onOpen, onCreate, onOpenCalendar, onOpenAll, onOpenInvitations, userId, isGuest } = props;
+  const { plans, inicio, pinnedIds, onTogglePin, onOpen, onCreate, onOpenCalendar, onOpenAll, onOpenInvitations, userId } = props;
   const sections = useMemo(() => buildHomeSections(plans, pinnedIds), [plans, pinnedIds]);
   const extras = useMemo(() => new Map((inicio?.planes ?? []).map((e) => [e.plan_id, e])), [inicio]);
   const [sheet, setSheet] = useState<null | "menu" | "join">(null);
@@ -76,7 +76,6 @@ export function MisPlanesHome(props: Props) {
           <CalendarDays size={22} aria-hidden />
         </button>
       </header>
-      {isGuest && <GuestNotice />}
       {empty ? (
         <EmptyHome onCreate={onCreate} onJoin={() => setSheet("join")} onOpenPlan={(id) => onOpen(id)} />
       ) : (
@@ -177,11 +176,6 @@ export function MisPlanesHome(props: Props) {
           Nuevo plan
         </button>
       </header>
-      {isGuest && (
-        <div className="mt-4 max-w-[560px]">
-          <GuestNotice />
-        </div>
-      )}
       {empty ? (
         <EmptyHome desktop onCreate={onCreate} onJoin={() => setSheet("join")} onOpenPlan={(id) => onOpen(id)} />
       ) : (

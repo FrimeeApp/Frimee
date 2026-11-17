@@ -882,8 +882,8 @@ export function ChatConversation({
     const g = sugerencias[m.id]?.gasto;
     return g?.es_gasto && g.importe ? { titulo: g.concepto ?? "", importe: g.importe, pagador: m.sender_id } : null;
   };
-  // In a plan's chat, its admins; in a chat without a plan, «¿Dónde la guardo?» (each plan checks its role).
-  const canPlan = planId ? Boolean(isAdmin) : true;
+  // In a plan's chat, any member adds to the plan; in a chat without a plan, «¿Dónde la guardo?».
+  const canPlan = true;
   // A chat without a plan only makes plans (activities are talked about in the plan's chat), and a
   // message a plan was already made from loses its diamond for everyone («Plan creado» links to it).
   // The message a plan was made from is sealed for everyone: filled diamond, «En «X» · Abrir».
@@ -1955,13 +1955,13 @@ export function ChatConversation({
           closeOverlays();
           setCreatePlan({ guarda: null, inicial: { titulo: titulo || undefined, fecha, lugar: lugar || undefined } });
           replyText = "Te dejo el plan preparado: revisa los datos y créalo.";
-        } else if (result.command && planId && !isAdmin && /^\/(tarea|actividad)\b/i.test(result.command)) {
-          // ia-09: only the plan's admins add activities and tasks (as in the form): no card they
+        } else if (result.command && planId && !isAdmin && /^\/tarea\b/i.test(result.command)) {
+          // ia-09: only the plan's admins create tasks (activities: any member): no card they
           // cannot accept, and no «ya está en el plan».
           const adminNames = chat.miembros
             .filter((m) => chatInfo?.admins.includes(m.id) && m.id !== currentUserId)
             .map((m) => m.nombre.split(" ")[0]);
-          const que = /^\/tarea/i.test(result.command) ? "crear tareas" : "añadir actividades al plan";
+          const que = "crear tareas";
           replyText = `Solo un admin del plan puede ${que}.${adminNames.length > 0 ? ` Pídeselo a ${adminNames.length > 1 ? `${adminNames.slice(0, -1).join(", ")} o ${adminNames[adminNames.length - 1]}` : adminNames[0]}.` : ""}`;
         } else if (result.command && /^\/(gasto|tarea|actividad)\b/i.test(result.command)) {
           const proposal = await buildProposal(result.command, replyText);
