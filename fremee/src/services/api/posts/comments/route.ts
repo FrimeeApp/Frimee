@@ -13,6 +13,7 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "@/services/firebase/firestore";
+import { ensureFirebaseAuth } from "@/services/firebase/auth";
 
 type CreateCommentInput = {
   planId: number;
@@ -146,6 +147,7 @@ async function listCommentsInternal(params: {
 const MAX_COMMENT_LENGTH = 1000;
 
 export async function createCommentRoute(input: CreateCommentInput): Promise<CreateCommentResult> {
+  await ensureFirebaseAuth();
   const content = input.content.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "").trim().slice(0, MAX_COMMENT_LENGTH);
   if (!content) {
     throw new Error("El comentario no puede estar vacio");
@@ -167,6 +169,7 @@ export async function createCommentRoute(input: CreateCommentInput): Promise<Cre
 }
 
 export async function toggleCommentLikeRoute(input: ToggleCommentLikeInput): Promise<ToggleCommentLikeResult> {
+  await ensureFirebaseAuth();
   const commentRef = doc(db, "posts", getPostId(input.planId), "comments", input.commentId);
   const likeRef = doc(db, "posts", getPostId(input.planId), "comments", input.commentId, "likes", input.userId);
 
@@ -204,6 +207,7 @@ export async function getTopCommentForPlanRoute(params: {
   planId: number;
   userId?: string;
 }): Promise<TopCommentDto | null> {
+  await ensureFirebaseAuth();
   return getTopCommentInternal(params.planId, params.userId);
 }
 
@@ -211,6 +215,7 @@ export async function listTopCommentsForPlansRoute(params: {
   planIds: number[];
   userId?: string;
 }): Promise<{ topCommentsByPlanId: Record<number, TopCommentDto | null> }> {
+  await ensureFirebaseAuth();
   const uniquePlanIds = [...new Set(params.planIds)].filter(
     (planId) => Number.isInteger(planId) && planId > 0,
   );
@@ -235,6 +240,7 @@ export async function listCommentsForPlanRoute(params: {
   userId?: string;
   limit?: number;
 }): Promise<{ comments: CommentDto[] }> {
+  await ensureFirebaseAuth();
   const safeLimit = Number.isFinite(params.limit) ? Math.max(1, Math.min(100, Number(params.limit))) : 30;
   const comments = await listCommentsInternal({
     planId: params.planId,
@@ -248,6 +254,7 @@ export async function deleteCommentRoute(params: {
   planId: number;
   commentId: string;
 }): Promise<void> {
+  await ensureFirebaseAuth();
   const commentRef = doc(db, "posts", getPostId(params.planId), "comments", params.commentId);
   await deleteDoc(commentRef);
 }
@@ -257,6 +264,7 @@ export async function listPreviewCommentsForPlansRoute(params: {
   userId?: string;
   limitPerPlan?: number;
 }): Promise<{ previewCommentsByPlanId: Record<number, CommentDto[]> }> {
+  await ensureFirebaseAuth();
   const uniquePlanIds = [...new Set(params.planIds)].filter(
     (planId) => Number.isInteger(planId) && planId > 0,
   );

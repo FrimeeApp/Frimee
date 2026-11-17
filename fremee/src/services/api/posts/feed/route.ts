@@ -1,6 +1,7 @@
 import { collection, getDocs, limit, orderBy, query, where } from "firebase/firestore";
 import type { ParticipantsSnapshot } from "@/services/api/dtos/plan.dto";
 import { db } from "@/services/firebase/firestore";
+import { ensureFirebaseAuth } from "@/services/firebase/auth";
 
 type FeedPostDoc = {
   planId?: number;
@@ -65,6 +66,7 @@ export async function listPublishedPostPlanIdsRoute(params: { limit: number }): 
 }
 
 export async function listPublishedPostPlanIdsRouteEnabled(params: { limit: number }): Promise<FeedPostEntry[]> {
+  await ensureFirebaseAuth();
   const postsRef = collection(db, "posts");
   const q = query(
     postsRef,

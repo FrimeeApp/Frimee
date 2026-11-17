@@ -1,5 +1,6 @@
 import { ref, uploadBytes, uploadString, getDownloadURL } from "firebase/storage";
 import { storage } from "./storage";
+import { ensureFirebaseAuth } from "./auth";
 
 // ── WebP conversion ───────────────────────────────────────────────────────────
 
@@ -52,6 +53,7 @@ export async function uploadPhotoDataUrl(params: {
   dataUrl: string;
   userId: string;
 }) {
+  await ensureFirebaseAuth();
   const webpDataUrl = await dataUrlToWebP(params.dataUrl);
   const filePath = `photos/${params.userId}/${Date.now()}.webp`;
   const fileRef = ref(storage, filePath);
@@ -61,6 +63,7 @@ export async function uploadPhotoDataUrl(params: {
 }
 
 export async function uploadPlanCoverFile(params: { file: File; userId: string }) {
+  await ensureFirebaseAuth();
   const webp = await toWebP(params.file, 0.92);
   const filePath = `plans/${params.userId}/${Date.now()}.webp`;
   const fileRef = ref(storage, filePath);
@@ -70,6 +73,7 @@ export async function uploadPlanCoverFile(params: { file: File; userId: string }
 }
 
 export async function uploadDocumentFile(params: { file: File; userId: string }) {
+  await ensureFirebaseAuth();
   const filePath = `documentos/${params.userId}/${Date.now()}_${params.file.name}`;
   const fileRef = ref(storage, filePath);
   await uploadBytes(fileRef, params.file, { contentType: params.file.type || "application/octet-stream" });
@@ -78,6 +82,7 @@ export async function uploadDocumentFile(params: { file: File; userId: string })
 }
 
 export async function uploadMediaFile(params: { file: File; userId: string }) {
+  await ensureFirebaseAuth();
   const isImage = params.file.type.startsWith("image/");
   let blob: Blob = params.file;
   let ext = params.file.name.split(".").pop()?.toLowerCase() ?? "bin";
@@ -93,6 +98,7 @@ export async function uploadMediaFile(params: { file: File; userId: string }) {
 }
 
 export async function uploadAudioFile(params: { file: File; userId: string }) {
+  await ensureFirebaseAuth();
   const ext = params.file.name.split(".").pop()?.toLowerCase() ?? "mp3";
   const filePath = `audio/${params.userId}/${Date.now()}.${ext}`;
   const fileRef = ref(storage, filePath);
@@ -102,6 +108,7 @@ export async function uploadAudioFile(params: { file: File; userId: string }) {
 }
 
 export async function uploadPlanAlbumFile(params: { file: File; planId: number }) {
+  await ensureFirebaseAuth();
   const webp = await toWebP(params.file, 0.92);
   const filePath = `plan-albums/${params.planId}/${Date.now()}.webp`;
   const fileRef = ref(storage, filePath);
@@ -111,6 +118,7 @@ export async function uploadPlanAlbumFile(params: { file: File; planId: number }
 }
 
 export async function uploadAudioBlob(params: { blob: Blob; userId: string }) {
+  await ensureFirebaseAuth();
   const ext = params.blob.type.includes("ogg") ? "ogg" : "webm";
   const filePath = `audio/${params.userId}/${Date.now()}.${ext}`;
   const fileRef = ref(storage, filePath);
