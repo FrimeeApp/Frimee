@@ -10,6 +10,7 @@ import CreatePlanModal, { type CreatePlanPayload } from "@/components/plans/moda
 import { useCreatePlan } from "@/hooks/useCreatePlan";
 import AddGastoSheet from "@/components/plans/modals/AddGastoSheet";
 import { listUserRelatedPlans } from "@/services/api/repositories/plans.repository";
+import { listChats } from "@/services/api/repositories/chat.repository";
 import type { FeedPlanItemDto } from "@/services/api/dtos/plan.dto";
 import { countNotificacionesNoLeidas } from "@/services/api/repositories/notifications.repository";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
@@ -123,6 +124,7 @@ export default function AppSidebar({ onCreatePlan, onCreateGroup, hideMobileNav,
   const [notifPanelOpen, setNotifPanelOpen] = useState(false);
   const [searchPopoverOpen, setSearchPopoverOpen] = useState(false);
   const [unreadNotifs, setUnreadNotifs] = useState(0);
+  const [unreadMessages, setUnreadMessages] = useState(0);
   const searchPanelRef = useRef<HTMLDivElement>(null);
   const mobileFabRef = useRef<HTMLDivElement>(null);
   const desktopCreateRef = useRef<HTMLButtonElement>(null);
@@ -184,6 +186,39 @@ export default function AppSidebar({ onCreatePlan, onCreateGroup, hideMobileNav,
   useEffect(() => {
     void countNotificacionesNoLeidas().then(setUnreadNotifs).catch(() => setUnreadNotifs(0));
   }, []);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setUnreadMessages(0);
+      return;
+    }
+    let cancelled = false;
+    const refreshUnreadMessages = async () => {
+      try {
+        const chats = await listChats();
+        const total = chats.reduce((sum, chat) => sum + Math.max(0, Number(chat.unread_count) || 0), 0);
+        if (!cancelled) setUnreadMessages(total);
+      } catch {
+        // Keep the last known count if a temporary network error occurs.
+      }
+    };
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") void refreshUnreadMessages();
+    };
+
+    void refreshUnreadMessages();
+    const interval = window.setInterval(() => void refreshUnreadMessages(), 45_000);
+    window.addEventListener("focus", refreshWhenVisible);
+    window.addEventListener("frimee:chat-unread-changed", refreshWhenVisible);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refreshWhenVisible);
+      window.removeEventListener("frimee:chat-unread-changed", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, [user?.id, pathname]);
 
   useEffect(() => {
     const handleNotificationsRead = () => setUnreadNotifs(0);
@@ -405,7 +440,7 @@ export default function AppSidebar({ onCreatePlan, onCreateGroup, hideMobileNav,
         <div className="relative flex w-[102px] shrink-0 items-center justify-center">
           {icon({ className: "size-[26px]", strokeWidth: NAV_ICON_STROKE, active })}
           {badge ? (
-            <span className="absolute top-0 right-[38px] flex size-[16px] items-center justify-center rounded-full bg-blue-500 text-[9px] font-[var(--fw-semibold)] leading-none text-white">
+            <span className="absolute top-0 right-[38px] flex h-[16px] min-w-[16px] items-center justify-center rounded-full bg-blue-500 px-[3px] text-[9px] font-[var(--fw-semibold)] leading-none text-white">
               {badge}
             </span>
           ) : null}
@@ -429,6 +464,7 @@ export default function AppSidebar({ onCreatePlan, onCreateGroup, hideMobileNav,
   const notificationsActive = notifPanelOpen || isActive("/notifications");
   const profileActive = pathname.startsWith("/profile");
   const notificationBadge = unreadNotifs > 0 ? (unreadNotifs > 9 ? "9+" : unreadNotifs) : null;
+  const unreadMessageBadge = unreadMessages > 0 ? (unreadMessages > 9 ? "9+" : unreadMessages) : null;
   const showMobileNotificationsButton = !hideMobileNav && !modalOpen && !searchActive && !profileActive && !notificationsActive;
   const mobileNavStyle: MobileNavStyle = { "--mobile-nav-base-height": "clamp(56px, 8dvh, 64px)" };
 
@@ -446,10 +482,15 @@ export default function AppSidebar({ onCreatePlan, onCreateGroup, hideMobileNav,
             <Link
               key={item.key}
               href={item.href}
-              aria-label={item.label}
-              className="text-app transition-opacity duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] active:opacity-[var(--disabled-opacity)]"
+              aria-label={item.key === "send" && unreadMessages > 0 ? `Mensajes, ${unreadMessages} sin leer` : item.label}
+              className="relative text-app transition-opacity duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] active:opacity-[var(--disabled-opacity)]"
             >
               <item.icon className="size-[clamp(25px,6.4vw,28px)]" strokeWidth={NAV_ICON_STROKE} active={isActive(item.href)} />
+              {item.key === "send" && unreadMessageBadge ? (
+                <span aria-hidden className="absolute -right-[7px] -top-[4px] flex h-[16px] min-w-[16px] items-center justify-center rounded-full bg-[var(--primary)] px-[3px] text-[9px] font-[var(--fw-semibold)] leading-none text-[var(--contrast)]">
+                  {unreadMessageBadge}
+                </span>
+              ) : null}
             </Link>
           ))}
           <Link
@@ -748,6 +789,7 @@ export default function AppSidebar({ onCreatePlan, onCreateGroup, hideMobileNav,
                 icon: item.icon,
                 href: item.href,
                 active: isActive(item.href),
+                badge: item.key === "send" ? unreadMessageBadge : null,
               })
             )}
             {renderSidebarRow({

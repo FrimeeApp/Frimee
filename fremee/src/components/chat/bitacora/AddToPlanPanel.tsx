@@ -382,12 +382,12 @@ function DesktopPopover({ anchor, onClose, children }: { anchor: { x: number; y:
   }, [onClose]);
   return createPortal(
     <>
-      <div className="fixed inset-0 z-[99]" onClick={onClose} aria-hidden />
+      <div className="fixed inset-0 z-[1299]" onClick={onClose} aria-hidden />
       <div
         ref={ref}
         role="dialog"
         aria-label="Añadir al plan"
-        className="fixed z-[100] rounded-[8px] border border-app bg-[var(--bg)] p-[16px] shadow-[0_12px_32px_rgba(0,0,0,0.5)]"
+        className="fixed z-[1300] rounded-[8px] border border-app bg-[var(--bg)] p-[16px] shadow-[0_12px_32px_rgba(0,0,0,0.5)]"
         style={{ left: 0, top: 0, width: W, visibility: "hidden" }}
         onClick={(e) => e.stopPropagation()}
       >

@@ -127,9 +127,9 @@ export function MessageActions(props: MessageActionsProps) {
     return (
       <Drawer.Root open onOpenChange={(o) => { if (!o) onClose(); }}>
         <Drawer.Portal>
-          <Drawer.Overlay className="fixed inset-0 z-[100] bg-black/50" />
+          <Drawer.Overlay className="fixed inset-0 z-[1300] bg-black/50" />
           <Drawer.Content
-            className="fixed inset-x-0 bottom-0 z-[101] flex max-h-[85dvh] flex-col rounded-t-[16px] border-t border-app bg-[var(--bg)] pb-[env(safe-area-inset-bottom)] outline-none"
+            className="fixed inset-x-0 bottom-0 z-[1301] flex max-h-[85dvh] flex-col rounded-t-[16px] border-t border-app bg-[var(--bg)] pb-[env(safe-area-inset-bottom)] outline-none"
             aria-describedby={undefined}
           >
             <div aria-hidden className="mx-auto mt-[8px] h-[4px] w-[36px] rounded-full bg-[var(--border)]" />
@@ -187,12 +187,12 @@ function DesktopMenu(props: MessageActionsProps & { actions: Action[] }) {
   // In a portal: an ancestor of the chat has a transform, which would make «fixed» relative to it.
   return createPortal(
     <>
-      <div className="fixed inset-0 z-[99]" onClick={props.onClose} onContextMenu={(e) => { e.preventDefault(); props.onClose(); }} aria-hidden />
+      <div className="fixed inset-0 z-[1299]" onClick={props.onClose} onContextMenu={(e) => { e.preventDefault(); props.onClose(); }} aria-hidden />
       <div
         ref={ref}
         role="menu"
         aria-label={props.reactionsOnly ? "Reaccionar" : "Más acciones"}
-        className="fixed z-[100] rounded-[8px] border border-app bg-[var(--bg)] p-[6px] shadow-[0_8px_32px_rgba(0,0,0,0.3)]"
+        className="fixed z-[1300] rounded-[8px] border border-app bg-[var(--bg)] p-[6px] shadow-[0_8px_32px_rgba(0,0,0,0.3)]"
         style={{ left: pos?.left ?? -9999, top: pos?.top ?? -9999, width: props.reactionsOnly ? undefined : W }}
         onClick={(e) => e.stopPropagation()}
       >
