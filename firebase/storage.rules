@@ -1,0 +1,36 @@
+rules_version = '2';
+
+// Firebase Storage de Frimee. La app inicia sesión en Firebase con el mismo usuario que en
+// Supabase (token de /api/firebase/token), así que request.auth.uid es el id de Supabase.
+// Los enlaces de descarga con token que ya se guardaron siguen funcionando sin pasar por aquí.
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Only users signed in through /api/firebase/token (custom claim «frimee»).
+    function frimeeUser() { return request.auth != null && request.auth.token.frimee == true; }
+
+    // Nadie puede recorrer la lista de ficheros.
+    match /{allPaths=**} {
+      allow list: if false;
+    }
+
+    // Carpetas de cada usuario: las lee cualquiera con sesión (lo comparte en un chat o un
+    // plan), solo su dueño escribe, y con un tamaño máximo.
+    match /{carpeta}/{uid}/{fichero} {
+      allow get: if frimeeUser()
+        && carpeta in ['photos', 'plans', 'documentos', 'media', 'audio'];
+      allow create, update: if frimeeUser()
+        && request.auth.uid == uid
+        && carpeta in ['photos', 'plans', 'documentos', 'media', 'audio']
+        && request.resource.size < 50 * 1024 * 1024;
+      allow delete: if frimeeUser() && request.auth.uid == uid;
+    }
+
+    // Álbum de un plan: cualquiera con sesión (las reglas no ven quién está en el plan).
+    match /plan-albums/{planId}/{fichero} {
+      allow get: if frimeeUser();
+      allow create: if frimeeUser()
+        && request.resource.contentType.matches('image/.*')
+        && request.resource.size < 20 * 1024 * 1024;
+    }
+  }
+}

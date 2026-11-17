@@ -1,0 +1,53 @@
+rules_version = '2';
+
+// Firestore de Frimee (feed: posts, likes, comentarios y fotos). Hace falta sesión para todo;
+// cada cual escribe lo suyo y los contadores se pueden actualizar sin tocar nada más.
+// Las funciones del servidor (sync-firebase-plan, sync-firebase-creator) usan la clave de
+// administrador y no pasan por estas reglas.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Only users signed in through /api/firebase/token (custom claim «frimee»).
+    function signedIn() { return request.auth != null && request.auth.token.frimee == true; }
+    function onlyChanges(keys) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
+    }
+
+    match /posts/{postId} {
+      allow read: if signedIn();
+      allow create: if signedIn();
+      allow update: if signedIn()
+        && (resource.data.ownerUserId == request.auth.uid
+            || onlyChanges(['likeCount', 'commentCount', 'updatedAt', 'planId']));
+      allow delete: if signedIn() && resource.data.ownerUserId == request.auth.uid;
+
+      match /likes/{userId} {
+        allow read: if signedIn();
+        allow write: if signedIn() && request.auth.uid == userId;
+      }
+
+      match /comments/{commentId} {
+        allow read: if signedIn();
+        allow create: if signedIn() && request.resource.data.user_id == request.auth.uid;
+        allow update: if signedIn()
+          && (resource.data.user_id == request.auth.uid || onlyChanges(['likeCount', 'updated_at']));
+        allow delete: if signedIn() && resource.data.user_id == request.auth.uid;
+
+        match /likes/{userId} {
+          allow read: if signedIn();
+          allow write: if signedIn() && request.auth.uid == userId;
+        }
+      }
+    }
+
+    match /photos/{photoId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow delete: if signedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    // Todo lo demás, cerrado.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
