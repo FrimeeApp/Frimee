@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import Image from "next/image";
 
-export function AuthSplitLayout({ children, footer }: { children: ReactNode; footer?: ReactNode }) {
+export function AuthSplitLayout({ children, description }: { children: ReactNode; description?: string }) {
   return (
     <div className="min-h-[100dvh] w-full bg-surface min-[1025px]:fixed min-[1025px]:inset-0">
       <div className="grid min-h-[100dvh] grid-cols-4 gap-0 overflow-hidden min-[1025px]:h-full min-[1025px]:grid-cols-12">
@@ -25,7 +25,7 @@ export function AuthSplitLayout({ children, footer }: { children: ReactNode; foo
                       alt="Personaje de Frimee preparando un plan"
                       width={650}
                       height={780}
-                      className="relative z-10 mx-auto h-auto max-h-[min(54vh,500px)] w-auto object-contain drop-shadow-[0_18px_28px_rgba(0,0,0,0.18)]"
+                      className={`relative z-10 mx-auto h-auto w-auto object-contain drop-shadow-[0_18px_28px_rgba(0,0,0,0.18)] ${description ? "max-h-[min(42vh,380px)]" : "max-h-[min(54vh,500px)]"}`}
                       priority
                       unoptimized
                     />
@@ -36,6 +36,11 @@ export function AuthSplitLayout({ children, footer }: { children: ReactNode; foo
                       Organiza tus planes
                       <span className="block">sin perder el hilo</span>
                     </h1>
+                    {description ? (
+                      <p className="mx-auto mt-[var(--space-4)] max-w-[400px] text-[clamp(0.85rem,1vw,0.95rem)] leading-relaxed text-white/85 dark:text-[#102018]/80">
+                        {description}
+                      </p>
+                    ) : null}
                   </div>
                 </div>
               </div>
@@ -62,7 +67,11 @@ export function AuthSplitLayout({ children, footer }: { children: ReactNode; foo
           <div className="flex flex-1 items-start justify-center overflow-y-auto px-[max(var(--space-5),env(safe-area-inset-left))] pb-[max(var(--space-5),env(safe-area-inset-bottom))] pt-[var(--space-2)] min-[800px]:items-center min-[800px]:pb-[var(--space-8)] min-[800px]:pt-0 lg:px-[clamp(44px,4vw,72px)]">
             {children}
           </div>
-          {footer}
+          {description ? (
+            <p className="mx-auto max-w-[420px] shrink-0 px-[max(var(--space-5),env(safe-area-inset-left))] pb-[max(var(--space-4),env(safe-area-inset-bottom))] text-center text-caption text-tertiary min-[1025px]:hidden">
+              {description}
+            </p>
+          ) : null}
         </main>
       </div>
     </div>
