@@ -25,7 +25,7 @@ export function AuthSplitLayout({ children, description }: { children: ReactNode
                       alt="Personaje de Frimee preparando un plan"
                       width={650}
                       height={780}
-                      className="relative z-10 mx-auto h-auto max-h-[min(54vh,500px)] w-auto object-contain drop-shadow-[0_18px_28px_rgba(0,0,0,0.18)]"
+                      className={`relative z-10 mx-auto h-auto w-auto object-contain drop-shadow-[0_18px_28px_rgba(0,0,0,0.18)] ${description ? "max-h-[min(42vh,380px)]" : "max-h-[min(54vh,500px)]"}`}
                       priority
                       unoptimized
                     />
@@ -37,7 +37,7 @@ export function AuthSplitLayout({ children, description }: { children: ReactNode
                       <span className="block">sin perder el hilo</span>
                     </h1>
                     {description ? (
-                      <p className="mx-auto mt-[var(--space-3)] max-w-[440px] text-[clamp(0.9rem,1.1vw,1.05rem)] leading-relaxed text-white/85 dark:text-[#102018]/80">
+                      <p className="mx-auto mt-[var(--space-4)] max-w-[400px] text-[clamp(0.85rem,1vw,0.95rem)] leading-relaxed text-white/85 dark:text-[#102018]/80">
                         {description}
                       </p>
                     ) : null}
