@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Link2, Plus, User, X } from "lucide-react";
+import { ArrowRight, Link2, Plus, X } from "lucide-react";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { DEFAULT_PLAN_COVER_IMAGE } from "@/config/app";
 import { CARD, FILL_BTN, FOCUS, GHOST_BTN, LABEL, SERIF, TEXT_BTN } from "./pieces";
@@ -163,44 +163,6 @@ export function AfterCard({ planTitle, onCreate, onJoin }: { planTitle: string; 
   );
 }
 
-const GUEST_HIDE_KEY = "frimee:mis-planes:guest-notice-hidden-until";
-
-/** Guest notice under the title: hideable for 7 days (the profile keeps a dot until the account is saved). */
-export function GuestNotice() {
-  const [hidden, setHidden] = useState(() => {
-    try {
-      return Number(localStorage.getItem(GUEST_HIDE_KEY) ?? 0) > Date.now();
-    } catch {
-      return false;
-    }
-  });
-  if (hidden) return null;
-  return (
-    <div className="mx-4 flex min-h-[52px] items-center gap-2.5 rounded-[8px] border border-app bg-surface pl-3 pr-1 md:mx-0 md:rounded-full">
-      <User size={18} className="shrink-0 text-muted" aria-hidden />
-      <span className="flex-1 text-[14px] leading-tight text-app">Estás en modo invitado</span>
-      <button type="button" onClick={() => window.dispatchEvent(new Event("frimee:save-account"))} className={`${TEXT_BTN} px-2 ${FOCUS}`}>
-        Guardar mi cuenta
-      </button>
-      <button
-        type="button"
-        aria-label="Ocultar aviso"
-        title="Ocultar aviso"
-        onClick={() => {
-          try {
-            localStorage.setItem(GUEST_HIDE_KEY, String(Date.now() + 7 * 86_400_000));
-          } catch {
-            /* private mode: hide for this visit only */
-          }
-          setHidden(true);
-        }}
-        className={`flex size-11 items-center justify-center rounded-[8px] text-muted ${FOCUS}`}
-      >
-        <X size={18} aria-hidden />
-      </button>
-    </div>
-  );
-}
 
 /** Empty state: headline, create / join, and the Lisbon example plan. */
 export function EmptyHome({ onCreate, onJoin, onOpenPlan, desktop }: { onCreate: () => void; onJoin: () => void; onOpenPlan: (id: number) => void; desktop?: boolean }) {
