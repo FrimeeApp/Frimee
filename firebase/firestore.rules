@@ -6,7 +6,8 @@ rules_version = '2';
 // administrador y no pasan por estas reglas.
 service cloud.firestore {
   match /databases/{database}/documents {
-    function signedIn() { return request.auth != null; }
+    // Only users signed in through /api/firebase/token (custom claim «frimee»).
+    function signedIn() { return request.auth != null && request.auth.token.frimee == true; }
     function onlyChanges(keys) {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
     }
