@@ -6,6 +6,7 @@ import { Capacitor } from "@capacitor/core";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { APP_AUTH_CALLBACK_PATH, APP_AUTH_CALLBACK_URI, APP_DEEP_LINK_SCHEME, APP_HOME_PATH } from "@/config/app";
 import { GOOGLE_CALENDAR_SCOPE } from "@/config/external";
+import { GOOGLE_CALENDAR_ENABLED } from "@/config/app";
 
 /**
  * Debes registrar este redirect en Supabase -> Auth -> URL Configuration -> Redirect URLs
@@ -48,12 +49,11 @@ export async function signInWithGoogleCapacitor() {
     options: {
       redirectTo: CAPACITOR_REDIRECT_URI,
       skipBrowserRedirect: true,
-      scopes: GOOGLE_CALENDAR_SCOPE,
-      queryParams: {
-        access_type: "offline",
-        prompt: "consent",
-        include_granted_scopes: "true",
-      },
+      // Only email and profile: Calendar is a sensitive scope that needs Google's verification.
+      ...(GOOGLE_CALENDAR_ENABLED ? {
+        scopes: GOOGLE_CALENDAR_SCOPE,
+        queryParams: { access_type: "offline", prompt: "consent", include_granted_scopes: "true" },
+      } : {}),
     },
   });
 
