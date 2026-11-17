@@ -310,6 +310,19 @@ export default function ProfilePage() {
 
         <main className="px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-mobile-safe-top md:py-[var(--space-8)] md:pr-[var(--space-14)]">
           <div className="mx-auto w-full max-w-[760px]">
+            {/* Guest on a phone: the avatar opens this page (on desktop, the profile menu has it). */}
+            {isOwnProfile && user?.is_anonymous && (
+              <div className="mb-[var(--space-4)] flex min-h-[52px] items-center gap-2.5 rounded-[8px] border border-app bg-surface pl-3 pr-1 md:hidden">
+                <span className="flex-1 text-[14px] leading-tight text-app">Estás en modo invitado</span>
+                <button
+                  type="button"
+                  onClick={() => window.dispatchEvent(new Event("frimee:save-account"))}
+                  className="min-h-11 px-2 text-[14px] font-[var(--fw-semibold)] text-[var(--primary)]"
+                >
+                  Guardar mi cuenta
+                </button>
+              </div>
+            )}
             {/* Settings button - own profile only */}
             {isOwnProfile && (
               <div className="mb-[var(--space-4)] flex justify-end">
