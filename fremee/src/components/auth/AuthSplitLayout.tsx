@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import Image from "next/image";
 
-export function AuthSplitLayout({ children }: { children: ReactNode }) {
+export function AuthSplitLayout({ children, footer }: { children: ReactNode; footer?: ReactNode }) {
   return (
     <div className="min-h-[100dvh] w-full bg-surface min-[1025px]:fixed min-[1025px]:inset-0">
       <div className="grid min-h-[100dvh] grid-cols-4 gap-0 overflow-hidden min-[1025px]:h-full min-[1025px]:grid-cols-12">
@@ -62,6 +62,7 @@ export function AuthSplitLayout({ children }: { children: ReactNode }) {
           <div className="flex flex-1 items-start justify-center overflow-y-auto px-[max(var(--space-5),env(safe-area-inset-left))] pb-[max(var(--space-5),env(safe-area-inset-bottom))] pt-[var(--space-2)] min-[800px]:items-center min-[800px]:pb-[var(--space-8)] min-[800px]:pt-0 lg:px-[clamp(44px,4vw,72px)]">
             {children}
           </div>
+          {footer}
         </main>
       </div>
     </div>
