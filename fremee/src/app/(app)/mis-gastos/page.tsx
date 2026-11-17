@@ -308,8 +308,9 @@ function MisGastosContent() {
               ) : (
                 filteredVisibleItems.map((item) => {
                   const incoming = item.direction === "incoming";
-                  const senderName = incoming ? item.counterparty : `${profile?.nombre ?? "Tú"} (Tú)`;
-                  const senderImage = incoming ? item.counterpartyImage : profile?.profile_image ?? null;
+                  // Always the other person: the sign of the amount says who pays whom («Sara −30 €»).
+                  const senderName = item.counterparty;
+                  const senderImage = item.counterpartyImage;
                   const secondaryLine = [
                     item.concept || item.planName,
                     item.concept ? item.planName : null,

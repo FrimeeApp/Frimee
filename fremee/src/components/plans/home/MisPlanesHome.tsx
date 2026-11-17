@@ -64,7 +64,8 @@ export function MisPlanesHome(props: Props) {
   /* ───────────── Mobile ───────────── */
   const mobile = (
     <div className="md:hidden">
-      <header className="flex h-16 items-center pl-4 pr-1">
+      {/* The bell is fixed at the top right (AppSidebar): leave it its room, as Mensajes does. */}
+      <header className="mb-[10px] flex h-11 items-center pl-4 pr-[calc(var(--page-margin-x)+48px)]">
         <h1 className={`${SERIF} flex-1 text-[32px] leading-10 text-app`}>Mis planes</h1>
         {!empty && (
           <button type="button" aria-label="Buscar en tus planes" title="Buscar en tus planes" onClick={() => onOpenAll()} className={iconBtn}>
