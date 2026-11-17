@@ -514,7 +514,10 @@ export function ChatConversation({
         setLoading(false);
       }
     })();
-    void indicePromise.finally(() => markChatRead(chat.chat_id).then(() => { void channelRef.current?.send({ type: "broadcast", event: "read", payload: { user_id: currentUserId } }); }));
+    void indicePromise.finally(() => markChatRead(chat.chat_id).then(() => {
+      window.dispatchEvent(new Event("frimee:chat-unread-changed"));
+      void channelRef.current?.send({ type: "broadcast", event: "read", payload: { user_id: currentUserId } });
+    }));
   }, [chat.chat_id, currentUserId]);
 
   useEffect(() => {
@@ -548,7 +551,10 @@ export function ChatConversation({
           return [...prev, msg];
         });
         onNewMessageRef.current(bloqueo.directo ? msg : taparBloqueados([msg], bloqueo.set, currentUserId)[0]);
-        void markChatRead(chat.chat_id).then(() => { void channelRef.current?.send({ type: "broadcast", event: "read", payload: { user_id: currentUserId } }); });
+        void markChatRead(chat.chat_id).then(() => {
+          window.dispatchEvent(new Event("frimee:chat-unread-changed"));
+          void channelRef.current?.send({ type: "broadcast", event: "read", payload: { user_id: currentUserId } });
+        });
       })
       .on("broadcast", { event: "edit_message" }, ({ payload }) => {
         const { id, texto } = payload as { id: number; texto: string };
