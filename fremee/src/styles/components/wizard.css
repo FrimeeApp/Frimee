@@ -73,6 +73,9 @@ button.wz-step:disabled { cursor: default; }
 .dark .wz .wz-tick { color: #0b2a25; }
 
 .wz-chips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+/* Phones: two columns, and a long name («Alojamiento») is cut with an ellipsis, not spilled. */
+@media (max-width: 479px) { .wz-chips { grid-template-columns: repeat(2, 1fr); } }
+.wz-chip-l { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wz-chip { height: 48px; border-radius: 8px; border: 1px solid var(--border-strong); display: flex; align-items: center; gap: 8px; padding: 0 12px; font-size: 14px; font-weight: 600; position: relative; }
 .wz-chip .ti { color: var(--text-secondary); display: flex; flex: none; }
 .wz-chip > span:last-child, .wz-chip { min-width: 0; }
