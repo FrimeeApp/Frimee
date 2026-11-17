@@ -52,38 +52,43 @@ export async function checkRateLimit(
 }
 
 // ── Modo invitado ──────────────────────────────────────────────────────────────
-// Los invitados (usuarios anónimos de Supabase) se crean con un clic, así que un
-// límite por usuario no basta: además del cupo diario de cada invitado hay una
-// bolsa común para todos, que pone un techo absoluto al gasto.
+// Cupo diario de las funciones que cuestan dinero (OpenAI, Google Maps, LiveKit).
+// Los invitados (usuarios anónimos de Supabase) se crean con un clic y el registro está
+// abierto, así que un límite por usuario no basta: además del cupo de cada uno hay una
+// bolsa común al día, que pone un techo absoluto al gasto. Los invitados tienen la suya,
+// más pequeña. Los números quedan muy por encima de un uso normal.
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-export const GUEST_DAILY_LIMITS = {
-  "ocr-ticket": { perGuest: 3, allGuests: 100 },
-  "ocr-receipt": { perGuest: 3, allGuests: 100 },
-  livekit: { perGuest: 2, allGuests: 50 },
+export const DAILY_LIMITS = {
+  "ocr-ticket": { guest: 3, allGuests: 100, user: 20, allUsers: 500 },
+  "ocr-receipt": { guest: 3, allGuests: 100, user: 20, allUsers: 500 },
+  livekit: { guest: 2, allGuests: 50, user: 50, allUsers: 1000 },
+  directions: { guest: 150, allGuests: 2000, user: 400, allUsers: 4000 },
 } as const;
 
-export type GuestFeature = keyof typeof GUEST_DAILY_LIMITS;
+export type DailyFeature = keyof typeof DAILY_LIMITS;
+export type DailyLimitResult = RateLimitResult & { guest: boolean };
 
-/** Cupo diario del modo invitado. Para usuarios registrados no limita nada. */
-export async function checkGuestDailyLimit(
+/** Cupo diario de una función de pago para este usuario (invitado o registrado). */
+export async function checkDailyLimit(
   user: { id: string; is_anonymous?: boolean },
-  feature: GuestFeature,
-): Promise<RateLimitResult> {
-  if (!user.is_anonymous) return { limited: false, remaining: Infinity };
-
-  const { perGuest, allGuests } = GUEST_DAILY_LIMITS[feature];
-  const own = await checkRateLimit(`guest-day:${feature}:${user.id}`, perGuest, DAY_MS);
-  if (own.limited) return own;
-  return checkRateLimit(`guest-day:${feature}:all`, allGuests, DAY_MS);
+  feature: DailyFeature,
+): Promise<DailyLimitResult> {
+  const limits = DAILY_LIMITS[feature];
+  const guest = Boolean(user.is_anonymous);
+  const kind = guest ? "guest-day" : "user-day";
+  const own = await checkRateLimit(`${kind}:${feature}:${user.id}`, guest ? limits.guest : limits.user, DAY_MS);
+  if (own.limited) return { ...own, guest };
+  const all = await checkRateLimit(`${kind}:${feature}:all`, guest ? limits.allGuests : limits.allUsers, DAY_MS);
+  return { ...all, guest };
 }
 
-export function guestLimitedResponse(retryAfter: number): NextResponse {
-  return NextResponse.json(
-    { error: "Has llegado al límite diario del modo invitado. Crea una cuenta para seguir usando esta función." },
-    { status: 429, headers: { "Retry-After": String(retryAfter) } },
-  );
+export function dailyLimitedResponse(result: { guest: boolean; retryAfter: number }): NextResponse {
+  const error = result.guest
+    ? "Has llegado al límite diario del modo invitado. Crea una cuenta para seguir usando esta función."
+    : "Has llegado al límite diario de esta función. Vuelve a intentarlo mañana.";
+  return NextResponse.json({ error }, { status: 429, headers: { "Retry-After": String(result.retryAfter) } });
 }
 
 export function rateLimitedResponse(retryAfter: number): NextResponse {
