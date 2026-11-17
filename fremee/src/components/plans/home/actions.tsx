@@ -6,6 +6,7 @@ import { ArrowRight, Link2, Plus, X } from "lucide-react";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { DEFAULT_PLAN_COVER_IMAGE } from "@/config/app";
 import { CARD, FILL_BTN, FOCUS, GHOST_BTN, LABEL, SERIF, TEXT_BTN } from "./pieces";
+import { hasFinePointer } from "@/lib/finePointer";
 
 // Invitation links are frimee.es/join/<uuid>; people may paste the whole link or just the code.
 const JOIN_CODE_REGEX = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
@@ -135,7 +136,7 @@ export function CreateJoinSheet({ onClose, onCreate, startOnJoin }: { onClose: (
               <span className="block text-[14px] text-muted">Pega la invitación que te han pasado</span>
             </span>
           </button>
-          {joining && <JoinForm autoFocus />}
+          {joining && <JoinForm autoFocus={hasFinePointer()} />}
         </div>
       </div>
     </div>
