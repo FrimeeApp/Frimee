@@ -1,5 +1,5 @@
 /**
- * Photos of the guest demo trips (public/demo/lisboa and public/demo/roma), from Wikimedia Commons.
+ * Photos of the guest demo (public/demo/lisboa, public/demo/roma and the covers in public/demo/portadas), from Wikimedia Commons.
  * Resized and converted to WebP (the miradouro one also cropped to 3:2); CC BY-SA
  * adaptations keep the same licence. The album shows these credits next to them.
  * Real trips only ever show photos their members uploaded.
@@ -133,5 +133,11 @@ export const DEMO_PHOTO_CREDITS: Record<string, DemoPhotoCredit> = {
     licencia: "CC BY-SA 4.0",
     licenciaUrl: BY_SA_4,
     fuente: "https://commons.wikimedia.org/wiki/File:Escalinata_de_la_plaza_de_Espa%C3%B1a,_Roma,_Italia,_2022-09-14,_DD_21.jpg",
+  },
+  "/demo/portadas/cumpleanos.webp": {
+    autor: "Shixart1985",
+    licencia: "CC BY 2.0",
+    licenciaUrl: BY_2,
+    fuente: "https://commons.wikimedia.org/wiki/File:Celebrating_a_50th_birthday_with_a_cake_featuring_lit_candles_and_chocolate_frosting.jpg",
   },
 };

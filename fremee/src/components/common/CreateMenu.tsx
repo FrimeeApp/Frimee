@@ -10,8 +10,10 @@ import { isPlanFinished } from "@/lib/plan-dates";
 export type CreateMenuPlanContext = {
   planId: number;
   title: string;
-  /** Admin of a plan that has not ended: may add activities and invite. */
+  /** Member of a plan that has not ended: may add activities. */
   canEdit: boolean;
+  /** Admin of a plan that has not ended: may invite. */
+  canInvite: boolean;
   onActividad: () => void;
   onGasto: () => void;
   onInvitar: () => void;
@@ -104,7 +106,7 @@ export default function CreateMenu(props: Props) {
       const opts: Option[] = [];
       if (planContext.canEdit) opts.push({ key: "actividad", label: "Actividad", shortcut: "A", icon: <CalendarPlus className={ICON} aria-hidden />, run: planContext.onActividad });
       opts.push({ key: "gasto", label: "Gasto", shortcut: "G", icon: <Receipt className={ICON} aria-hidden />, run: planContext.onGasto });
-      if (planContext.canEdit) opts.push({ key: "invitar", label: "Invitar", shortcut: "I", icon: <UserPlus className={ICON} aria-hidden />, run: planContext.onInvitar });
+      if (planContext.canInvite) opts.push({ key: "invitar", label: "Invitar", shortcut: "I", icon: <UserPlus className={ICON} aria-hidden />, run: planContext.onInvitar });
       out.push({ key: "plan", header: { text: `En este plan · ${planContext.title}`, live: false }, options: opts });
     } else if (relevant) {
       const id = relevant.plan.id;

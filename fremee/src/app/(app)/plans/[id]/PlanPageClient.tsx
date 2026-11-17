@@ -212,6 +212,8 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
   const [isAdmin, setIsAdmin] = useState(initialCache?.isAdmin ?? false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [membershipChecked, setMembershipChecked] = useState(initialCache?.membershipChecked ?? false);
+  // Any member adds activities and expenses; editing the plan and inviting stay with the admins.
+  const canAdd = isAdmin || membershipChecked;
   const [planChat, setPlanChat] = useState<ChatListItem | null>(initialCache?.planChat ?? null);
   const [planLoading, setPlanLoading] = useState(!initialCache?.plan);
   const [subplanes, setSubplanes] = useState<SubplanRow[]>(initialCache?.subplanes ?? []);
@@ -479,8 +481,8 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
     }
 
     // From a chat message («Añadir al plan»): the add sheet with its title already written.
-    // Only admins add activities (the database checks it too).
-    if (nuevaActividad !== null && plan && !isPast && isAdmin) {
+    // Members add activities (the database checks it too).
+    if (nuevaActividad !== null && plan && !isPast && canAdd) {
       setActiveTab("itinerario");
       setEditingSubplan(null);
       setAddSheetInitialTitulo(nuevaActividad || undefined);
@@ -498,7 +500,7 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
       const nextQuery = nextParams.toString();
       router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
     }
-  }, [searchParams, plan, isPast, isAdmin, pathname, router]);
+  }, [searchParams, plan, isPast, canAdd, pathname, router]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -1043,7 +1045,8 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
   const sidebarPlanContext: CreateMenuPlanContext | undefined = plan ? {
     planId: plan.id,
     title: plan.titulo,
-    canEdit: !isPast && isAdmin,
+    canEdit: !isPast && canAdd,
+    canInvite: !isPast && isAdmin,
     onActividad: () => { setActiveTab("itinerario"); openCreateSubplan(); },
     onGasto: () => { setActiveTab("gastos"); setShowAddGastoSheet(true); },
     onInvitar: () => { void openInviteModal(); },
@@ -1255,7 +1258,7 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
                   planId={plan?.id}
                   isAdmin={isAdmin}
                   onAbrirActividad={(titulo, extra) => {
-                    if (isPast || !isAdmin) return;
+                    if (isPast || !canAdd) return;
                     setEditingSubplan(null);
                     setAddSheetInitialTitulo(titulo);
                     setAddSheetInitialDate(extra?.fecha || undefined);
@@ -1313,7 +1316,7 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
                   <Itinerary
                     model={itinerary}
                     finished={isPast}
-                    canEdit={isAdmin}
+                    canEdit={canAdd}
                     openDays={openDays}
                     onToggleDay={toggleOpenDay}
                     onOpenDays={openItineraryDays}
@@ -1795,7 +1798,7 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
       ) && (!isPast || membershipChecked || isAdmin) && (membershipChecked || isAdmin || activeTab === "gastos") && (
         <div className="pointer-events-none fixed bottom-[calc(env(safe-area-inset-bottom)+16px)] right-[calc(env(safe-area-inset-right)+16px)] z-[65] md:hidden">
           <div className={`absolute bottom-[calc(100%+12px)] right-0 flex flex-col items-end gap-2 transition-all duration-200 ease-out ${mobileCreateOpen ? "pointer-events-auto translate-y-0 opacity-100" : "pointer-events-none translate-y-2 opacity-0"}`}>
-            {!isPast && isAdmin && (
+            {!isPast && canAdd && (
               <button
                 type="button"
                 onClick={openCreateSubplan}
@@ -1862,7 +1865,7 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
         </div>
       )}
 
-      {showAddSheet && plan && !isPast && isAdmin && (
+      {showAddSheet && plan && !isPast && canAdd && (
         <AddSubplanSheet
           planId={plan.id}
           planStartDate={plan.inicio_at}

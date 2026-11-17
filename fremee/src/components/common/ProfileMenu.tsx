@@ -188,7 +188,7 @@ export default function ProfileMenu(props: Props) {
         <>
           <div className="px-[10px] pb-[10px] pt-[8px]">
             <p className="text-[15px] font-[var(--fw-semibold)] text-app">Estás en modo invitado</p>
-            <p className="mt-[2px] text-[13px] text-muted">Viaje de ejemplo: Barcelona → Lisboa</p>
+            <p className="mt-[2px] text-[13px] text-muted">Cuenta de ejemplo con tres planes</p>
             <button
               type="button"
               role="menuitem"
