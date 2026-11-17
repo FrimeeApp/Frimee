@@ -454,7 +454,7 @@ export default function AppSidebar({ onCreatePlan, onCreateGroup, hideMobileNav,
         <div className="relative flex w-[102px] shrink-0 items-center justify-center">
           {icon({ className: "size-[26px]", strokeWidth: NAV_ICON_STROKE, active })}
           {badge ? (
-            <span className="absolute top-0 right-[38px] flex h-[16px] min-w-[16px] items-center justify-center rounded-full bg-[var(--primary)] px-[3px] text-[9px] font-[var(--fw-semibold)] leading-none text-[var(--contrast)]">
+            <span className="absolute top-[-4px] right-[30px] flex h-[16px] min-w-[16px] items-center justify-center rounded-full bg-[var(--primary)] px-[3px] text-[9px] font-[var(--fw-semibold)] leading-none text-[var(--contrast)]">
               {badge}
             </span>
           ) : null}
