@@ -39,7 +39,8 @@ export async function POST(req: NextRequest) {
   if (!auth) return withCors(req, NextResponse.json({ error: "Firebase not configured" }, { status: 500 }));
 
   try {
-    const token = await auth.createCustomToken(user.id);
+    // «frimee»: the rules only trust tokens from here, not any Firebase account someone could create.
+    const token = await auth.createCustomToken(user.id, { frimee: true });
     return withCors(req, NextResponse.json({ token }));
   } catch (error) {
     console.error("[firebase-token] No se pudo crear el token:", error);
