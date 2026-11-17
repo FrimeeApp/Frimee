@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { AccessToken } from "livekit-server-sdk";
 import { createSupabaseServiceClient } from "@/services/supabase/server";
 import { sanitizeRoomName, sanitizeUuid } from "@/lib/sanitize";
-import { checkGuestDailyLimit, checkRateLimit, guestLimitedResponse, rateLimitedResponse } from "@/lib/rate-limit";
+import { checkDailyLimit, checkRateLimit, dailyLimitedResponse, rateLimitedResponse } from "@/lib/rate-limit";
 import { handleCorsPreflight, withCors } from "@/lib/api/cors";
 
 export async function OPTIONS(req: NextRequest) {
@@ -50,9 +50,9 @@ export async function POST(req: NextRequest) {
     .maybeSingle();
   if (!member) return withCors(req, NextResponse.json({ error: "forbidden" }, { status: 403 }));
 
-  // Only valid calls use up a guest's daily quota (a refused room or chat does not count).
-  const guest = await checkGuestDailyLimit(user, "livekit");
-  if (guest.limited) return withCors(req, guestLimitedResponse(guest.retryAfter));
+  // Only valid calls use up the daily quota (a refused room or chat does not count).
+  const daily = await checkDailyLimit(user, "livekit");
+  if (daily.limited) return withCors(req, dailyLimitedResponse(daily));
 
   const at = new AccessToken(apiKey, apiSecret, {
     identity: user.id,

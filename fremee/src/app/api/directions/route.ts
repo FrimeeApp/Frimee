@@ -3,7 +3,7 @@ import { Client, TravelMode, TransitMode, UnitSystem, Language } from "@googlema
 import { getGoogleMapsServerKey } from "@/config/env";
 import { createSupabaseServerClient, createSupabaseServiceClient } from "@/services/supabase/server";
 import { sanitizeLatLng } from "@/lib/sanitize";
-import { checkRateLimit, rateLimitedResponse } from "@/lib/rate-limit";
+import { checkDailyLimit, checkRateLimit, dailyLimitedResponse, rateLimitedResponse } from "@/lib/rate-limit";
 import { formatCompactRouteDistance, formatCompactRouteDuration } from "@/lib/route-formatters";
 
 const client = new Client({});
@@ -63,6 +63,8 @@ export async function POST(req: NextRequest) {
 
   const rl = await checkRateLimit(`directions:${user.id}`, 60, 60_000);
   if (rl.limited) return rateLimitedResponse(rl.retryAfter);
+  const daily = await checkDailyLimit(user, "directions");
+  if (daily.limited) return dailyLimitedResponse(daily);
 
   try {
     const body = await req.json() as unknown;
