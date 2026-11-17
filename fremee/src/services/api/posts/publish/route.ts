@@ -1,6 +1,7 @@
 import type { PublishPostPayload } from "@/services/api/mappers/post.mapper";
 import { doc, runTransaction, serverTimestamp } from "firebase/firestore";
 import { db } from "@/services/firebase/firestore";
+import { ensureFirebaseAuth } from "@/services/firebase/auth";
 
 type PublishPostResult = { ok: true; post_id: string; alreadyPublished: boolean };
 
@@ -10,6 +11,7 @@ export async function publishPostRoute(payload: PublishPostPayload): Promise<Pub
 }
 
 export async function publishPostRouteEnabled(payload: PublishPostPayload): Promise<PublishPostResult> {
+  await ensureFirebaseAuth();
   const postId = `plan_${payload.plan.id}`;
   const postRef = doc(db, "posts", postId);
 

@@ -1,11 +1,13 @@
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 import { db } from "./firestore";
+import { ensureFirebaseAuth } from "./auth";
 
 export async function savePhotoDoc(params: {
   userId: string;
   downloadUrl: string;
   filePath: string;
 }) {
+  await ensureFirebaseAuth();
   const ref = await addDoc(collection(db, "photos"), {
     userId: params.userId,
     downloadUrl: params.downloadUrl,

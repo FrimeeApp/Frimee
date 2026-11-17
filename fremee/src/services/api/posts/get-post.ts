@@ -1,5 +1,6 @@
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/services/firebase/firestore";
+import { ensureFirebaseAuth } from "@/services/firebase/auth";
 import type {
   PublicationConfig,
   ItinerarySnapshotItem,
@@ -32,6 +33,7 @@ export type PostDoc = {
 };
 
 export async function getPostByPlanId(planId: number): Promise<PostDoc | null> {
+  await ensureFirebaseAuth();
   const snap = await getDoc(doc(db, "posts", `plan_${planId}`));
   if (!snap.exists()) return null;
   return snap.data() as PostDoc;
