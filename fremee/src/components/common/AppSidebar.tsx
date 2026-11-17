@@ -193,11 +193,14 @@ export default function AppSidebar({ onCreatePlan, onCreateGroup, hideMobileNav,
       return;
     }
     let cancelled = false;
+    let refreshVersion = 0;
+    let realtimeRefreshTimeout: number | undefined;
     const refreshUnreadMessages = async () => {
+      const version = ++refreshVersion;
       try {
         const chats = await listChats();
         const total = chats.reduce((sum, chat) => sum + Math.max(0, Number(chat.unread_count) || 0), 0);
-        if (!cancelled) setUnreadMessages(total);
+        if (!cancelled && version === refreshVersion) setUnreadMessages(total);
       } catch {
         // Keep the last known count if a temporary network error occurs.
       }
@@ -205,6 +208,15 @@ export default function AppSidebar({ onCreatePlan, onCreateGroup, hideMobileNav,
     const refreshWhenVisible = () => {
       if (document.visibilityState === "visible") void refreshUnreadMessages();
     };
+    const supabase = createBrowserSupabaseClient();
+    const messagesChannel = supabase
+      .channel(createRealtimeTopic("chat-unread-sidebar", user.id))
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "mensajes" }, () => {
+        if (document.visibilityState !== "visible") return;
+        if (realtimeRefreshTimeout !== undefined) window.clearTimeout(realtimeRefreshTimeout);
+        realtimeRefreshTimeout = window.setTimeout(() => void refreshUnreadMessages(), 120);
+      })
+      .subscribe();
 
     void refreshUnreadMessages();
     const interval = window.setInterval(() => void refreshUnreadMessages(), 45_000);
@@ -214,6 +226,8 @@ export default function AppSidebar({ onCreatePlan, onCreateGroup, hideMobileNav,
     return () => {
       cancelled = true;
       window.clearInterval(interval);
+      if (realtimeRefreshTimeout !== undefined) window.clearTimeout(realtimeRefreshTimeout);
+      void supabase.removeChannel(messagesChannel);
       window.removeEventListener("focus", refreshWhenVisible);
       window.removeEventListener("frimee:chat-unread-changed", refreshWhenVisible);
       document.removeEventListener("visibilitychange", refreshWhenVisible);
@@ -440,7 +454,7 @@ export default function AppSidebar({ onCreatePlan, onCreateGroup, hideMobileNav,
         <div className="relative flex w-[102px] shrink-0 items-center justify-center">
           {icon({ className: "size-[26px]", strokeWidth: NAV_ICON_STROKE, active })}
           {badge ? (
-            <span className="absolute top-0 right-[38px] flex h-[16px] min-w-[16px] items-center justify-center rounded-full bg-blue-500 px-[3px] text-[9px] font-[var(--fw-semibold)] leading-none text-white">
+            <span className="absolute top-0 right-[38px] flex h-[16px] min-w-[16px] items-center justify-center rounded-full bg-[var(--primary)] px-[3px] text-[9px] font-[var(--fw-semibold)] leading-none text-[var(--contrast)]">
               {badge}
             </span>
           ) : null}
