@@ -16,6 +16,7 @@ import {
   readCachedThemePreference,
 } from "@/services/theme/preferences";
 import type { UserSettingsDto } from "@/services/api/repositories/settings.repository";
+import { ensureFirebaseAuth, signOutFirebase } from "@/services/firebase/auth";
 
 type Profile = {
   id: string;
@@ -149,6 +150,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(nextSession);
         setUser(nextSession?.user ?? null);
         if (nextSession) setSignedOutByUser(false);
+        // Firebase acts as the same user (Storage and Firestore rules need it); uploads wait
+        // for it anyway, so a failure here only delays the first one.
+        if (nextSession) void ensureFirebaseAuth().catch((err) => console.warn("[auth] Firebase:", err));
+        else void signOutFirebase().catch(() => {});
 
         const sess = nextSession as { provider_token?: string | null; provider_refresh_token?: string | null } | null;
         const providerToken = sess?.provider_token ?? null;

@@ -5,6 +5,7 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "@/services/firebase/firestore";
+import { ensureFirebaseAuth } from "@/services/firebase/auth";
 
 type TogglePlanLikeInput = {
   planId: number;
@@ -38,6 +39,7 @@ function getPostId(planId: number): string {
 }
 
 export async function togglePlanLikeRoute(input: TogglePlanLikeInput): Promise<TogglePlanLikeResult> {
+  await ensureFirebaseAuth();
   const postRef = doc(db, "posts", getPostId(input.planId));
   const likeRef = doc(db, "posts", getPostId(input.planId), "likes", input.userId);
 
@@ -71,6 +73,7 @@ export async function togglePlanLikeRoute(input: TogglePlanLikeInput): Promise<T
 }
 
 export async function listUserPlanLikesRoute(input: ListUserPlanLikesInput): Promise<ListUserPlanLikesResult> {
+  await ensureFirebaseAuth();
   const uniquePlanIds = [...new Set(input.planIds)].filter(
     (planId) => Number.isInteger(planId) && planId > 0,
   );
@@ -98,6 +101,7 @@ export async function listUserPlanLikesRoute(input: ListUserPlanLikesInput): Pro
 }
 
 export async function listPlanLikeCountsRoute(input: ListPlanLikeCountsInput): Promise<ListPlanLikeCountsResult> {
+  await ensureFirebaseAuth();
   const uniquePlanIds = [...new Set(input.planIds)].filter(
     (planId) => Number.isInteger(planId) && planId > 0,
   );
