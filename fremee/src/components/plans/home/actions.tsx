@@ -2,10 +2,8 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Link2, Plus, X } from "lucide-react";
-import { createBrowserSupabaseClient } from "@/services/supabase/client";
-import { DEFAULT_PLAN_COVER_IMAGE } from "@/config/app";
-import { CARD, FILL_BTN, FOCUS, GHOST_BTN, LABEL, SERIF, TEXT_BTN } from "./pieces";
+import { Link2, Plus, X } from "lucide-react";
+import { FILL_BTN, FOCUS, GHOST_BTN, LABEL, SERIF } from "./pieces";
 
 // Invitation links are frimee.es/join/<uuid>; people may paste the whole link or just the code.
 const JOIN_CODE_REGEX = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
@@ -164,48 +162,8 @@ export function AfterCard({ planTitle, onCreate, onJoin }: { planTitle: string; 
 }
 
 
-/** Empty state: headline, create / join, and the Lisbon example plan. */
-export function EmptyHome({ onCreate, onJoin, onOpenPlan, desktop }: { onCreate: () => void; onJoin: () => void; onOpenPlan: (id: number) => void; desktop?: boolean }) {
-  const [exampleLoading, setExampleLoading] = useState(false);
-  const [exampleError, setExampleError] = useState<string | null>(null);
-
-  const openExample = async () => {
-    setExampleError(null);
-    setExampleLoading(true);
-    try {
-      const { data, error } = await createBrowserSupabaseClient().rpc("fn_guest_seed_demo");
-      if (error) throw error;
-      onOpenPlan(data as number);
-    } catch (error) {
-      console.error("[mis-planes] example plan error", error instanceof Error ? error.message : error);
-      setExampleError("No se ha podido abrir el ejemplo. Vuelve a intentarlo.");
-      setExampleLoading(false);
-    }
-  };
-
-  const example = (
-    <article className={`${CARD} rounded-[12px]`}>
-      <div className="relative">
-        <div className="relative h-[112px] overflow-hidden bg-surface-inset md:h-[160px]" aria-hidden>
-          {/* eslint-disable-next-line @next/next/no-img-element -- static placeholder cover */}
-          <img src={DEFAULT_PLAN_COVER_IMAGE.desktop} alt="" loading="lazy" className="absolute inset-0 size-full object-cover" />
-        </div>
-        <span className="absolute left-2 top-2 inline-flex h-[26px] items-center rounded-full border border-app bg-surface px-3 text-[12px] font-[var(--fw-semibold)] text-app">
-          Ejemplo
-        </span>
-      </div>
-      <div className="px-4 pb-1 pt-3">
-        <h4 className={`${SERIF} text-[26px] leading-[30px] text-app`}>Escapada a Lisboa</h4>
-        <p className="mt-0.5 text-[13px] text-muted">Barcelona → Lisboa · 4 personas · actividades, gastos y chat</p>
-        <button type="button" onClick={() => void openExample()} disabled={exampleLoading} className={`${TEXT_BTN} mt-0.5 disabled:opacity-60 ${FOCUS}`}>
-          {exampleLoading ? "Abriendo el ejemplo…" : "Ver el ejemplo"}
-          <ArrowRight size={16} aria-hidden />
-        </button>
-        {exampleError && <p className="pb-2 text-[14px] text-error-token">{exampleError}</p>}
-      </div>
-    </article>
-  );
-
+/** Empty state: headline, create and join (the example plan is only for guests). */
+export function EmptyHome({ onCreate, onJoin, desktop }: { onCreate: () => void; onJoin: () => void; onOpenPlan: (id: number) => void; desktop?: boolean }) {
   const steps = [
     ["Crea el plan", "Destino y fechas, aunque sean aproximadas."],
     ["Invita con un enlace", "Quien lo abre entra en el plan y en su chat."],
@@ -241,9 +199,7 @@ export function EmptyHome({ onCreate, onJoin, onOpenPlan, desktop }: { onCreate:
           </ol>
         )}
         {!desktop && <h3 className={`${LABEL} mt-6`}>Así se ve un plan</h3>}
-        {!desktop && <div className="mt-2">{example}</div>}
       </div>
-      {desktop && example}
     </div>
   );
 }
