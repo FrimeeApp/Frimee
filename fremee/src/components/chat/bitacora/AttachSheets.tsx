@@ -9,6 +9,7 @@ import { formatEuros } from "./moments";
 import { Sheet, sheetField, sheetLabel, sheetPrimaryButton } from "./Sheet";
 
 import { isPlanFinished } from "@/lib/plan-dates";
+import { hasFinePointer } from "@/lib/finePointer";
 const errMsg = (e: unknown) => (e as { message?: string })?.message ?? String(e);
 
 // ── Ubicación ─────────────────────────────────────────────────────────────────────────────────
@@ -66,7 +67,7 @@ export function PlaceSheet({ onClose, onSend }: { onClose: () => void; onSend: (
         placeholder="Un bar, una calle, un mirador…"
         className={sheetField}
         dropdownVariant="surface"
-        autoFocus
+        autoFocus={hasFinePointer()}
       />
       <button type="button" onClick={sendCurrent} disabled={busy}
         className="mt-[12px] flex min-h-[48px] w-full items-center gap-[12px] rounded-[8px] px-[4px] text-left text-[15px] text-app hover:bg-[var(--surface-2)] disabled:opacity-50">
@@ -136,7 +137,7 @@ export function ExpenseSheet({
       <div className="flex flex-col gap-[14px]">
         <div>
           <label className={sheetLabel} htmlFor="gasto-titulo">Concepto</label>
-          <input id="gasto-titulo" className={sheetField} value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Cena, gasolina, entradas…" maxLength={80} autoFocus />
+          <input id="gasto-titulo" className={sheetField} value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Cena, gasolina, entradas…" maxLength={80} autoFocus={hasFinePointer()} />
         </div>
         <div>
           <label className={sheetLabel} htmlFor="gasto-importe">Importe (€)</label>
