@@ -526,7 +526,7 @@ export default function AddGastoSheet({ planId, userId, planName, initialDate, o
                       onClick={() => setCategoriaId(g.ids[0])}
                       onKeyDown={(e) => radioKeys(e, GRUPOS, i, (x) => setCategoriaId(x.ids[0]))}
                     >
-                      <span className="ti"><g.Icon className="size-[18px]" aria-hidden /></span>{g.label}
+                      <span className="ti"><g.Icon className="size-[18px]" aria-hidden /></span><span className="wz-chip-l">{g.label}</span>
                     </button>
                   );
                 })}

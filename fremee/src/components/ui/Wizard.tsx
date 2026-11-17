@@ -42,6 +42,9 @@ export function Wizard({
     body.scrollTop = 0;
     if (first.current) {
       first.current = false;
+      // Touch screens: no autofocus. iOS Safari scrolls the sheet for the keyboard even with
+      // preventScroll, and the first field ends up hidden under the steps.
+      if (window.matchMedia("(pointer: coarse)").matches) return;
       body.querySelector<HTMLElement>("[data-autofocus], button, input")?.focus({ preventScroll: true });
     } else {
       body.querySelector<HTMLElement>(".wz-title")?.focus({ preventScroll: true });
