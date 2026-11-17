@@ -25,6 +25,7 @@ import {
   type UserSettingsVisibility,
 } from "@/services/api/repositories/settings.repository";
 import { STORAGE_KEYS } from "@/config/storage";
+import { GOOGLE_CALENDAR_ENABLED } from "@/config/app";
 
 type BusyAction = "save" | "signout" | "delete" | "upload-image" | "change-password" | null;
 type ThemeOption = UserSettingsTheme;
@@ -693,6 +694,7 @@ export default function SettingsPage() {
               />
             </SettingsSection>
 
+            {GOOGLE_CALENDAR_ENABLED && (
             <SettingsSection title="Google Calendar">
               <SettingsRow
                 icon={<CalendarIcon />}
@@ -719,6 +721,7 @@ export default function SettingsPage() {
                 }
               />
             </SettingsSection>
+            )}
 
             <SettingsSection title="Seguridad">
               <SettingsRow

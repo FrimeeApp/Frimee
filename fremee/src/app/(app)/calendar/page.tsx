@@ -23,6 +23,7 @@ import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { STORAGE_KEYS } from "@/config/storage";
 import { useToast } from "@/components/ui/Toaster";
 import { MAX_PINNED_PLANS, planTiming } from "@/components/plans/home/homeSections";
+import { GOOGLE_CALENDAR_ENABLED } from "@/config/app";
 
 
 let calendarPlansCache: { userId: string; plans: FeedPlanItemDto[] } | null = null;
@@ -254,7 +255,7 @@ function CalendarPageInner() {
   useEffect(() => {
     if (authLoading || loading) return;
     if (!user?.id) return;
-    if (!settings?.google_sync_enabled) return;
+    if (!GOOGLE_CALENDAR_ENABLED || !settings?.google_sync_enabled) return;
     if (autoSyncTriggeredRef.current) return;
 
     autoSyncTriggeredRef.current = true;

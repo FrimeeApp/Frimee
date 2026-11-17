@@ -4,6 +4,7 @@ import { Capacitor } from "@capacitor/core";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { signInWithGoogleCapacitor } from "@/services/auth/google";
 import { GOOGLE_CALENDAR_SCOPE } from "@/config/external";
+import { GOOGLE_CALENDAR_ENABLED } from "@/config/app";
 
 type Props = {
   label?: string;
@@ -30,12 +31,11 @@ export default function GoogleAuthButton({
         provider: "google",
         options: {
           redirectTo,
-          scopes: GOOGLE_CALENDAR_SCOPE,
-          queryParams: {
-            access_type: "offline",
-            prompt: "consent",
-            include_granted_scopes: "true",
-          },
+          // Only email and profile: Calendar is a sensitive scope that needs Google's verification.
+          ...(GOOGLE_CALENDAR_ENABLED ? {
+            scopes: GOOGLE_CALENDAR_SCOPE,
+            queryParams: { access_type: "offline", prompt: "consent", include_granted_scopes: "true" },
+          } : {}),
         },
       });
 

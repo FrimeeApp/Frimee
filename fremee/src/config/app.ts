@@ -2,6 +2,9 @@ export const APP_NAME = "Frimee";
 export const APP_DESCRIPTION = "Organiza planes, viajes y grupos";
 export const APP_HOME_PATH = "/calendar";
 export const FEED_ENABLED = false;
+// Google Calendar sync asks for a sensitive scope: off until Google verifies the app.
+// Meanwhile «Entrar con Google» only asks for email and profile (no verification needed).
+export const GOOGLE_CALENDAR_ENABLED = false;
 
 export const APP_ICON_PATHS = {
   primary: "/logo_app_frimee.png",
