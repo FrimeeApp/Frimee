@@ -28,6 +28,12 @@ const nextConfig: NextConfig = {
   // The dev «N» badge sits over the sidebar's profile at the bottom left.
   devIndicators: false,
   reactCompiler: true,
+  // Next 16.4 matches routes strictly: the pages outside (app) (login, invitado, legal,
+  // auth/callback) no longer fit the (app)/@modal parallel slot and answer 404. Old
+  // behaviour until the routes are reorganised (the slot is only (app)'s modals).
+  deprecated: {
+    looseRouteMatching: true,
+  },
   ...(allowedDevOrigins.length > 0 && {
     allowedDevOrigins,
   }),
