@@ -19,7 +19,7 @@ function resolveStaticFallback(url: URL): string | null {
 
 // Lo que lee quien llega sin conocer la app, y Google para verificar el inicio de sesión con su cuenta.
 const APP_DESCRIPTION =
-  "Frimee reúne en un solo plan las actividades de cada día, la ruta en el mapa, los gastos compartidos, las fotos del viaje y el chat del grupo. Si entras con Google, solo usa tu nombre, tu email y tu foto de perfil para crear tu cuenta.";
+  "Frimee reúne las actividades, la ruta, los gastos, las fotos y el chat de tu plan en un solo sitio. Si entras con Google, solo usa tu nombre, tu email y tu foto de perfil.";
 
 function isNativeApp(): boolean {
   const w = window as Window & { Capacitor?: { isNativePlatform?: () => boolean } };
