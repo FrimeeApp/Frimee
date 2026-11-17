@@ -543,10 +543,10 @@ export default function InviteSheet({ planId, planTitle, planDates, members, cur
     return (
       <Drawer.Root open onOpenChange={(o) => { if (!o) onClose(); }} repositionInputs={false}>
         <Drawer.Portal>
-          <Drawer.Overlay className="fixed inset-0 z-[100] bg-black/50" />
+          <Drawer.Overlay className="fixed inset-0 z-[1300] bg-black/50" />
           <Drawer.Content
             aria-describedby={undefined}
-            className="fixed inset-x-0 bottom-0 top-[88px] z-[101] flex flex-col rounded-t-[16px] border-t border-app bg-[var(--bg)] outline-none"
+            className="fixed inset-x-0 bottom-0 top-[88px] z-[1301] flex flex-col rounded-t-[16px] border-t border-app bg-[var(--bg)] outline-none"
             style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
           >
             <div aria-hidden className="mx-auto mt-[8px] h-[4px] w-[36px] shrink-0 rounded-full bg-[var(--border)]" />
@@ -559,7 +559,7 @@ export default function InviteSheet({ planId, planTitle, planDates, members, cur
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-[16px]" onClick={onClose}>
+    <div className="fixed inset-0 z-[1300] flex items-center justify-center bg-black/50 p-[16px]" onClick={onClose}>
       <div
         role="dialog"
         aria-modal="true"

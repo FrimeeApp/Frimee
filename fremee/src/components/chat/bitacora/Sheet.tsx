@@ -23,6 +23,7 @@ export function Sheet({
   children,
   footer,
   maxWidth = 440,
+  zIndex = 1300,
 }: {
   title: string;
   onClose: () => void;
@@ -31,6 +32,8 @@ export function Sheet({
   footer?: React.ReactNode;
   /** Desktop dialog width (px). */
   maxWidth?: number;
+  /** Layer used by sheets opened above an intercepted route. */
+  zIndex?: number;
 }) {
   const phone = useIsPhone();
 
@@ -54,11 +57,11 @@ export function Sheet({
     return (
       <Drawer.Root open onOpenChange={(o) => { if (!o) onClose(); }} repositionInputs={false}>
         <Drawer.Portal>
-          <Drawer.Overlay className="fixed inset-0 z-[100] bg-black/50" />
+          <Drawer.Overlay className="fixed inset-0 z-[100] bg-black/50" style={{ zIndex }} />
           <Drawer.Content
             aria-describedby={undefined}
             className="fixed inset-x-0 bottom-0 z-[101] flex max-h-[90dvh] flex-col rounded-t-[16px] border-t border-app bg-[var(--bg)] outline-none"
-            style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + var(--keyboard-height, 0px))" }}
+            style={{ zIndex: zIndex + 1, paddingBottom: "calc(env(safe-area-inset-bottom) + var(--keyboard-height, 0px))" }}
           >
             <div aria-hidden className="mx-auto mt-[8px] h-[4px] w-[36px] rounded-full bg-[var(--border)]" />
             <Drawer.Title asChild><div>{header}</div></Drawer.Title>
@@ -73,7 +76,7 @@ export function Sheet({
   // On body: the Messages page slides its panels with a transform, which would trap a fixed layer
   // inside the chat panel (the veil would not cover the sidebar).
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-[16px]" onClick={onClose}>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-[16px]" style={{ zIndex }} onClick={onClose}>
       <div
         role="dialog"
         aria-modal="true"
