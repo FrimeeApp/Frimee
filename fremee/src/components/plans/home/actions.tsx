@@ -144,12 +144,16 @@ export function CreateJoinSheet({ onClose, onCreate, startOnJoin }: { onClose: (
 }
 
 /** «¿Y después de la sierra?»: with a single plan the actions live on the screen instead of the «+». */
-export function AfterCard({ planTitle, onCreate, onJoin }: { planTitle: string; onCreate: () => void; onJoin: () => void }) {
+export function AfterCard({ planTitle, onCreate, onJoin, finished = false }: { planTitle: string; onCreate: () => void; onJoin: () => void; finished?: boolean }) {
   const tail = planTitle.replace(/^(finde|escapada|viaje|semana santa|puente)\s+(en|a)\s+/i, "");
   return (
     <div className="mx-4 mt-4 rounded-[8px] border border-dashed border-[var(--border-strong)] p-4 md:mx-0">
-      <p className="text-[16px] font-[var(--fw-semibold)] text-app">¿Y después de {tail.length <= 28 ? tail : "este plan"}?</p>
-      <p className="mt-1 text-[14px] leading-normal text-muted">Crea otro plan o únete al de un amigo con su enlace.</p>
+      <p className="text-[16px] font-[var(--fw-semibold)] text-app">
+        {finished ? "¿Cuál será tu próximo viaje?" : `¿Y después de ${tail.length <= 28 ? tail : "este plan"}?`}
+      </p>
+      <p className="mt-1 text-[14px] leading-normal text-muted">
+        {finished ? "Vuelve a planificar un viaje o únete al de un amigo con su enlace." : "Crea otro plan o únete al de un amigo con su enlace."}
+      </p>
       <div className="mt-3 flex gap-2">
         <button type="button" onClick={onCreate} className={`${FILL_BTN} flex-1 ${FOCUS}`}>
           <Plus size={18} aria-hidden />
