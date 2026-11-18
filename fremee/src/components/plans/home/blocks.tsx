@@ -443,7 +443,7 @@ export function CoverCard({
   const poll = pollForMe(extra?.encuestas);
   const countdown = countdownText(plan);
   return (
-    <article aria-label={`${label}: ${plan.title}${countdown ? `, ${countdown.toLowerCase()}` : ""}`} className={`${CARD} transition-transform duration-[120ms] active:scale-[.98] motion-reduce:transition-none`}>
+    <article aria-label={`${label}: ${plan.title}${countdown ? `, ${countdown.toLowerCase()}` : ""}`} className={`relative ${CARD} transition-transform duration-[120ms] active:scale-[.98] motion-reduce:transition-none`}>
       <PlanCover
         plan={plan}
         veil
@@ -454,12 +454,12 @@ export function CoverCard({
             <Pill>{countdown}</Pill>
           </div>
         )}
-        <div className="absolute right-2 top-2">
+        <div className="absolute right-2 top-2 z-[2]">
           <PinButton pinned={pinned} onToggle={onTogglePin} onPhoto />
         </div>
         <div className={`absolute bottom-3.5 ${desktop ? "inset-x-5" : "inset-x-4"}`}>
           <h3 className={`${SERIF} truncate text-[32px] leading-9 text-white`}>
-            <OpenLink plan={plan} onOpen={onOpen}>{plan.title}</OpenLink>
+            {plan.title}
           </h3>
           <p className="mt-1 text-[14px] leading-5 text-white">{rangeAndPlace(plan, desktop)}</p>
         </div>
@@ -471,7 +471,7 @@ export function CoverCard({
           {!poll && desktop ? ` · ${creatorText(plan, userId)}` : ""}
         </span>
         {poll && (
-          <button type="button" onClick={() => onOpen(plan.id, "chat")} className={`${CHIP_HL} ${FOCUS}`}>
+          <button type="button" onClick={() => onOpen(plan.id, "chat")} className={`relative z-[2] ${CHIP_HL} ${FOCUS}`}>
             <BarChart3 size={16} aria-hidden className="shrink-0" />
             <span className="truncate">
               {poll.pregunta}
@@ -483,13 +483,20 @@ export function CoverCard({
           <button
             type="button"
             onClick={() => onOpen(plan.id)}
-            className={`inline-flex h-8 items-center gap-1.5 rounded-full border border-[var(--border-strong)] px-3 text-[14px] font-[var(--fw-medium)] text-app ${FOCUS}`}
+            className={`relative z-[2] inline-flex h-8 items-center gap-1.5 rounded-full border border-[var(--border-strong)] px-3 text-[14px] font-[var(--fw-medium)] text-app ${FOCUS}`}
           >
             <ImagePlus size={16} aria-hidden />
             Añadir foto
           </button>
         )}
       </div>
+      <OpenLink
+        plan={plan}
+        onOpen={onOpen}
+        className="absolute inset-0 z-[1] rounded-[8px] focus-visible:outline-offset-[-3px]"
+      >
+        <span className="sr-only">Abrir plan: {plan.title}</span>
+      </OpenLink>
     </article>
   );
 }
@@ -652,7 +659,7 @@ export function PlanTile({ plan, extra, pinned, onTogglePin, onOpen, userId }: C
   const count = people.length || 1;
   const status = timing.kind === "ongoing" ? `En curso · día ${timing.day} de ${timing.total}` : countdownText(plan);
   return (
-    <article aria-label={plan.title} className={`${CARD} transition-transform duration-[120ms] has-[a:active]:scale-[.98] motion-reduce:transition-none`}>
+    <article aria-label={plan.title} className={`relative ${CARD} transition-transform duration-[120ms] has-[a:active]:scale-[.98] motion-reduce:transition-none`}>
       <PlanCover plan={plan} className="h-[148px]">
         {status && (
           <div className="absolute left-2.5 top-2.5">
@@ -663,15 +670,13 @@ export function PlanTile({ plan, extra, pinned, onTogglePin, onOpen, userId }: C
           </div>
         )}
         {!finished && (
-          <div className="absolute right-1.5 top-1.5">
+          <div className="absolute right-1.5 top-1.5 z-[2]">
             <PinButton pinned={pinned} onToggle={onTogglePin} onPhoto />
           </div>
         )}
       </PlanCover>
       <div className="px-3.5 pb-3.5 pt-3">
-        <h3 className="truncate text-[16px] font-[var(--fw-semibold)] leading-[22px] text-app">
-          <OpenLink plan={plan} onOpen={onOpen}>{plan.title}</OpenLink>
-        </h3>
+        <h3 className="truncate text-[16px] font-[var(--fw-semibold)] leading-[22px] text-app">{plan.title}</h3>
         <p className="mt-0.5 truncate text-[14px] text-muted">{rangeAndPlace(plan, true)}</p>
         <div className="mt-2.5 flex items-center gap-2">
           <PeopleStack people={people} size={22} max={3} />
@@ -680,6 +685,13 @@ export function PlanTile({ plan, extra, pinned, onTogglePin, onOpen, userId }: C
           </span>
         </div>
       </div>
+      <OpenLink
+        plan={plan}
+        onOpen={onOpen}
+        className="absolute inset-0 z-[1] rounded-[8px] focus-visible:outline-offset-[-3px]"
+      >
+        <span className="sr-only">Abrir plan: {plan.title}</span>
+      </OpenLink>
     </article>
   );
 }
