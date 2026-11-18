@@ -362,10 +362,12 @@ function PollRow({ poll, total, planId, onOpen }: { poll: InicioEncuesta; total:
 
 export function HeroBlock({ plan, extra, pinned, onTogglePin, onOpen, userId, desktop }: Common & { desktop?: boolean }) {
   const t = planTiming(plan);
+  const finished = t.kind === "finished";
   const people = extra?.miembros ?? [];
   const polls = extra?.encuestas ?? [];
-  const countdown =
-    t.kind === "upcoming" && t.days > 1 && t.days <= 30 ? (
+  const countdown = finished ? (
+    <p className={`${SERIF} text-[32px] leading-9 text-app`}>Viaje finalizado</p>
+  ) : t.kind === "upcoming" && t.days > 1 && t.days <= 30 ? (
       <p className="flex items-baseline gap-2">
         <span className={LABEL}>Faltan</span>
         <span className={`${SERIF} tabular-nums text-app ${desktop ? "text-[72px] leading-[64px]" : "text-[48px] leading-[44px]"}`}>{t.days}</span>
@@ -388,15 +390,17 @@ export function HeroBlock({ plan, extra, pinned, onTogglePin, onOpen, userId, de
   );
 
   return (
-    <article aria-label={`Tu próximo viaje: ${plan.title}`} className={`${CARD} ${desktop ? "flex min-h-[420px]" : ""}`}>
+    <article aria-label={`${finished ? "Tu último viaje" : "Tu próximo viaje"}: ${plan.title}`} className={`${CARD} ${desktop ? "flex min-h-[420px]" : ""}`}>
       <PlanCover
         plan={plan}
         veil={!desktop}
         className={desktop ? "w-[400px] shrink-0" : "h-[208px]"}
       >
-        <div className="absolute right-2 top-2">
-          <PinButton pinned={pinned} onToggle={onTogglePin} onPhoto />
-        </div>
+        {!finished && (
+          <div className="absolute right-2 top-2">
+            <PinButton pinned={pinned} onToggle={onTogglePin} onPhoto />
+          </div>
+        )}
         {!desktop && <div className="absolute inset-x-4 bottom-3.5">{titleBlock}</div>}
       </PlanCover>
       <div className={desktop ? "flex min-w-0 flex-1 flex-col px-7 pb-5 pt-6" : "px-4 pb-1.5 pt-3.5"}>
@@ -406,12 +410,16 @@ export function HeroBlock({ plan, extra, pinned, onTogglePin, onOpen, userId, de
           <div className="flex flex-col items-end gap-1">
             <PeopleStack people={people} size={28} />
             <span className="text-[12px] text-muted">
-              {people.length === 1 ? "Solo tú" : `${people.length} van`}
+              {finished
+                ? `${people.length} ${people.length === 1 ? "participante" : "participantes"}`
+                : people.length === 1
+                  ? "Solo tú"
+                  : `${people.length} van`}
               {desktop ? "" : ` · ${creatorText(plan, userId)}`}
             </span>
           </div>
         </div>
-        {polls.length > 0 && (
+        {!finished && polls.length > 0 && (
           <>
             <h4 className={`${LABEL} mt-4`}>Por decidir · {polls.length}</h4>
             <ul className="mt-1">
