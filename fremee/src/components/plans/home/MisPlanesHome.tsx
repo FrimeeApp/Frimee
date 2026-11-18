@@ -49,6 +49,7 @@ export function MisPlanesHome(props: Props) {
   const empty = plans.length === 0;
   const { now, hero, next, pinned, later, finished, activeCount } = sections;
   const single = !now && hero && activeCount === 1;
+  const lastTrip = activeCount === 0 ? finished[0] ?? null : null;
   const common = (plan: FeedPlanItemDto) => ({
     plan,
     extra: extras.get(plan.id),
@@ -80,7 +81,16 @@ export function MisPlanesHome(props: Props) {
         <EmptyHome onCreate={onCreate} onJoin={() => setSheet("join")} onOpenPlan={(id) => onOpen(id)} />
       ) : (
         <div className="pb-6">
-          {now && (
+          {lastTrip && (
+            <>
+              <SectionTitle>Tu último viaje</SectionTitle>
+              <div className="px-4">
+                <HeroBlock {...common(lastTrip)} />
+              </div>
+              <AfterCard planTitle={lastTrip.title} onCreate={onCreate} onJoin={() => setSheet("join")} finished />
+            </>
+          )}
+          {!lastTrip && now && (
             <>
               <SectionTitle>
                 <span className="flex items-center gap-2 text-[var(--chat-accent-text)]">
@@ -93,7 +103,7 @@ export function MisPlanesHome(props: Props) {
               </div>
             </>
           )}
-          {hero && (
+          {!lastTrip && hero && (
             <>
               <SectionTitle>Tu próximo viaje</SectionTitle>
               <div className="px-4">
@@ -101,7 +111,7 @@ export function MisPlanesHome(props: Props) {
               </div>
             </>
           )}
-          {next && (
+          {!lastTrip && next && (
             <div className="mt-3">
               <SectionTitle>Siguiente</SectionTitle>
               <div className="px-4">
@@ -109,13 +119,13 @@ export function MisPlanesHome(props: Props) {
               </div>
             </div>
           )}
-          {single && <AfterCard planTitle={hero.title} onCreate={onCreate} onJoin={() => setSheet("join")} />}
-          {pinned.length > 0 && (
+          {!lastTrip && single && <AfterCard planTitle={hero.title} onCreate={onCreate} onJoin={() => setSheet("join")} />}
+          {!lastTrip && pinned.length > 0 && (
             <div className="mt-3">
               <PinnedStack plans={pinned} extras={extras} onTogglePin={onTogglePin} onOpen={onOpen} userId={userId} />
             </div>
           )}
-          {later.length > 0 && (
+          {!lastTrip && later.length > 0 && (
             <div className="mt-3">
               <SectionTitle
                 action={
@@ -134,7 +144,7 @@ export function MisPlanesHome(props: Props) {
               <FinishedLink plans={finished} onClick={() => onOpenAll({ finished: true })} />
             </div>
           )}
-          {!single && <CreateJoinFab onCreate={onCreate} open={sheet === "menu"} onOpenChange={(o) => setSheet(o ? "menu" : null)} />}
+          {!single && !lastTrip && <CreateJoinFab onCreate={onCreate} open={sheet === "menu"} onOpenChange={(o) => setSheet(o ? "menu" : null)} />}
         </div>
       )}
     </div>
@@ -181,7 +191,14 @@ export function MisPlanesHome(props: Props) {
       ) : (
         <div className="flex items-start gap-10">
           <div className="min-w-0 flex-1 pb-12">
-            {now && (
+            {lastTrip && (
+              <>
+                <h2 className="mt-5 flex h-8 items-center text-[12px] font-[var(--fw-semibold)] tracking-[.02em] text-muted">Tu último viaje</h2>
+                <HeroBlock {...common(lastTrip)} desktop />
+                <AfterCard planTitle={lastTrip.title} onCreate={onCreate} onJoin={() => setSheet("join")} finished />
+              </>
+            )}
+            {!lastTrip && now && (
               <>
                 <h2 className="mt-5 flex h-8 items-center gap-2 text-[12px] font-[var(--fw-semibold)] tracking-[.02em] text-[var(--chat-accent-text)]">
                   <LiveDot />
@@ -190,14 +207,14 @@ export function MisPlanesHome(props: Props) {
                 <NowBlock {...common(now)} desktop />
               </>
             )}
-            {hero && (
+            {!lastTrip && hero && (
               <>
                 <h2 className="mt-5 flex h-8 items-center text-[12px] font-[var(--fw-semibold)] tracking-[.02em] text-muted">Tu próximo viaje</h2>
                 <HeroBlock {...common(hero)} desktop />
               </>
             )}
-            {single && <AfterCard planTitle={hero.title} onCreate={onCreate} onJoin={() => setSheet("join")} />}
-            {(next || pinned.length > 0) && (
+            {!lastTrip && single && <AfterCard planTitle={hero.title} onCreate={onCreate} onJoin={() => setSheet("join")} />}
+            {!lastTrip && (next || pinned.length > 0) && (
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 {next && (
                   <div>
@@ -210,16 +227,18 @@ export function MisPlanesHome(props: Props) {
                 )}
               </div>
             )}
-            {(laterPlans.length > 0 || finished.length > 0) && (
+            {(lastTrip || laterPlans.length > 0 || finished.length > 0) && (
               <div className="mt-4 flex h-8 items-center justify-between">
-                <h2 className="text-[12px] font-[var(--fw-semibold)] tracking-[.02em] text-muted">{laterPlans.length ? "Más adelante" : ""}</h2>
+                <h2 className="text-[12px] font-[var(--fw-semibold)] tracking-[.02em] text-muted">
+                  {lastTrip ? "Historial" : laterPlans.length ? "Más adelante" : ""}
+                </h2>
                 <button type="button" onClick={() => onOpenAll()} className={`${TEXT_BTN} ${FOCUS}`}>
                   Todos los planes · {activeCount} {activeCount === 1 ? "activo" : "activos"}
                   {finished.length ? `, ${finished.length} ${finished.length === 1 ? "finalizado" : "finalizados"}` : ""}
                 </button>
               </div>
             )}
-            {laterPlans.length > 0 && (
+            {!lastTrip && laterPlans.length > 0 && (
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 {laterPlans.map((p) => (
                   <LaterTile key={p.id} plan={p} onOpen={onOpen} userId={userId} pinned={pinnedIds.includes(p.id)} onTogglePin={() => onTogglePin(p.id)} />
