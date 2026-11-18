@@ -50,8 +50,10 @@ const AuthContext = createContext<AuthState | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   const mountedRef = useRef(false);
+  const demoCleanupCompletedForRef = useRef<string | null>(null);
 
   const [loading, setLoading] = useState(true);
+  const [demoCleanupPending, setDemoCleanupPending] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
   const [googleProviderToken, setGoogleProviderToken] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
@@ -134,6 +136,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(null);
     setGoogleProviderToken(null);
     setUser(null);
+    demoCleanupCompletedForRef.current = null;
+    setDemoCleanupPending(false);
     applySnapshot(null);
     setLoading(false);
   }, [supabase, applySnapshot, user?.id]);
@@ -149,6 +153,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         setSession(nextSession);
         setUser(nextSession?.user ?? null);
+        const nextUser = nextSession?.user ?? null;
+        if (nextUser && !nextUser.is_anonymous) {
+          if (demoCleanupCompletedForRef.current !== nextUser.id) setDemoCleanupPending(true);
+        } else {
+          demoCleanupCompletedForRef.current = null;
+          setDemoCleanupPending(false);
+        }
         if (nextSession) setSignedOutByUser(false);
         // Firebase acts as the same user (Storage and Firestore rules need it); uploads wait
         // for it anyway, so a failure here only delays the first one.
@@ -188,9 +199,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [supabase, loadUserSnapshot]);
 
+  // Registered accounts may still have the temporary demo from an earlier session.
+  // Keep app loading bounded by three seconds while the RPC clears it.
+  useEffect(() => {
+    const currentUser = session?.user;
+    if (!currentUser?.id || currentUser.is_anonymous || demoCleanupCompletedForRef.current === currentUser.id) return;
+
+    let active = true;
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => {
+      controller.abort();
+      if (active && mountedRef.current) {
+        demoCleanupCompletedForRef.current = currentUser.id;
+        setDemoCleanupPending(false);
+      }
+    }, 3_000);
+    void supabase
+      .rpc("fn_demo_borrar")
+      .abortSignal(controller.signal)
+      .then(({ error }) => {
+        if (!error || controller.signal.aborted) return;
+        console.warn("[demo] No se pudo limpiar el ejemplo:", error.message);
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        console.warn("[demo] No se pudo limpiar el ejemplo:", error);
+      })
+      .finally(() => {
+        window.clearTimeout(timeoutId);
+        if (active && mountedRef.current) {
+          demoCleanupCompletedForRef.current = currentUser.id;
+          setDemoCleanupPending(false);
+        }
+      });
+
+    return () => {
+      active = false;
+      window.clearTimeout(timeoutId);
+      controller.abort();
+    };
+  }, [session?.user?.id, session?.user?.is_anonymous, supabase]);
+
   const value: AuthState = {
     signedOutByUser,
-    loading,
+    loading: loading || demoCleanupPending,
     session,
     googleProviderToken,
     user,
