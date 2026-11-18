@@ -214,24 +214,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setDemoCleanupPending(false);
       }
     }, 3_000);
-    void supabase
-      .rpc("fn_demo_borrar")
-      .abortSignal(controller.signal)
-      .then(({ error }) => {
-        if (!error || controller.signal.aborted) return;
-        console.warn("[demo] No se pudo limpiar el ejemplo:", error.message);
-      })
-      .catch((error: unknown) => {
-        if (controller.signal.aborted) return;
-        console.warn("[demo] No se pudo limpiar el ejemplo:", error);
-      })
-      .finally(() => {
+    void (async () => {
+      try {
+        const { error } = await supabase
+          .rpc("fn_demo_borrar")
+          .abortSignal(controller.signal);
+        if (error && !controller.signal.aborted) {
+          console.warn("[demo] No se pudo limpiar el ejemplo:", error.message);
+        }
+      } catch (error: unknown) {
+        if (!controller.signal.aborted) {
+          console.warn("[demo] No se pudo limpiar el ejemplo:", error);
+        }
+      } finally {
         window.clearTimeout(timeoutId);
         if (active && mountedRef.current) {
           demoCleanupCompletedForRef.current = currentUser.id;
           setDemoCleanupPending(false);
         }
-      });
+      }
+    })();
 
     return () => {
       active = false;
