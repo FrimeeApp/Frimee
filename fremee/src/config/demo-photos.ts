@@ -141,3 +141,8 @@ export const DEMO_PHOTO_CREDITS: Record<string, DemoPhotoCredit> = {
     fuente: "https://commons.wikimedia.org/wiki/File:Celebrating_a_50th_birthday_with_a_cake_featuring_lit_candles_and_chocolate_frosting.jpg",
   },
 };
+
+/** The seed repeats each image under «?n=N» so every photo row has its own url; credits are by path. */
+export function demoPhotoCredit(url: string): DemoPhotoCredit | undefined {
+  return DEMO_PHOTO_CREDITS[url.split("?")[0]];
+}

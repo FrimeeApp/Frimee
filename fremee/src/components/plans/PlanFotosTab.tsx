@@ -24,11 +24,11 @@ import {
 import { Plus, Trash2, Loader2, BookOpen, ChevronRight, Hand, CalendarDays, CircleAlert, Bed, Route, Archive, Check, SquareCheckBig, X, Clock, MapPin, FolderInput } from "lucide-react";
 import AlbumMover, { type MoverChoice } from "@/components/plans/AlbumMover";
 import { ImageLightbox } from "@/components/ui/ImageLightbox";
-import { DEMO_PHOTO_CREDITS } from "@/config/demo-photos";
+import { demoPhotoCredit } from "@/config/demo-photos";
 
 /** Author and licence of an example-trip photo (Wikimedia Commons); real uploads have none. */
 function DemoPhotoCaption({ url }: { url: string }) {
-  const credit = DEMO_PHOTO_CREDITS[url];
+  const credit = demoPhotoCredit(url);
   if (!credit) return null;
   return (
     <>
@@ -596,7 +596,7 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, isAdmin 
             }}
           />
         )}
-        {DEMO_PHOTO_CREDITS[url] ? (
+        {demoPhotoCredit(url) ? (
           <p className={`mt-3 text-[13px] text-white/70 ${variant === "sheet" ? "text-center" : ""}`}>
             <DemoPhotoCaption url={url} />
           </p>
@@ -841,7 +841,7 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, isAdmin 
         document.body,
       )}
 
-      {album.fotos.some((foto) => DEMO_PHOTO_CREDITS[foto.url]) && (
+      {album.fotos.some((foto) => demoPhotoCredit(foto.url)) && (
         <p className="mt-[var(--space-3)] text-[12px] text-tertiary">Fotos de ejemplo de Wikimedia Commons; al abrir cada una verás su autor y licencia.</p>
       )}
 
