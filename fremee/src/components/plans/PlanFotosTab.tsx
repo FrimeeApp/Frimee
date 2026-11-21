@@ -989,14 +989,6 @@ const MOTIVO_DETALLE = {
   otro: null,
 } as const;
 
-const FUENTE_TEXT: Record<string, string> = {
-  confirmada: "Hora confirmada",
-  exif: "Hora de la cámara",
-  xmp: "Hora de la cámara",
-  gps: "Hora del GPS de la foto",
-  nombre: "Sacada del nombre del archivo",
-};
-
 function shortDate(iso: string): string {
   return new Date(iso).toLocaleDateString("es-ES", { weekday: "short", day: "numeric", month: "short" }).replace(/[.,]/g, "").trim();
 }
@@ -1043,7 +1035,6 @@ function PhotoInfo({
   const aqui = destinoTexto(album, colocacion.destino);
   const sinActividad = colocacion.destino.kind === "sin_clasificar";
   const motivo = colocacion.destino.kind === "sin_clasificar" ? MOTIVO_DETALLE[colocacion.destino.motivo] : null;
-  const fuenteTexto = foto.tomada_fuente ? FUENTE_TEXT[foto.tomada_fuente] : undefined;
   return (
     <div className="mx-auto w-full max-w-[560px] text-left text-white">
       <div className="flex items-center gap-2.5 pb-3">
@@ -1075,7 +1066,6 @@ function PhotoInfo({
               <span className={pillClass}>Hora aproximada</span>
             </div>
           )}
-          {fuenteTexto && <p className="mt-1 text-[13px] text-[#a0a0a9]">{fuenteTexto}</p>}
         </div>
       </div>
       )}
