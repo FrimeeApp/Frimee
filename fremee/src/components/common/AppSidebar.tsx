@@ -929,7 +929,8 @@ export default function AppSidebar({ onCreatePlan, onCreateGroup, hideMobileNav,
         <div className="flex min-h-0 flex-1 flex-col px-5 pb-4 pt-5">
           <UserSearchSurface
             excludeUserId={user?.id}
-            limit={6}
+            title="Personas"
+            showShortcuts
             autoFocus={searchPopoverOpen}
             resultsClassName="mt-3 -mx-5 flex-1 overflow-y-auto overscroll-contain"
             onResultClick={() => setSearchPopoverOpen(false)}
