@@ -469,6 +469,32 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, isAdmin 
   const hayFotos = grouping.total > 0;
   const visibleDays = grouping.days.filter((d) => (hayFotos ? d.fotoCount > 0 : d.blocks.length > 0));
 
+  const viewerInfo = (url: string, variant: "sheet" | "aside") => {
+    const p = placedByUrl.get(url);
+    return (
+      <>
+        {p && (
+          <PhotoInfo
+            placed={p}
+            album={album}
+            currentUserId={currentUserId}
+            canMove={canMove(p.foto.user_id)}
+            variant={variant}
+            onMove={() => {
+              setSelected(new Set([p.foto.id]));
+              setMoverOpen(true);
+            }}
+          />
+        )}
+        {DEMO_PHOTO_CREDITS[url] ? (
+          <p className={`mt-3 text-[13px] text-white/70 ${variant === "sheet" ? "text-center" : ""}`}>
+            <DemoPhotoCaption url={url} />
+          </p>
+        ) : null}
+      </>
+    );
+  };
+
   const photoProps = {
     album,
     currentUserId,
@@ -677,31 +703,8 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, isAdmin 
             const p = placedByUrl.get(url);
             return p ? `Foto de ${authorName(album, p.foto.user_id, currentUserId)}${p.foto.tomada_at ? `, ${hhmm(p.foto.tomada_at)}` : ""}` : "Foto del álbum";
           }}
-          caption={(url) => {
-            const p = placedByUrl.get(url);
-            return (
-              <>
-                {p && (
-                  <PhotoInfo
-                    placed={p}
-                    album={album}
-                    currentUserId={currentUserId}
-                    canMove={canMove(p.foto.user_id)}
-                    desktop={isDesktop}
-                    onMove={() => {
-                      setSelected(new Set([p.foto.id]));
-                      setMoverOpen(true);
-                    }}
-                  />
-                )}
-                {DEMO_PHOTO_CREDITS[url] ? (
-                  <p className="mt-2 text-center text-[13px] text-white/70">
-                    <DemoPhotoCaption url={url} />
-                  </p>
-                ) : null}
-              </>
-            );
-          }}
+          caption={(url) => viewerInfo(url, "sheet")}
+          aside={(url) => viewerInfo(url, "aside")}
         />
       )}
     </div>
@@ -863,16 +866,18 @@ function PhotoInfo({
   album,
   currentUserId,
   canMove,
-  desktop,
+  variant,
   onMove,
 }: {
   placed: PlacedPhoto;
   album: PlanAlbum;
   currentUserId: string;
   canMove: boolean;
-  desktop: boolean;
+  /** «sheet»: under the photo on phones; «aside»: the 400 px side panel on desktop. */
+  variant: "sheet" | "aside";
   onMove: () => void;
 }) {
+  const row = variant === "aside" ? "py-3.5" : "py-3";
   const { foto, colocacion } = placed;
   const own = foto.user_id === currentUserId;
   const nombre = authorName(album, foto.user_id, currentUserId);
@@ -890,7 +895,7 @@ function PhotoInfo({
         </div>
       </div>
 
-      <div className="flex gap-3 border-t border-[#2a2a31] py-3">
+      <div className={`flex gap-3 border-t border-[#2a2a31] ${row}`}>
         <span className="mt-px text-[#a0a0a9]" aria-hidden>
           {colocacion.aprox ? (
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -912,7 +917,7 @@ function PhotoInfo({
         </div>
       </div>
 
-      <div className="flex gap-3 border-t border-[#2a2a31] py-3">
+      <div className={`flex gap-3 border-t border-[#2a2a31] ${row}`}>
         <span className="mt-px text-[#a0a0a9]" aria-hidden>
           <MapPin className="size-[18px]" />
         </span>
@@ -933,13 +938,13 @@ function PhotoInfo({
         <button
           type="button"
           onClick={onMove}
-          className="mt-1 flex h-[46px] w-full items-center justify-center gap-2 rounded-lg border border-[#3a3a3d] text-[15px] font-[600] text-[#ededef] transition-colors hover:bg-white/5"
+          className={`flex h-[46px] w-full items-center justify-center gap-2 rounded-lg border border-[#3a3a3d] text-[15px] font-[600] text-[#ededef] transition-colors hover:bg-white/5 ${variant === "aside" ? "mt-4" : "mt-1"}`}
         >
           <FolderInput className="size-[18px]" aria-hidden />
           Mover a…
-          {desktop && <span className="text-[12px] font-[500] text-[#a0a0a9]">Atajo: M</span>}
         </button>
       )}
+      {canMove && variant === "aside" && <p className="mt-2.5 text-[12px] text-[#a0a0a9]">Atajo: M</p>}
     </div>
   );
 }
