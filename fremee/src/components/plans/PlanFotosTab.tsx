@@ -183,7 +183,8 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, isAdmin 
     const out: string[] = [];
     for (const d of grouping.days) for (const b of d.blocks) for (const p of b.fotos) out.push(p.foto.url);
     for (const g of grouping.sinClasificar.grupos) for (const p of g.fotos) out.push(p.foto.url);
-    return out;
+    // The viewer keys its thumbnails by url: two rows with the same url (a photo saved twice) would repeat the key.
+    return [...new Set(out)];
   }, [grouping]);
 
   /** Photo ids in the order they are drawn (Shift+click selects the range between two). */
