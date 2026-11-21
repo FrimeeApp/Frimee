@@ -49,16 +49,17 @@ function PageBlock({ b, m, last }: { b: Block; m: PdfModel; last: boolean }) {
     );
   }
   if (b.t === "balance") {
-    const cols = "150px 100px 100px 160px 1fr";
+    const cols = "130px 100px 100px 20px 160px 1fr";
     return (
       <div style={{ marginBottom: H.gap }}>
         {mkH2("Balance por persona", "Pagó − le toca")}
-        <Head cols={cols} labels={["Persona", "Pagó", "Le toca", "Saldo", ""]} right={[1, 2]} />
+        <Head cols={cols} labels={["Persona", "Pagó", "Le toca", "", "Saldo", ""]} right={[1, 2]} />
         {b.rows.map((r, i) => (
           <Row key={i} h={H.balRow} cols={cols}>
             <b>{r.name}</b>
             <span style={{ textAlign: "right" }}>{r.paid}</span>
             <span style={{ textAlign: "right" }}>{r.share}</span>
+            <span />
             <div style={{ display: "flex", alignItems: "center", height: 10 }}>
               <span style={{ width: 1, height: 12, background: INK }} />
               {r.saldo > 0.005 && <span style={{ height: 10, width: Math.max(2, r.ratio * 120), background: INK }} />}
@@ -153,11 +154,11 @@ function PageHead({ m }: { m: PdfModel }) {
       <h1 style={{ fontFamily: SERIF, fontWeight: 400, fontSize: 44, margin: "26px 0 0", lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.title}</h1>
       <p style={{ fontSize: 12.5, margin: "8px 0 0", color: "#3a3a42", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.subtitle}</p>
       {m.partialNote && (
-        <div style={{ position: "absolute", left: 0, right: 0, top: 86, height: 44, boxSizing: "border-box", border: `1.5px dashed ${INK}`, borderRadius: 6, padding: "0 12px", display: "flex", alignItems: "center", fontSize: 11.5, whiteSpace: "nowrap", overflow: "hidden" }}>
+        <div style={{ position: "absolute", left: 0, right: 0, top: 142, height: 44, boxSizing: "border-box", border: `1.5px dashed ${INK}`, borderRadius: 6, padding: "0 12px", display: "flex", alignItems: "center", fontSize: 11.5, whiteSpace: "nowrap", overflow: "hidden" }}>
           <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}><b>Resumen parcial.</b> {m.partialNote}</span>
         </div>
       )}
-      <div style={{ position: "absolute", left: 0, right: 0, top: partial ? 148 : 96, height: 66, display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr 1.2fr", borderTop: `1.5px solid ${INK}`, borderBottom: `1px solid ${LINE}` }}>
+      <div style={{ position: "absolute", left: 0, right: 0, top: partial ? 204 : 152, height: 66, display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr 1.2fr", borderTop: `1.5px solid ${INK}`, borderBottom: `1px solid ${LINE}` }}>
         {m.stats.map((s, i) => (
           <div key={i} style={{ padding: `10px 0 0 ${i ? 14 : 0}px`, borderLeft: i ? `1px solid ${SOFT}` : undefined }}>
             <p style={{ ...CAPS, margin: 0 }}>{s.label}</p>
