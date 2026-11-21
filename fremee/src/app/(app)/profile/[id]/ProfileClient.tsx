@@ -21,6 +21,7 @@ import { useBloqueos } from "@/hooks/useBloqueos";
 import { BlockConfirm } from "@/components/chat/info/BlockConfirm";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
 import { Tabs } from "@/components/ui/Tabs";
+import { useToast } from "@/components/ui/Toaster";
 
 /** Seguir is hidden while the feed is (its code and data stay for when the feed comes back). */
 const MOSTRAR_SEGUIR = false;
@@ -42,6 +43,8 @@ export default function ProfilePage() {
   const router = useRouter();
   const id = routeId === "static" ? searchParams.get("id") ?? "" : routeId;
   const { user, profile: myProfile, settings, loading: authLoading, refreshProfile } = useAuth();
+  const { toast } = useToast();
+  const isGuest = Boolean(user?.is_anonymous);
   const isOwnProfile = user?.id === id;
 
   const [profileData, setProfileData] = useState<ProfileData | null>(null);
@@ -69,12 +72,15 @@ export default function ProfilePage() {
 
   const handleAddFriend = async () => {
     if (friendshipStatus !== "none" || sendingFriendRequest) return;
+    if (isGuest) { toast("Regístrate para hacerlo", "info"); return; }
     setSendingFriendRequest(true);
     try {
       await sendFriendRequest(id);
       setFriendshipStatus("pending");
     } catch (err) {
-      console.error("[profile] Error sending friend request:", err);
+      const msg = err instanceof Error ? err.message : (err as { message?: string } | null)?.message ?? "";
+      if (msg.startsWith("Regístrate")) toast("Regístrate para hacerlo", "info");
+      else console.error("[profile] Error sending friend request:", err);
     } finally {
       setSendingFriendRequest(false);
     }
@@ -464,6 +470,8 @@ export default function ProfilePage() {
                     onClick={onFriendButtonPress}
                     disabled={friendshipStatus === "pending" || sendingFriendRequest}
                     className={`rounded-full border px-6 py-[6px] text-body-sm font-[var(--fw-semibold)] transition-all disabled:opacity-50 ${
+                      isGuest ? "opacity-60 " : ""
+                    }${
                       friendshipStatus === "friends"
                         ? "border-app bg-transparent text-app hover:border-red-400 hover:text-red-400"
                         : "border-app bg-transparent text-app hover:bg-surface"
@@ -471,7 +479,7 @@ export default function ProfilePage() {
                   >
                     {sendingFriendRequest ? "..." : friendshipStatus === "friends" ? "Amigos" : friendshipStatus === "pending" ? "Pendiente" : "Añadir amigo"}
                   </button>
-                  <ProfileMoreMenu userId={profileData.id} name={profileData.nombre} />
+                  {!isGuest && <ProfileMoreMenu userId={profileData.id} name={profileData.nombre} />}
                 </div>
               )}
 
