@@ -569,14 +569,49 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, isAdmin 
   // ── Loading and error ─────────────────────────────────────────────────────────────────
 
   if (status === "loading" && !album) {
-    return (
-      <div className="px-[var(--page-margin-x)] pt-5 pb-8" role="status" aria-live="polite">
-        <AlbumLink planId={planId} />
-        <p className="mb-3 text-[14px] text-muted">Cargando el álbum…</p>
-        <div className="grid grid-cols-3 gap-1">
-          {Array.from({ length: 9 }).map((_, i) => (
-            <div key={i} className="aspect-square w-full animate-pulse rounded-lg bg-[var(--surface-2)] motion-reduce:animate-none" />
+    const bar = "animate-pulse rounded bg-[var(--surface-2)] motion-reduce:animate-none";
+    const tile = "aspect-square w-full animate-pulse rounded-lg bg-[var(--surface-2)] motion-reduce:animate-none";
+    // Same skeleton as the grouped album: day header, activity head with its number, photo grid and a leg.
+    const activity = (tiles: number) => (
+      <div className="pb-6">
+        <div className="flex min-h-11 items-start gap-2.5">
+          <span className={`${bar} size-7 shrink-0 !rounded-full`} />
+          <div className="flex-1 space-y-2 pt-[5px]">
+            <div className={`${bar} h-4 w-2/5`} />
+            <div className={`${bar} h-3 w-1/4`} />
+          </div>
+        </div>
+        <div className="mt-2 grid grid-cols-3 gap-1 lg:grid-cols-6">
+          {Array.from({ length: tiles }).map((_, i) => (
+            <div key={i} className={tile} />
           ))}
+        </div>
+      </div>
+    );
+    return (
+      <div className="px-[var(--page-margin-x)] pt-5 pb-8" role="status" aria-live="polite" aria-label="Cargando el álbum">
+        <AlbumLink planId={planId} />
+        <div className="max-w-[960px]">
+          <div className="mb-4 border-b border-app pt-6 pb-2.5">
+            <div className={`${bar} h-[18px] w-1/3`} />
+            <div className={`${bar} mt-2 h-3 w-1/4`} />
+          </div>
+          {activity(6)}
+          <div className="relative -mt-3 mb-3 pb-3 pl-10">
+            <span aria-hidden className="absolute top-0 bottom-0 left-[13px] border-l-2 border-dashed border-app" />
+            <div className="-ml-10 flex min-h-9 items-center gap-2.5">
+              <span className={`${bar} size-7 shrink-0 !rounded-full`} />
+              <div className={`${bar} h-3.5 w-1/2`} />
+            </div>
+            <div className="mt-1.5 flex gap-1">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="w-[72px] shrink-0">
+                  <div className="aspect-square w-full animate-pulse rounded-md bg-[var(--surface-2)] motion-reduce:animate-none" />
+                </div>
+              ))}
+            </div>
+          </div>
+          {activity(3)}
         </div>
       </div>
     );

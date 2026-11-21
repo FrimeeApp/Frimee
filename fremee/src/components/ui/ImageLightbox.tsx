@@ -96,11 +96,16 @@ export function ImageLightbox({ url, imageUrls, onClose, caption, isVideo, alt, 
     return () => window.removeEventListener("keydown", handler, true);
   });
 
+  // The strip only exists once the viewer is on <body> (`mounted`), so the first centring waits for
+  // it and jumps without animation; later moves glide.
+  const stripPlaced = useRef(false);
   useEffect(() => {
     const el = thumbsRef.current?.children[idx] as HTMLElement | undefined;
+    if (!el) return;
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    el?.scrollIntoView({ inline: "center", block: "nearest", behavior: reduce ? "auto" : "smooth" });
-  }, [idx]);
+    el.scrollIntoView({ inline: "center", block: "nearest", behavior: reduce || !stripPlaced.current ? "auto" : "smooth" });
+    stripPlaced.current = true;
+  }, [idx, mounted, loaded]);
 
   const dist = (t: React.TouchList) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
 
