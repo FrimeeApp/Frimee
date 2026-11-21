@@ -1,4 +1,5 @@
 import type { AlbumActividad, AlbumFoto, AlbumGasto, PlanAlbum } from "@/services/api/endpoints/album.endpoint";
+import { colocarFotos } from "./album-placement";
 
 export type AlbumDay = {
   /** Local date, YYYY-MM-DD. */
@@ -29,8 +30,10 @@ export type AlbumStats = {
 
 export type AlbumModel = {
   days: AlbumDay[];
-  /** Photos uploaded outside the trip dates (often after coming back). */
+  /** Photos that fit no activity (before or after the trip, or with no time). */
   fotosSueltas: AlbumFoto[];
+  /** The activity each placed photo belongs to (photo id → activity id). */
+  fotoActividad: Map<number, number>;
   stats: AlbumStats;
 };
 
@@ -72,7 +75,6 @@ export function buildAlbumModel(album: PlanAlbum): AlbumModel {
     }
     return day;
   };
-  const inTrip = (key: string) => key >= startKey && key <= endKey;
 
   for (const actividad of album.actividades) {
     const day = dayFor(localDayKey(actividad.inicio_at));
@@ -88,12 +90,28 @@ export function buildAlbumModel(album: PlanAlbum): AlbumModel {
     day.gastoTotal += gasto.total;
   }
 
-  // Photos only know their upload time for now (phase 2 adds the time they were taken).
+  // Each photo goes where the album tab puts it: by the time it was taken, or where someone moved it.
+  // A photo taken on the way stays with the stop it left; one with no place is «suelta».
+  const colocadas = colocarFotos(album.actividades, album.fotos);
   const fotosSueltas: AlbumFoto[] = [];
+  const fotoActividad = new Map<number, number>();
   for (const foto of album.fotos) {
-    const key = localDayKey(foto.created_at);
-    if (inTrip(key)) dayFor(key).fotos.push(foto);
-    else fotosSueltas.push(foto);
+    const destino = colocadas.get(foto.id)?.destino;
+    let actividad: AlbumActividad | undefined;
+    if (destino?.kind === "actividad") {
+      actividad = album.actividades.find((a) => a.id === destino.subplanId);
+    } else if (destino?.kind === "viaje") {
+      const i = album.actividades.findIndex((a) => a.id === destino.hastaSubplanId);
+      const anterior = i > 0 ? album.actividades[i - 1] : undefined;
+      const llegada = i >= 0 ? album.actividades[i] : undefined;
+      actividad = anterior && llegada && localDayKey(anterior.inicio_at) === localDayKey(llegada.inicio_at) ? anterior : llegada;
+    }
+    if (!actividad) {
+      fotosSueltas.push(foto);
+      continue;
+    }
+    fotoActividad.set(foto.id, actividad.id);
+    dayFor(localDayKey(actividad.inicio_at)).fotos.push(foto);
   }
 
   const sortedDays = [...days.values()]
@@ -107,6 +125,7 @@ export function buildAlbumModel(album: PlanAlbum): AlbumModel {
   return {
     days: sortedDays,
     fotosSueltas,
+    fotoActividad,
     stats: {
       // Days with activities: the plan's end date can fall on the next day in the viewer's
       // time zone (23:59 in Lisbon is 00:59 in Madrid) and would count one day too many.
