@@ -216,6 +216,14 @@ export function GastosPdfModal({ input, closing, onClose }: { input: Omit<PdfInp
 
   const scale = Math.min(1, Math.max(0.2, (width - (width > 600 ? 48 : 32)) / PAGE_W));
   const has = (t: Block["t"]) => model.pages.some((p) => p.some((b) => b.t === t));
+  const parts = [
+    has("pagos") && "quién tiene que pagar a quién",
+    "cómo queda cada persona",
+    has("split") && "en qué se ha ido el dinero",
+    model.gastosCount === 1 ? "el gasto del plan" : `los ${model.gastosCount} gastos, día a día`,
+  ].filter(Boolean) as string[];
+  const joined = parts.length > 1 ? `${parts.slice(0, -1).join(", ")} y ${parts[parts.length - 1]}` : parts[0];
+  const contents = `${joined.charAt(0).toUpperCase()}${joined.slice(1)}.`;
   const pagesLabel = `${model.pages.length} ${model.pages.length === 1 ? "página" : "páginas"} · A4`;
 
   const download = () => {
@@ -279,13 +287,8 @@ export function GastosPdfModal({ input, closing, onClose }: { input: Omit<PdfInp
             <button type="button" onClick={onClose} aria-label="Cerrar" className="-mr-2 -mt-1 flex size-11 shrink-0 items-center justify-center rounded-lg text-app hover:bg-surface"><X className="size-[22px]" aria-hidden /></button>
           </div>
           <div className="rounded-lg border border-app bg-surface px-3.5 py-3 text-[14px]">
-            <p className="font-[var(--fw-semibold)] text-app">Incluye</p>
-            <ul className="mt-1 text-muted">
-              {has("pagos") && <li>Pagos para quedar en paz</li>}
-              <li>Balance por persona</li>
-              {(has("split")) && <li>En qué se ha ido y por subplan</li>}
-              <li>Los {model.gastosCount} gastos, por día</li>
-            </ul>
+            <p className="font-[var(--fw-semibold)] text-app">Qué lleva</p>
+            <p className="mt-1 text-muted">{contents}</p>
           </div>
           <p className="text-[12px] tabular-nums text-muted">{pagesLabel} · {model.fileName}</p>
           {failed && <p className="text-[13px] text-[var(--warning)]">No se ha podido preparar el PDF. Cierra y vuelve a intentarlo.</p>}
