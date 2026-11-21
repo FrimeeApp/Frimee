@@ -808,6 +808,21 @@ function Thumb({
   const isSelected = selected.has(foto.id);
   const press = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pressed = useRef(false);
+  const activate = (shift: boolean) => {
+    if (pressed.current) {
+      pressed.current = false;
+      return;
+    }
+    if (more) {
+      onMore();
+      return;
+    }
+    if (selecting) {
+      if (selectable) onToggleSelect(foto.id, shift);
+      return;
+    }
+    onOpen(foto.url);
+  };
   const cancelPress = () => {
     if (press.current) clearTimeout(press.current);
     press.current = null;
@@ -819,21 +834,7 @@ function Thumb({
         aria-label={more ? `Ver ${more} fotos más` : label}
         aria-pressed={selecting && selectable ? isSelected : undefined}
         aria-disabled={selecting && !selectable ? true : undefined}
-        onClick={(e) => {
-          if (pressed.current) {
-            pressed.current = false;
-            return;
-          }
-          if (more) {
-            onMore();
-            return;
-          }
-          if (selecting) {
-            if (selectable) onToggleSelect(foto.id, e.shiftKey);
-            return;
-          }
-          onOpen(foto.url);
-        }}
+        onClick={(e) => activate(e.shiftKey)}
         onPointerDown={(e) => {
           if (selecting || !selectable || e.pointerType === "mouse" || more) return;
           pressed.current = false;
@@ -880,7 +881,13 @@ function Thumb({
         </span>
       )}
       {more === 0 && colocacion.manual && (
-        <span className="pointer-events-none absolute top-1 right-1 flex size-[22px] items-center justify-center rounded-full bg-[rgba(17,17,17,.8)] text-white" aria-hidden>
+        // The mark answers the pointer only to show its tooltip; a click goes on to the photo.
+        <span
+          title="Colocada a mano"
+          onClick={(e) => activate(e.shiftKey)}
+          className="absolute top-1 right-1 flex size-[22px] items-center justify-center rounded-full bg-[rgba(17,17,17,.8)] text-white"
+          aria-hidden
+        >
           <Hand className="size-3" />
         </span>
       )}
