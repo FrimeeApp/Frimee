@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Archive, Bed, ChevronRight, Route, Search, Undo2, X } from "lucide-react";
 import { Sheet } from "@/components/chat/bitacora/Sheet";
 import { dayLabel, type MoverDay, type MoverOption } from "@/lib/album-grouping";
@@ -226,7 +227,7 @@ export default function AlbumMover({
     );
   }
 
-  return (
+  return createPortal(
     <>
       <div className="fixed inset-0 z-[1390]" onClick={onClose} aria-hidden />
       <div
@@ -237,6 +238,7 @@ export default function AlbumMover({
         <p className="mb-2 px-1 text-[15px] font-[600] text-app">{title}</p>
         {body}
       </div>
-    </>
+    </>,
+    document.body,
   );
 }

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { Capacitor } from "@capacitor/core";
 import { uploadPlanAlbumFile } from "@/services/firebase/upload";
@@ -673,10 +674,10 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, isAdmin 
         <AlbumMover count={selected.size} days={moverDays} desktop={isDesktop} onPick={(c) => { setMoverOpen(false); void handlePick(c); }} onClose={() => { setMoverOpen(false); if (!selecting) setSelected(new Set()); }} />
       )}
 
-      {notice && (
+      {notice && createPortal(
         <div
           role="status"
-          className={`fixed inset-x-3 bottom-6 z-[70] mx-auto flex min-h-14 max-w-[420px] items-center gap-3 rounded-lg border py-2 pr-1.5 pl-3.5 text-[14px] leading-[1.35] shadow-[0_12px_32px_rgba(0,0,0,0.3)] ${notice.error ? "border-[var(--error)] bg-[var(--surface)] text-app" : "border-app bg-[var(--surface)] text-app"}`}
+          className={`fixed inset-x-3 bottom-6 z-[1500] mx-auto flex min-h-14 max-w-[420px] items-center gap-3 rounded-lg border py-2 pr-1.5 pl-3.5 text-[14px] leading-[1.35] shadow-[0_12px_32px_rgba(0,0,0,0.3)] ${notice.error ? "border-[var(--error)] bg-[var(--surface)] text-app" : "border-app bg-[var(--surface)] text-app"}`}
         >
           <span className="min-w-0 flex-1">
             <b className="font-[600]">{notice.title}</b>
@@ -687,7 +688,8 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, isAdmin 
               Deshacer
             </button>
           )}
-        </div>
+        </div>,
+        document.body,
       )}
 
       {album.fotos.some((foto) => DEMO_PHOTO_CREDITS[foto.url]) && (
@@ -830,6 +832,13 @@ function CollapseLink({ onClick }: { onClick: () => void }) {
 
 // ── Viewer panel ────────────────────────────────────────────────────────────────────────
 
+const MOTIVO_DETALLE = {
+  antes: "Antes de que empezara el viaje",
+  despues: "Después de la última actividad",
+  sin_hora: null,
+  otro: null,
+} as const;
+
 const FUENTE_TEXT: Record<string, string> = {
   exif: "Hora de la cámara",
   xmp: "Hora de la cámara",
@@ -882,7 +891,9 @@ function PhotoInfo({
   const own = foto.user_id === currentUserId;
   const nombre = authorName(album, foto.user_id, currentUserId);
   const aqui = destinoTexto(album, colocacion.destino);
-  const iria = colocacion.manual && colocacion.noCoincide ? destinoTexto(album, colocacion.auto) : null;
+  const sinActividad = colocacion.destino.kind === "sin_clasificar";
+  const motivo = colocacion.destino.kind === "sin_clasificar" ? MOTIVO_DETALLE[colocacion.destino.motivo] : null;
+  const fuenteTexto = foto.tomada_fuente ? FUENTE_TEXT[foto.tomada_fuente] : undefined;
   return (
     <div className="mx-auto w-full max-w-[560px] text-left text-white">
       <div className="flex items-center gap-2.5 pb-3">
@@ -895,6 +906,7 @@ function PhotoInfo({
         </div>
       </div>
 
+      {foto.tomada_at && (
       <div className={`flex gap-3 border-t border-[#2a2a31] ${row}`}>
         <span className="mt-px text-[#a0a0a9]" aria-hidden>
           {colocacion.aprox ? (
@@ -907,22 +919,23 @@ function PhotoInfo({
           )}
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-[15px] font-[600] tabular-nums">{foto.tomada_at ? `Hecha el ${shortDate(foto.tomada_at)}, ${hhmm(foto.tomada_at)}` : "Sin hora"}</p>
+          <p className="text-[15px] font-[600] tabular-nums">{`Hecha el ${shortDate(foto.tomada_at)}, ${hhmm(foto.tomada_at)}`}</p>
           {colocacion.aprox && (
             <div className="mt-1.5">
               <span className={pillClass}>Hora aproximada</span>
             </div>
           )}
-          <p className="mt-1 text-[13px] text-[#a0a0a9]">{foto.tomada_at ? (FUENTE_TEXT[foto.tomada_fuente ?? ""] ?? "Hora de la foto") : "No hemos encontrado su hora"}</p>
+          {fuenteTexto && <p className="mt-1 text-[13px] text-[#a0a0a9]">{fuenteTexto}</p>}
         </div>
       </div>
+      )}
 
       <div className={`flex gap-3 border-t border-[#2a2a31] ${row}`}>
         <span className="mt-px text-[#a0a0a9]" aria-hidden>
           <MapPin className="size-[18px]" />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-[15px] font-[600]">Está en: {aqui.titulo}</p>
+          <p className="text-[15px] font-[600]">{sinActividad ? "No está en ninguna actividad" : `Está en: ${aqui.titulo}`}</p>
           {colocacion.manual && (
             <div className="mt-1.5">
               <span className={pillClass}>
@@ -930,7 +943,7 @@ function PhotoInfo({
               </span>
             </div>
           )}
-          <p className="mt-1 text-[13px] text-[#a0a0a9]">{iria ? `Por su hora iría en ${iria.titulo}` : (aqui.detalle ?? "")}</p>
+          {(sinActividad ? motivo : aqui.detalle) && <p className="mt-1 text-[13px] text-[#a0a0a9]">{sinActividad ? motivo : aqui.detalle}</p>}
         </div>
       </div>
 
