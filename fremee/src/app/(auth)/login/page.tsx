@@ -4,7 +4,11 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import LegalNotice from "@/components/auth/LegalNotice";
 import GoogleAuthButton from "@/components/auth/GoogleAuthButton";
-import { AUTH_EMAIL_REGEX, focusInput, getAuthErrorMessage } from "@/components/auth/AuthFormUtils";
+import {
+  AUTH_EMAIL_REGEX,
+  focusInput,
+  getAuthErrorMessage,
+} from "@/components/auth/AuthFormUtils";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { startGuestSession } from "@/services/auth/guest";
 import { Input } from "@/components/ui/Input";
@@ -36,7 +40,9 @@ function LoginPageInner() {
   const [showPassword, setShowPassword] = useState(false);
   const searchParams = useSearchParams();
   const requestedRedirectTo = searchParams.get("redirect");
-  const redirectTo = requestedRedirectTo?.startsWith("/feed") ? APP_HOME_PATH : requestedRedirectTo ?? APP_HOME_PATH;
+  const redirectTo = requestedRedirectTo?.startsWith("/feed")
+    ? APP_HOME_PATH
+    : (requestedRedirectTo ?? APP_HOME_PATH);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -46,7 +52,9 @@ function LoginPageInner() {
   // credentials are checked, so a wrong password does not flash the splash screen.
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [invalidField, setInvalidField] = useState<"email" | "password" | null>(null);
+  const [invalidField, setInvalidField] = useState<"email" | "password" | null>(
+    null,
+  );
 
   const emailRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
@@ -124,7 +132,12 @@ function LoginPageInner() {
       // Signed in: keep the button disabled while the app opens.
       router.replace(redirectTo);
     } catch (err: unknown) {
-      setErrorMsg(getAuthErrorMessage(err, "No se pudo iniciar sesión. Inténtalo de nuevo."));
+      setErrorMsg(
+        getAuthErrorMessage(
+          err,
+          "No se pudo iniciar sesión. Inténtalo de nuevo.",
+        ),
+      );
       focusInput(emailRef);
       setSubmitting(false);
       setPassword("");
@@ -140,12 +153,25 @@ function LoginPageInner() {
       router.replace(planId ? `/plans/${planId}` : APP_HOME_PATH);
     } catch (err: unknown) {
       enteringAsGuestRef.current = false;
-      setErrorMsg(getAuthErrorMessage(err, "No se pudo entrar como invitado. Inténtalo de nuevo."));
+      setErrorMsg(
+        getAuthErrorMessage(
+          err,
+          "No se pudo entrar como invitado. Inténtalo de nuevo.",
+        ),
+      );
       setLoading(false);
     }
   };
 
-  if (loading && !errorMsg) return <LoadingScreen />;
+  // The legal links go in the server HTML too (Google checks them on frimee.es); while the
+  // session is checked they sit under the loading screen, then the form shows them as usual.
+  if (loading && !errorMsg)
+    return (
+      <>
+        <LoadingScreen />
+        <LegalNotice />
+      </>
+    );
 
   return (
     <div className="auth-page flex min-h-full w-full max-w-[420px] flex-col py-[var(--space-3)] text-app min-[800px]:py-[var(--space-8)]">
@@ -154,17 +180,25 @@ function LoginPageInner() {
           <h1 className="auth-title font-sans font-[var(--fw-semibold)] text-app">
             Bienvenid@ de vuelta
           </h1>
-          <h3 className="font-sans mt-[var(--space-1)] text-body text-muted">Inicia sesión con tu cuenta</h3>
+          <h3 className="font-sans mt-[var(--space-1)] text-body text-muted">
+            Inicia sesión con tu cuenta
+          </h3>
 
           <GoogleAuthButton className="auth-neutral-button mt-[var(--space-4)] flex h-btn-primary w-full items-center justify-center gap-[var(--button-gap)] rounded-button border border-app bg-[var(--input-bg)] text-button-md font-[var(--fw-medium)] text-app transition-colors duration-[var(--duration-base)] [transition-timing-function:var(--ease-standard)] min-[800px]:mt-[var(--space-6)]" />
 
           <div className="flex items-center gap-[var(--space-4)] py-[var(--space-3)]">
             <div className="flex-1 border-t border-app" />
-            <span className="text-body-sm font-[var(--fw-medium)] text-muted">o</span>
+            <span className="text-body-sm font-[var(--fw-medium)] text-muted">
+              o
+            </span>
             <div className="flex-1 border-t border-app" />
           </div>
 
-          <form className="space-y-[var(--space-3)]" onSubmit={onSubmit} noValidate>
+          <form
+            className="space-y-[var(--space-3)]"
+            onSubmit={onSubmit}
+            noValidate
+          >
             <Input
               ref={emailRef}
               type="email"
@@ -202,7 +236,9 @@ function LoginPageInner() {
                   <button
                     type="button"
                     className="text-muted"
-                    aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                    aria-label={
+                      showPassword ? "Ocultar contraseña" : "Mostrar contraseña"
+                    }
                     onClick={() => setShowPassword((prev) => !prev)}
                   >
                     <EyeIcon open={showPassword} />
@@ -211,13 +247,18 @@ function LoginPageInner() {
               />
 
               <div className="pt-[var(--space-2)] text-right">
-                <Link href="/forgot" className="auth-link auth-link-muted text-body-sm text-muted">
+                <Link
+                  href="/forgot"
+                  className="auth-link auth-link-muted text-body-sm text-muted"
+                >
                   ¿Has olvidado tu contraseña?
                 </Link>
               </div>
             </div>
 
-            {errorMsg && <p className="text-body-sm text-error-token">{errorMsg}</p>}
+            {errorMsg && (
+              <p className="text-body-sm text-error-token">{errorMsg}</p>
+            )}
 
             <button
               type="submit"
@@ -230,7 +271,10 @@ function LoginPageInner() {
 
           <p className="pt-[var(--space-3)] text-center text-body text-muted min-[800px]:pt-[var(--space-4)]">
             ¿Todavía no tienes una cuenta?{" "}
-            <Link href="/register" className="auth-link auth-link-primary font-[var(--fw-semibold)]">
+            <Link
+              href="/register"
+              className="auth-link auth-link-primary font-[var(--fw-semibold)]"
+            >
               Registrarse
             </Link>
           </p>
