@@ -8,6 +8,8 @@ export type RevisarGroup = {
   titulo: string;
   detalle: string | null;
   fotos: { id: number; url: string; aprox: boolean }[];
+  /** The ones the user can move (own photos, or any if admin). */
+  movibles: number[];
 };
 
 /**
@@ -23,6 +25,7 @@ export default function AlbumRevisar({
   busy,
   error,
   onOpenPhoto,
+  onMover,
   onTodoBien,
   onClose,
 }: {
@@ -33,6 +36,7 @@ export default function AlbumRevisar({
   busy: boolean;
   error: boolean;
   onOpenPhoto: (url: string) => void;
+  onMover: (ids: number[]) => void;
   onTodoBien: () => void;
   onClose: () => void;
 }) {
@@ -53,8 +57,17 @@ export default function AlbumRevisar({
       <div className="flex flex-col gap-5 pb-2">
         {grupos.map((g) => (
           <section key={g.key} aria-label={g.titulo}>
-            <p className="text-[15px] font-[600] text-app">{g.titulo}</p>
-            {g.detalle && <p className="text-[13px] text-muted">{g.detalle}</p>}
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[15px] font-[600] text-app">{g.titulo}</p>
+                {g.detalle && <p className="text-[13px] text-muted">{g.detalle}</p>}
+              </div>
+              {g.movibles.length > 0 && (
+                <button type="button" onClick={() => onMover(g.movibles)} className="-mt-2 min-h-11 shrink-0 px-2 text-[14px] font-[600] text-[var(--primary)]">
+                  {g.movibles.length === 1 ? "Mover a…" : `Mover ${g.movibles.length} a…`}
+                </button>
+              )}
+            </div>
             <div className="mt-2 flex flex-wrap gap-1">
               {g.fotos.map((f) => (
                 <button

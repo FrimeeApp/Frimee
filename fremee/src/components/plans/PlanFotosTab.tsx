@@ -794,11 +794,13 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, isAdmin 
           const sin = p.colocacion.destino.kind === "sin_clasificar";
           if (!p.colocacion.aprox && !sin) continue;
           dudosas += 1;
-          if (p.colocacion.aprox && canMove(f.user_id)) aproxMovibles.push(id);
+          // «Todo bien» confirms times of photos that are in an activity; one with no place is not «bien».
+          if (p.colocacion.aprox && !sin && canMove(f.user_id)) aproxMovibles.push(id);
           const d = destinoTexto(album, p.colocacion.destino);
           const key = sin ? "sin" : `${p.colocacion.destino.kind}-${d.titulo}`;
-          const g = grupos.get(key) ?? { key, titulo: d.titulo, detalle: sin ? (f.tomada_at ? "No encajan en ninguna actividad" : "No hemos encontrado su hora") : d.detalle, fotos: [] };
+          const g = grupos.get(key) ?? { key, titulo: d.titulo, detalle: sin ? (f.tomada_at ? "No encajan en ninguna actividad" : "No hemos encontrado su hora") : d.detalle, fotos: [], movibles: [] };
           g.fotos.push({ id, url: f.url, aprox: p.colocacion.aprox });
+          if (canMove(f.user_id)) g.movibles.push(id);
           grupos.set(key, g);
         }
         if (dudosas === 0) return null;
@@ -811,6 +813,10 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, isAdmin 
             busy={reviewBusy}
             error={reviewError}
             onOpenPhoto={(url) => setLightboxUrl(url)}
+            onMover={(ids) => {
+              setSelected(new Set(ids));
+              setMoverOpen(true);
+            }}
             onTodoBien={() => void handleTodoBien(aproxMovibles)}
             onClose={() => setReview(null)}
           />
