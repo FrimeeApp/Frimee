@@ -12,15 +12,58 @@ function clampDimensions(w: number, h: number, max = MAX_IMAGE_DIM): { width: nu
   return { width: Math.round(w * scale), height: Math.round(h * scale) };
 }
 
-async function toWebP(file: File, quality = 0.85): Promise<Blob> {
+type Decoded = { source: CanvasImageSource; width: number; height: number; release: () => void };
+
+async function viaBitmap(file: Blob): Promise<Decoded> {
   const bitmap = await createImageBitmap(file);
-  const { width, height } = clampDimensions(bitmap.width, bitmap.height);
+  return { source: bitmap, width: bitmap.width, height: bitmap.height, release: () => bitmap.close() };
+}
+
+async function viaImgElement(file: Blob): Promise<Decoded> {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    return { source: img, width: img.naturalWidth, height: img.naturalHeight, release: () => URL.revokeObjectURL(url) };
+  } catch (error) {
+    URL.revokeObjectURL(url);
+    throw error;
+  }
+}
+
+/**
+ * Opens any photo the phone can produce: the browser's own decoders first, then a built-in HEIC/HEIF
+ * decoder (loaded only when needed) for the formats Chrome does not read (HEIC, 10-bit HDR).
+ */
+async function decodeImage(file: File): Promise<Decoded> {
+  try {
+    return await viaBitmap(file);
+  } catch {}
+  try {
+    return await viaImgElement(file);
+  } catch {}
+  const { isHeic, heicTo } = await import("heic-to/next");
+  if (await isHeic(file)) {
+    const jpeg = await heicTo({ blob: file, type: "image/jpeg", quality: 0.92 });
+    try {
+      return await viaBitmap(jpeg);
+    } catch {
+      return viaImgElement(jpeg);
+    }
+  }
+  throw new Error(`No se ha podido abrir la imagen (${file.type || "tipo desconocido"}, ${Math.round(file.size / 1024)} KB).`);
+}
+
+async function toWebP(file: File, quality = 0.85): Promise<Blob> {
+  const decoded = await decodeImage(file);
+  const { width, height } = clampDimensions(decoded.width, decoded.height);
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext("2d")!;
-  ctx.drawImage(bitmap, 0, 0, width, height);
-  bitmap.close();
+  ctx.drawImage(decoded.source, 0, 0, width, height);
+  decoded.release();
   return new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(
       (blob) => (blob ? resolve(blob) : reject(new Error("toBlob failed"))),
@@ -109,10 +152,21 @@ export async function uploadAudioFile(params: { file: File; userId: string }) {
 
 export async function uploadPlanAlbumFile(params: { file: File; planId: number }) {
   await ensureFirebaseAuth();
-  const webp = await toWebP(params.file, 0.92);
-  const filePath = `plan-albums/${params.planId}/${Date.now()}.webp`;
+  // Any photo must be uploadable: if it cannot be converted, the original goes up untouched.
+  let body: Blob = params.file;
+  // Storage rules only accept image/*; some pickers hand over files with no type.
+  let contentType = params.file.type.startsWith("image/") ? params.file.type : "image/jpeg";
+  let ext = (params.file.name.split(".").pop() ?? "bin").toLowerCase().replace(/[^a-z0-9]/g, "") || "bin";
+  try {
+    body = await toWebP(params.file, 0.92);
+    contentType = "image/webp";
+    ext = "webp";
+  } catch (error) {
+    console.warn("[uploadPlanAlbumFile] no se pudo convertir, se sube el original:", error);
+  }
+  const filePath = `plan-albums/${params.planId}/${Date.now()}.${ext}`;
   const fileRef = ref(storage, filePath);
-  await uploadBytes(fileRef, webp, { contentType: "image/webp" });
+  await uploadBytes(fileRef, body, { contentType });
   const downloadUrl = await getDownloadURL(fileRef);
   return { filePath, downloadUrl };
 }

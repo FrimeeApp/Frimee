@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Capacitor } from "@capacitor/core";
 import { uploadPlanAlbumFile } from "@/services/firebase/upload";
+import { leerHoraFoto } from "@/lib/foto-hora";
 import {
   getPlanFotos,
   addPlanFoto,
@@ -80,12 +81,15 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, refreshK
     try {
       const uploads = await Promise.all(
         files.map(async (file) => {
+          const hora = await leerHoraFoto(file);
           const { filePath, downloadUrl } = await uploadPlanAlbumFile({ file, planId });
           return addPlanFoto({
             planId,
             userId: currentUserId,
             url: downloadUrl,
             storagePath: filePath,
+            tomadaAt: hora?.at ?? null,
+            tomadaFuente: hora?.fuente ?? null,
           });
         })
       );

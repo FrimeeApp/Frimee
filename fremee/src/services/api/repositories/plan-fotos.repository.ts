@@ -12,6 +12,8 @@ export type PlanFotoDto = {
   url: string;
   storagePath: string;
   createdAt: string;
+  tomadaAt: string | null;
+  tomadaFuente: string | null;
 };
 
 function rowToDto(row: PlanFotoRow): PlanFotoDto {
@@ -22,6 +24,8 @@ function rowToDto(row: PlanFotoRow): PlanFotoDto {
     url: row.url,
     storagePath: row.storage_path,
     createdAt: row.created_at,
+    tomadaAt: row.tomada_at,
+    tomadaFuente: row.tomada_fuente,
   };
 }
 
@@ -35,6 +39,8 @@ export async function addPlanFoto(params: {
   userId: string;
   url: string;
   storagePath: string;
+  tomadaAt?: string | null;
+  tomadaFuente?: string | null;
 }): Promise<PlanFotoDto> {
   const row = await insertPlanFoto(params);
   return rowToDto(row);

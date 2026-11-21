@@ -54,6 +54,10 @@ export type AlbumFoto = {
   url: string;
   user_id: string;
   created_at: string;
+  /** When it was taken (EXIF); null when the file did not say. */
+  tomada_at: string | null;
+  /** exif, gps, xmp, nombre or archivo; the album trusts the first three most. */
+  tomada_fuente: string | null;
 };
 
 export type PlanAlbum = {
