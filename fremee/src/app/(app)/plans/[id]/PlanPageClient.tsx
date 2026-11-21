@@ -32,6 +32,7 @@ import { buildGoogleMapsDirectionsUrl, buildWazeDirectionsUrl } from "@/config/e
 import { FEED_ENABLED } from "@/config/app";
 import { PlanDetailSkeleton } from "./_components/PlanDetailSkeleton";
 import { ExpenseSummaryCard } from "./_components/ExpenseSummaryCard";
+import { GastosTab } from "./_components/GastosTab";
 import { AddSubplanSheet, TRANSPORT_MAP, type AddSheetProps } from "./_components/AddSubplanSheet";
 import { isoDateOnly, groupByDay, normalizeDateKey, summarizeRecipients, getOccupiedIntervals, timeToMin, mergeIntervals, type Interval } from "./_components/plan-utils";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
@@ -116,22 +117,6 @@ const PlusIcon = ({ className = "size-icon" }: { className?: string }) => <Plus 
 const ExternalLinkIcon = ({ className = "size-icon" }: { className?: string }) => <ExternalLink className={className} aria-hidden />;
 
 /* ───────────── page ───────────── */
-
-function PlanExpenseAvatar({ name, image }: { name: string; image: string | null }) {
-  if (image) {
-    return (
-      <div className="relative size-11 shrink-0 overflow-hidden rounded-full border border-app">
-        <Image src={image} alt={name} fill sizes="44px" className="object-cover" unoptimized referrerPolicy="no-referrer" />
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex size-11 shrink-0 items-center justify-center rounded-full border border-app bg-surface-2 text-body-sm font-[var(--fw-semibold)] text-muted">
-      {getInitial(name)}
-    </div>
-  );
-}
 
 /* ───────────── invoice debtor list ───────────── */
 
@@ -250,9 +235,8 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [gastos, setGastos] = useState<GastoRow[]>(initialCache?.gastos ?? []);
   const [selectedGastoId, setSelectedGastoId] = useState<number | null>(null);
-  const [gastosLimit, setGastosLimit] = useState(5);
+  const [gastosLimit] = useState(5);
   const [balances, setBalances] = useState<BalanceRow[]>(initialCache?.balances ?? []);
-  const [expandedDebtors, setExpandedDebtors] = useState<Set<string>>(new Set());
   const [pagarDeuda, setPagarDeuda] = useState<BalanceRow | null>(null);
   const [comprobanteFile, setComprobanteFile] = useState<File | null>(null);
   const [comprobantePreview, setComprobantePreview] = useState<string | null>(null);
@@ -647,12 +631,6 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
   }, [gastos]);
 
   const visiblePlanGastos = useMemo(() => sortedPlanGastos.slice(0, gastosLimit), [sortedPlanGastos, gastosLimit]);
-
-  const planMemberIds = useMemo(() => {
-    const ids = new Set<string>();
-    sortedPlanGastos.forEach(g => { ids.add(g.pagado_por_user_id); g.partes?.forEach(p => ids.add(p.user_id)); });
-    return ids;
-  }, [sortedPlanGastos]);
 
   const selectedGasto = useMemo(
     () => gastos.find((gasto) => gasto.id === selectedGastoId) ?? null,
@@ -1163,7 +1141,7 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
 
           {/* ─── Tabs ─── */}
           <div className="px-[var(--page-margin-x)]">
-            <div className="flex items-center justify-between">
+            <div className="relative flex items-center justify-between">
               <Tabs
                 tabs={[
                   { value: "itinerario", label: "Itinerario" },
@@ -1204,6 +1182,30 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
                   >
                     <VideoCallIcon className="size-[18px]" />
                   </button>
+                </div>
+              )}
+              {activeTab === "gastos" && (sortedPlanGastos.length > 0 || (!isPast && canAdd)) && (
+                <div className="absolute right-0 top-1/2 hidden -translate-y-1/2 items-center gap-[var(--space-2)] md:flex">
+                  {sortedPlanGastos.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowInvoiceModal(true)}
+                      className={`inline-flex h-10 items-center gap-2 rounded-lg px-4 text-[14px] font-[var(--fw-semibold)] ${isPast ? "bg-primary-token text-contrast-token" : "border border-app text-app hover:bg-surface"}`}
+                    >
+                      <FileText className="size-[18px]" aria-hidden />
+                      {isPast ? "Factura final" : "Resumen PDF"}
+                    </button>
+                  )}
+                  {!isPast && canAdd && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAddGastoSheet(true)}
+                      className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary-token px-4 text-[14px] font-[var(--fw-semibold)] text-contrast-token"
+                    >
+                      <Plus className="size-[18px]" strokeWidth={2.25} aria-hidden />
+                      Añadir gasto
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -1435,263 +1437,19 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
             )}
 
             {activeTab === "gastos" && (
-              <div className="mx-auto max-w-[760px]">
-                {/* Stats + acciones */}
-                <div className="relative mb-[var(--space-7)] flex flex-col items-center gap-[var(--space-3)] pt-[var(--space-2)]">
-                  <p className="text-[28px] font-[var(--fw-bold)] leading-none text-app">
-                    {formatMoney(expenseSummary.total, expenseSummary.currency)}
-                  </p>
-                  <div className="flex flex-wrap justify-center gap-2">
-                    <span className="rounded-full bg-surface px-3 py-[5px] text-caption text-muted">
-                      {sortedPlanGastos.length} {sortedPlanGastos.length === 1 ? "gasto" : "gastos"}
-                    </span>
-                    {planMemberIds.size > 0 && (
-                      <span className="rounded-full bg-surface px-3 py-[5px] text-caption text-muted">
-                        {planMemberIds.size} {planMemberIds.size === 1 ? "persona" : "personas"}
-                      </span>
-                    )}
-                    {planMemberIds.size > 0 && expenseSummary.total > 0 && (
-                      <span className="rounded-full bg-surface px-3 py-[5px] text-caption text-muted">
-                        {formatMoney(expenseSummary.total / planMemberIds.size, expenseSummary.currency)}/persona
-                      </span>
-                    )}
-                  </div>
-                  <div className="absolute right-0 top-0 hidden items-center gap-2 md:flex">
-                    {sortedPlanGastos.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setShowInvoiceModal(true)}
-                        title={isPast ? "Generar factura final" : "Generar resumen parcial"}
-                        className="flex size-9 items-center justify-center rounded-full bg-surface text-muted transition-colors hover:bg-surface-2 hover:text-app"
-                      >
-                        <FileText className="size-[15px]" aria-hidden />
-                      </button>
-                    )}
-                    {!isPast && (
-                      <button
-                        onClick={() => setShowAddGastoSheet(true)}
-                        aria-label="Añadir gasto"
-                        className="flex size-9 items-center justify-center rounded-full bg-primary-token text-contrast-token transition-opacity hover:opacity-80"
-                      >
-                        <Plus className="size-4" strokeWidth={2.5} aria-hidden />
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                <div className="space-y-[var(--space-6)]">
-                  <section>
-                    <div className="mb-[var(--space-3)] flex items-center justify-between gap-[var(--space-3)]">
-                      <p className="text-body-sm font-[var(--fw-medium)] text-muted">Deudas pendientes</p>
-                      <span className="text-caption text-muted">
-                        {new Set(visibleBalances.map(b => b.from_user_id)).size} deudor{new Set(visibleBalances.map(b => b.from_user_id)).size === 1 ? "" : "es"}
-                      </span>
-                    </div>
-
-                    {visibleBalances.length === 0 ? (
-                      <p className="px-[var(--space-4)] py-[var(--space-2)] text-body-sm text-muted">
-                        No hay deudas pendientes en este plan.
-                      </p>
-                    ) : (() => {
-                      // Agrupar por deudor (from_user_id)
-                      const groups = new Map<string, { debtor: { id: string; nombre: string | null; foto: string | null }; debts: BalanceRow[] }>();
-                      for (const b of visibleBalances) {
-                        if (!groups.has(b.from_user_id)) {
-                          groups.set(b.from_user_id, { debtor: { id: b.from_user_id, nombre: b.from_nombre, foto: b.from_profile_image }, debts: [] });
-                        }
-                        groups.get(b.from_user_id)!.debts.push(b);
-                      }
-                      const sortedGroups = [...groups.values()].sort((a, b) => {
-                        const sumA = a.debts.reduce((s, d) => s + d.importe, 0);
-                        const sumB = b.debts.reduce((s, d) => s + d.importe, 0);
-                        return sumB - sumA;
-                      });
-
-                      return (
-                        <div className="divide-y divide-app">
-                          {sortedGroups.map(({ debtor, debts }) => {
-                            const isMe = debtor.id === user?.id;
-                            const debtorLabel = isMe ? "Tú" : (debtor.nombre ?? "Usuario");
-                            const totalGeneral = debts.reduce((s, d) => s + d.importe, 0);
-                            const isExpanded = expandedDebtors.has(debtor.id);
-                            const hasMultiple = debts.length > 1;
-
-                            return (
-                              <div key={debtor.id}>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (!hasMultiple && isMe) { setPagarDeuda(debts[0]); return; }
-                                    if (!hasMultiple) return;
-                                    setExpandedDebtors(prev => {
-                                      const next = new Set(prev);
-                                      if (next.has(debtor.id)) next.delete(debtor.id);
-                                      else next.add(debtor.id);
-                                      return next;
-                                    });
-                                  }}
-                                  className={`flex w-full items-center gap-3 py-[var(--space-3)] text-left ${(hasMultiple || isMe) ? "cursor-pointer hover:bg-surface-inset/50" : "cursor-default"}`}
-                                >
-                                  <PlanExpenseAvatar
-                                    name={debtorLabel}
-                                    image={debtor.foto ?? null}
-                                  />
-                                  <div className="min-w-0 flex-1">
-                                    <p className="truncate text-body-sm text-app">
-                                      {isMe ? (
-                                        <>
-                                          <span className="font-bold">Tú</span>
-                                          <span className="font-light"> debes a </span>
-                                          <span className="font-bold">{!hasMultiple ? (debts[0].to_user_id === user?.id ? "Tú" : (debts[0].to_nombre ?? "Usuario")) : `${debts.length} personas`}</span>
-                                        </>
-                                      ) : (
-                                        <>
-                                          <span className="font-bold">{debtorLabel}</span>
-                                          <span className="font-light"> debe a </span>
-                                          <span className="font-bold">{!hasMultiple ? (debts[0].to_user_id === user?.id ? "Tú" : (debts[0].to_nombre ?? "Usuario")) : `${debts.length} personas`}</span>
-                                        </>
-                                      )}
-                                    </p>
-                                    <p className="truncate text-caption text-muted">
-                                      {hasMultiple ? `${debts.length} deudas` : "Deuda pendiente"}
-                                    </p>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <div className="text-right">
-                                      <p className={`text-body-sm font-[var(--fw-semibold)] ${isMe ? "text-[var(--warning,#b45309)]" : "text-app"}`}>
-                                        {formatMoney(totalGeneral, expenseSummary.currency)}
-                                      </p>
-                                    </div>
-                                    {hasMultiple && (
-                                      <span className={`text-muted transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`}>
-                                        <ChevronDown className="size-[16px]" aria-hidden />
-                                      </span>
-                                    )}
-                                  </div>
-                                </button>
-
-                                {isExpanded && (
-                                  <div className="border-t border-app bg-[var(--surface-subtle,rgba(255,255,255,0.02))]">
-                                    {debts.map((d) => {
-                                      const isMineIncoming = d.to_user_id === user?.id;
-                                      const creditorName = isMineIncoming ? "Tú" : (d.to_nombre ?? "Usuario");
-                                      return (
-                                        <button
-                                          type="button"
-                                          key={`${d.from_user_id}-${d.to_user_id}`}
-                                          onClick={() => isMe ? setPagarDeuda(d) : undefined}
-                                          className={`flex w-full items-center gap-3 py-[var(--space-2)] pl-10 ${isMe ? "cursor-pointer hover:bg-surface-inset/50" : "cursor-default"}`}
-                                        >
-                                          <div className="flex size-8 shrink-0 items-center justify-center rounded-full border border-app bg-surface-2 text-[11px] font-[var(--fw-semibold)] text-muted overflow-hidden">
-                                            {!isMineIncoming && d.to_profile_image
-                                              ? <img src={d.to_profile_image} alt={creditorName} className="size-full object-cover" />
-                                              : creditorName.charAt(0).toUpperCase()}
-                                          </div>
-                                          <p className="min-w-0 flex-1 truncate text-left text-body-sm text-app">
-                                            <span className="font-light">a </span>
-                                            <span className="font-[var(--fw-semibold)]">{creditorName}</span>
-                                          </p>
-                                          <div className="text-right">
-                                            <p className={`text-body-sm font-[var(--fw-semibold)] ${isMe ? "text-[var(--warning,#b45309)]" : "text-app"}`}>
-                                              {formatMoney(d.importe, expenseSummary.currency)}
-                                            </p>
-                                          </div>
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      );
-                    })()}
-                  </section>
-
-                  <section>
-                    <div className="mb-[var(--space-3)] flex items-center justify-between gap-[var(--space-3)]">
-                      <p className="text-body-sm font-[var(--fw-medium)] text-muted">Historial de gastos</p>
-                      <span className="text-caption text-muted">
-                        {sortedPlanGastos.length} gasto{sortedPlanGastos.length === 1 ? "" : "s"}
-                      </span>
-                    </div>
-
-                    {visiblePlanGastos.length === 0 ? (
-                      <p className="px-[var(--space-4)] py-[var(--space-2)] text-body-sm text-muted">
-                        Aún no hay gastos registrados en este plan.
-                      </p>
-                    ) : (
-                      <div className="flex flex-col">
-                        {visiblePlanGastos.map((gasto) => {
-                          const payerName = gasto.pagado_por_nombre ?? "Usuario";
-                          const isPaidByYou = gasto.pagado_por_user_id === user?.id;
-
-                          return (
-                            <article
-                              key={gasto.id}
-                              role="button"
-                              tabIndex={0}
-                              onClick={() => setSelectedGastoId(gasto.id)}
-                              onKeyDown={(event) => {
-                                if (event.key === "Enter" || event.key === " ") {
-                                  event.preventDefault();
-                                  setSelectedGastoId(gasto.id);
-                                }
-                              }}
-                              className="flex cursor-pointer items-center gap-3 transition-colors hover:bg-surface-inset/50 focus:outline-none"
-                            >
-                              <PlanExpenseAvatar name={payerName} image={gasto.pagado_por_foto ?? null} />
-
-                              <div className="flex min-w-0 flex-1 items-center gap-2 py-[var(--space-4)]">
-                                <div className="min-w-0 flex-1">
-                                  <p className="truncate text-body-sm text-app">
-                                    {isPaidByYou ? (
-                                      <>
-                                        <span className="font-[var(--fw-semibold)]">Tú</span>
-                                        <span className="font-light"> pagaste </span>
-                                        <span className="font-[var(--fw-semibold)]">{gasto.titulo}</span>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <span className="font-[var(--fw-semibold)]">{payerName}</span>
-                                        <span className="font-light"> pagó </span>
-                                        <span className="font-[var(--fw-semibold)]">{gasto.titulo}</span>
-                                      </>
-                                    )}
-                                  </p>
-                                  {gasto.subplan_titulo && (
-                                    <p className="truncate text-caption text-muted">{gasto.subplan_titulo}</p>
-                                  )}
-                                </div>
-
-                                <div className="flex shrink-0 items-center gap-[var(--space-3)]">
-                                  <p className="text-body-sm font-[var(--fw-semibold)] text-app">
-                                    {formatMoney(gasto.total, gasto.moneda)}
-                                  </p>
-                                  <svg viewBox="0 0 24 24" fill="none" className="size-[15px] shrink-0 text-muted" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                    <path d="M9 18l6-6-6-6" />
-                                  </svg>
-                                </div>
-                              </div>
-                            </article>
-                          );
-                        })}
-                      </div>
-                    )}
-                    {sortedPlanGastos.length > gastosLimit && (
-                      <button
-                        type="button"
-                        onClick={() => setGastosLimit(l => l + 5)}
-                        className="mt-[var(--space-2)] w-full py-[10px] text-body-sm font-[var(--fw-medium)] text-primary-token transition-colors hover:opacity-75"
-                      >
-                        Ver más ({sortedPlanGastos.length - gastosLimit} restantes)
-                      </button>
-                    )}
-                  </section>
-
-                </div>
-              </div>
+              <GastosTab
+                gastos={sortedPlanGastos}
+                balances={visibleBalances}
+                userId={user?.id}
+                summary={expenseSummary}
+                planStart={plan?.inicio_at ?? null}
+                isPast={isPast}
+                canAdd={canAdd}
+                onOpenGasto={setSelectedGastoId}
+                onPagar={setPagarDeuda}
+                onAdd={() => setShowAddGastoSheet(true)}
+                onPdf={() => setShowInvoiceModal(true)}
+              />
             )}
 
           </div>}
@@ -1777,9 +1535,21 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
         </div>
       )}
 
-      {activeTab !== "chat" && !showAddSheet && !showAddGastoSheet && (
-        activeTab === "itinerario" || activeTab === "gastos" || activeTab === "fotos"
-      ) && (!isPast || membershipChecked || isAdmin) && (membershipChecked || isAdmin || activeTab === "gastos") && (
+      {activeTab === "gastos" && !isPast && canAdd && !showAddSheet && !showAddGastoSheet && (
+        <button
+          type="button"
+          onClick={openCreateGasto}
+          aria-label="Añadir gasto"
+          className="fixed bottom-[calc(env(safe-area-inset-bottom)+16px)] right-[calc(env(safe-area-inset-right)+16px)] z-[65] flex h-14 items-center gap-2 rounded-full bg-primary-token pl-4 pr-5 text-[15px] font-[var(--fw-semibold)] text-contrast-token shadow-[0_0_0_1px_rgba(0,0,0,0.12),0_2px_6px_rgba(0,0,0,0.14)] md:hidden"
+        >
+          <PlusIcon className="size-[22px]" />
+          Gasto
+        </button>
+      )}
+
+      {!showAddSheet && !showAddGastoSheet && (
+        activeTab === "itinerario" || activeTab === "fotos"
+      ) && (!isPast || membershipChecked || isAdmin) && (membershipChecked || isAdmin) && (
         <div className="pointer-events-none fixed bottom-[calc(env(safe-area-inset-bottom)+16px)] right-[calc(env(safe-area-inset-right)+16px)] z-[65] md:hidden">
           <div className={`absolute bottom-[calc(100%+12px)] right-0 flex flex-col items-end gap-2 transition-all duration-200 ease-out ${mobileCreateOpen ? "pointer-events-auto translate-y-0 opacity-100" : "pointer-events-none translate-y-2 opacity-0"}`}>
             {!isPast && canAdd && (
