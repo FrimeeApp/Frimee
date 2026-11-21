@@ -80,3 +80,18 @@ export async function fetchPlanAlbum(planId: number): Promise<PlanAlbum> {
   if (!album?.plan) throw new Error("Plan no encontrado");
   return album;
 }
+
+export type FotoColocacion = { colocacion: "actividad" | "viaje" | "sin_clasificar" | null; subplanId: number | null };
+
+/** Moves photos by hand (who uploaded each one or a plan admin). `colocacion: null` puts them back to their time. */
+export async function moverFotosAlbum(planId: number, fotoIds: number[], destino: FotoColocacion): Promise<number> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_plan_fotos_mover", {
+    p_plan_id: planId,
+    p_foto_ids: fotoIds,
+    p_colocacion: destino.colocacion,
+    p_subplan_id: destino.subplanId,
+  });
+  if (error) throw error;
+  return Number(data ?? 0);
+}

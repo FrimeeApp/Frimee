@@ -1302,6 +1302,7 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
               planId={plan.id}
               currentUserId={user.id}
               isMember={membershipChecked}
+              isAdmin={isAdmin}
               refreshKey={photoAlbumRefreshKey}
             />
           )}

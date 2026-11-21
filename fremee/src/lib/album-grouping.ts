@@ -103,7 +103,8 @@ export function agruparAlbum(opts: {
     const k = startKey(a);
     (delDia.get(k) ?? delDia.set(k, []).get(k)!).push(a);
   }
-  const ordinalDe = (a: GroupActivity) => (delDia.get(startKey(a)) ?? []).indexOf(a) + 1;
+  // The number of an activity in its day; stays carry a bed instead and are not counted.
+  const ordinalDe = (a: GroupActivity) => (delDia.get(startKey(a)) ?? []).filter((x) => !LODGING_TYPES.has(x.tipo)).indexOf(a) + 1;
 
   const blocks = new Map<string, Map<string, Block>>(); // day → block key → block
   const sin: PlacedPhoto[] = [];
@@ -113,16 +114,7 @@ export function agruparAlbum(opts: {
     return d.get(key) ?? d.set(key, make()).get(key)!;
   };
 
-  const legDesde = (hasta: GroupActivity): GroupActivity | null => {
-    const k = startKey(hasta);
-    const hastaStart = Date.parse(hasta.inicio_at);
-    let best: GroupActivity | null = null;
-    for (const a of delDia.get(k) ?? []) {
-      if (a.id === hasta.id || a.all_day || LODGING_TYPES.has(a.tipo)) continue;
-      if (Date.parse(a.fin_at) <= hastaStart && (!best || Date.parse(a.fin_at) >= Date.parse(best.fin_at))) best = a;
-    }
-    return best;
-  };
+  const legDesde = (hasta: GroupActivity) => legDesdeDe(delDia.get(startKey(hasta)) ?? [], hasta);
 
   for (const foto of fotos) {
     const colocacion = colocadas.get(foto.id)!;
@@ -152,7 +144,8 @@ export function agruparAlbum(opts: {
     // anything else on the day it starts.
     const inicio = startKey(act);
     const largo = dayKeyOf(Date.parse(act.fin_at)) !== inicio;
-    const dia = largo && foto.tomada_at && !colocacion.manual ? dayKeyOf(Date.parse(foto.tomada_at)) : inicio;
+    const enRango = foto.tomada_at !== null && Date.parse(foto.tomada_at) >= Date.parse(act.inicio_at) && Date.parse(foto.tomada_at) <= Date.parse(act.fin_at);
+    const dia = largo && enRango ? dayKeyOf(Date.parse(foto.tomada_at as string)) : inicio;
     const b = ensure(dia, `act-${act.id}`, () => makeActivityBlock(act, dia, inicio, ordinalDe(act))) as ActivityBlock;
     b.fotos.push(placed);
   }
@@ -229,4 +222,94 @@ function agruparPorFecha(sin: PlacedPhoto[]): UnclassifiedGroup[] {
   return [...map.entries()]
     .sort(([a], [b]) => (a === "sin-hora" ? 1 : b === "sin-hora" ? -1 : a.localeCompare(b)))
     .map(([k, fotos]) => ({ key: k, motivo: k === "sin-hora" ? ("sin_hora" as const) : null, dayKey: k === "sin-hora" ? null : k, fotos }));
+}
+
+/** The activity a leg to `hasta` comes from: the timed one of that day that ended last before it starts. */
+export function legDesdeDe(delMismoDia: GroupActivity[], hasta: GroupActivity): GroupActivity | null {
+  const hastaStart = Date.parse(hasta.inicio_at);
+  let best: GroupActivity | null = null;
+  for (const a of delMismoDia) {
+    if (a.id === hasta.id || a.all_day || LODGING_TYPES.has(a.tipo)) continue;
+    if (Date.parse(a.fin_at) <= hastaStart && (!best || Date.parse(a.fin_at) >= Date.parse(best.fin_at))) best = a;
+  }
+  // A stay that checked in after it ends takes the photos from there: no leg from it past the stay.
+  if (best && delMismoDia.some((a) => a.id !== hasta.id && LODGING_TYPES.has(a.tipo) && Date.parse(a.inicio_at) >= Date.parse(best.fin_at) && Date.parse(a.inicio_at) < hastaStart)) return null;
+  return best;
+}
+
+/** «Sáb 21 nov» */
+export function dayLabel(key: string): string {
+  const [y, m, d] = key.split("-").map(Number);
+  const text = new Date(y, m - 1, d).toLocaleDateString("es-ES", { weekday: "short", day: "numeric", month: "short" });
+  const clean = text.replace(/[.,]/g, "").trim();
+  return clean.charAt(0).toUpperCase() + clean.slice(1);
+}
+
+// ── «Mover a…»: every place a photo can be sent to ────────────────────────────────────────
+
+export type MoverOption = {
+  id: string;
+  kind: "actividad" | "viaje" | "sigue";
+  colocacion: "actividad" | "viaje";
+  subplanId: number;
+  dayKey: string;
+  ordinal: number | null;
+  titulo: string;
+  /** «desde 15:00», «10:00», «noche 2», «Todo el día»; empty for a leg. */
+  detalle: string;
+  /** Photos there now. */
+  count: number;
+  /** Lower-case text the search looks in. */
+  busqueda: string;
+};
+
+export type MoverDay = { key: string; numero: number; options: MoverOption[] };
+
+const hhmm = (iso: string) => new Date(iso).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", hour12: false });
+
+/** The days with all their activities, legs and stays, even the empty ones; «Sin clasificar» is added by the caller. */
+export function opcionesMover(actividades: GroupActivity[], grouping: AlbumGrouping): MoverDay[] {
+  const cuenta = new Map<string, number>();
+  for (const d of grouping.days) for (const b of d.blocks) cuenta.set(`${d.key}|${b.key}`, b.fotos.length);
+
+  const startKey = (a: GroupActivity) => dayKeyOf(Date.parse(a.inicio_at));
+  const ordenadas = [...actividades].sort((x, y) => Date.parse(x.inicio_at) - Date.parse(y.inicio_at) || x.id - y.id);
+  const delDia = new Map<string, GroupActivity[]>();
+  for (const a of ordenadas) (delDia.get(startKey(a)) ?? delDia.set(startKey(a), []).get(startKey(a))!).push(a);
+
+  return grouping.days.map((day) => {
+    const options: MoverOption[] = [];
+    // Stays that carry on into this day.
+    for (const a of ordenadas) {
+      const inicio = startKey(a);
+      const fin = dayKeyOf(Date.parse(a.fin_at));
+      if (inicio < day.key && day.key <= fin && fin !== inicio) {
+        const noche = Math.round((new Date(day.key).getTime() - new Date(inicio).getTime()) / 86_400_000) + 1;
+        options.push({
+          id: `sigue-${a.id}-${day.key}`, kind: "sigue", colocacion: "actividad", subplanId: a.id, dayKey: day.key, ordinal: null,
+          titulo: `Sigue · ${a.titulo}`, detalle: day.key === fin ? "salida" : `noche ${noche}`,
+          count: cuenta.get(`${day.key}|act-${a.id}`) ?? 0, busqueda: `sigue ${a.titulo}`.toLowerCase(),
+        });
+      }
+    }
+    const hoy = delDia.get(day.key) ?? [];
+    const sinEstancias = hoy.filter((x) => !LODGING_TYPES.has(x.tipo));
+    hoy.forEach((a) => {
+      const leg = legDesdeDe(hoy, a);
+      if (leg) {
+        options.push({
+          id: `viaje-${a.id}`, kind: "viaje", colocacion: "viaje", subplanId: a.id, dayKey: day.key, ordinal: null,
+          titulo: `${leg.titulo} → ${a.titulo}`, detalle: "", count: cuenta.get(`${day.key}|viaje-${a.id}`) ?? 0,
+          busqueda: `viaje ${leg.titulo} ${a.titulo}`.toLowerCase(),
+        });
+      }
+      const stay = LODGING_TYPES.has(a.tipo);
+      options.push({
+        id: `act-${a.id}`, kind: "actividad", colocacion: "actividad", subplanId: a.id, dayKey: day.key, ordinal: stay ? null : sinEstancias.indexOf(a) + 1,
+        titulo: a.titulo, detalle: a.all_day ? "Todo el día" : stay ? `desde ${hhmm(a.inicio_at)}` : hhmm(a.inicio_at),
+        count: cuenta.get(`${day.key}|act-${a.id}`) ?? 0, busqueda: a.titulo.toLowerCase(),
+      });
+    });
+    return { key: day.key, numero: day.numero, options };
+  });
 }

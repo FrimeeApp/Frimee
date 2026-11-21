@@ -7,16 +7,19 @@ import { Capacitor } from "@capacitor/core";
 import { uploadPlanAlbumFile } from "@/services/firebase/upload";
 import { leerHoraFoto } from "@/lib/foto-hora";
 import { addPlanFoto, removePlanFoto } from "@/services/api/repositories/plan-fotos.repository";
-import { fetchPlanAlbum, type PlanAlbum } from "@/services/api/endpoints/album.endpoint";
+import { fetchPlanAlbum, moverFotosAlbum, type FotoColocacion, type PlanAlbum } from "@/services/api/endpoints/album.endpoint";
 import {
   agruparAlbum,
+  dayLabel,
+  opcionesMover,
   dayKeyOf,
   type ActivityBlock,
   type LegBlock,
   type PlacedPhoto,
   type UnclassifiedGroup,
 } from "@/lib/album-grouping";
-import { Plus, Trash2, Loader2, BookOpen, ChevronRight, Hand, CalendarDays, CircleAlert, Bed, Route, Archive } from "lucide-react";
+import { Plus, Trash2, Loader2, BookOpen, ChevronRight, Hand, CalendarDays, CircleAlert, Bed, Route, Archive, Check, SquareCheckBig, X } from "lucide-react";
+import AlbumMover, { type MoverChoice } from "@/components/plans/AlbumMover";
 import { ImageLightbox } from "@/components/ui/ImageLightbox";
 import { DEMO_PHOTO_CREDITS } from "@/config/demo-photos";
 
@@ -46,6 +49,8 @@ type Props = {
   planId: number;
   currentUserId: string;
   isMember: boolean;
+  /** Admins of the plan can move anybody's photos; everyone else only their own. */
+  isAdmin?: boolean;
   refreshKey?: number;
 };
 
@@ -56,13 +61,6 @@ const fotosText = (n: number) => (n === 0 ? "Sin fotos" : plural(n, "foto", "fot
 
 function cap(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
-}
-
-/** «Sáb 21 nov» */
-function dayLabel(key: string): string {
-  const [y, m, d] = key.split("-").map(Number);
-  const text = new Date(y, m - 1, d).toLocaleDateString("es-ES", { weekday: "short", day: "numeric", month: "short" });
-  return cap(text.replace(/[.,]/g, "").trim());
 }
 
 const hhmm = (iso: string) => new Date(iso).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", hour12: false });
@@ -113,8 +111,14 @@ function dateMark(tomadaAt: string | null, planYear: number): string {
 
 // ── Tab ─────────────────────────────────────────────────────────────────────────────────
 
-export default function PlanFotosTab({ planId, currentUserId, isMember, refreshKey = 0 }: Props) {
+export default function PlanFotosTab({ planId, currentUserId, isMember, isAdmin = false, refreshKey = 0 }: Props) {
   const [album, setAlbum] = useState<PlanAlbum | null>(null);
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [moverOpen, setMoverOpen] = useState(false);
+  const [moving, setMoving] = useState(false);
+  const [notice, setNotice] = useState<{ id: number; title: string; detail?: string; undo?: () => void; error?: boolean } | null>(null);
+  const lastSelected = useRef<number | null>(null);
   const [status, setStatus] = useState<"loading" | "error" | "ok">("loading");
   const [uploading, setUploading] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
@@ -173,6 +177,17 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, refreshK
     return out;
   }, [grouping]);
 
+  /** Photo ids in the order they are drawn (Shift+click selects the range between two). */
+  const orderedPhotoIds = useMemo(() => {
+    if (!grouping) return [] as number[];
+    const out: number[] = [];
+    for (const d of grouping.days) for (const b of d.blocks) for (const p of b.fotos) out.push(p.foto.id);
+    for (const g of grouping.sinClasificar.grupos) for (const p of g.fotos) out.push(p.foto.id);
+    return out;
+  }, [grouping]);
+
+  const moverDays = useMemo(() => (album && grouping ? opcionesMover(album.actividades, grouping) : []), [album, grouping]);
+
   async function handleFilesSelected(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
     if (files.length === 0) return;
@@ -212,6 +227,152 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, refreshK
     } finally {
       setDeletingId(null);
     }
+  }
+
+  // ── Selection and «Mover a…» ───────────────────────────────────────────────────────────
+
+  const canMove = useCallback(
+    (userId: string) => isMember && (isAdmin || userId === currentUserId),
+    [isMember, isAdmin, currentUserId],
+  );
+
+  function exitSelection() {
+    setSelecting(false);
+    setSelected(new Set());
+    setMoverOpen(false);
+    lastSelected.current = null;
+  }
+
+  function toggleSelected(id: number, shift: boolean) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (shift && lastSelected.current !== null && album) {
+        // Shift+click: everything between the last one and this one, in the order drawn.
+        const ids = orderedPhotoIds;
+        const a = ids.indexOf(lastSelected.current);
+        const b = ids.indexOf(id);
+        if (a >= 0 && b >= 0) {
+          const byId = new Map(album.fotos.map((f) => [f.id, f]));
+          for (const pid of ids.slice(Math.min(a, b), Math.max(a, b) + 1)) {
+            const f = byId.get(pid);
+            if (f && canMove(f.user_id)) next.add(pid);
+          }
+          return next;
+        }
+      }
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+    lastSelected.current = id;
+  }
+
+  function startSelectionWith(id: number) {
+    setSelecting(true);
+    setSelected(new Set([id]));
+    lastSelected.current = id;
+    if (typeof navigator !== "undefined" && "vibrate" in navigator) navigator.vibrate(10);
+  }
+
+  function showNotice(n: Omit<NonNullable<typeof notice>, "id">) {
+    setNotice({ id: Date.now(), ...n });
+  }
+
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice((cur) => (cur && cur.id === notice.id ? null : cur)), notice.error ? 6000 : 10000);
+    return () => clearTimeout(t);
+  }, [notice]);
+
+  /** Sets the placement of photos in the local copy, so the album redraws without waiting. */
+  function applyLocal(ids: number[], c: FotoColocacion) {
+    const set = new Set(ids);
+    setAlbum((prev) =>
+      prev ? { ...prev, fotos: prev.fotos.map((f) => (set.has(f.id) ? { ...f, colocacion: c.colocacion, subplan_id: c.subplanId } : f)) } : prev,
+    );
+  }
+
+  async function handlePick(choice: MoverChoice) {
+    if (!album || !grouping || moving || selected.size === 0) return;
+    const ids = [...selected];
+    const destino: FotoColocacion =
+      choice.kind === "auto"
+        ? { colocacion: null, subplanId: null }
+        : choice.kind === "sin_clasificar"
+          ? { colocacion: "sin_clasificar", subplanId: null }
+          : { colocacion: choice.option.colocacion, subplanId: choice.option.subplanId };
+    const antes = album.fotos.filter((f) => selected.has(f.id));
+    const placementBefore = new Map(grouping.days.flatMap((d) => d.blocks.flatMap((b) => b.fotos)).concat(grouping.sinClasificar.grupos.flatMap((g) => g.fotos)).map((p) => [p.foto.id, p.colocacion]));
+    setMoving(true);
+    try {
+      await moverFotosAlbum(planId, ids, destino);
+    } catch (err) {
+      console.error("Move failed:", err);
+      setMoving(false);
+      showNotice({ title: "No se pudo mover", detail: "Comprueba la conexión y vuelve a intentarlo.", error: true });
+      return;
+    }
+    setMoving(false);
+    applyLocal(ids, destino);
+    exitSelection();
+
+    const undo = () => {
+      // Each photo goes back to where it was: the ones that shared a placement go together.
+      const grupos = new Map<string, { ids: number[]; c: FotoColocacion }>();
+      for (const f of antes) {
+        const c: FotoColocacion = { colocacion: f.colocacion, subplanId: f.subplan_id };
+        const k = `${c.colocacion}|${c.subplanId}`;
+        (grupos.get(k) ?? grupos.set(k, { ids: [], c }).get(k)!).ids.push(f.id);
+      }
+      setNotice(null);
+      for (const g of grupos.values()) {
+        applyLocal(g.ids, g.c);
+        void moverFotosAlbum(planId, g.ids, g.c).catch(() => reload());
+      }
+    };
+
+    const n = ids.length;
+    if (choice.kind === "auto") {
+      showNotice({ title: n === 1 ? "Colocada por su hora" : `${n} fotos colocadas por su hora`, undo });
+      return;
+    }
+    const nombre =
+      choice.kind === "sin_clasificar"
+        ? "Sin clasificar"
+        : choice.option.kind === "viaje"
+          ? `Viaje · ${choice.option.titulo}`
+          : choice.option.kind === "sigue"
+            ? choice.option.titulo.replace(/^Sigue · /, "")
+            : choice.option.titulo;
+    // Where their time would have put them, when it is somewhere else.
+    const lugarAuto = (id: number): string | null => {
+      const c = placementBefore.get(id);
+      if (!c) return null;
+      const d = c.auto;
+      if (d.kind === "sin_clasificar") return "Sin clasificar";
+      const act = album.actividades.find((a) => a.id === (d.kind === "actividad" ? d.subplanId : d.hastaSubplanId));
+      return act ? (d.kind === "viaje" ? `Viaje · hasta ${act.titulo}` : act.titulo) : null;
+    };
+    const mismo = (id: number) => {
+      const c = placementBefore.get(id);
+      if (!c) return true;
+      const d = c.auto;
+      if (choice.kind === "sin_clasificar") return d.kind === "sin_clasificar";
+      if (choice.kind !== "destino") return true;
+      return (
+        d.kind === choice.option.colocacion && (d.kind === "actividad" ? d.subplanId === choice.option.subplanId : d.kind === "viaje" && d.hastaSubplanId === choice.option.subplanId)
+      );
+    };
+    const distintas = ids.filter((id) => !mismo(id));
+    let detail: string | undefined;
+    if (distintas.length === 1 && n === 1) {
+      const f = album.fotos.find((x) => x.id === distintas[0]);
+      const donde = lugarAuto(distintas[0]);
+      detail = f?.tomada_at && donde ? `Por su hora, ${hhmm(f.tomada_at)}, iría en ${donde}` : undefined;
+    } else if (distintas.length > 0) {
+      detail = `Por su hora, ${distintas.length === n ? "irían" : `${distintas.length} de ellas irían`} en otro sitio`;
+    }
+    showNotice({ title: n === 1 ? `Movida a ${nombre}` : `${n} fotos movidas a ${nombre}`, detail, undo });
   }
 
   function toggleExpanded(key: string) {
@@ -288,6 +449,11 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, refreshK
     deletingId,
     onOpen: (url: string) => setLightboxUrl(url),
     onDelete: handleDelete,
+    selecting,
+    selected,
+    canMove,
+    onToggleSelect: toggleSelected,
+    onStartSelect: startSelectionWith,
   };
 
   return (
@@ -296,10 +462,29 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, refreshK
 
       <AlbumLink planId={planId} />
 
-      <div className="mb-3 flex items-center justify-between">
-        <p className="text-[14px] font-[600] text-app tabular-nums">{hayFotos ? plural(grouping.total, "foto", "fotos") : "Fotos"}</p>
+      <div className="sticky top-0 z-10 -mx-[var(--page-margin-x)] mb-3 flex min-h-11 items-center justify-between bg-[var(--bg)] px-[var(--page-margin-x)]">
+        {selecting ? (
+          <>
+            <button type="button" onClick={exitSelection} aria-label="Salir de la selección" className="-ml-3 flex size-11 items-center justify-center text-app">
+              <X className="size-[22px]" aria-hidden />
+            </button>
+            <p className="flex-1 text-[16px] font-[600] text-app tabular-nums" role="status" aria-live="polite">
+              {selected.size === 0 ? "Elige fotos" : selected.size === 1 ? "1 seleccionada" : `${selected.size} seleccionadas`}
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="text-[14px] font-[600] text-app tabular-nums">{hayFotos ? plural(grouping.total, "foto", "fotos") : "Fotos"}</p>
+            {hayFotos && album.fotos.some((f) => canMove(f.user_id)) && (
+              <button type="button" onClick={() => setSelecting(true)} className="-mr-3 inline-flex min-h-11 items-center gap-1.5 px-3 text-[14px] font-[600] text-app">
+                <SquareCheckBig className="size-[18px]" aria-hidden />
+                Seleccionar
+              </button>
+            )}
+          </>
+        )}
       </div>
-      {addButton}
+      {!selecting && addButton}
 
       {!hayFotos && (
         <div className="mt-6 text-center">
@@ -405,6 +590,46 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, refreshK
         </div>
       </div>
 
+      {selecting && (
+        <div className="fixed inset-x-0 bottom-0 z-[60] border-t border-app bg-[var(--surface)] px-4 pt-2.5 pb-[calc(env(safe-area-inset-bottom)+16px)]">
+          <div className="mx-auto flex max-w-[960px] flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+            {!isAdmin && album.fotos.some((f) => !canMove(f.user_id)) && (
+              <p className="text-[13px] text-muted">Solo puedes mover tus fotos; las de los demás las mueve un admin.</p>
+            )}
+            <button
+              type="button"
+              disabled={selected.size === 0 || moving}
+              onClick={() => setMoverOpen(true)}
+              className="ml-auto flex h-[46px] w-full items-center justify-center gap-2 rounded-lg bg-[var(--primary)] px-4 text-[15px] font-[600] text-[var(--bg)] transition-opacity hover:opacity-90 disabled:bg-[var(--surface-2)] disabled:text-muted lg:w-auto"
+            >
+              {moving ? <Loader2 className="size-5 animate-spin" aria-hidden /> : null}
+              {selected.size === 0 ? "Mover a…" : selected.size === 1 ? "Mover 1 foto a…" : `Mover ${selected.size} fotos a…`}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {moverOpen && selected.size > 0 && (
+        <AlbumMover count={selected.size} days={moverDays} desktop={isDesktop} onPick={(c) => { setMoverOpen(false); void handlePick(c); }} onClose={() => setMoverOpen(false)} />
+      )}
+
+      {notice && (
+        <div
+          role="status"
+          className={`fixed inset-x-3 bottom-6 z-[70] mx-auto flex min-h-14 max-w-[420px] items-center gap-3 rounded-lg border py-2 pr-1.5 pl-3.5 text-[14px] leading-[1.35] shadow-[0_12px_32px_rgba(0,0,0,0.3)] ${notice.error ? "border-[var(--error)] bg-[var(--surface)] text-app" : "border-app bg-[var(--surface)] text-app"}`}
+        >
+          <span className="min-w-0 flex-1">
+            <b className="font-[600]">{notice.title}</b>
+            {notice.detail && <span className="block text-[13px] text-muted">{notice.detail}</span>}
+          </span>
+          {notice.undo && (
+            <button type="button" onClick={notice.undo} className="min-h-11 shrink-0 px-2.5 text-[14px] font-[600] text-[var(--primary)]">
+              Deshacer
+            </button>
+          )}
+        </div>
+      )}
+
       {album.fotos.some((foto) => DEMO_PHOTO_CREDITS[foto.url]) && (
         <p className="mt-[var(--space-3)] text-[12px] text-tertiary">Fotos de ejemplo de Wikimedia Commons; al abrir cada una verás su autor y licencia.</p>
       )}
@@ -429,6 +654,11 @@ type PhotoCtx = {
   deletingId: number | null;
   onOpen: (url: string) => void;
   onDelete: (id: number, url: string) => void;
+  selecting: boolean;
+  selected: Set<number>;
+  canMove: (userId: string) => boolean;
+  onToggleSelect: (id: number, shift: boolean) => void;
+  onStartSelect: (id: number) => void;
 };
 
 type BlockProps = PhotoCtx & { expanded: boolean; max: number; onToggle: () => void };
@@ -546,6 +776,11 @@ function Thumb({
   deletingId,
   onOpen,
   onDelete,
+  selecting,
+  selected,
+  canMove,
+  onToggleSelect,
+  onStartSelect,
 }: PhotoCtx & {
   placed: PlacedPhoto;
   small?: boolean;
@@ -561,16 +796,63 @@ function Thumb({
   const when = foto.tomada_at ? hhmm(foto.tomada_at) : "sin hora";
   const label = `Foto de ${authorName(album, foto.user_id, currentUserId)}, ${when}${colocacion.aprox ? ", hora aproximada" : ""}${colocacion.manual ? ", colocada a mano" : ""}`;
   const radius = small ? "rounded-md" : "rounded-lg";
+  const selectable = canMove(foto.user_id);
+  const isSelected = selected.has(foto.id);
+  const press = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pressed = useRef(false);
+  const cancelPress = () => {
+    if (press.current) clearTimeout(press.current);
+    press.current = null;
+  };
   return (
-    <div className={`group relative aspect-square w-full overflow-hidden ${radius} bg-[var(--surface-2)]`}>
+    <div className={`group relative aspect-square w-full overflow-hidden ${radius} bg-[var(--surface-2)] ${selecting && !selectable ? "opacity-35" : ""} ${isSelected ? "ring-[3px] ring-inset ring-[var(--primary)]" : ""}`}>
       <button
         type="button"
         aria-label={more ? `Ver ${more} fotos más` : label}
-        onClick={more ? onMore : () => onOpen(foto.url)}
-        className="absolute inset-0"
+        aria-pressed={selecting && selectable ? isSelected : undefined}
+        aria-disabled={selecting && !selectable ? true : undefined}
+        onClick={(e) => {
+          if (pressed.current) {
+            pressed.current = false;
+            return;
+          }
+          if (more) {
+            onMore();
+            return;
+          }
+          if (selecting) {
+            if (selectable) onToggleSelect(foto.id, e.shiftKey);
+            return;
+          }
+          onOpen(foto.url);
+        }}
+        onPointerDown={(e) => {
+          if (selecting || !selectable || e.pointerType === "mouse" || more) return;
+          pressed.current = false;
+          cancelPress();
+          press.current = setTimeout(() => {
+            pressed.current = true;
+            onStartSelect(foto.id);
+          }, 450);
+        }}
+        onPointerUp={cancelPress}
+        onPointerLeave={cancelPress}
+        onPointerCancel={cancelPress}
+        onContextMenu={(e) => {
+          if (!selecting && selectable && e.nativeEvent instanceof MouseEvent && (e.nativeEvent as PointerEvent).pointerType === "touch") e.preventDefault();
+        }}
+        className="absolute inset-0 select-none [-webkit-touch-callout:none]"
       >
         <FotoImage src={foto.url} />
       </button>
+      {selecting && selectable && (
+        <span
+          aria-hidden
+          className={`pointer-events-none absolute top-1.5 left-1.5 flex size-6 items-center justify-center rounded-full border-2 ${isSelected ? "border-[var(--primary)] bg-[var(--primary)] text-[var(--bg)]" : "border-white bg-[rgba(17,17,17,.35)] text-transparent"}`}
+        >
+          <Check className="size-3.5" strokeWidth={3} />
+        </span>
+      )}
       {more > 0 && (
         <span className="tabular-nums pointer-events-none absolute inset-0 flex items-center justify-center bg-black/60 text-[20px] font-[600] text-white">+{more}</span>
       )}

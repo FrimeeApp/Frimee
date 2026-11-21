@@ -42,7 +42,7 @@ test("el viaje sale entre sus dos actividades, con la de origen", () => {
 test("la estancia aparece día a día con «Sigue» y la noche", () => {
   const g = agruparAlbum({ ...plan, actividades: acts, fotos: [foto(t(21, 16)), foto(t(22, 8)), foto(t(25, 9))] });
   const dia1 = g.days[0].blocks[0];
-  assert.ok(dia1.kind === "actividad" && dia1.sigue === null && dia1.ordinal === 2);
+  assert.ok(dia1.kind === "actividad" && dia1.sigue === null && dia1.actividad.titulo === "Hotel Alfama");
   const dia2 = g.days[1].blocks[0];
   assert.ok(dia2.kind === "actividad" && dia2.sigue?.noche === 2 && dia2.sigue.total === 4 && dia2.ordinal === null);
   const dia5 = g.days[4].blocks[0];
@@ -72,4 +72,20 @@ test("foto movida a mano a una actividad: sale en esa actividad", () => {
   const g = agruparAlbum({ ...plan, actividades: acts, fotos: [foto(t(22, 11), { colocacion: "actividad", subplan_id: 5 })] });
   const b = g.days[1].blocks[0];
   assert.ok(b.kind === "actividad" && b.actividad.id === 5 && b.fotos[0].colocacion.manual);
+});
+
+test("Mover a…: días con actividades, viajes y estancias que siguen, con cuántas fotos hay", async () => {
+  const { opcionesMover } = await import("../src/lib/album-grouping.ts");
+  const g = agruparAlbum({ ...plan, actividades: acts, fotos: [foto(t(22, 11)), foto(t(22, 8))] });
+  const dias = opcionesMover(acts, g);
+  assert.equal(dias.length, 5);
+  assert.deepEqual(dias[0].options.map((o) => [o.kind, o.titulo]), [
+    ["actividad", "Vuelo"], ["viaje", "Vuelo → Hotel Alfama"], ["actividad", "Hotel Alfama"], ["actividad", "Mirador"],
+  ]);
+  assert.deepEqual(dias[1].options.map((o) => [o.id, o.count]), [
+    ["sigue-2-2026-11-22", 1], ["act-4", 1], ["viaje-5", 0], ["act-5", 0],
+  ]);
+  assert.equal(dias[1].options[0].detalle, "noche 2");
+  assert.equal(dias[4].options[0].detalle, "salida");
+  assert.equal(dias[0].options[3].ordinal, 2);
 });
