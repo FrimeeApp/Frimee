@@ -1141,7 +1141,7 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
 
           {/* ─── Tabs ─── */}
           <div className="px-[var(--page-margin-x)]">
-            <div className="relative flex items-center justify-between">
+            <div className="flex items-center justify-between">
               <Tabs
                 tabs={[
                   { value: "itinerario", label: "Itinerario" },
@@ -1182,30 +1182,6 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
                   >
                     <VideoCallIcon className="size-[18px]" />
                   </button>
-                </div>
-              )}
-              {activeTab === "gastos" && (sortedPlanGastos.length > 0 || (!isPast && canAdd)) && (
-                <div className="absolute right-0 top-1/2 hidden -translate-y-1/2 items-center gap-[var(--space-2)] md:flex">
-                  {sortedPlanGastos.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setShowInvoiceModal(true)}
-                      className={`inline-flex h-10 items-center gap-2 rounded-lg px-4 text-[14px] font-[var(--fw-semibold)] ${isPast ? "bg-primary-token text-contrast-token" : "border border-app text-app hover:bg-surface"}`}
-                    >
-                      <FileText className="size-[18px]" aria-hidden />
-                      {isPast ? "Factura final" : "Resumen PDF"}
-                    </button>
-                  )}
-                  {!isPast && canAdd && (
-                    <button
-                      type="button"
-                      onClick={() => setShowAddGastoSheet(true)}
-                      className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary-token px-4 text-[14px] font-[var(--fw-semibold)] text-contrast-token"
-                    >
-                      <Plus className="size-[18px]" strokeWidth={2.25} aria-hidden />
-                      Añadir gasto
-                    </button>
-                  )}
                 </div>
               )}
             </div>
@@ -1428,8 +1404,9 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
 
                   {/* Expenses summary */}
                   <ExpenseSummaryCard
-                    title={isPast ? "Cuentas del viaje" : "Resumen de gastos"}
                     summary={expenseSummary}
+                    balances={visibleBalances}
+                    userId={user?.id}
                     onOpen={() => setActiveTab("gastos")}
                   />
                 </div>

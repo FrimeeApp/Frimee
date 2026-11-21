@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ArrowDownLeft, ArrowUpRight, ChevronDown, FileText, Pencil, Search, WalletCards } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, ChevronDown, FileText, Pencil, Plus, Search, WalletCards } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { formatMoney } from "@/lib/formatters";
 import type { BalanceRow, GastoRow } from "@/services/api/endpoints/gastos.endpoint";
@@ -14,6 +14,8 @@ const SERIF = { fontFamily: 'var(--font-display-face), "Instrument Serif", Georg
 const ME_TINT = "bg-[color-mix(in_srgb,var(--primary)_12%,transparent)]";
 const SHADES = [1, 0.68, 0.42, 0.22];
 const SEARCH_FROM = 15;
+const CATS_TOP = 3;
+const SUBPLANS_SHOWN = 4;
 
 type Filter = "todos" | "mios" | "afectan";
 
@@ -57,6 +59,8 @@ export function GastosTab({ gastos, balances, userId, summary, planStart, isPast
   const [cat, setCat] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState<Set<string>>(new Set());
+  const [allCats, setAllCats] = useState(false);
+  const [allSubplans, setAllSubplans] = useState(false);
   const currency = summary.currency;
 
   /* ── Tu cuenta y deudas ── */
@@ -82,6 +86,18 @@ export function GastosTab({ gastos, balances, userId, summary, planStart, isPast
       .sort((a, b) => b[1] - a[1])
       .map(([label, amount], i) => ({ label, amount, pct: Math.round((amount / total) * 100), shade: SHADES[Math.min(i, SHADES.length - 1)] }));
   }, [confirmed]);
+  const collapsible = categories.length > CATS_TOP + 1;
+  const shownCats: ((typeof categories)[number] & { other?: boolean })[] =
+    allCats || !collapsible
+      ? categories
+      : [
+          ...categories.slice(0, CATS_TOP),
+          (() => {
+            const rest = categories.slice(CATS_TOP);
+            return { label: "Otras", amount: sum(rest.map((c) => c.amount)), pct: sum(rest.map((c) => c.pct)), shade: SHADES[SHADES.length - 1], other: true };
+          })(),
+        ];
+  const pickCat = (c: { label: string; other?: boolean }) => (c.other ? setAllCats(true) : setCat(cat === c.label ? null : c.label));
   const showCategories = categories.length > 0 && !(categories.length === 1 && categories[0].label === "Otros");
   const subplans = useMemo(() => {
     const map = new Map<string, number>();
@@ -289,12 +305,15 @@ export function GastosTab({ gastos, balances, userId, summary, planStart, isPast
                 {categories.map((c) => <i key={c.label} style={{ width: `${c.pct}%`, background: "var(--text-primary)", opacity: c.shade }} />)}
               </div>
               <div className="mt-2 flex flex-wrap gap-1.5">
-                {categories.map((c) => (
-                  <button key={c.label} type="button" aria-pressed={cat === c.label} onClick={() => setCat(cat === c.label ? null : c.label)} className={`${chip(cat === c.label)} !h-8 !px-2.5 !text-[12px]`}>
+                {shownCats.map((c) => (
+                  <button key={c.label} type="button" aria-pressed={cat === c.label} onClick={() => pickCat(c)} className={`${chip(cat === c.label)} !h-8 !px-2.5 !text-[12px]`}>
                     <span aria-hidden className="size-2 rounded-[2px]" style={{ background: "var(--text-primary)", opacity: c.shade }} />
                     {c.label} <b className="font-[var(--fw-semibold)] tabular-nums text-app">{c.pct} %</b>
                   </button>
                 ))}
+                {collapsible && allCats && (
+                  <button type="button" onClick={() => setAllCats(false)} className="inline-flex h-8 items-center px-2 text-[12px] font-[var(--fw-semibold)] text-[var(--primary)]">Ver menos</button>
+                )}
               </div>
             </>
           )}
@@ -346,9 +365,18 @@ export function GastosTab({ gastos, balances, userId, summary, planStart, isPast
       </div>
 
       {/* Entre todos · escritorio */}
-      <aside aria-label="Entre todos" className="hidden flex-col gap-4 md:sticky md:top-6 md:flex">
-        <section className="rounded-lg border border-app bg-surface p-5">
-          <p className="text-[12px] text-muted">Entre los {summary.participantCount}</p>
+      <aside aria-label="Entre todos" className="hidden flex-col gap-4 md:sticky md:top-6 md:flex md:max-h-[calc(100dvh-3rem)] md:overflow-y-auto">
+        {isPast && hasPdf ? (
+          <button type="button" onClick={onPdf} className="flex h-[46px] w-full shrink-0 items-center justify-center gap-2 rounded-lg bg-primary-token text-[15px] font-[var(--fw-semibold)] text-contrast-token">
+            <FileText className="size-[18px]" aria-hidden />Factura final (PDF)
+          </button>
+        ) : !isPast && canAdd ? (
+          <button type="button" onClick={onAdd} className="flex h-[46px] w-full shrink-0 items-center justify-center gap-2 rounded-lg bg-primary-token text-[15px] font-[var(--fw-semibold)] text-contrast-token">
+            <Plus className="size-[18px]" strokeWidth={2.25} aria-hidden />Añadir gasto
+          </button>
+        ) : null}
+        <section className="shrink-0 rounded-lg border border-app bg-surface p-5">
+          <p className="text-[12px] text-muted">Entre los {summary.participantCount}{isPast && " · plan terminado"}</p>
           <p className="mt-0.5 text-[28px] font-[var(--fw-semibold)] tabular-nums text-app">{money(summary.total)}</p>
           <p className="mt-0.5 text-[12px] tabular-nums text-muted">
             {summary.count} {summary.count === 1 ? "gasto" : "gastos"}
@@ -357,26 +385,42 @@ export function GastosTab({ gastos, balances, userId, summary, planStart, isPast
           {showCategories && (
             <>
               <p className="mb-1 mt-5 text-[12px] font-[var(--fw-semibold)] tracking-[0.02em] text-muted">En qué se ha ido</p>
-              {categories.map((c) => (
-                <button key={c.label} type="button" aria-pressed={cat === c.label} onClick={() => setCat(cat === c.label ? null : c.label)} className="grid w-full grid-cols-[1fr_auto] gap-x-2.5 gap-y-1 py-1.5 text-left">
-                  <span className={`text-[14px] ${cat === c.label ? "font-[var(--fw-semibold)]" : ""} text-app`}>{c.label}</span>
-                  <span className="text-[14px] tabular-nums text-app">{money(c.amount)}</span>
+              {shownCats.map((c) => (
+                <button key={c.label} type="button" aria-pressed={cat === c.label} onClick={() => pickCat(c)} className="grid w-full grid-cols-[minmax(0,1fr)_88px] gap-x-2.5 gap-y-1 py-1.5 text-left">
+                  <span className={`truncate text-[14px] ${cat === c.label ? "font-[var(--fw-semibold)]" : ""} text-app`}>{c.label}</span>
+                  <span className="text-right text-[14px] tabular-nums text-app">{money(c.amount)}</span>
                   <span className="flex h-1.5 items-center overflow-hidden rounded bg-surface-2"><i className="block h-full" style={{ width: `${c.pct}%`, background: "var(--text-primary)", opacity: c.shade }} /></span>
-                  <span className="text-[12px] tabular-nums text-muted">{c.pct} %</span>
+                  <span className="text-right text-[12px] tabular-nums text-muted">{c.pct} %</span>
                 </button>
               ))}
+              {collapsible && allCats && (
+                <button type="button" onClick={() => setAllCats(false)} className="mt-1 min-h-9 text-[13px] font-[var(--fw-semibold)] text-[var(--primary)]">Ver menos</button>
+              )}
             </>
           )}
-          {subplans.rows.length > 0 && (
+          {subplans.rows.length > 1 && (
             <>
               <p className="mb-1 mt-5 text-[12px] font-[var(--fw-semibold)] tracking-[0.02em] text-muted">Por subplan</p>
-              {subplans.rows.map(([name, amount]) => (
+              {subplans.rows.slice(0, SUBPLANS_SHOWN).map(([name, amount]) => (
                 <div key={name} className="flex items-baseline gap-2 py-1 text-[14px] text-app"><span className="min-w-0 flex-1 truncate">{name}</span><span className="tabular-nums">{money(amount)}</span></div>
               ))}
+              {allSubplans && subplans.rows.slice(SUBPLANS_SHOWN).map(([name, amount]) => (
+                <div key={name} className="flex items-baseline gap-2 py-1 text-[14px] text-app"><span className="min-w-0 flex-1 truncate">{name}</span><span className="tabular-nums">{money(amount)}</span></div>
+              ))}
+              {subplans.rows.length > SUBPLANS_SHOWN && (
+                <button type="button" onClick={() => setAllSubplans((v) => !v)} className="flex min-h-9 w-full items-baseline gap-2 py-1 text-left text-[13px] font-[var(--fw-semibold)] text-[var(--primary)]">
+                  {allSubplans ? "Ver menos" : <><span className="flex-1">Y {subplans.rows.length - SUBPLANS_SHOWN} más</span><span className="tabular-nums">{money(sum(subplans.rows.slice(SUBPLANS_SHOWN).map((r) => r[1])))}</span></>}
+                </button>
+              )}
               {subplans.rest > 0.005 && (
                 <div className="flex items-baseline gap-2 py-1 text-[14px] text-muted"><span className="flex-1">Sin subplan</span><span className="tabular-nums">{money(subplans.rest)}</span></div>
               )}
             </>
+          )}
+          {!isPast && hasPdf && (
+            <button type="button" onClick={onPdf} aria-label="Resumen parcial en PDF" className="mt-4 flex h-[46px] w-full items-center justify-center gap-2 rounded-lg border border-app text-[15px] font-[var(--fw-semibold)] text-app hover:bg-surface-2">
+              <FileText className="size-[18px]" aria-hidden />Resumen PDF
+            </button>
           )}
         </section>
       </aside>

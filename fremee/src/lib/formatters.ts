@@ -6,6 +6,8 @@ export function formatMoney(value: number, currency = "EUR"): string {
     currency,
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
+    // es-ES no agrupa los números de 4 cifras por defecto («1474,00 €»); con "always" sale «1.474,00 €».
+    useGrouping: "always" as unknown as boolean,
   }).format(value);
 }
 

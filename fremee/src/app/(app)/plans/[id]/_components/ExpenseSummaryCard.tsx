@@ -1,7 +1,7 @@
 "use client";
 
-import { ArrowRight } from "lucide-react";
 import { formatMoney } from "@/lib/formatters";
+import type { BalanceRow } from "@/services/api/endpoints/gastos.endpoint";
 
 export type ExpenseSummary = {
   hasExpenses: boolean;
@@ -15,88 +15,69 @@ export type ExpenseSummary = {
   topCategories: { label: string; amount: number; count: number; icon: string | null }[];
 };
 
-// Three steps of the brand colour for the top three categories; the rest is neutral.
-const CATEGORY_SHADES = [
-  "var(--primary)",
-  "color-mix(in srgb, var(--primary) 60%, var(--surface))",
-  "color-mix(in srgb, var(--primary) 35%, var(--surface))",
-];
+const SERIF = { fontFamily: 'var(--font-display-face), "Instrument Serif", Georgia, serif', fontWeight: 400, letterSpacing: "-0.01em" } as const;
 
-function balanceText(net: number, currency: string) {
-  if (net > 0) return { text: `Te deben ${formatMoney(net, currency)}`, tone: "text-[var(--success)]" };
-  if (net < 0) return { text: `Debes ${formatMoney(-net, currency)}`, tone: "text-[var(--warning)]" };
-  return { text: "En equilibrio", tone: "text-muted" };
+const firstName = (name: string | null | undefined) => (name ?? "Usuario").trim().split(" ")[0] || "Usuario";
+
+function joinNames(names: string[]) {
+  if (names.length === 1) return names[0];
+  if (names.length === 2) return `${names[0]} y ${names[1]}`;
+  return `${names.length} personas`;
 }
 
-/** Sidebar summary of the plan's expenses: total, balance and how it splits by category. Full detail lives in the Gastos tab. */
-export function ExpenseSummaryCard({ summary: s, onOpen, title = "Resumen gastos" }: { summary: ExpenseSummary; onOpen: () => void; title?: string }) {
-  const balance = balanceText(s.net, s.currency);
-  const shown = s.topCategories.reduce((sum, c) => sum + c.amount, 0);
-  const rest = Math.max(s.total - shown, 0);
-  const parts = [
-    ...s.topCategories.map((c, i) => ({ label: c.label, amount: c.amount, color: CATEGORY_SHADES[i] })),
-    ...(rest > 0.005 ? [{ label: "Resto", amount: rest, color: "var(--surface-inset)" }] : []),
-  ];
-  const caption = `${s.count} gasto${s.count === 1 ? "" : "s"}${
-    s.participantCount > 0 ? ` · ${s.participantCount} participante${s.participantCount === 1 ? "" : "s"}` : ""
-  }`;
+/** Tarjeta reducida de la columna lateral (Itinerario): tu situación, el total del grupo y el acceso a Gastos. El detalle vive en la pestaña. */
+export function ExpenseSummaryCard({
+  summary: s,
+  balances,
+  userId,
+  onOpen,
+}: {
+  summary: ExpenseSummary;
+  balances: BalanceRow[];
+  userId: string | undefined;
+  onOpen: () => void;
+}) {
+  const mine = balances.filter((b) => b.from_user_id === userId);
+  const owedToMe = balances.filter((b) => b.to_user_id === userId);
+  const debt = mine.reduce((sum, b) => sum + b.importe, 0);
+  const credit = owedToMe.reduce((sum, b) => sum + b.importe, 0);
 
   return (
-    <div className="hidden rounded-[16px] border border-app bg-surface px-[var(--space-4)] py-[var(--space-4)] md:block">
-      <div className="flex items-center justify-between gap-[var(--space-3)]">
-        <h3 className="text-body font-[var(--fw-semibold)]">{title}</h3>
-        <button
-          type="button"
-          onClick={onOpen}
-          className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted transition-colors hover:bg-surface-inset hover:text-app"
-          aria-label="Ir a la sección de gastos"
-        >
-          <ArrowRight className="size-[16px]" />
-        </button>
-      </div>
+    <div className="hidden rounded-lg border border-app bg-surface p-4 md:block">
+      <h3 className="text-[15px] font-[var(--fw-semibold)] text-app">Gastos</h3>
 
       {s.hasExpenses ? (
         <>
-          <div className="mt-[var(--space-2)] flex items-end justify-between gap-[var(--space-3)]">
-            <div>
-              <p className="text-[28px] font-[var(--fw-bold)] leading-none text-app">{formatMoney(s.total, s.currency)}</p>
-              <p className="mt-[6px] text-caption text-muted">{caption}</p>
-            </div>
-            <span className={`shrink-0 rounded-full bg-surface-inset px-[10px] py-[4px] text-caption font-[var(--fw-semibold)] ${balance.tone}`}>
-              {balance.text}
-            </span>
-          </div>
-
-          {parts.length > 0 && s.total > 0 ? (
-            <>
-              <div className="mt-[var(--space-4)] flex h-[8px] gap-[2px] overflow-hidden rounded-full" aria-hidden>
-                {parts.map((p) => (
-                  <div key={p.label} style={{ width: `${(p.amount / s.total) * 100}%`, background: p.color }} />
-                ))}
-              </div>
-              <ul className="mt-[var(--space-3)] space-y-[6px]">
-                {parts.map((p) => (
-                  <li key={p.label} className="flex items-center gap-[var(--space-2)] text-body-sm">
-                    <span className="size-[8px] shrink-0 rounded-full" style={{ background: p.color }} />
-                    <span className="min-w-0 flex-1 truncate text-app">{p.label}</span>
-                    <span className="text-caption text-muted">{Math.round((p.amount / s.total) * 100)}%</span>
-                    <span className="w-[76px] shrink-0 text-right font-[var(--fw-medium)] text-app">
-                      {formatMoney(p.amount, s.currency)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </>
-          ) : null}
-
-          <p className="mt-[var(--space-4)] border-t border-app pt-[var(--space-3)] text-caption text-muted">
-            Pagaste <span className="font-[var(--fw-medium)] text-app">{formatMoney(s.paidByYou, s.currency)}</span>
-            {" · "}Tu parte <span className="font-[var(--fw-medium)] text-app">{formatMoney(s.yourShare, s.currency)}</span>
+          {debt > 0 ? (
+            <p className="mt-3 flex flex-wrap items-baseline gap-x-2">
+              <span className="w-full text-[13px] font-[var(--fw-semibold)] text-[var(--warning)]">Debes</span>
+              <span className="text-[32px] leading-none tabular-nums text-app" style={SERIF}>{formatMoney(debt, s.currency)}</span>
+              <span className="text-[14px] text-muted">a {joinNames(mine.map((b) => firstName(b.to_nombre)))}</span>
+            </p>
+          ) : credit > 0 ? (
+            <p className="mt-3 flex flex-wrap items-baseline gap-x-2">
+              <span className="w-full text-[13px] font-[var(--fw-semibold)] text-[var(--success)]">Te deben</span>
+              <span className="text-[32px] leading-none tabular-nums text-app" style={SERIF}>{formatMoney(credit, s.currency)}</span>
+              <span className="text-[14px] text-muted">{joinNames(owedToMe.map((b) => firstName(b.from_nombre)))}</span>
+            </p>
+          ) : (
+            <p className="mt-3 text-[26px] leading-none text-app" style={SERIF}>Estás al día</p>
+          )}
+          <p className="mt-3 text-[13px] tabular-nums text-muted">
+            {formatMoney(s.total, s.currency)} entre los {s.participantCount} · {s.count} gasto{s.count === 1 ? "" : "s"}
           </p>
         </>
       ) : (
-        <p className="mt-[var(--space-2)] text-body-sm text-muted">Aún no hay gastos confirmados en este plan.</p>
+        <p className="mt-2 text-[14px] text-muted">Aún no hay gastos confirmados en este plan.</p>
       )}
+
+      <button
+        type="button"
+        onClick={onOpen}
+        className="mt-3 inline-flex min-h-10 items-center text-[14px] font-[var(--fw-semibold)] text-[var(--primary)] hover:opacity-80"
+      >
+        Ver gastos
+      </button>
     </div>
   );
 }
