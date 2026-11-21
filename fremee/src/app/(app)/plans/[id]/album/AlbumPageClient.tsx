@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Capacitor } from "@capacitor/core";
 import { Camera, Check, ChevronDown, ChevronLeft, MapPin, Moon, Plane, PlaneLanding, Share2, Ship } from "lucide-react";
 import { useAuth } from "@/providers/AuthProvider";
@@ -53,6 +53,31 @@ function capitalize(text: string) {
 
 function planHref(planId: string) {
   return Capacitor.isNativePlatform() ? `/plans/static?id=${planId}` : `/plans/${planId}`;
+}
+
+/**
+ * «Volver al plan». The album is opened from the plan, so going back must pop it off the history:
+ * pushing the plan again would leave «plan → álbum → plan» behind, and the plan's own back arrow
+ * (which goes back in the history) would land on the album again.
+ */
+function BackToPlan({ planId, className, children, ...rest }: { planId: string; className?: string; children: React.ReactNode } & React.AriaAttributes) {
+  const router = useRouter();
+  return (
+    <Link
+      href={planHref(planId)}
+      className={className}
+      onClick={(e) => {
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+        if (window.history.length > 1) {
+          e.preventDefault();
+          router.back();
+        }
+      }}
+      {...rest}
+    >
+      {children}
+    </Link>
+  );
 }
 
 function placeName(stop: JourneyStop) {
@@ -249,13 +274,13 @@ function JourneyView({ album, journey, planId, isGuest, currentUserId }: { album
           <DayCurtain key={`curtain-${position.day}`} day={journey.days.at(position.day)} />
         )}
         <div className={`pointer-events-none absolute inset-x-3 flex items-center justify-between ${isGuest ? "top-[calc(env(safe-area-inset-top)+56px)]" : "top-[calc(env(safe-area-inset-top)+12px)]"}`}>
-          <Link
-            href={planHref(planId)}
+          <BackToPlan
+            planId={planId}
             aria-label="Volver al plan"
             className="pointer-events-auto flex size-11 items-center justify-center rounded-full border border-[var(--al-line)] bg-[var(--al-glass)] text-[var(--al-text)] backdrop-blur-sm lg:hidden"
           >
             <ChevronLeft className="size-[18px]" aria-hidden />
-          </Link>
+          </BackToPlan>
           <MapPill destino={destino} journey={journey} base={position} motion={motion} />
           <div className="pointer-events-auto flex items-center gap-2.5">
             <LiveDashboard day={day} base={position} motion={motion} currency={journey.model.stats.moneda} className="hidden lg:inline-flex" />
@@ -269,9 +294,9 @@ function JourneyView({ album, journey, planId, isGuest, currentUserId }: { album
       <div className="relative z-0 lg:order-1 lg:border-r lg:border-[var(--al-line)]">
         <div ref={headRef} className="sticky top-[min(48dvh,420px)] z-[5] bg-app px-5 pb-3 pt-4 lg:top-0 lg:px-9 lg:pt-6">
           <div className="mb-4 hidden items-center justify-between lg:flex">
-            <Link href={planHref(planId)} className="flex items-center gap-2 text-[14px] text-muted hover:text-app">
+            <BackToPlan planId={planId} className="flex items-center gap-2 text-[14px] text-muted hover:text-app">
               <ChevronLeft className="size-4" aria-hidden /> Volver al plan
-            </Link>
+            </BackToPlan>
             <span className="text-[14px] font-semibold text-[var(--primary)]">Frimee</span>
           </div>
           <DayProgress journey={journey} base={position} motion={motion} />
