@@ -1,5 +1,6 @@
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import type { UserSettingsRow } from "@/services/api/endpoints/settings.endpoint";
+import type { PersonaBusqueda } from "@/lib/people-search";
 
 export type UserProfileRow = {
   id: string;
@@ -38,6 +39,20 @@ export async function searchPublicUserProfiles(params: {
 
   if (error) throw error;
   return (data ?? []) as PublicUserProfileRow[];
+}
+
+/**
+ * Buscador de personas con contexto (fn_users_buscar_contexto). Sin texto devuelve quién viaja
+ * contigo y aún no es amigo.
+ */
+export async function searchPeopleWithContext(params: { query?: string; limit?: number }): Promise<PersonaBusqueda[]> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_users_buscar_contexto", {
+    p_query: params.query?.trim() || null,
+    p_limit: params.limit ?? 20,
+  });
+  if (error) throw error;
+  return (data ?? []) as PersonaBusqueda[];
 }
 
 export type UserAuthSnapshotRow = {
