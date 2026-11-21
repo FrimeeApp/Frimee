@@ -14,7 +14,8 @@
     "start": "next start",
     "lint": "eslint .",
     "test:hora": "node tests/foto-hora.test.mts",
-    "test:colocacion": "node tests/album-placement.test.mts"
+    "test:colocacion": "node tests/album-placement.test.mts",
+    "test:agrupado": "node tests/album-grouping.test.mts"
   },
   "dependencies": {
     "@capacitor/android": "~8.5.3",

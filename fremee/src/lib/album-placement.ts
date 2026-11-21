@@ -126,26 +126,27 @@ export function destinoPorHora(index: PlacementIndex, at: number | null): Destin
   }
   if (dentro) return { kind: "actividad", subplanId: dentro.id };
 
-  // 2. A leg: between the latest end so far and the next start, on the same day.
-  let prevEnd = -Infinity;
-  let next: Timed | null = null;
-  for (const t of index.timed) {
-    if (t.start <= at) {
-      prevEnd = Math.max(prevEnd, t.end);
-    } else {
-      next = t;
-      break;
-    }
-  }
-  if (next && Number.isFinite(prevEnd) && dayKey(prevEnd) === dayKey(next.start) && dayKey(at) === dayKey(next.start)) {
-    return { kind: "viaje", hastaSubplanId: next.id };
-  }
-
-  // 3. A stay or long activity that covers it; the one that started last.
+  // A stay or long activity that covers it; the one that started last.
   let cubre: Long | null = null;
   for (const l of index.long) {
     if (l.start <= at && at <= l.end && (!cubre || l.start >= cubre.start)) cubre = l;
   }
+
+  // 2. A leg: between the latest end of the timed activities so far and the next start (a stay's
+  //    check-in counts as a start), on the same day. Not when a stay began after that end: from its
+  //    check-in the photo is the stay's (a stay never starts a leg).
+  let prevEnd = -Infinity;
+  for (const t of index.timed) if (t.start <= at) prevEnd = Math.max(prevEnd, t.end);
+  let next: { id: number; start: number } | null = null;
+  for (const c of [...index.timed, ...index.long]) {
+    if (c.start > at && (!next || c.start < next.start)) next = c;
+  }
+  const estanciaDespues = cubre !== null && cubre.start > prevEnd;
+  if (next && Number.isFinite(prevEnd) && !estanciaDespues && dayKey(prevEnd) === dayKey(next.start) && dayKey(at) === dayKey(next.start)) {
+    return { kind: "viaje", hastaSubplanId: next.id };
+  }
+
+  // 3. The stay or long activity that covers it: the nights.
   if (cubre) return { kind: "actividad", subplanId: cubre.id };
 
   // 4. An all-day activity of that day, if there is just one.

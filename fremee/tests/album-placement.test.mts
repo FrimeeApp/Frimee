@@ -136,3 +136,12 @@ test("una foto sin hora movida a mano no cuenta como «no coincide» al ir a «S
   const r = donde([museo], foto(null, { colocacion: "sin_clasificar" }));
   assert.equal(r.noCoincide, false);
 });
+
+test("antes de la entrada del hotel es un viaje hasta el hotel; desde la entrada, del hotel", () => {
+  const vuelo = act(20, "TRANSPORTE", t(20, 7), t(20, 8));
+  const mirador = act(21, "ACTIVIDAD", t(20, 17), t(20, 18));
+  const acts = [vuelo, hotel, mirador];
+  assert.deepEqual(donde(acts, foto(t(20, 11))).destino, { kind: "viaje", hastaSubplanId: 5 });
+  assert.deepEqual(donde(acts, foto(t(20, 16))).destino, { kind: "actividad", subplanId: 5 });
+  assert.deepEqual(donde(acts, foto(t(20, 18, 30))).destino, { kind: "actividad", subplanId: 5 });
+});
