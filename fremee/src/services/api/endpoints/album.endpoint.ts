@@ -61,6 +61,8 @@ export type AlbumFoto = {
   /** Placed by hand: actividad, viaje (subplan_id = the activity it arrives at) or sin_clasificar. Null = by its time. */
   colocacion: "actividad" | "viaje" | "sin_clasificar" | null;
   subplan_id: number | null;
+  /** A photo or a video (older answers have no type: a photo). */
+  tipo?: "foto" | "video";
 };
 
 export type PlanAlbum = {

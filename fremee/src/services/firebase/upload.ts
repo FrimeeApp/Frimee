@@ -150,8 +150,27 @@ export async function uploadAudioFile(params: { file: File; userId: string }) {
   return { filePath, downloadUrl };
 }
 
+const VIDEO_TYPES: Record<string, string> = { mp4: "video/mp4", m4v: "video/mp4", mov: "video/quicktime", webm: "video/webm", mkv: "video/x-matroska", "3gp": "video/3gpp" };
+
+/** A video by its type, or by its extension when the system gives the file no type (some pickers do). */
+export function isVideoFile(file: File): boolean {
+  if (file.type.startsWith("video/")) return true;
+  if (file.type.startsWith("image/")) return false;
+  const ext = (file.name.split(".").pop() ?? "").toLowerCase();
+  return ext in VIDEO_TYPES;
+}
+
 export async function uploadPlanAlbumFile(params: { file: File; planId: number }) {
   await ensureFirebaseAuth();
+  // A video goes up as it is (no conversion), with its own type.
+  if (isVideoFile(params.file)) {
+    const videoExt = (params.file.name.split(".").pop() ?? "").toLowerCase().replace(/[^a-z0-9]/g, "") || "mp4";
+    const videoType = params.file.type.startsWith("video/") ? params.file.type : VIDEO_TYPES[videoExt] ?? "video/mp4";
+    const videoPath = `plan-albums/${params.planId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${videoExt}`;
+    const videoRef = ref(storage, videoPath);
+    await uploadBytes(videoRef, params.file, { contentType: videoType });
+    return { filePath: videoPath, downloadUrl: await getDownloadURL(videoRef) };
+  }
   // Any photo must be uploadable: if it cannot be converted, the original goes up untouched.
   let body: Blob = params.file;
   // Storage rules only accept image/*; some pickers hand over files with no type.

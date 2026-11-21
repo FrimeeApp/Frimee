@@ -24,9 +24,7 @@ import type { CreateMenuPlanContext } from "@/components/common/CreateMenu";
 import PublishPlanModal from "@/components/plans/modals/PublishPlanModal";
 import PlanFotosTab from "@/components/plans/PlanFotosTab";
 import { PlanGastoDetailModal } from "@/components/plans/modals/PlanGastoDetailModal";
-import { uploadPlanAlbumFile, uploadPlanCoverFile } from "@/services/firebase/upload";
-import { addPlanFoto } from "@/services/api/repositories/plan-fotos.repository";
-import { leerHoraFoto } from "@/lib/foto-hora";
+import { uploadPlanCoverFile } from "@/services/firebase/upload";
 import { formatMoney, formatExpenseDateTime, getInitial, formatDateRange } from "@/lib/formatters";
 import { createRealtimeTopic } from "@/lib/realtime";
 import { FIELD_LINE_CLS } from "@/lib/styles";
@@ -247,7 +245,7 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
   const [showAddGastoSheet, setShowAddGastoSheet] = useState(false);
   const [mobileCreateOpen, setMobileCreateOpen] = useState(false);
   const [photoAlbumRefreshKey, setPhotoAlbumRefreshKey] = useState(0);
-  const [fabPhotoUploading, setFabPhotoUploading] = useState(false);
+  const [fabFiles, setFabFiles] = useState<File[] | null>(null);
   const fabPhotoInputRef = useRef<HTMLInputElement>(null);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [gastos, setGastos] = useState<GastoRow[]>(initialCache?.gastos ?? []);
@@ -425,34 +423,13 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
     fabPhotoInputRef.current?.click();
   };
 
-  const handleFabPhotoFilesSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFabPhotoFilesSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? []);
     event.target.value = "";
     if (!plan?.id || !user?.id || files.length === 0) return;
-
+    // The album tab uploads them (progress, notices and review), as with its own button.
     setActiveTab("fotos");
-    setFabPhotoUploading(true);
-    try {
-      await Promise.all(
-        files.map(async (file) => {
-          const hora = await leerHoraFoto(file);
-          const { filePath, downloadUrl } = await uploadPlanAlbumFile({ file, planId: plan.id });
-          return addPlanFoto({
-            planId: plan.id,
-            userId: user.id,
-            url: downloadUrl,
-            storagePath: filePath,
-            tomadaAt: hora?.at ?? null,
-            tomadaFuente: hora?.fuente ?? null,
-          });
-        })
-      );
-      setPhotoAlbumRefreshKey((value) => value + 1);
-    } catch (error) {
-      console.error("Upload failed:", error);
-    } finally {
-      setFabPhotoUploading(false);
-    }
+    setFabFiles(files);
   };
   const [showPublishModal, setShowPublishModal] = useState(false);
 
@@ -1304,6 +1281,8 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
               isMember={membershipChecked}
               isAdmin={isAdmin}
               refreshKey={photoAlbumRefreshKey}
+              incomingFiles={fabFiles}
+              onIncomingConsumed={() => setFabFiles(null)}
             />
           )}
 
@@ -1837,15 +1816,14 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
               <button
                 type="button"
                 onClick={openPhotoUpload}
-                aria-label="Subir foto"
-                disabled={fabPhotoUploading}
+                aria-label="Subir fotos o vídeos"
                 className="pointer-events-auto flex min-h-12 min-w-[150px] max-w-[calc(100vw-32px)] items-center justify-between gap-2.5 rounded-full border border-app bg-app py-[7px] pl-5 pr-4 text-app shadow-[0_0_0_1px_rgba(0,0,0,0.10),0_2px_6px_rgba(0,0,0,0.12)] disabled:opacity-60"
               >
                 <span className="whitespace-nowrap text-caption font-[var(--fw-semibold)]">
-                  {fabPhotoUploading ? "Subiendo..." : "Subir foto"}
+                  Subir foto
                 </span>
                 <span className="flex size-7 shrink-0 items-center justify-center">
-                  {fabPhotoUploading ? <span className="size-5 animate-spin rounded-full border-2 border-current border-t-transparent opacity-60" /> : <Upload className="size-6" aria-hidden />}
+                  <Upload className="size-6" aria-hidden />
                 </span>
               </button>
             )}
@@ -1853,10 +1831,10 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
           <input
             ref={fabPhotoInputRef}
             type="file"
-            accept="image/*"
+            accept="image/*,video/*"
             multiple
             className="hidden"
-            onChange={(event) => void handleFabPhotoFilesSelected(event)}
+            onChange={handleFabPhotoFilesSelected}
           />
           <button
             type="button"

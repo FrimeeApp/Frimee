@@ -14,8 +14,9 @@ type PolaroidStyle = CSSProperties & { "--tilt": string; "--delay": string };
 
 /**
  * The group on the map. On arriving at a stop it bounces, a ring spreads from the stop and the
- * stop's photos drop next to it as polaroids (at most 3, then a "+N" badge). Keyed by stop, so
- * each arrival plays once; while travelling the pile is gone.
+ * stop's photos drop next to it as polaroids (at most 3; a "+N" badge sits on the corner of the top
+ * one). Keyed by stop, so each arrival plays once; while travelling the pile is gone (the photos
+ * taken on the way are pinned to the map by PhotoPin).
  */
 export function GroupMarker({ day, position, miembros, currentUserId }: { day: JourneyDay; position: JourneyPosition; miembros: AlbumMiembro[]; currentUserId: string | null }) {
   const atStop = position.started && !position.finished && position.legT === 0;
@@ -35,7 +36,7 @@ export function GroupMarker({ day, position, miembros, currentUserId }: { day: J
 
       {shown.length > 0 && (
         <div key={`pile-${arrivalKey}`} className={`${styles.pile} pointer-events-none`} aria-hidden>
-          <div className="relative h-[128px] w-[130px] lg:h-[210px] lg:w-[200px]">
+          <div className="relative h-[128px] w-[130px] [--badge-left:94px] lg:h-[210px] lg:w-[200px] lg:[--badge-left:154px]">
             {shown.map((foto, i) => (
               <div
                 key={foto.id}
@@ -52,8 +53,8 @@ export function GroupMarker({ day, position, miembros, currentUserId }: { day: J
             ))}
             {extra > 0 && (
               <span
-                className={`${styles.polaroid} absolute flex h-7 min-w-7 items-center justify-center rounded-full bg-[var(--primary)] px-2 text-[12px] font-semibold text-[var(--al-base)]`}
-                style={{ left: shown.length * 14 + 80, top: -6, "--tilt": "0deg", "--delay": `${150 + shown.length * 120}ms` } as PolaroidStyle}
+                className={`${styles.polaroid} absolute z-10 flex h-7 min-w-7 items-center justify-center rounded-full bg-[var(--primary)] px-2 text-[12px] font-semibold text-[var(--al-base)]`}
+                style={{ left: "var(--badge-left)", top: -12, "--tilt": "0deg", "--delay": `${150 + shown.length * 120}ms` } as PolaroidStyle}
               >
                 +{extra}
               </span>

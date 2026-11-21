@@ -14,6 +14,7 @@ export type PlanFotoDto = {
   createdAt: string;
   tomadaAt: string | null;
   tomadaFuente: string | null;
+  tipo: "foto" | "video";
 };
 
 function rowToDto(row: PlanFotoRow): PlanFotoDto {
@@ -26,6 +27,7 @@ function rowToDto(row: PlanFotoRow): PlanFotoDto {
     createdAt: row.created_at,
     tomadaAt: row.tomada_at,
     tomadaFuente: row.tomada_fuente,
+    tipo: row.tipo ?? "foto",
   };
 }
 
@@ -41,6 +43,7 @@ export async function addPlanFoto(params: {
   storagePath: string;
   tomadaAt?: string | null;
   tomadaFuente?: string | null;
+  tipo?: "foto" | "video";
 }): Promise<PlanFotoDto> {
   const row = await insertPlanFoto(params);
   return rowToDto(row);

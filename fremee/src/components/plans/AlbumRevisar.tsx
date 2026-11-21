@@ -2,12 +2,13 @@
 
 import Image from "next/image";
 import { Sheet, sheetPrimaryButton } from "@/components/chat/bitacora/Sheet";
+import { VideoThumb } from "@/components/plans/VideoThumb";
 
 export type RevisarGroup = {
   key: string;
   titulo: string;
   detalle: string | null;
-  fotos: { id: number; url: string; aprox: boolean }[];
+  fotos: { id: number; url: string; aprox: boolean; video?: boolean }[];
   /** The ones the user can move (own photos, or any if admin). */
   movibles: number[];
 };
@@ -74,10 +75,10 @@ export default function AlbumRevisar({
                   key={f.id}
                   type="button"
                   onClick={() => onOpenPhoto(f.url)}
-                  aria-label={f.aprox ? "Ver foto, hora aproximada" : "Ver foto"}
+                  aria-label={`${f.video ? "Ver vídeo" : "Ver foto"}${f.aprox ? ", hora aproximada" : ""}`}
                   className="relative size-[72px] shrink-0 overflow-hidden rounded-md bg-[var(--surface-2)]"
                 >
-                  <Image src={f.url} alt="" fill sizes="72px" className="object-cover" unoptimized referrerPolicy="no-referrer" />
+                  {f.video ? <VideoThumb src={f.url} small /> : <Image src={f.url} alt="" fill sizes="72px" className="object-cover" unoptimized referrerPolicy="no-referrer" />}
                   {f.aprox && (
                     <span className="pointer-events-none absolute bottom-1 left-1 inline-flex h-5 items-center gap-[3px] rounded-full bg-[rgba(17,17,17,.8)] pr-1.5 pl-1 text-[11px] font-[600] leading-none text-white">
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>

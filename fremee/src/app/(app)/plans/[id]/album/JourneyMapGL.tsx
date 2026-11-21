@@ -9,8 +9,10 @@ import type { LatLng } from "@/lib/polyline";
 import { cameraFor, dashboardAt, FLIGHT_DESCENT_AT, legMidpoint, pendingLegs, positionFromProgress, vehicleAt, type JourneyDay, type JourneyPosition } from "@/lib/album-journey";
 import type { Motion } from "@/lib/motion";
 import { LegIcon } from "./LegIcon";
-import type { AlbumMiembro } from "@/services/api/endpoints/album.endpoint";
+import type { AlbumFoto, AlbumMiembro } from "@/services/api/endpoints/album.endpoint";
 import { GroupMarker } from "./GroupMarker";
+import { PhotoPin } from "./PhotoPin";
+import { LEG_PHOTOS_SHOWN, legPlayMs } from "./leg-play";
 import { pileSide } from "./pile-side";
 import styles from "./album.module.css";
 
@@ -211,6 +213,7 @@ export function JourneyMapGL({
   const libRef = useRef<typeof import("maplibre-gl") | null>(null);
   const legMarkersRef = useRef<Marker[]>([]);
   const [ready, setReady] = useState(false);
+  const [mapApi, setMapApi] = useState<{ map: MaplibreMap; lib: typeof import("maplibre-gl") } | null>(null);
   const [markerEl] = useState(() => (typeof document === "undefined" ? null : document.createElement("div")));
   const palette = dark ? PALETTE.dark : PALETTE.light;
   const onFailRef = useRef(onFail);
@@ -263,6 +266,7 @@ export function JourneyMapGL({
         // The map is not interactive, so the compact attribution would stay open over the map:
         // fold it into its "i" button (the full credit is also printed at the end of the album).
         container.querySelector(".maplibregl-ctrl-attrib")?.classList.remove("maplibregl-compact-show");
+        setMapApi({ map, lib: maplibregl });
         setReady(true);
       });
     }).catch(() => onFailRef.current());
@@ -319,6 +323,28 @@ export function JourneyMapGL({
     map.getSource<GeoJSONSource>("album-current")?.setData(data.current);
     map.getSource<GeoJSONSource>("album-stops")?.setData(data.stops);
   }, [ready, data]);
+
+  // Photos taken on the way: each one is pinned where the group is when its moment comes, spread
+  // over the leg's playing time, and stays there until the group arrives.
+  const [drops, setDrops] = useState<{ legKey: string; foto: AlbumFoto; at: LatLng; index: number; place: string; extra: number }[]>([]);
+  const legKey = pos.started && !pos.finished && pos.legT > 0 ? `${pos.day}|${pos.stop}` : null;
+  const legNow = legKey ? day?.legs.at(pos.stop) : undefined;
+  const legStop = day?.stops.at(pos.stop);
+  const legNext = day?.stops.at(pos.stop + 1);
+  useEffect(() => {
+    if (!ready || !day || !legKey || !legNow || legNow.fotos.length === 0) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const fotos = legNow.fotos.slice(0, LEG_PHOTOS_SHOWN);
+    const extra = legNow.fotos.length - fotos.length;
+    const playMs = legPlayMs(legNow, legStop, legNext);
+    const place = "Viajando";
+    const timers = fotos.map((foto, index) => window.setTimeout(() => {
+      const at = vehicleAt(day, positionFromProgress(base, motion.get()));
+      if (!at) return;
+      setDrops((previous) => [...previous.filter((d) => !(d.legKey === legKey && d.foto.id === foto.id)), { legKey, foto, at, index, place, extra }]);
+    }, Math.round(playMs * 0.9 * ((index + 1) / (fotos.length + 1)))));
+    return () => timers.forEach((t) => window.clearTimeout(t));
+  }, [ready, day, legKey, legNow, legStop, legNext, base, motion]);
 
   // Which side of the group the photo pile goes, so it stays inside the map.
   const placePileRef = useRef(() => {});
@@ -397,6 +423,14 @@ export function JourneyMapGL({
         const transporte = day.legs.at(i)?.transporte;
         return el && transporte ? createPortal(<LegIcon transporte={transporte} />, el, `leg-${i}`) : null;
       })}
+      {mapApi && (() => {
+        const here = drops.filter((d) => d.legKey === legKey);
+        // The «+N» goes on the corner of the photo that is highest on the map (north is up).
+        const top = here.reduce<(typeof here)[number] | null>((best, d) => (!best || d.at.lat > best.at.lat ? d : best), null);
+        return here.map((d) => (
+          <PhotoPin key={`${d.legKey}-${d.foto.id}`} map={mapApi.map} lib={mapApi.lib} at={d.at} foto={d.foto} index={d.index} place={d.place} extra={d === top ? d.extra : 0} />
+        ));
+      })()}
       {markerEl && ready && vehicle && day && createPortal(
         <GroupMarker day={day} position={pos} miembros={miembros} currentUserId={currentUserId} />,
         markerEl,
