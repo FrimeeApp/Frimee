@@ -164,7 +164,8 @@ export async function uploadPlanAlbumFile(params: { file: File; planId: number }
   } catch (error) {
     console.warn("[uploadPlanAlbumFile] no se pudo convertir, se sube el original:", error);
   }
-  const filePath = `plan-albums/${params.planId}/${Date.now()}.${ext}`;
+  // Several photos are uploaded at once: the time alone can repeat to the millisecond and one would overwrite the other.
+  const filePath = `plan-albums/${params.planId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
   const fileRef = ref(storage, filePath);
   await uploadBytes(fileRef, body, { contentType });
   const downloadUrl = await getDownloadURL(fileRef);
