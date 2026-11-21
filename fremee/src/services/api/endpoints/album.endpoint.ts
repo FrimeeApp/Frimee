@@ -58,6 +58,9 @@ export type AlbumFoto = {
   tomada_at: string | null;
   /** exif, gps, xmp, nombre or archivo; the album trusts the first three most. */
   tomada_fuente: string | null;
+  /** Placed by hand: actividad, viaje (subplan_id = the activity it arrives at) or sin_clasificar. Null = by its time. */
+  colocacion: "actividad" | "viaje" | "sin_clasificar" | null;
+  subplan_id: number | null;
 };
 
 export type PlanAlbum = {
