@@ -7,6 +7,10 @@ export type PlanFotoRow = {
   url: string;
   storage_path: string;
   created_at: string;
+  /** When the photo was taken (EXIF); null when unknown. */
+  tomada_at: string | null;
+  /** Where tomada_at came from: exif, gps, xmp, nombre, archivo. */
+  tomada_fuente: string | null;
 };
 
 export async function fetchPlanFotos(params: { planId: number }): Promise<PlanFotoRow[]> {
@@ -27,6 +31,8 @@ export async function insertPlanFoto(params: {
   userId: string;
   url: string;
   storagePath: string;
+  tomadaAt?: string | null;
+  tomadaFuente?: string | null;
 }): Promise<PlanFotoRow> {
   const supabase = createBrowserSupabaseClient();
 
@@ -37,6 +43,8 @@ export async function insertPlanFoto(params: {
       user_id: params.userId,
       url: params.url,
       storage_path: params.storagePath,
+      tomada_at: params.tomadaAt ?? null,
+      tomada_fuente: params.tomadaFuente ?? null,
     })
     .select("*")
     .single();

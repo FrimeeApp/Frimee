@@ -26,6 +26,7 @@ import PlanFotosTab from "@/components/plans/PlanFotosTab";
 import { PlanGastoDetailModal } from "@/components/plans/modals/PlanGastoDetailModal";
 import { uploadPlanAlbumFile, uploadPlanCoverFile } from "@/services/firebase/upload";
 import { addPlanFoto } from "@/services/api/repositories/plan-fotos.repository";
+import { leerHoraFoto } from "@/lib/foto-hora";
 import { formatMoney, formatExpenseDateTime, getInitial, formatDateRange } from "@/lib/formatters";
 import { createRealtimeTopic } from "@/lib/realtime";
 import { FIELD_LINE_CLS } from "@/lib/styles";
@@ -434,12 +435,15 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
     try {
       await Promise.all(
         files.map(async (file) => {
+          const hora = await leerHoraFoto(file);
           const { filePath, downloadUrl } = await uploadPlanAlbumFile({ file, planId: plan.id });
           return addPlanFoto({
             planId: plan.id,
             userId: user.id,
             url: downloadUrl,
             storagePath: filePath,
+            tomadaAt: hora?.at ?? null,
+            tomadaFuente: hora?.fuente ?? null,
           });
         })
       );
@@ -1298,6 +1302,7 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
               planId={plan.id}
               currentUserId={user.id}
               isMember={membershipChecked}
+              isAdmin={isAdmin}
               refreshKey={photoAlbumRefreshKey}
             />
           )}

@@ -77,15 +77,13 @@ function exitOf(a: AlbumActividad): LatLng | null {
   return coordsOf(a);
 }
 
-/** Each photo goes to the last activity that started before it (or the first one). */
-function placePhotos(actividades: AlbumActividad[], fotos: AlbumFoto[]): AlbumFoto[][] {
+/** Each photo goes to the activity the album placed it in (by the time it was taken, or by hand). */
+function placePhotos(actividades: AlbumActividad[], fotos: AlbumFoto[], fotoActividad: Map<number, number>): AlbumFoto[][] {
   const buckets = actividades.map((): AlbumFoto[] => []);
   if (actividades.length === 0) return buckets;
   for (const foto of fotos) {
-    const at = Date.parse(foto.created_at);
-    let index = 0;
-    actividades.forEach((a, i) => { if (Date.parse(a.inicio_at) <= at) index = i; });
-    buckets.at(index)?.push(foto);
+    const index = actividades.findIndex((a) => a.id === fotoActividad.get(foto.id));
+    buckets.at(Math.max(0, index))?.push(foto);
   }
   return buckets;
 }
@@ -95,7 +93,7 @@ export function buildJourney(album: PlanAlbum): Journey {
   const days: JourneyDay[] = model.days
     .filter((day) => day.actividades.length > 0)
     .map((day) => {
-      const fotosPorParada = placePhotos(day.actividades, day.fotos);
+      const fotosPorParada = placePhotos(day.actividades, day.fotos, model.fotoActividad);
       const stops: JourneyStop[] = [];
       const legs: JourneyLeg[] = [];
       day.actividades.forEach((a, i) => {

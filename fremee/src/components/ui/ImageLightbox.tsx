@@ -18,6 +18,8 @@ type ImageLightboxProps = {
   totalCount?: number;
   /** The shown one changed (its index): lets the caller load more before the end. */
   onIndexChange?: (index: number) => void;
+  /** Side panel on wide screens (≥1024 px), 400 px; on narrower ones the caption is used under the image instead. */
+  aside?: (url: string) => ReactNode;
 };
 
 const MAX_ZOOM = 4;
@@ -27,7 +29,7 @@ const MAX_ZOOM = 4;
  * because it is drawn on <body>. Arrows, counter, keyboard (← → Escape, Tab stays inside) and, on
  * phones, swipe to move, swipe down to close, pinch or double tap to zoom.
  */
-export function ImageLightbox({ url, imageUrls, onClose, caption, isVideo, alt, totalCount, onIndexChange }: ImageLightboxProps) {
+export function ImageLightbox({ url, imageUrls, onClose, caption, isVideo, alt, totalCount, onIndexChange, aside }: ImageLightboxProps) {
   const [current, setCurrent] = useState(url);
   const [mounted, setMounted] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -160,9 +162,10 @@ export function ImageLightbox({ url, imageUrls, onClose, caption, isVideo, alt, 
       role="dialog"
       aria-modal="true"
       aria-label={total > 1 ? `Visor, ${idx + 1} de ${total}` : "Visor"}
-      className="fixed inset-0 z-[400] flex flex-col bg-black text-white"
+      className="fixed inset-0 z-[400] flex bg-black text-white"
       style={dragY ? { backgroundColor: `rgba(0,0,0,${Math.max(0.35, 1 - dragY / 400)})` } : undefined}
     >
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <div className="flex shrink-0 items-center justify-between gap-3 px-3 pb-2 pt-[max(8px,calc(env(safe-area-inset-top)+8px))]">
         <span aria-live="polite" className="pl-2 text-[14px] tabular-nums text-white/85">{total > 1 ? `${idx + 1} de ${total}` : ""}</span>
         <button ref={closeRef} type="button" onClick={onClose} aria-label="Cerrar" title="Cerrar" className="flex size-[44px] items-center justify-center rounded-full text-white hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white">
@@ -204,7 +207,7 @@ export function ImageLightbox({ url, imageUrls, onClose, caption, isVideo, alt, 
       </div>
 
       {caption?.(current) && (
-        <div className="shrink-0 px-4 pt-3 text-center text-[14px] text-white/90">{caption(current)}</div>
+        <div className={`shrink-0 px-4 pt-3 text-center text-[14px] text-white/90 ${aside ? "lg:hidden" : ""}`}>{caption(current)}</div>
       )}
 
       {loaded > 1 ? (
@@ -232,6 +235,12 @@ export function ImageLightbox({ url, imageUrls, onClose, caption, isVideo, alt, 
         </div>
       ) : (
         <div className="shrink-0 pb-[max(12px,calc(env(safe-area-inset-bottom)+12px))]" />
+      )}
+      </div>
+      {aside && (
+        <aside aria-label="Detalles de la foto" className="hidden w-[400px] shrink-0 overflow-y-auto border-l border-[#2a2a31] bg-[#111111] p-6 lg:block">
+          {aside(current)}
+        </aside>
       )}
     </div>,
     document.body,
