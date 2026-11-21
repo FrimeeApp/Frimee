@@ -995,7 +995,6 @@ const FUENTE_TEXT: Record<string, string> = {
   xmp: "Hora de la cámara",
   gps: "Hora del GPS de la foto",
   nombre: "Sacada del nombre del archivo",
-  archivo: "Sacada de la fecha del archivo (puede ser el día en que la recibiste)",
 };
 
 function shortDate(iso: string): string {
