@@ -11,7 +11,7 @@ import {
 } from "./album-placement.ts";
 
 export type GroupActivity = PlacementActivity & { titulo: string; ubicacion_nombre: string | null };
-export type GroupPhoto = PlacementPhoto & { created_at: string; url: string; user_id: string };
+export type GroupPhoto = PlacementPhoto & { created_at: string; url: string; user_id: string; tipo?: "foto" | "video" };
 
 export type PlacedPhoto = { foto: GroupPhoto; colocacion: Colocacion };
 

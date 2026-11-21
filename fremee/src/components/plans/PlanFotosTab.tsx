@@ -5,7 +5,7 @@ import Image from "next/image";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { Capacitor } from "@capacitor/core";
-import { uploadPlanAlbumFile } from "@/services/firebase/upload";
+import { isVideoFile, uploadPlanAlbumFile } from "@/services/firebase/upload";
 import { leerHoraFoto } from "@/lib/foto-hora";
 import { addPlanFoto, removePlanFoto } from "@/services/api/repositories/plan-fotos.repository";
 import { confirmarHoraFotos, fetchPlanAlbum, moverFotosAlbum, type FotoColocacion, type PlanAlbum } from "@/services/api/endpoints/album.endpoint";
@@ -24,6 +24,7 @@ import {
 import { Plus, Trash2, Loader2, BookOpen, ChevronRight, Hand, CalendarDays, CircleAlert, Bed, Route, Archive, Check, SquareCheckBig, X, Clock, MapPin, FolderInput } from "lucide-react";
 import AlbumMover, { type MoverChoice } from "@/components/plans/AlbumMover";
 import { ImageLightbox } from "@/components/ui/ImageLightbox";
+import { VideoThumb } from "@/components/plans/VideoThumb";
 import { demoPhotoCredit } from "@/config/demo-photos";
 
 /** Author and licence of an example-trip photo (Wikimedia Commons); real uploads have none. */
@@ -55,6 +56,9 @@ type Props = {
   /** Admins of the plan can move anybody's photos; everyone else only their own. */
   isAdmin?: boolean;
   refreshKey?: number;
+  /** Files chosen outside the tab (the plan page's upload button): they go through the same upload and review. */
+  incomingFiles?: File[] | null;
+  onIncomingConsumed?: () => void;
 };
 
 // ── Text helpers ────────────────────────────────────────────────────────────────────────
@@ -114,7 +118,11 @@ function dateMark(tomadaAt: string | null, planYear: number): string {
 
 // ── Tab ─────────────────────────────────────────────────────────────────────────────────
 
-export default function PlanFotosTab({ planId, currentUserId, isMember, isAdmin = false, refreshKey = 0 }: Props) {
+/** Largest video that can be uploaded (the Storage rules say the same). */
+const MAX_VIDEO_MB = 100;
+const MAX_VIDEO_BYTES = MAX_VIDEO_MB * 1024 * 1024;
+
+export default function PlanFotosTab({ planId, currentUserId, isMember, isAdmin = false, refreshKey = 0, incomingFiles = null, onIncomingConsumed }: Props) {
   const [album, setAlbum] = useState<PlanAlbum | null>(null);
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -236,7 +244,19 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, isAdmin 
     void subirFotos(files);
   }
 
-  async function subirFotos(files: File[]) {
+  async function subirFotos(todos: File[]) {
+    // A video over the limit is not an error: it is left out and the user is told why.
+    const pesados = todos.filter((f) => isVideoFile(f) && f.size > MAX_VIDEO_BYTES);
+    const files = todos.filter((f) => !pesados.includes(f));
+    if (pesados.length > 0) {
+      showNotice({
+        title: pesados.length === 1 ? "1 vídeo no se ha subido" : `${pesados.length} vídeos no se han subido`,
+        detail: pesados.length === 1
+          ? `«${pesados[0].name}» pesa ${Math.round(pesados[0].size / (1024 * 1024))} MB y el máximo son ${MAX_VIDEO_MB} MB`
+          : `Cada vídeo puede pesar hasta ${MAX_VIDEO_MB} MB`,
+      });
+    }
+    if (files.length === 0) return;
     const total = files.length;
     const queue = [...files];
     const fallos: File[] = [];
@@ -254,6 +274,7 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, isAdmin 
             storagePath: filePath,
             tomadaAt: hora?.at ?? null,
             tomadaFuente: hora?.fuente ?? null,
+            tipo: isVideoFile(file) ? "video" : "foto",
           });
           uploadedIds.current.push(dto.id);
         } catch (err) {
@@ -274,6 +295,14 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, isAdmin 
     }
     setUpload(fallos.length > 0 ? { total, done: total, failed: fallos } : null);
   }
+
+  // Files handed over by the plan page's upload button.
+  useEffect(() => {
+    if (!incomingFiles || incomingFiles.length === 0 || !isMember || uploading) return;
+    onIncomingConsumed?.();
+    void subirFotos(incomingFiles);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [incomingFiles]);
 
   /** After the upload: everything fits (a short notice) or there is something to look at (the review). */
   function evaluarSubida(fresh: PlanAlbum) {
@@ -620,7 +649,7 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, isAdmin 
 
   return (
     <div className="px-[var(--page-margin-x)] pt-5 pb-8">
-      {isMember && <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFilesSelected} />}
+      {isMember && <input ref={fileInputRef} type="file" accept="image/*,video/*" multiple className="hidden" onChange={handleFilesSelected} />}
 
       <AlbumLink planId={planId} />
 
@@ -799,7 +828,7 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, isAdmin 
           const d = destinoTexto(album, p.colocacion.destino);
           const key = sin ? "sin" : `${p.colocacion.destino.kind}-${d.titulo}`;
           const g = grupos.get(key) ?? { key, titulo: d.titulo, detalle: sin ? (f.tomada_at ? "No encajan en ninguna actividad" : "No hemos encontrado su hora") : d.detalle, fotos: [], movibles: [] };
-          g.fotos.push({ id, url: f.url, aprox: p.colocacion.aprox });
+          g.fotos.push({ id, url: f.url, aprox: p.colocacion.aprox, video: f.tipo === "video" });
           if (canMove(f.user_id)) g.movibles.push(id);
           grupos.set(key, g);
         }
@@ -849,6 +878,7 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, isAdmin 
         <ImageLightbox
           url={lightboxUrl}
           imageUrls={orderedUrls}
+          isVideo={(url) => placedByUrl.get(url)?.foto.tipo === "video"}
           onClose={() => {
             setLightboxUrl(null);
             // «Mover a…» opened from the viewer goes with it.
@@ -859,7 +889,7 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, isAdmin 
           }}
           alt={(url) => {
             const p = placedByUrl.get(url);
-            return p ? `Foto de ${authorName(album, p.foto.user_id, currentUserId)}${p.foto.tomada_at ? `, ${hhmm(p.foto.tomada_at)}` : ""}` : "Foto del álbum";
+            return p ? `${p.foto.tipo === "video" ? "Vídeo" : "Foto"} de ${authorName(album, p.foto.user_id, currentUserId)}${p.foto.tomada_at ? `, ${hhmm(p.foto.tomada_at)}` : ""}` : "Foto del álbum";
           }}
           caption={(url) => viewerInfo(url, "sheet")}
           aside={(url) => viewerInfo(url, "aside")}
@@ -1139,7 +1169,7 @@ function Thumb({
   const own = foto.user_id === currentUserId;
   const deleting = deletingId === foto.id;
   const when = foto.tomada_at ? hhmm(foto.tomada_at) : "sin hora";
-  const label = `Foto de ${authorName(album, foto.user_id, currentUserId)}, ${when}${colocacion.aprox ? ", hora aproximada" : ""}${colocacion.manual ? ", colocada a mano" : ""}`;
+  const label = `${foto.tipo === "video" ? "Vídeo" : "Foto"} de ${authorName(album, foto.user_id, currentUserId)}, ${when}${colocacion.aprox ? ", hora aproximada" : ""}${colocacion.manual ? ", colocada a mano" : ""}`;
   const radius = small ? "rounded-md" : "rounded-lg";
   const selectable = canMove(foto.user_id);
   const isSelected = selected.has(foto.id);
@@ -1189,7 +1219,7 @@ function Thumb({
         }}
         className="absolute inset-0 select-none [-webkit-touch-callout:none]"
       >
-        <FotoImage src={foto.url} />
+        {foto.tipo === "video" ? <VideoThumb src={foto.url} /> : <FotoImage src={foto.url} />}
       </button>
       {selecting && selectable && (
         <span
