@@ -285,7 +285,16 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, isAdmin 
       return c && (c.aprox || c.destino.kind === "sin_clasificar");
     });
     if (dudosas.length > 0) {
-      setReview({ ids });
+      // No sheet in the user's face: the notice offers to look at them for a few seconds.
+      showNotice({
+        title: ids.length === 1 ? "1 foto subida" : `${ids.length} fotos subidas`,
+        detail: dudosas.length === 1 ? "1 necesita que la revises" : `${dudosas.length} necesitan que las revises`,
+        actionLabel: "Revisar",
+        undo: () => {
+          setNotice(null);
+          setReview({ ids });
+        },
+      });
       return;
     }
     const sitios = new Set(
