@@ -584,7 +584,6 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, isAdmin 
               {sin.grupos.map((g) => (
                 <UnclassifiedSection key={g.key} group={g} porFecha={sin.porFecha} planYear={planYear} expanded={expanded.has(`sin-${g.key}`)} max={isDesktop ? 12 : 9} onToggle={() => toggleExpanded(`sin-${g.key}`)} {...photoProps} />
               ))}
-              {hayFotos && <p className="py-3 text-center text-[12px] text-muted">Hasta aquí el viaje</p>}
             </section>
           )}
         </div>
@@ -596,15 +595,24 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, isAdmin 
             {!isAdmin && album.fotos.some((f) => !canMove(f.user_id)) && (
               <p className="text-[13px] text-muted">Solo puedes mover tus fotos; las de los demás las mueve un admin.</p>
             )}
-            <button
-              type="button"
-              disabled={selected.size === 0 || moving}
-              onClick={() => setMoverOpen(true)}
-              className="ml-auto flex h-[46px] w-full items-center justify-center gap-2 rounded-lg bg-[var(--primary)] px-4 text-[15px] font-[600] text-[var(--bg)] transition-opacity hover:opacity-90 disabled:bg-[var(--surface-2)] disabled:text-muted lg:w-auto"
-            >
-              {moving ? <Loader2 className="size-5 animate-spin" aria-hidden /> : null}
-              {selected.size === 0 ? "Mover a…" : selected.size === 1 ? "Mover 1 foto a…" : `Mover ${selected.size} fotos a…`}
-            </button>
+            <div className="flex w-full gap-2 lg:ml-auto lg:w-auto">
+              <button
+                type="button"
+                onClick={exitSelection}
+                className="flex h-[46px] shrink-0 items-center justify-center rounded-lg border border-app px-4 text-[15px] font-[600] text-app"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={selected.size === 0 || moving}
+                onClick={() => setMoverOpen(true)}
+                className="flex h-[46px] min-w-0 flex-1 items-center justify-center gap-2 rounded-lg bg-[var(--primary)] px-4 text-[15px] font-[600] text-[var(--bg)] transition-opacity hover:opacity-90 disabled:bg-[var(--surface-2)] disabled:text-muted lg:flex-none"
+              >
+                {moving ? <Loader2 className="size-5 animate-spin" aria-hidden /> : null}
+                {selected.size === 0 ? "Mover a…" : selected.size === 1 ? "Mover 1 foto a…" : `Mover ${selected.size} fotos a…`}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -833,7 +841,7 @@ function Thumb({
           press.current = setTimeout(() => {
             pressed.current = true;
             onStartSelect(foto.id);
-          }, 450);
+          }, 600);
         }}
         onPointerUp={cancelPress}
         onPointerLeave={cancelPress}
