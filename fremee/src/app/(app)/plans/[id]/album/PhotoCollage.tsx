@@ -4,7 +4,7 @@ import { useState } from "react";
 import Image from "next/image";
 import { useInView } from "@/hooks/useInView";
 import { ImageLightbox } from "@/components/ui/ImageLightbox";
-import { demoPhotoCredit } from "@/config/demo-photos";
+import { uniqueDemoCredits } from "@/config/demo-photos";
 import type { AlbumFoto, AlbumMiembro } from "@/services/api/endpoints/album.endpoint";
 
 // Small alternating tilts: a pile of prints rather than a grid of thumbnails.
@@ -24,7 +24,7 @@ export function PhotoCollage({ fotos, miembros }: { fotos: AlbumFoto[]; miembros
   const { ref, inView } = useInView<HTMLDivElement>(0.15);
   const [open, setOpen] = useState<string | null>(null);
   const names = new Map(miembros.map((m) => [m.id, m.nombre.split(" ")[0]]));
-  const credits = fotos.map((f) => demoPhotoCredit(f.url)).filter((c) => c !== undefined);
+  const credits = uniqueDemoCredits(fotos.map((f) => f.url));
 
   return (
     <div className="mt-[var(--space-6)]">

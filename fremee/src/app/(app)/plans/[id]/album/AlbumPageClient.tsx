@@ -15,7 +15,7 @@ import { createMotion, createScrollStore, type Motion, type ScrollStore } from "
 import { useIsDarkTheme } from "@/hooks/useIsDarkTheme";
 import { formatDateRange, formatMoney, fmtDayHeader, fmtTime } from "@/lib/formatters";
 import { formatCompactRouteDistance, formatCompactRouteDuration } from "@/lib/route-formatters";
-import { demoPhotoCredit } from "@/config/demo-photos";
+import { uniqueDemoCredits } from "@/config/demo-photos";
 import { getWebAppUrl } from "@/config/external";
 import { transportInfo } from "./transport";
 import { findMissingLegs, useComputeMissingLegs } from "@/hooks/useComputeMissingLegs";
@@ -636,7 +636,7 @@ function StopSection({
   const names = new Map(miembros.map((m) => [m.id, m.nombre.split(" ")[0]]));
   const shown = fotos.slice(0, 5);
   const urls = fotos.map((f) => f.url);
-  const credits = fotos.map((f) => demoPhotoCredit(f.url)).filter((c) => c !== undefined);
+  const credits = uniqueDemoCredits(fotos.map((f) => f.url));
   const { ref: viewRef, inView } = useInView<HTMLDivElement>(0.2);
   // Arrival text: hour, name and chips rise once, when half the stop is on screen.
   const { ref: arriveRef, inView: arrived } = useInView<HTMLDivElement>(0.5);

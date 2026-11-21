@@ -146,3 +146,13 @@ export const DEMO_PHOTO_CREDITS: Record<string, DemoPhotoCredit> = {
 export function demoPhotoCredit(url: string): DemoPhotoCredit | undefined {
   return DEMO_PHOTO_CREDITS[url.split("?")[0]];
 }
+
+/** The credits of a set of photos, one per source: the seed repeats each image, but its credit is listed once. */
+export function uniqueDemoCredits(urls: string[]): DemoPhotoCredit[] {
+  const seen = new Map<string, DemoPhotoCredit>();
+  for (const url of urls) {
+    const c = demoPhotoCredit(url);
+    if (c && !seen.has(c.fuente)) seen.set(c.fuente, c);
+  }
+  return [...seen.values()];
+}
