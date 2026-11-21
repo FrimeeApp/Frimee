@@ -36,6 +36,8 @@ export type JourneyLeg = {
   /** Saved route, or a straight line when only both ends are known; null without coordinates. */
   points: LatLng[] | null;
   routed: boolean;
+  /** Photos taken on the way (the album puts them in this leg, not in a stop). */
+  fotos: AlbumFoto[];
 };
 
 export type JourneyDay = {
@@ -78,10 +80,12 @@ function exitOf(a: AlbumActividad): LatLng | null {
 }
 
 /** Each photo goes to the activity the album placed it in (by the time it was taken, or by hand). */
-function placePhotos(actividades: AlbumActividad[], fotos: AlbumFoto[], fotoActividad: Map<number, number>): AlbumFoto[][] {
+function placePhotos(actividades: AlbumActividad[], fotos: AlbumFoto[], fotoActividad: Map<number, number>, fotoTramo: Map<number, number>): AlbumFoto[][] {
   const buckets = actividades.map((): AlbumFoto[] => []);
   if (actividades.length === 0) return buckets;
   for (const foto of fotos) {
+    // Taken on the way: it is shown in the leg, not at the stop it left.
+    if (fotoTramo.has(foto.id)) continue;
     const index = actividades.findIndex((a) => a.id === fotoActividad.get(foto.id));
     buckets.at(Math.max(0, index))?.push(foto);
   }
@@ -93,7 +97,7 @@ export function buildJourney(album: PlanAlbum): Journey {
   const days: JourneyDay[] = model.days
     .filter((day) => day.actividades.length > 0)
     .map((day) => {
-      const fotosPorParada = placePhotos(day.actividades, day.fotos, model.fotoActividad);
+      const fotosPorParada = placePhotos(day.actividades, day.fotos, model.fotoActividad, model.fotoTramo);
       const stops: JourneyStop[] = [];
       const legs: JourneyLeg[] = [];
       day.actividades.forEach((a, i) => {
@@ -111,6 +115,7 @@ export function buildJourney(album: PlanAlbum): Journey {
             km: parseKm(a.distancia_viaje),
             points: route.length > 1 ? route : start && at ? [start, at] : null,
             routed: route.length > 1,
+            fotos: day.fotos.filter((f) => model.fotoTramo.get(f.id) === a.id),
           });
         }
         const isLong = TIPOS_TRANSPORTE.includes(a.tipo as TipoSubplan) && at != null && a.fin_lat != null && a.fin_lng != null;
@@ -136,6 +141,7 @@ export function buildJourney(album: PlanAlbum): Journey {
             km: 0,
             points: arc(at, landing),
             routed: true,
+            fotos: [],
           });
           stops.push({
             key: `${a.id}-llegada`,
@@ -172,7 +178,7 @@ export function buildJourney(album: PlanAlbum): Journey {
   });
   steps.push({ kind: "final" });
 
-  const noLeg: JourneyLeg = { transporte: null, long: false, longKm: 0, duracion: null, distancia: null, km: 0, points: null, routed: false };
+  const noLeg: JourneyLeg = { transporte: null, long: false, longKm: 0, duracion: null, distancia: null, km: 0, points: null, routed: false, fotos: [] };
   const trip: JourneyDay = {
     key: "trip",
     number: 0,

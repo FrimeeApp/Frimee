@@ -34,6 +34,8 @@ export type AlbumModel = {
   fotosSueltas: AlbumFoto[];
   /** The activity each placed photo belongs to (photo id → activity id). */
   fotoActividad: Map<number, number>;
+  /** Photos taken on the way between two activities of the same day (photo id → the activity the leg arrives at). */
+  fotoTramo: Map<number, number>;
   stats: AlbumStats;
 };
 
@@ -63,7 +65,9 @@ function topBy<T>(items: T[], key: (item: T) => string, weight: (item: T) => num
 }
 
 /** Groups the album by local day and computes the closing figures. */
-export function buildAlbumModel(album: PlanAlbum): AlbumModel {
+export function buildAlbumModel(fullAlbum: PlanAlbum): AlbumModel {
+  // The journey tells the trip with photos: videos live in the album tab only.
+  const album: PlanAlbum = { ...fullAlbum, fotos: fullAlbum.fotos.filter((f) => f.tipo !== "video") };
   const startKey = localDayKey(album.plan.inicio_at);
   const endKey = localDayKey(album.plan.fin_at);
   const days = new Map<string, AlbumDay>();
@@ -95,6 +99,7 @@ export function buildAlbumModel(album: PlanAlbum): AlbumModel {
   const colocadas = colocarFotos(album.actividades, album.fotos);
   const fotosSueltas: AlbumFoto[] = [];
   const fotoActividad = new Map<number, number>();
+  const fotoTramo = new Map<number, number>();
   for (const foto of album.fotos) {
     const destino = colocadas.get(foto.id)?.destino;
     let actividad: AlbumActividad | undefined;
@@ -104,7 +109,9 @@ export function buildAlbumModel(album: PlanAlbum): AlbumModel {
       const i = album.actividades.findIndex((a) => a.id === destino.hastaSubplanId);
       const anterior = i > 0 ? album.actividades[i - 1] : undefined;
       const llegada = i >= 0 ? album.actividades[i] : undefined;
-      actividad = anterior && llegada && localDayKey(anterior.inicio_at) === localDayKey(llegada.inicio_at) ? anterior : llegada;
+      const enTramo = anterior && llegada && localDayKey(anterior.inicio_at) === localDayKey(llegada.inicio_at);
+      actividad = enTramo ? anterior : llegada;
+      if (enTramo && llegada) fotoTramo.set(foto.id, llegada.id);
     }
     if (!actividad) {
       fotosSueltas.push(foto);
@@ -126,6 +133,7 @@ export function buildAlbumModel(album: PlanAlbum): AlbumModel {
     days: sortedDays,
     fotosSueltas,
     fotoActividad,
+    fotoTramo,
     stats: {
       // Days with activities: the plan's end date can fall on the next day in the viewer's
       // time zone (23:59 in Lisbon is 00:59 in Madrid) and would count one day too many.

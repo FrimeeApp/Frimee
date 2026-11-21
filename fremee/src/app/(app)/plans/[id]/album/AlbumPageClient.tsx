@@ -29,23 +29,11 @@ import { TRAVELLER_COLORS } from "./Vehicle";
 import { Stamp, stampDate } from "./Stamp";
 import { Dashboard } from "./Dashboard";
 import { PhotoCollage } from "./PhotoCollage";
+import { LEG_PHOTOS_SHOWN, legPlayMs, parseMinutes } from "./leg-play";
 import { CountUp } from "./CountUp";
 import styles from "./album.module.css";
 
 const SERIF = "[font-family:var(--font-display-face)] font-normal";
-// How long a leg takes to play once it is on screen: longer trips take longer, on a log scale
-// so it never drags (5 min ≈ 2.1 s, 1 h ≈ 3.6 s, 8 h ≈ 4.9 s, at most 5.5 s). Flights get at
-// least enough for the camera to pull back and return. Same leg, same time, every time.
-const PLAY_MIN_MS = 1500;
-const PLAY_MAX_MS = 5500;
-const FLIGHT_MIN_MS = 3400;
-function legPlayMs(leg: JourneyLeg | undefined, from: JourneyStop | undefined, to: JourneyStop | undefined) {
-  const minutes = parseMinutes(leg?.duracion)
-    || (from && to ? Math.max(0, Math.round((Date.parse(to.time) - Date.parse(from.leaves)) / 60000)) : 0);
-  const ms = Math.min(PLAY_MAX_MS, Math.max(PLAY_MIN_MS, 900 + 1500 * Math.log10(1 + minutes)));
-  return leg?.long ? Math.max(FLIGHT_MIN_MS, ms) : ms;
-}
-
 function capitalize(text: string) {
   const lower = text.toLocaleLowerCase("es-ES");
   return lower.charAt(0).toLocaleUpperCase("es-ES") + lower.slice(1);
@@ -355,6 +343,7 @@ function JourneyView({ album, journey, planId, isGuest, currentUserId }: { album
                     to={next}
                     miembros={album.miembros}
                     currentUserId={currentUserId}
+                    onOpenPhoto={(url, urls) => setLightbox({ url, urls })}
                   />
                 ) : null;
               }
@@ -817,14 +806,6 @@ function ShareButton({ title, planId }: { title: string; planId: string }) {
   );
 }
 
-/** "24 min" / "1 h 46 min" → minutes (0 when unknown). */
-function parseMinutes(value: string | null | undefined) {
-  if (!value) return 0;
-  const hours = Number(/(\d+)\s*h/.exec(value)?.[1] ?? 0);
-  const minutes = Number(/(\d+)\s*min/.exec(value)?.[1] ?? 0);
-  return hours * 60 + minutes;
-}
-
 const TRAVEL_PHRASES: Record<string, string> = {
   APIE: "a pie",
   COCHE: "en coche",
@@ -842,7 +823,7 @@ function travelPhrase(transporte: string | null) {
 }
 
 function LegSection({
-  ref, step, scroll, leg, from, to, miembros, currentUserId,
+  ref, step, scroll, leg, from, to, miembros, currentUserId, onOpenPhoto,
 }: {
   ref: SectionRef;
   step: number;
@@ -852,6 +833,7 @@ function LegSection({
   to: JourneyStop;
   miembros: AlbumMiembro[];
   currentUserId: string | null;
+  onOpenPhoto: (url: string, urls: string[]) => void;
 }) {
   // Only the active leg changes its snapshot while scrolling, so only it re-renders.
   const raw = useSyncExternalStore(
@@ -864,6 +846,7 @@ function LegSection({
   );
   // Same pace as the group on the map (eased), so the card and the map agree.
   const progress = travelEase(raw);
+  const index = useSyncExternalStore(scroll.subscribe, () => scroll.get().index, () => 0);
   const transporte = transportInfo(leg.transporte);
   const Icon = transporte?.Icon;
   // Flights and ferries: straight-line km, shown apart from the km travelled in town.
@@ -880,6 +863,9 @@ function LegSection({
         : [leftMin > 0 ? `Faltan unos ${leftMin} min` : null, leftKm > 0.05 ? formatKm(leftKm) : null].filter(Boolean).join(" · ");
   const phrase = travelPhrase(leg.transporte);
   const ordered = [...miembros.filter((m) => m.id !== currentUserId), ...miembros.filter((m) => m.id === currentUserId)];
+  const names = new Map(miembros.map((m) => [m.id, m.nombre.split(" ")[0]]));
+  const shown = leg.fotos.slice(0, LEG_PHOTOS_SHOWN);
+  const urls = leg.fotos.map((f) => f.url);
 
   return (
     // A whole screen: while the leg plays, the next stop stays out of view.
@@ -916,6 +902,39 @@ function LegSection({
             {left && <span className="text-app"> {left}{left.endsWith("…") ? "" : "."}</span>}
           </p>
         </div>
+        {shown.length > 0 && (
+          <div className="flex gap-[10px]">
+            {shown.map((foto, i) => {
+              // One by one as the group moves along: the first at a quarter of the way, the rest spread out.
+              const visible = raw >= (i + 1) / (shown.length + 1) * 0.9 || index > step;
+              const autor = names.get(foto.user_id);
+              return (
+                <figure
+                  key={foto.id}
+                  className="m-0 flex w-[104px] shrink-0 flex-col gap-1.5 transition-[opacity,transform] duration-500 ease-out motion-reduce:transition-none lg:w-[116px]"
+                  style={{ opacity: visible ? 1 : 0, transform: visible ? "none" : "translateY(10px)" }}
+                  aria-hidden={visible ? undefined : true}
+                >
+                  <button
+                    type="button"
+                    tabIndex={visible ? 0 : -1}
+                    onClick={() => onOpenPhoto(foto.url, urls)}
+                    className="relative h-[78px] overflow-hidden rounded-[8px] bg-[var(--surface-2)] lg:h-[86px]"
+                    aria-label={`Ver foto del camino${autor ? ` de ${autor}` : ""}`}
+                  >
+                    <Image src={foto.url} alt="" fill className="object-cover" sizes="116px" unoptimized loading="lazy" referrerPolicy="no-referrer" />
+                    {i === shown.length - 1 && leg.fotos.length > shown.length && (
+                      <span className="absolute inset-0 flex items-center justify-center bg-black/55 text-[15px] font-semibold text-white">
+                        +{leg.fotos.length - shown.length}
+                      </span>
+                    )}
+                  </button>
+                  {autor && <figcaption className="text-[12px] leading-[1.35] text-muted">Foto de {autor}</figcaption>}
+                </figure>
+              );
+            })}
+          </div>
+        )}
       </div>
     </section>
   );
