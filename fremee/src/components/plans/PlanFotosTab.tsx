@@ -18,7 +18,7 @@ import {
   type PlacedPhoto,
   type UnclassifiedGroup,
 } from "@/lib/album-grouping";
-import { Plus, Trash2, Loader2, BookOpen, ChevronRight, Hand, CalendarDays, CircleAlert, Bed, Route, Archive, Check, SquareCheckBig, X } from "lucide-react";
+import { Plus, Trash2, Loader2, BookOpen, ChevronRight, Hand, CalendarDays, CircleAlert, Bed, Route, Archive, Check, SquareCheckBig, X, Clock, MapPin, FolderInput } from "lucide-react";
 import AlbumMover, { type MoverChoice } from "@/components/plans/AlbumMover";
 import { ImageLightbox } from "@/components/ui/ImageLightbox";
 import { DEMO_PHOTO_CREDITS } from "@/config/demo-photos";
@@ -188,6 +188,37 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, isAdmin 
 
   const moverDays = useMemo(() => (album && grouping ? opcionesMover(album.actividades, grouping) : []), [album, grouping]);
 
+  const canMove = useCallback(
+    (userId: string) => isMember && (isAdmin || userId === currentUserId),
+    [isMember, isAdmin, currentUserId],
+  );
+
+  /** Every placed photo by its url: the viewer asks for the one on screen. */
+  const placedByUrl = useMemo(() => {
+    const map = new Map<string, PlacedPhoto>();
+    if (!grouping) return map;
+    for (const d of grouping.days) for (const b of d.blocks) for (const p of b.fotos) map.set(p.foto.url, p);
+    for (const g of grouping.sinClasificar.grupos) for (const p of g.fotos) map.set(p.foto.url, p);
+    return map;
+  }, [grouping]);
+
+  // In the viewer, «M» opens «Mover a…» for the photo on screen.
+  useEffect(() => {
+    if (!lightboxUrl) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== "m" || e.metaKey || e.ctrlKey || e.altKey || moverOpen) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
+      const p = placedByUrl.get(lightboxUrl);
+      if (!p || !canMove(p.foto.user_id)) return;
+      e.preventDefault();
+      setSelected(new Set([p.foto.id]));
+      setMoverOpen(true);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [lightboxUrl, moverOpen, placedByUrl, canMove]);
+
   async function handleFilesSelected(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
     if (files.length === 0) return;
@@ -230,11 +261,6 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, isAdmin 
   }
 
   // ── Selection and «Mover a…» ───────────────────────────────────────────────────────────
-
-  const canMove = useCallback(
-    (userId: string) => isMember && (isAdmin || userId === currentUserId),
-    [isMember, isAdmin, currentUserId],
-  );
 
   function exitSelection() {
     setSelecting(false);
@@ -618,7 +644,7 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, isAdmin 
       )}
 
       {moverOpen && selected.size > 0 && (
-        <AlbumMover count={selected.size} days={moverDays} desktop={isDesktop} onPick={(c) => { setMoverOpen(false); void handlePick(c); }} onClose={() => setMoverOpen(false)} />
+        <AlbumMover count={selected.size} days={moverDays} desktop={isDesktop} onPick={(c) => { setMoverOpen(false); void handlePick(c); }} onClose={() => { setMoverOpen(false); if (!selecting) setSelected(new Set()); }} />
       )}
 
       {notice && (
@@ -647,7 +673,35 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, isAdmin 
           url={lightboxUrl}
           imageUrls={orderedUrls}
           onClose={() => setLightboxUrl(null)}
-          caption={(url) => (DEMO_PHOTO_CREDITS[url] ? <DemoPhotoCaption url={url} /> : null)}
+          alt={(url) => {
+            const p = placedByUrl.get(url);
+            return p ? `Foto de ${authorName(album, p.foto.user_id, currentUserId)}${p.foto.tomada_at ? `, ${hhmm(p.foto.tomada_at)}` : ""}` : "Foto del álbum";
+          }}
+          caption={(url) => {
+            const p = placedByUrl.get(url);
+            return (
+              <>
+                {p && (
+                  <PhotoInfo
+                    placed={p}
+                    album={album}
+                    currentUserId={currentUserId}
+                    canMove={canMove(p.foto.user_id)}
+                    desktop={isDesktop}
+                    onMove={() => {
+                      setSelected(new Set([p.foto.id]));
+                      setMoverOpen(true);
+                    }}
+                  />
+                )}
+                {DEMO_PHOTO_CREDITS[url] ? (
+                  <p className="mt-2 text-center text-[13px] text-white/70">
+                    <DemoPhotoCaption url={url} />
+                  </p>
+                ) : null}
+              </>
+            );
+          }}
         />
       )}
     </div>
@@ -768,6 +822,125 @@ function CollapseLink({ onClick }: { onClick: () => void }) {
     <button type="button" onClick={onClick} className="mt-2 min-h-11 text-[14px] font-[600] text-[var(--primary)]">
       Ver menos
     </button>
+  );
+}
+
+// ── Viewer panel ────────────────────────────────────────────────────────────────────────
+
+const FUENTE_TEXT: Record<string, string> = {
+  exif: "Hora de la cámara",
+  xmp: "Hora de la cámara",
+  gps: "Hora del GPS de la foto",
+  nombre: "Sacada del nombre del archivo",
+  archivo: "Sacada de la fecha del archivo (puede ser el día en que la recibiste)",
+};
+
+function shortDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("es-ES", { weekday: "short", day: "numeric", month: "short" }).replace(/[.,]/g, "").trim();
+}
+
+/** Where a destination is, in words: «Cena en Taberna da Rua», «Viaje · A → B», «Sin clasificar». */
+function destinoTexto(album: PlanAlbum, d: PlacedPhoto["colocacion"]["destino"]): { titulo: string; detalle: string | null } {
+  if (d.kind === "sin_clasificar") return { titulo: "Sin clasificar", detalle: null };
+  const id = d.kind === "actividad" ? d.subplanId : d.hastaSubplanId;
+  const act = album.actividades.find((a) => a.id === id);
+  if (!act) return { titulo: "Sin clasificar", detalle: null };
+  const dia = cap(shortDate(act.inicio_at));
+  if (d.kind === "viaje") {
+    const antes = album.actividades
+      .filter((a) => a.id !== act.id && !a.all_day && Date.parse(a.fin_at) <= Date.parse(act.inicio_at) && dayKeyOf(Date.parse(a.fin_at)) === dayKeyOf(Date.parse(act.inicio_at)))
+      .sort((x, y) => Date.parse(y.fin_at) - Date.parse(x.fin_at))[0];
+    return { titulo: antes ? `Viaje · ${antes.titulo} → ${act.titulo}` : `Viaje · hasta ${act.titulo}`, detalle: dia };
+  }
+  return { titulo: act.titulo, detalle: act.all_day ? `${dia} · todo el día` : `${dia} · ${hhmm(act.inicio_at)} – ${hhmm(act.fin_at)}` };
+}
+
+const pillClass = "inline-flex h-5 items-center gap-[3px] rounded-full bg-[#2a2a31] pr-1.5 pl-1 text-[11px] font-[600] leading-none text-white";
+
+/** The panel under the photo in the viewer: who, when it was taken, where it is, and «Mover a…». */
+function PhotoInfo({
+  placed,
+  album,
+  currentUserId,
+  canMove,
+  desktop,
+  onMove,
+}: {
+  placed: PlacedPhoto;
+  album: PlanAlbum;
+  currentUserId: string;
+  canMove: boolean;
+  desktop: boolean;
+  onMove: () => void;
+}) {
+  const { foto, colocacion } = placed;
+  const own = foto.user_id === currentUserId;
+  const nombre = authorName(album, foto.user_id, currentUserId);
+  const aqui = destinoTexto(album, colocacion.destino);
+  const iria = colocacion.manual && colocacion.noCoincide ? destinoTexto(album, colocacion.auto) : null;
+  return (
+    <div className="mx-auto w-full max-w-[560px] text-left text-white">
+      <div className="flex items-center gap-2.5 pb-3">
+        <span className="flex size-[34px] shrink-0 items-center justify-center rounded-full border border-[#2a2a31] bg-[#222227] text-[13px] font-[600]">{nombre.charAt(0).toUpperCase()}</span>
+        <div className="min-w-0">
+          <p className="text-[15px] font-[600]">{nombre}</p>
+          <p className="text-[13px] text-[#a0a0a9]">
+            {own ? "La subiste" : "Subida"} el {shortDate(foto.created_at)}
+          </p>
+        </div>
+      </div>
+
+      <div className="flex gap-3 border-t border-[#2a2a31] py-3">
+        <span className="mt-px text-[#a0a0a9]" aria-hidden>
+          {colocacion.aprox ? (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="9.5" strokeDasharray="3.2 3" />
+              <path d="M12 7v5l3 2" />
+            </svg>
+          ) : (
+            <Clock className="size-[18px]" />
+          )}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[15px] font-[600] tabular-nums">{foto.tomada_at ? `Hecha el ${shortDate(foto.tomada_at)}, ${hhmm(foto.tomada_at)}` : "Sin hora"}</p>
+          {colocacion.aprox && (
+            <div className="mt-1.5">
+              <span className={pillClass}>Hora aproximada</span>
+            </div>
+          )}
+          <p className="mt-1 text-[13px] text-[#a0a0a9]">{foto.tomada_at ? (FUENTE_TEXT[foto.tomada_fuente ?? ""] ?? "Hora de la foto") : "No hemos encontrado su hora"}</p>
+        </div>
+      </div>
+
+      <div className="flex gap-3 border-t border-[#2a2a31] py-3">
+        <span className="mt-px text-[#a0a0a9]" aria-hidden>
+          <MapPin className="size-[18px]" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[15px] font-[600]">Está en: {aqui.titulo}</p>
+          {colocacion.manual && (
+            <div className="mt-1.5">
+              <span className={pillClass}>
+                <Hand className="size-3" aria-hidden /> Colocada a mano
+              </span>
+            </div>
+          )}
+          <p className="mt-1 text-[13px] text-[#a0a0a9]">{iria ? `Por su hora iría en ${iria.titulo}` : (aqui.detalle ?? "")}</p>
+        </div>
+      </div>
+
+      {canMove && (
+        <button
+          type="button"
+          onClick={onMove}
+          className="mt-1 flex h-[46px] w-full items-center justify-center gap-2 rounded-lg border border-[#3a3a3d] text-[15px] font-[600] text-[#ededef] transition-colors hover:bg-white/5"
+        >
+          <FolderInput className="size-[18px]" aria-hidden />
+          Mover a…
+          {desktop && <span className="text-[12px] font-[500] text-[#a0a0a9]">Atajo: M</span>}
+        </button>
+      )}
+    </div>
   );
 }
 
