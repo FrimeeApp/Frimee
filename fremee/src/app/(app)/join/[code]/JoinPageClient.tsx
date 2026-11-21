@@ -11,6 +11,7 @@ const JOIN_ERRORS: Record<string, string> = {
 };
 const joinErrorText = (e: JoinCodeError | string) => JOIN_ERRORS[e] ?? "No se pudo unir al plan.";
 import { useAuth } from "@/providers/AuthProvider";
+import { useToast } from "@/components/ui/Toaster";
 
 export default function JoinPageClient() {
   const params = useParams<{ code: string }>();
@@ -19,6 +20,7 @@ export default function JoinPageClient() {
   const code = params.code === "static" ? searchParams.get("code") ?? "" : params.code;
   const router = useRouter();
   const { user } = useAuth();
+  const { toast } = useToast();
 
   const [plan, setPlan] = useState<PlanByIdRow | null>(null);
   const [planId, setPlanId] = useState<number | null>(null);
@@ -41,6 +43,7 @@ export default function JoinPageClient() {
 
   const handleJoin = async () => {
     if (!plan || !user) return;
+    if (user.is_anonymous) { toast("Regístrate para hacerlo", "info"); return; }
     setJoining(true);
     try {
       const result = await joinPlanByCode(code);
@@ -49,8 +52,10 @@ export default function JoinPageClient() {
         return;
       }
       router.replace(`/plans/${"plan_id" in result ? result.plan_id : planId}`);
-    } catch {
-      setError("No se pudo unir al plan.");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : (err as { message?: string } | null)?.message ?? "";
+      if (msg.startsWith("Regístrate")) toast("Regístrate para hacerlo", "info");
+      else setError("No se pudo unir al plan.");
     } finally {
       setJoining(false);
     }
@@ -144,7 +149,7 @@ export default function JoinPageClient() {
             type="button"
             onClick={() => void handleJoin()}
             disabled={joining}
-            className="w-full rounded-full bg-[var(--text-primary)] py-3 text-body-sm font-[var(--fw-semibold)] text-contrast-token transition-opacity hover:opacity-80 disabled:opacity-50"
+            className={`w-full rounded-full bg-[var(--text-primary)] py-3 text-body-sm font-[var(--fw-semibold)] text-contrast-token transition-opacity hover:opacity-80 disabled:opacity-50 ${user?.is_anonymous ? "opacity-60" : ""}`}
           >
             {joining ? "Uniéndose..." : "Unirse al plan"}
           </button>
