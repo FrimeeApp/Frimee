@@ -95,3 +95,11 @@ export async function moverFotosAlbum(planId: number, fotoIds: number[], destino
   if (error) throw error;
   return Number(data ?? 0);
 }
+
+/** «Todo bien»: the approximate time of these photos is right. Who uploaded each one or an admin. */
+export async function confirmarHoraFotos(planId: number, fotoIds: number[]): Promise<number> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_plan_fotos_confirmar_hora", { p_plan_id: planId, p_foto_ids: fotoIds });
+  if (error) throw error;
+  return Number(data ?? 0);
+}

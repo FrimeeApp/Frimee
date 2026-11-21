@@ -97,6 +97,8 @@ export default function AlbumMover({
       if (it) onPick(it.choice);
     } else if (e.key === "Escape") {
       e.preventDefault();
+      // Only this menu closes: the viewer behind listens to Escape on the document.
+      e.stopPropagation();
       onClose();
     }
   }

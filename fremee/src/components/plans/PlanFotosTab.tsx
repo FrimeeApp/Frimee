@@ -8,7 +8,9 @@ import { Capacitor } from "@capacitor/core";
 import { uploadPlanAlbumFile } from "@/services/firebase/upload";
 import { leerHoraFoto } from "@/lib/foto-hora";
 import { addPlanFoto, removePlanFoto } from "@/services/api/repositories/plan-fotos.repository";
-import { fetchPlanAlbum, moverFotosAlbum, type FotoColocacion, type PlanAlbum } from "@/services/api/endpoints/album.endpoint";
+import { confirmarHoraFotos, fetchPlanAlbum, moverFotosAlbum, type FotoColocacion, type PlanAlbum } from "@/services/api/endpoints/album.endpoint";
+import { colocarFotos } from "@/lib/album-placement";
+import AlbumRevisar, { type RevisarGroup } from "@/components/plans/AlbumRevisar";
 import {
   agruparAlbum,
   dayLabel,
@@ -118,10 +120,16 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, isAdmin 
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [moverOpen, setMoverOpen] = useState(false);
   const [moving, setMoving] = useState(false);
-  const [notice, setNotice] = useState<{ id: number; title: string; detail?: string; undo?: () => void; error?: boolean } | null>(null);
+  const [notice, setNotice] = useState<{ id: number; title: string; detail?: string; undo?: () => void; actionLabel?: string; error?: boolean } | null>(null);
   const lastSelected = useRef<number | null>(null);
   const [status, setStatus] = useState<"loading" | "error" | "ok">("loading");
-  const [uploading, setUploading] = useState(false);
+  const [upload, setUpload] = useState<{ total: number; done: number; failed: File[] } | null>(null);
+  const [review, setReview] = useState<{ ids: number[] } | null>(null);
+  const [reviewBusy, setReviewBusy] = useState(false);
+  const [reviewError, setReviewError] = useState(false);
+  /** Photos uploaded since the last review: the review looks at all of them, retries included. */
+  const uploadedIds = useRef<number[]>([]);
+  const uploading = upload !== null && upload.done < upload.total;
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -220,17 +228,25 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, isAdmin 
     return () => document.removeEventListener("keydown", onKey);
   }, [lightboxUrl, moverOpen, placedByUrl, canMove]);
 
-  async function handleFilesSelected(e: React.ChangeEvent<HTMLInputElement>) {
+  function handleFilesSelected(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
-    if (files.length === 0) return;
     e.target.value = "";
-    setUploading(true);
-    try {
-      await Promise.all(
-        files.map(async (file) => {
+    if (files.length === 0 || uploading) return;
+    void subirFotos(files);
+  }
+
+  async function subirFotos(files: File[]) {
+    const total = files.length;
+    const queue = [...files];
+    const fallos: File[] = [];
+    let done = 0;
+    setUpload({ total, done: 0, failed: [] });
+    const worker = async () => {
+      for (let file = queue.shift(); file; file = queue.shift()) {
+        try {
           const hora = await leerHoraFoto(file);
           const { filePath, downloadUrl } = await uploadPlanAlbumFile({ file, planId });
-          return addPlanFoto({
+          const dto = await addPlanFoto({
             planId,
             userId: currentUserId,
             url: downloadUrl,
@@ -238,13 +254,76 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, isAdmin 
             tomadaAt: hora?.at ?? null,
             tomadaFuente: hora?.fuente ?? null,
           });
-        }),
-      );
+          uploadedIds.current.push(dto.id);
+        } catch (err) {
+          console.error("Upload failed:", err);
+          fallos.push(file);
+        }
+        done += 1;
+        setUpload({ total, done, failed: [...fallos] });
+      }
+    };
+    await Promise.all([worker(), worker(), worker()]);
+    try {
+      const fresh = await fetchPlanAlbum(planId);
+      setAlbum(fresh);
+      if (fallos.length === 0) evaluarSubida(fresh);
+    } catch {
       reload();
+    }
+    setUpload(fallos.length > 0 ? { total, done: total, failed: fallos } : null);
+  }
+
+  /** After the upload: everything fits (a short notice) or there is something to look at (the review). */
+  function evaluarSubida(fresh: PlanAlbum) {
+    const ids = uploadedIds.current;
+    uploadedIds.current = [];
+    if (ids.length === 0) return;
+    const placed = colocarFotos(fresh.actividades, fresh.fotos);
+    const dudosas = ids.filter((id) => {
+      const c = placed.get(id);
+      return c && (c.aprox || c.destino.kind === "sin_clasificar");
+    });
+    if (dudosas.length > 0) {
+      setReview({ ids });
+      return;
+    }
+    const sitios = new Set(
+      ids.map((id) => {
+        const d = placed.get(id)?.destino;
+        return d?.kind === "actividad" ? `a${d.subplanId}` : d?.kind === "viaje" ? `v${d.hastaSubplanId}` : "";
+      }),
+    );
+    const primera = fresh.fotos.find((f) => f.id === ids[0]);
+    showNotice({
+      title: ids.length === 1 ? "1 foto colocada" : `${ids.length} fotos colocadas en ${sitios.size} ${sitios.size === 1 ? "actividad" : "actividades"}`,
+      actionLabel: "Ver",
+      undo: primera?.tomada_at
+        ? () => {
+            setNotice(null);
+            jumpTo(`album-dia-${dayKeyOf(Date.parse(primera.tomada_at as string))}`);
+          }
+        : undefined,
+    });
+  }
+
+  async function handleTodoBien(aproxIds: number[]) {
+    if (aproxIds.length === 0) {
+      setReview(null);
+      return;
+    }
+    setReviewBusy(true);
+    setReviewError(false);
+    try {
+      await confirmarHoraFotos(planId, aproxIds);
+      const set = new Set(aproxIds);
+      setAlbum((prev) => (prev ? { ...prev, fotos: prev.fotos.map((f) => (set.has(f.id) ? { ...f, tomada_fuente: "confirmada" } : f)) } : prev));
+      setReview(null);
     } catch (err) {
-      console.error("Upload failed:", err);
+      console.error("Confirm failed:", err);
+      setReviewError(true);
     } finally {
-      setUploading(false);
+      setReviewBusy(false);
     }
   }
 
@@ -416,17 +495,37 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, isAdmin 
     document.getElementById(id)?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
   }
 
-  const addButton = isMember ? (
+  const addButton = !isMember ? null : upload ? (
+    <div className="rounded-lg border border-app p-3" role="status" aria-live="polite">
+      <div className="flex min-h-9 items-center justify-between gap-3">
+        <p className="text-[14px] font-[600] text-app tabular-nums">
+          {uploading ? `Subiendo ${Math.min(upload.done + 1, upload.total)} de ${upload.total}` : `${upload.failed.length === 1 ? "1 foto sin subir" : `${upload.failed.length} fotos sin subir`}`}
+        </p>
+        {!uploading && upload.failed.length > 0 && (
+          <div className="flex shrink-0 gap-1">
+            <button type="button" onClick={() => void subirFotos(upload.failed)} className="min-h-11 px-2.5 text-[14px] font-[600] text-[var(--primary)]">
+              Reintentar
+            </button>
+            <button type="button" onClick={() => setUpload(null)} className="min-h-11 px-2.5 text-[14px] font-[600] text-muted">
+              Descartar
+            </button>
+          </div>
+        )}
+      </div>
+      <div className="mt-1 h-1 overflow-hidden rounded-full bg-[var(--surface-2)]" aria-hidden>
+        <i className="block h-full rounded-full bg-[var(--primary)] transition-[width] duration-300 motion-reduce:transition-none" style={{ width: `${Math.round((upload.done / upload.total) * 100)}%` }} />
+      </div>
+    </div>
+  ) : (
     <button
       type="button"
       onClick={() => fileInputRef.current?.click()}
-      disabled={uploading}
-      className="flex h-14 w-full items-center justify-center gap-2 rounded-lg border border-dashed border-[var(--primary)] text-[15px] font-[600] text-[var(--primary)] transition-colors hover:bg-[var(--primary)]/8 disabled:cursor-wait"
+      className="flex h-14 w-full items-center justify-center gap-2 rounded-lg border border-dashed border-[var(--primary)] text-[15px] font-[600] text-[var(--primary)] transition-colors hover:bg-[var(--primary)]/8"
     >
-      {uploading ? <Loader2 className="size-5 animate-spin" aria-hidden /> : <Plus className="size-5" aria-hidden />}
-      {uploading ? "Subiendo…" : "Añadir fotos"}
+      <Plus className="size-5" aria-hidden />
+      Añadir fotos
     </button>
-  ) : null;
+  );
 
   // ── Loading and error ─────────────────────────────────────────────────────────────────
 
@@ -674,6 +773,40 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, isAdmin 
         <AlbumMover count={selected.size} days={moverDays} desktop={isDesktop} onPick={(c) => { setMoverOpen(false); void handlePick(c); }} onClose={() => { setMoverOpen(false); if (!selecting) setSelected(new Set()); }} />
       )}
 
+      {review && !lightboxUrl && !moverOpen && (() => {
+        const grupos = new Map<string, RevisarGroup>();
+        const aproxMovibles: number[] = [];
+        let dudosas = 0;
+        for (const id of review.ids) {
+          const f = album.fotos.find((x) => x.id === id);
+          const p = f ? placedByUrl.get(f.url) : undefined;
+          if (!f || !p) continue;
+          const sin = p.colocacion.destino.kind === "sin_clasificar";
+          if (!p.colocacion.aprox && !sin) continue;
+          dudosas += 1;
+          if (p.colocacion.aprox && canMove(f.user_id)) aproxMovibles.push(id);
+          const d = destinoTexto(album, p.colocacion.destino);
+          const key = sin ? "sin" : `${p.colocacion.destino.kind}-${d.titulo}`;
+          const g = grupos.get(key) ?? { key, titulo: d.titulo, detalle: sin ? (f.tomada_at ? "No encajan en ninguna actividad" : "No hemos encontrado su hora") : d.detalle, fotos: [] };
+          g.fotos.push({ id, url: f.url, aprox: p.colocacion.aprox });
+          grupos.set(key, g);
+        }
+        if (dudosas === 0) return null;
+        return (
+          <AlbumRevisar
+            total={dudosas}
+            grupos={[...grupos.values()]}
+            enSuSitio={review.ids.length - dudosas}
+            canConfirm={aproxMovibles.length > 0}
+            busy={reviewBusy}
+            error={reviewError}
+            onOpenPhoto={(url) => setLightboxUrl(url)}
+            onTodoBien={() => void handleTodoBien(aproxMovibles)}
+            onClose={() => setReview(null)}
+          />
+        );
+      })()}
+
       {notice && createPortal(
         <div
           role="status"
@@ -685,7 +818,7 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, isAdmin 
           </span>
           {notice.undo && (
             <button type="button" onClick={notice.undo} className="min-h-11 shrink-0 px-2.5 text-[14px] font-[600] text-[var(--primary)]">
-              Deshacer
+              {notice.actionLabel ?? "Deshacer"}
             </button>
           )}
         </div>,
@@ -700,7 +833,14 @@ export default function PlanFotosTab({ planId, currentUserId, isMember, isAdmin 
         <ImageLightbox
           url={lightboxUrl}
           imageUrls={orderedUrls}
-          onClose={() => setLightboxUrl(null)}
+          onClose={() => {
+            setLightboxUrl(null);
+            // «Mover a…» opened from the viewer goes with it.
+            if (moverOpen) {
+              setMoverOpen(false);
+              if (!selecting) setSelected(new Set());
+            }
+          }}
           alt={(url) => {
             const p = placedByUrl.get(url);
             return p ? `Foto de ${authorName(album, p.foto.user_id, currentUserId)}${p.foto.tomada_at ? `, ${hhmm(p.foto.tomada_at)}` : ""}` : "Foto del álbum";
@@ -840,6 +980,7 @@ const MOTIVO_DETALLE = {
 } as const;
 
 const FUENTE_TEXT: Record<string, string> = {
+  confirmada: "Hora confirmada",
   exif: "Hora de la cámara",
   xmp: "Hora de la cámara",
   gps: "Hora del GPS de la foto",
