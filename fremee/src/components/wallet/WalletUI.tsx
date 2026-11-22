@@ -246,7 +246,7 @@ export function TicketDetail({ t, now, isDesktop, sourceUrl, onBack, onOpenPlan,
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={sourceUrl.url} alt="Billete original con su código" className="mx-auto max-h-[420px] w-full object-contain" />
     </section>
-  ) : (
+  ) : t.status === "usado" ? null : (
     <section aria-label="Sin código QR"
       className={`flex rounded-[10px] border-[1.5px] border-dashed border-[var(--border-strong)] p-5 ${isDesktop ? "items-center gap-4" : "flex-col items-start gap-3"}`}>
       <span aria-hidden className="grid h-12 w-12 shrink-0 place-content-center rounded-lg bg-[var(--surface-2)] text-[var(--text-secondary)]"><QrCode size={24} /></span>
