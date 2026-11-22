@@ -32,6 +32,8 @@ const MOBILE: Dims = { w: 358, h: 590 };
 const WIDE: Dims = { w: 452, h: 620 };
 const DimsContext = createContext<Dims>(MOBILE);
 /** Pulsar un sello abre su hoja (solo en tu propio pasaporte). */
+/** Los sellos nuevos se estampan cuando acaba la apertura del libro, no mientras la tapa aún vuela. */
+const StampAnimContext = createContext(true);
 const StampOpenContext = createContext<((s: Sello, el: HTMLElement) => void) | null>(null);
 const useDims = () => useContext(DimsContext);
 const SPINE = 6;
@@ -188,6 +190,7 @@ export default function Libreta({
   const visible = wide ? (index === 0 ? [0] : [index, index + 1]) : [index];
   const visibleKey = visible.join(",");
   useEffect(() => {
+    if (!introDone) return;
     const ids = visibleKey
       .split(",")
       .map((i) => pages[Number(i)])
@@ -199,7 +202,7 @@ export default function Libreta({
     marcarSellosVistos(ids).catch((err) => console.error("[pasaporte] No se marcaron los sellos como vistos:", (err as { message?: string } | null)?.message ?? err));
     // Sin limpiar el temporizador: aunque pases de página, esos sellos ya están vistos.
     setTimeout(() => setSeen((prev) => new Set([...prev, ...ids])), 2400);
-  }, [visibleKey, pages]);
+  }, [visibleKey, pages, introDone]);
 
   const refs = {
     leftTop: useRef<HTMLDivElement>(null),
@@ -336,6 +339,7 @@ export default function Libreta({
       <div ref={boxRef} className="w-full">
         <div className="relative mx-auto" style={{ width: (wide ? SPREAD_W + TAB_W : W) * scale, height: H * scale }}>
           <div ref={fadeRef} className="absolute left-0 top-0" style={{ width: wide ? SPREAD_W : W, height: H, transform: `scale(${scale})`, transformOrigin: "top left" }}>
+            <StampAnimContext.Provider value={introDone}>
             <StampOpenContext.Provider value={onOpenStamp ?? null}>
             <DimsContext.Provider value={dims}>
             {wide ? (
@@ -367,6 +371,7 @@ export default function Libreta({
             )}
             </DimsContext.Provider>
             </StampOpenContext.Provider>
+            </StampAnimContext.Provider>
           </div>
           {wide && (
             <div ref={tabsRef} className="absolute flex flex-col" style={{ left: SPREAD_W * scale, top: 28 * scale, gap: 6 * scale }}>
@@ -672,6 +677,7 @@ const stampIn = (isNew: boolean, delayMs: number): React.CSSProperties | undefin
 
 function PlacedStamp({ p, isNew }: { p: Placed; isNew: (s: Pick<Sello, "id" | "nuevo">) => boolean }) {
   const open = useContext(StampOpenContext);
+  const ready = useContext(StampAnimContext);
   if (p.kind === "more") {
     return (
       <span className="absolute inline-flex h-6 items-center rounded-full border border-[var(--border-strong)] bg-surface-2 px-2 text-[12px] font-[var(--fw-semibold)] leading-none" style={{ left: p.x, top: p.y }}>
@@ -697,7 +703,8 @@ function PlacedStamp({ p, isNew }: { p: Placed; isNew: (s: Pick<Sello, "id" | "n
       <HitoStamp hito={s.hito!} id={s.id} size={p.size} tilt={p.rot} nuevo={nuevo} />
     );
   const pill = nuevo && <NuevoPill className={p.kind === "plan" ? "-right-1.5 -top-2.5" : "-right-2 -top-2.5"} />;
-  const style = { left: p.x, top: p.y, ...stampIn(nuevo, delay) };
+  // Mientras el libro se abre, el sello nuevo espera sin verse; al acabar, cae sobre la página.
+  const style = { left: p.x, top: p.y, ...(nuevo && !ready ? { opacity: 0 } : stampIn(nuevo, delay)) };
   const base = "absolute block rounded-[8px] leading-[0]";
   // Con hoja (tu pasaporte) cada sello es un botón; sin ella, solo una imagen con su descripción.
   return open ? (
