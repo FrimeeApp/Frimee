@@ -605,7 +605,7 @@ export default function SettingsPage() {
               />
               <SettingsRow
                 icon={<MapPin className="size-[18px]" />}
-                label="Ciudad base"
+                label="Lugar de residencia"
                 description="Dónde vives. Se enseña en tu pasaporte a quien pueda verlo."
                 right={<CiudadBaseField disabled={disableEditing} />}
               />
