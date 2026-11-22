@@ -10,6 +10,7 @@ export function PassportCover({
   width = BASE_W,
   tilt = -3,
   loading = false,
+  height,
   className = "",
 }: {
   /** Nombre en mayúsculas al pie; sin nombre (mini, cargando) no se pinta. */
@@ -17,6 +18,8 @@ export function PassportCover({
   width?: number;
   tilt?: number;
   loading?: boolean;
+  /** Alto propio (p. ej. para cubrir exactamente la mitad de la libreta); sin él, la proporción de la tapa. */
+  height?: number;
   className?: string;
 }) {
   const k = width / BASE_W;
@@ -27,7 +30,7 @@ export function PassportCover({
       className={`relative flex shrink-0 flex-col items-center justify-between rounded-[8px] text-[var(--passport-foil)] shadow-md ${loading ? "animate-pulse motion-reduce:animate-none motion-reduce:opacity-70" : ""} ${className}`}
       style={{
         width,
-        height: px(BASE_H),
+        height: height ?? px(BASE_H),
         background: "var(--passport-cover)",
         borderLeft: `${px(7)}px solid var(--passport-spine)`,
         transform: `rotate(${tilt}deg)`,
@@ -65,10 +68,11 @@ export function PassportCover({
 }
 
 /** Sello de plan «fantasma» de un viaje que aún no ha terminado (tablero «Con planes, sin sellos»). */
-export function GhostPlanStamp({ place, dates, className = "" }: { place: string; dates: string; className?: string }) {
+export function GhostPlanStamp({ place, dates, className = "", style }: { place: string; dates: string; className?: string; style?: React.CSSProperties }) {
   return (
     <span
       aria-hidden="true"
+      style={style}
       className={`rounded-[8px] border-[1.5px] border-dashed border-[var(--border-strong)] p-1 leading-[0] ${className}`}
     >
       <svg width="93" height="64" viewBox="0 0 140 96" className="shrink-0 text-[var(--text-secondary)] opacity-60">

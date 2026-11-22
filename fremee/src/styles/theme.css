@@ -41,7 +41,6 @@
   --passport-foil: #3cddc2;
   /* Libreta: la mesa, el fondo de seguridad y la tinta de los sellos. */
   --passport-table: #ededef;
-  --passport-line: #e3ebe9;
   --passport-ink: #2a2a31;
   --passport-ink-new: #227a6c;
   /* Chat (Bitácora): your messages and the @frimee frame, from the Frimee design system */
@@ -201,7 +200,6 @@
   --border: #2c2c2e;
   --border-strong: #3a3a3d;
   --passport-table: #111111;
-  --passport-line: #26262d;
   --passport-ink: #d9d9de;
   --passport-ink-new: #3cddc2;
   --chat-me: #15302b;
