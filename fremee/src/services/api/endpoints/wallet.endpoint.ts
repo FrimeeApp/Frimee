@@ -236,6 +236,8 @@ export async function updateTicketEndpoint(ticketId: string, input: UpdateTicket
       notes:          input.notes,
       cover_color:    input.cover_color,
       status:         input.status,
+      source_image_url: input.source_image_url,
+      source_pdf_url:   input.source_pdf_url,
       updated_at:     new Date().toISOString(),
     })
     .eq("id", ticketId);
