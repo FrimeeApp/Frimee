@@ -5,12 +5,30 @@ export type PlanFilter = "all" | number;
 export type PlanGroup = {
   planId: number;
   planName: string;
+  /** «21 – 25 nov», o null si no se conocen las fechas. */
+  planDates: string | null;
   items: ExpenseItem[];
   /** Suma de lo que te deben en este plan (0 si solo hay pagos tuyos). */
   owedSubtotal: number;
 };
 
 export type PlanOption = { id: number; name: string; count: number };
+
+const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+
+/** «21 – 25 nov», «21 nov» o «30 oct – 2 nov» (con año si no es el actual). */
+export function planRange(start?: string | null, end?: string | null): string | null {
+  if (!start) return null;
+  const a = new Date(start);
+  const b = end ? new Date(end) : a;
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return null;
+  const year = new Date().getFullYear();
+  const suffix = a.getFullYear() === year && b.getFullYear() === year ? "" : ` ${b.getFullYear()}`;
+  const sameDay = a.toDateString() === b.toDateString();
+  if (sameDay) return `${a.getDate()} ${MESES[a.getMonth()]}${suffix}`;
+  if (a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear()) return `${a.getDate()} – ${b.getDate()} ${MESES[b.getMonth()]}${suffix}`;
+  return `${a.getDate()} ${MESES[a.getMonth()]} – ${b.getDate()} ${MESES[b.getMonth()]}${suffix}`;
+}
 
 const time = (item: ExpenseItem) => new Date(item.date).getTime();
 
@@ -47,6 +65,7 @@ export function groupByPlan(items: ExpenseItem[]): PlanGroup[] {
     return {
       planId,
       planName: sorted[0].planName,
+      planDates: planRange(sorted[0].planStart, sorted[0].planEnd),
       items: sorted,
       owedSubtotal: sorted
         .filter((i) => i.direction === "incoming")

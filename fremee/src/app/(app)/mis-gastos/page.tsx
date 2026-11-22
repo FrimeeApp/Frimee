@@ -97,6 +97,8 @@ function MisGastosContent() {
             counterpartyImage: l.counterparty_profile_image ?? null,
             planName: l.plan_titulo ?? `Plan ${l.plan_id}`,
             planId: l.plan_id,
+            planStart: l.plan_inicio_at,
+            planEnd: l.plan_fin_at,
             concept: l.nota,
             estado: l.estado,
             metodo: l.metodo,

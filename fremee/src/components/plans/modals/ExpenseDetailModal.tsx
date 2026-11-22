@@ -22,6 +22,9 @@ export type ExpenseItem = {
   counterpartyImage: string | null;
   planName: string;
   planId: number;
+  /** Inicio y fin del plan, para distinguir dos planes con el mismo nombre. */
+  planStart?: string | null;
+  planEnd?: string | null;
   concept: string | null;
   estado: EstadoLiquidacion;
   /** Cómo se pagó (lo elige quien paga); null si no lo dijo. */

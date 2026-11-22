@@ -4,6 +4,8 @@ export type LiquidacionRow = {
   id: number;
   plan_id: number;
   plan_titulo: string | null;
+  plan_inicio_at: string | null;
+  plan_fin_at: string | null;
   from_user_id: string;
   to_user_id: string;
   importe: number;

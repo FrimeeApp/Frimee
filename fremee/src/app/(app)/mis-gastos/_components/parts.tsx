@@ -202,7 +202,7 @@ export function LiquidacionRow({ item, history, acting, onOpen, onConfirm, onRej
 
 // ── Zonas y cabeceras de plan ─────────────────────────────────────────────────
 
-function PlanHeader({ name, subtotal, onOpen }: { name: string; subtotal: number; onOpen: () => void }) {
+function PlanHeader({ name, dates, subtotal, onOpen }: { name: string; dates: string | null; subtotal: number; onOpen: () => void }) {
   return (
     <button
       type="button"
@@ -213,7 +213,10 @@ function PlanHeader({ name, subtotal, onOpen }: { name: string; subtotal: number
       <span className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-[var(--chat-me-border)] bg-[var(--chat-me)] text-[var(--chat-accent-text)]">
         <MapPin className="size-4" strokeWidth={1.8} aria-hidden />
       </span>
-      <b className="min-w-0 truncate text-[14px] font-[var(--fw-semibold)] text-app">{name}</b>
+      <span className="min-w-0 truncate text-[14px] text-app">
+        <b className="font-[var(--fw-semibold)]">{name}</b>
+        {dates && <em className="ml-1 text-[12px] not-italic text-muted">· {dates}</em>}
+      </span>
       {subtotal > 0 && <span className="ml-auto text-[13px] tabular-nums text-muted">+{formatMoney(subtotal)}</span>}
       <ChevronRight className={`size-4 shrink-0 text-muted ${subtotal > 0 ? "" : "ml-auto"}`} aria-hidden />
     </button>
@@ -251,7 +254,7 @@ export function Zone({ id, title, count, tinted, groups, cap, actingId, onOpenIt
           const hidden = group.items.length - shown.length;
           return (
             <div key={group.planId}>
-              <PlanHeader name={group.planName} subtotal={tinted ? 0 : group.owedSubtotal} onOpen={() => onOpenPlan(group.planId)} />
+              <PlanHeader name={group.planName} dates={group.planDates} subtotal={tinted ? 0 : group.owedSubtotal} onOpen={() => onOpenPlan(group.planId)} />
               {shown.map((item) => (
                 <LiquidacionRow
                   key={item.id}
