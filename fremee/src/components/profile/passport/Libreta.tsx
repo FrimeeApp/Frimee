@@ -100,7 +100,7 @@ export default function Libreta({
       setWide(isWide);
       const d = isWide ? WIDE : MOBILE;
       const byWidth = el.clientWidth / (isWide ? d.w * 2 + SPINE + TAB_W : d.w);
-      const byHeight = isWide ? (window.innerHeight - 200) / d.h : Infinity;
+      const byHeight = isWide ? (window.innerHeight - 230) / d.h : Infinity;
       setScale(Math.min(isWide ? 1 : 1.25, Math.max(0.5, Math.min(byWidth, byHeight))));
       setMeasured(true);
     };

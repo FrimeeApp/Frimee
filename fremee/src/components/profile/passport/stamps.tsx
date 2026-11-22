@@ -1,5 +1,5 @@
 import { Plane, Ship, TrainFront } from "lucide-react";
-import { countryName, hash, planRangeLabel, routeCode, stampDateLabel, type HitoKind, type Sello } from "@/lib/passport";
+import { countryName, countryShortName, hash, planRangeLabel, routeCode, stampDateLabel, type HitoKind, type Sello } from "@/lib/passport";
 
 /** Sellos del pasaporte. Siempre en tinta (--passport-ink); el sello nuevo usa --passport-ink-new. Sin filtros SVG. */
 
@@ -89,7 +89,7 @@ export function CountryStamp({
   const border = seed % 4; // liso, dentado, doble, punteado
   const orn = (seed >> 4) % 4; // rayas, estrellas, puntos, arco
   const code = sello.country_code ?? "";
-  const name = countryName(code).toUpperCase();
+  const name = countryShortName(code).toUpperCase();
   const nameSize = name.length > 14 ? 5.6 : name.length > 10 ? 6.4 : 7.5;
   // A esa altura, el aro punteado deja unos 60 de ancho: los nombres largos («Ciudad del Vaticano») se comprimen para no salirse.
   const nameWidth = name.length * (nameSize * 0.64 + 1.4);
@@ -139,7 +139,7 @@ export function PlanStamp({
   const border = seed % 4; // base, perforado, esquinas, doble
   const plan = sello.plan;
   const title = plan?.titulo ?? "Viaje";
-  const titleSize = title.length > 15 ? 17 : title.length > 11 ? 21 : 27;
+  const titleSize = title.length <= 9 ? 27 : title.length <= 13 ? 21 : title.length <= 17 ? 17 : 15;
   const shown = title.length > 20 ? `${title.slice(0, 19)}…` : title;
   const place = (plan?.ubicacion_nombre?.split(",")[0]?.trim() ?? "").toUpperCase();
   const route = sello.ruta ? `${routeCode(sello.ruta.desde)} → ${routeCode(sello.ruta.hasta)}` : null;
@@ -173,7 +173,7 @@ export function PlanStamp({
           )}
         </>
       )}
-      <text x="16" y="63" fontFamily={SERIF} fontSize={titleSize} fill={c}>
+      <text x="16" y="63" fontFamily={SERIF} fontSize={titleSize} fill={c} textLength={shown.length * titleSize * 0.52 > 108 ? 108 : undefined} lengthAdjust="spacingAndGlyphs">
         {shown}
       </text>
       <text x="16" y="79" fontFamily={SANS} fontSize="8" fontWeight="700" letterSpacing="1.1" fill={c}>
