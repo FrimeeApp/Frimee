@@ -5,22 +5,17 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Capacitor } from "@capacitor/core";
 import AppSidebar from "@/components/common/AppSidebar";
-import LoadingScreen from "@/components/common/LoadingScreen";
 import { useAuth } from "@/providers/AuthProvider";
 import { getPublicUserProfile } from "@/services/api/repositories/users.repository";
 import { sendFriendRequest, getFriendshipStatuses, getFollowStatuses, removeFriend, getFollowerCount } from "@/services/api/endpoints/users.endpoint";
 import { useFollow } from "@/hooks/useFollow";
-import { listUserRelatedPlans, listSavedPlans } from "@/services/api/repositories/plans.repository";
-import {
-  uploadProfileImage,
-  saveUserProfileAndSettings,
-} from "@/services/api/repositories/settings.repository";
+import { listUserRelatedPlans } from "@/services/api/repositories/plans.repository";
 import type { FeedPlanItemDto } from "@/services/api/dtos/plan.dto";
-import { Settings, Plane, Wallet, Camera, Check, Pencil, LayoutGrid, Bookmark, Ban, MoreHorizontal } from "lucide-react";
+import { Ban, MoreHorizontal } from "lucide-react";
 import { useBloqueos } from "@/hooks/useBloqueos";
 import { BlockConfirm } from "@/components/chat/info/BlockConfirm";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
-import { Tabs } from "@/components/ui/Tabs";
+import MiPerfil from "@/components/profile/passport/MiPerfil";
 import { useToast } from "@/components/ui/Toaster";
 
 /** Seguir is hidden while the feed is (its code and data stay for when the feed comes back). */
@@ -32,27 +27,18 @@ type ProfileData = {
   profile_image: string | null;
 };
 
-const PROFILE_ACTION_ICON_CLASS = "size-[clamp(25px,6.4vw,28px)]";
-const PROFILE_ACTION_ICON_STROKE = 2;
-const PROFILE_TAB_ICON_CLASS = "size-6";
-const PROFILE_TAB_ICON_STROKE = 2;
-
 export default function ProfilePage() {
   const { id: routeId } = useParams<{ id: string }>();
   const searchParams = useSearchParams();
   const router = useRouter();
   const id = routeId === "static" ? searchParams.get("id") ?? "" : routeId;
-  const { user, profile: myProfile, settings, loading: authLoading, refreshProfile } = useAuth();
+  const { user, profile: myProfile, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const isGuest = Boolean(user?.is_anonymous);
   const isOwnProfile = user?.id === id;
 
   const [profileData, setProfileData] = useState<ProfileData | null>(null);
   const [plans, setPlans] = useState<FeedPlanItemDto[]>([]);
-  const [savedPlans, setSavedPlans] = useState<FeedPlanItemDto[]>([]);
-  const [activeTab, setActiveTab] = useState<"planes" | "guardados">("planes");
-  const [loadingSaved, setLoadingSaved] = useState(false);
-  const [savedLoaded, setSavedLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [followerCount, setFollowerCount] = useState(0);
 
@@ -105,16 +91,8 @@ export default function ProfilePage() {
     }
   };
 
-  // Edit state
-  const [editName, setEditName] = useState("");
-  const [nameError, setNameError] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const nameInputRef = useRef<HTMLInputElement>(null);
-
   useEffect(() => {
-    if (!id || authLoading) return;
+    if (!id || authLoading || isOwnProfile) return;
     let cancelled = false;
 
     const load = async () => {
@@ -125,21 +103,10 @@ export default function ProfilePage() {
       setFriendshipStatus("none");
       setInitialFollowing(false);
       try {
-        let profileResult: ProfileData | null;
-
-        if (isOwnProfile && myProfile) {
-          profileResult = {
-            id: myProfile.id,
-            nombre: myProfile.nombre,
-            profile_image: myProfile.profile_image,
-          };
-        } else {
-          profileResult = await getPublicUserProfile(id);
-        }
+        const profileResult: ProfileData | null = await getPublicUserProfile(id);
 
         if (cancelled) return;
         setProfileData(profileResult);
-        if (isOwnProfile && profileResult) setEditName(profileResult.nombre);
         if (!profileResult) return;
 
         if (!isOwnProfile) {
@@ -162,9 +129,7 @@ export default function ProfilePage() {
         ]);
         if (cancelled) return;
         if (userPlansResult.status === "fulfilled") {
-          const publicPlans = userPlansResult.value.filter(
-            (p) => p.visibility === "PÚBLICO" || isOwnProfile
-          );
+          const publicPlans = userPlansResult.value.filter((p) => p.visibility === "PÚBLICO");
           setPlans(publicPlans);
         }
         if (followerCountResult.status === "fulfilled") {
@@ -188,94 +153,24 @@ export default function ProfilePage() {
     return () => {
       cancelled = true;
     };
-  }, [id, authLoading, isOwnProfile, myProfile]);
+  }, [id, authLoading, isOwnProfile]);
 
-  const handleTabChange = async (tab: "planes" | "guardados") => {
-    setActiveTab(tab);
-    if (tab === "guardados" && !savedLoaded && user?.id) {
-      setLoadingSaved(true);
-      try {
-        const saved = await listSavedPlans(user.id);
-        setSavedPlans(saved);
-        setSavedLoaded(true);
-      } catch (err) {
-        console.error("[profile] Error loading saved plans:", err);
-      } finally {
-        setLoadingSaved(false);
-      }
-    }
-  };
-
-  const handleSaveName = async () => {
-    if (!user?.id || !settings || !profileData) return;
-    const trimmed = editName.trim();
-    if (!trimmed) { setNameError(true); nameInputRef.current?.focus(); return; }
-    if (trimmed === profileData.nombre) return;
-
-    setSaving(true);
-    try {
-      await saveUserProfileAndSettings({
-        userId: user.id,
-        nombre: trimmed,
-        fechaNac: myProfile?.fecha_nac ?? null,
-        profileImage: profileData.profile_image,
-        theme: settings.theme,
-        language: settings.language,
-        timezone: settings.timezone,
-        notifyPush: settings.notify_push,
-        notifyEmail: settings.notify_email,
-        notifyInApp: settings.notify_in_app,
-        profileVisibility: settings.profile_visibility,
-        allowFriendRequests: settings.allow_friend_requests,
-        googleSyncEnabled: settings.google_sync_enabled ?? false,
-        googleSyncExportPlans: settings.google_sync_export_plans ?? true,
-      });
-      setProfileData((prev) => prev ? { ...prev, nombre: trimmed } : prev);
-      setEditName(trimmed);
-      await refreshProfile();
-    } catch (err) {
-      console.error("[profile] Error saving name:", err);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !user?.id) return;
-
-    setUploading(true);
-    try {
-      const { publicUrl } = await uploadProfileImage({ userId: user.id, file });
-      const url = `${publicUrl}${publicUrl.includes("?") ? "&" : "?"}v=${Date.now()}`;
-      setProfileData((prev) => prev ? { ...prev, profile_image: url } : prev);
-
-      if (settings) {
-        await saveUserProfileAndSettings({
-          userId: user.id,
-          nombre: profileData?.nombre ?? "",
-          fechaNac: myProfile?.fecha_nac ?? null,
-          profileImage: url,
-          theme: settings.theme,
-          language: settings.language,
-          timezone: settings.timezone,
-          notifyPush: settings.notify_push,
-          notifyEmail: settings.notify_email,
-          notifyInApp: settings.notify_in_app,
-          profileVisibility: settings.profile_visibility,
-          allowFriendRequests: settings.allow_friend_requests,
-          googleSyncEnabled: settings.google_sync_enabled ?? false,
-          googleSyncExportPlans: settings.google_sync_export_plans ?? true,
-        });
-      }
-      await refreshProfile();
-    } catch (err) {
-      console.error("[profile] Error uploading image:", err);
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  };
+  if (isOwnProfile && !authLoading) {
+    return (
+      <div className="min-h-dvh bg-app text-app">
+        <div className="relative mx-auto min-h-dvh max-w-[1440px]">
+          <AppSidebar />
+          <main className="px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-mobile-safe-top md:py-[var(--space-8)] md:pr-[var(--space-14)]">
+            {myProfile ? (
+              <MiPerfil userId={myProfile.id} nombre={myProfile.nombre} profileImage={myProfile.profile_image} isGuest={isGuest} />
+            ) : (
+              <p role="alert" className="py-[var(--space-10)] text-center text-body text-muted">No se pudo cargar tu perfil.</p>
+            )}
+          </main>
+        </div>
+      </div>
+    );
+  }
 
   if (authLoading || loading) {
     return (
@@ -316,54 +211,8 @@ export default function ProfilePage() {
 
         <main className="px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-mobile-safe-top md:py-[var(--space-8)] md:pr-[var(--space-14)]">
           <div className="mx-auto w-full max-w-[760px]">
-            {/* Guest on a phone: the avatar opens this page (on desktop, the profile menu has it). */}
-            {isOwnProfile && user?.is_anonymous && (
-              <div className="mb-[var(--space-4)] flex min-h-[52px] items-center gap-2.5 rounded-[8px] border border-app bg-surface pl-3 pr-1 md:hidden">
-                <span className="flex-1 text-[14px] leading-tight text-app">Estás en modo invitado</span>
-                <button
-                  type="button"
-                  onClick={() => window.dispatchEvent(new Event("frimee:save-account"))}
-                  className="min-h-11 px-2 text-[14px] font-[var(--fw-semibold)] text-[var(--primary)]"
-                >
-                  Guardar mi cuenta
-                </button>
-              </div>
-            )}
-            {/* Settings button - own profile only */}
-            {isOwnProfile && (
-              <div className="mb-[var(--space-4)] flex justify-end">
-                <div className="inline-flex items-center gap-[var(--space-2)]">
-                  <button
-                    type="button"
-                    onClick={() => router.push("/wallet")}
-                    aria-label="Cartera"
-                    className="flex size-11 items-center justify-center rounded-full text-app transition-opacity hover:opacity-70 active:opacity-[var(--disabled-opacity)]"
-                  >
-                    <WalletIcon className={PROFILE_ACTION_ICON_CLASS} strokeWidth={PROFILE_ACTION_ICON_STROKE} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => router.push("/flights")}
-                    aria-label="Vuelos de amigos"
-                    className="flex size-11 items-center justify-center rounded-full text-app transition-opacity hover:opacity-70 active:opacity-[var(--disabled-opacity)]"
-                  >
-                    <PlaneIcon className={PROFILE_ACTION_ICON_CLASS} strokeWidth={PROFILE_ACTION_ICON_STROKE} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => router.push("/settings")}
-                    aria-label="Ajustes"
-                    className="flex size-11 items-center justify-center rounded-full text-app transition-opacity hover:opacity-70 active:opacity-[var(--disabled-opacity)]"
-                  >
-                    <SettingsIcon className={PROFILE_ACTION_ICON_CLASS} strokeWidth={PROFILE_ACTION_ICON_STROKE} />
-                  </button>
-                </div>
-              </div>
-            )}
-
             {/* Profile header */}
             <div className="flex flex-col items-center">
-              {/* Avatar with edit button */}
               <div className="relative">
                 {profileData.profile_image ? (
                   <Image
@@ -371,85 +220,28 @@ export default function ProfilePage() {
                     alt={profileData.nombre}
                     width={96}
                     height={96}
-                    className={`size-[96px] rounded-full border-2 border-app object-cover ${uploading ? "opacity-50" : ""}`}
+                    className="size-[96px] rounded-full border-2 border-app object-cover"
                     unoptimized
                     referrerPolicy="no-referrer"
                   />
                 ) : (
-                  <div className={`flex size-[96px] items-center justify-center rounded-full bg-[var(--text-primary)] text-[32px] font-[var(--fw-semibold)] text-contrast-token ${uploading ? "opacity-50" : ""}`}>
+                  <div className="flex size-[96px] items-center justify-center rounded-full bg-[var(--text-primary)] text-[32px] font-[var(--fw-semibold)] text-contrast-token">
                     {avatarLabel}
-                  </div>
-                )}
-
-                {isOwnProfile && (
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={uploading}
-                    className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 text-white/90 transition-opacity hover:bg-black/50 disabled:opacity-50"
-                    aria-label="Cambiar foto de perfil"
-                  >
-                    <Camera className="size-[28px]" aria-hidden />
-                  </button>
-                )}
-
-                {uploading && (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="size-[20px] animate-spin rounded-full border-2 border-[var(--text-primary)] border-t-transparent" />
                   </div>
                 )}
               </div>
 
-              {/* Name - editable on own profile */}
-              {isOwnProfile ? (
-                <div className="mt-[var(--space-3)] flex items-center justify-center">
-                  <div className="w-[22px] flex-shrink-0" />
-                  <input
-                    ref={nameInputRef}
-                    type="text"
-                    value={editName}
-                    size={Math.max(1, editName.length)}
-                    onChange={(e) => { setEditName(e.target.value); if (nameError) setNameError(false); }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") void handleSaveName();
-                      if (e.key === "Escape") { setEditName(profileData.nombre); setNameError(false); }
-                    }}
-                    className={`min-w-0 border-b bg-transparent text-center [font-family:var(--font-display-face)] text-[24px] leading-[1.1] font-normal outline-none transition-colors md:text-[28px] ${nameError ? "border-red-500" : "border-transparent focus:border-app"}`}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (editName.trim() !== profileData.nombre) void handleSaveName();
-                      else nameInputRef.current?.focus();
-                    }}
-                    disabled={saving}
-                    aria-label={editName.trim() !== profileData.nombre ? "Guardar nombre" : "Editar nombre"}
-                    className="ml-1.5 w-[22px] flex-shrink-0 flex items-center justify-center text-muted transition-opacity hover:opacity-70 disabled:opacity-50"
-                  >
-                    {saving ? (
-                      <div className="size-[16px] animate-spin rounded-full border-2 border-current border-t-transparent" />
-                    ) : editName.trim() !== profileData.nombre ? (
-                      <Check className="size-[16px]" aria-hidden />
-                    ) : (
-                      <Pencil className="size-[16px]" aria-hidden />
-                    )}
-                  </button>
-                </div>
-              ) : (
-                <p className="mt-[var(--space-3)] [font-family:var(--font-display-face)] text-[24px] leading-[1.1] font-normal md:text-[28px]">
-                  {profileData.nombre}
-                </p>
-              )}
+              <p className="mt-[var(--space-3)] [font-family:var(--font-display-face)] text-[24px] leading-[1.1] font-normal md:text-[28px]">
+                {profileData.nombre}
+              </p>
 
               {/* Description */}
               <p className="mt-[var(--space-1)] text-body-sm text-muted">
-                {isOwnProfile
-                  ? (myProfile?.username ? `@${myProfile.username}` : "Tu perfil")
-                  : `Perfil de ${profileData.nombre}`}
+                {`Perfil de ${profileData.nombre}`}
               </p>
 
               {/* Follow + Add friend buttons - other profiles only */}
-              {!isOwnProfile && user && (
+              {user && (
                 <div className="mt-[var(--space-3)] flex gap-[var(--space-2)]">
                   {MOSTRAR_SEGUIR && (
                   <button
@@ -508,61 +300,16 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {/* Tabs */}
-            <Tabs
-              tabs={[
-                {
-                  value: "planes",
-                  label: <LayoutGrid className={PROFILE_TAB_ICON_CLASS} strokeWidth={PROFILE_TAB_ICON_STROKE} fill={activeTab === "planes" ? "currentColor" : "none"} aria-hidden />,
-                  ariaLabel: "Planes",
-                },
-                ...(isOwnProfile ? [{
-                  value: "guardados",
-                  label: <Bookmark className={PROFILE_TAB_ICON_CLASS} strokeWidth={PROFILE_TAB_ICON_STROKE} fill={activeTab === "guardados" ? "currentColor" : "none"} aria-hidden />,
-                  ariaLabel: "Guardados",
-                }] : []),
-              ]}
-              value={activeTab}
-              onChange={(tab) => handleTabChange(tab as "planes" | "guardados")}
-              className="mt-[var(--space-6)] gap-0 pb-0"
-              buttonClassName="min-h-11 flex-1 justify-center py-[var(--space-3)]"
-              indicatorWidth={28}
-            />
-
             {/* Grid */}
-            <div className="mt-[var(--space-5)]">
-              {activeTab === "planes" ? (
-                plans.length === 0 ? (
-                  <p className="py-[var(--space-6)] text-center text-body-sm text-muted">
-                    {isOwnProfile ? "Aún no tienes planes publicados." : "No hay planes públicos."}
-                  </p>
-                ) : (
-                  <PlanGrid plans={plans} onPlanClick={(planId) => router.push(Capacitor.isNativePlatform() ? `/plans/static?id=${planId}` : `/plans/${planId}`)} />
-                )
-              ) : loadingSaved ? (
-                <div className="flex justify-center py-[var(--space-6)]">
-                  <LoadingScreen fullscreen={false} compact size="sm" />
-                </div>
-              ) : savedPlans.length === 0 ? (
-                <p className="py-[var(--space-6)] text-center text-body-sm text-muted">
-                  Aún no has guardado ningún plan.
-                </p>
+            <div className="mt-[var(--space-6)]">
+              {plans.length === 0 ? (
+                <p className="py-[var(--space-6)] text-center text-body-sm text-muted">No hay planes públicos.</p>
               ) : (
-                <PlanGrid plans={savedPlans} onPlanClick={(planId) => router.push(Capacitor.isNativePlatform() ? `/plans/static?id=${planId}` : `/plans/${planId}`)} />
+                <PlanGrid plans={plans} onPlanClick={(planId) => router.push(Capacitor.isNativePlatform() ? `/plans/static?id=${planId}` : `/plans/${planId}`)} />
               )}
             </div>
           </div>
         </main>
-
-        {/* Hidden file input */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          onChange={handleImageUpload}
-          className="hidden"
-          aria-hidden="true"
-        />
 
         {/* Unfriend dialog */}
         {showUnfriendDialog && (
@@ -676,21 +423,6 @@ function PlanGrid({ plans, onPlanClick }: { plans: FeedPlanItemDto[]; onPlanClic
   );
 }
 
-type ProfileActionIconProps = {
-  className?: string;
-  strokeWidth?: number;
-};
-
-const SettingsIcon = ({ className = "size-icon", strokeWidth }: ProfileActionIconProps) => (
-  <Settings className={className} strokeWidth={strokeWidth} aria-hidden />
-);
-const PlaneIcon = ({ className = "size-icon", strokeWidth }: ProfileActionIconProps) => (
-  <Plane className={className} strokeWidth={strokeWidth} aria-hidden />
-);
-const WalletIcon = ({ className = "size-icon", strokeWidth }: ProfileActionIconProps) => (
-  <Wallet className={className} strokeWidth={strokeWidth} aria-hidden />
-);
-
 function ProfileSkeleton() {
   return (
     <div aria-label="Cargando perfil" role="status">
@@ -706,12 +438,6 @@ function ProfileSkeleton() {
               <div className="skeleton-shimmer h-3 w-[48px] rounded-full opacity-70" />
             </div>
           ))}
-        </div>
-      </div>
-
-      <div className="mt-[var(--space-6)]">
-        <div className="flex justify-center py-[var(--space-3)]">
-          <div className="skeleton-shimmer h-5 w-5 rounded-[6px]" />
         </div>
       </div>
 
