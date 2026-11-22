@@ -1,11 +1,13 @@
 /**
- * Abrir el pasaporte: la tapa del perfil se queda puesta (capa en <body>, sobrevive al cambio de ruta) y, cuando la
- * libreta está lista, se escala (240 ms) hasta ocupar el hueco del libro; entonces se funde y las páginas aparecen.
+ * Abrir el pasaporte. La tapa del perfil se queda puesta en una capa de <body> (sobrevive al cambio de ruta) y,
+ * cuando la libreta está montada, viaja hasta la página que ocupa su sitio, se endereza y se funde con ella.
+ * Escala uniforme: la tapa y la página tienen casi la misma proporción, así que nada se estira.
  */
 
 const OVERLAY_ID = "passport-opening";
-const SCALE_MS = 240;
+const TRAVEL_MS = 240;
 const FADE_MS = 200;
+const EASE = "cubic-bezier(0.2, 0, 0, 1)";
 
 /** Deja la tapa en una capa fija sobre el perfil y navega. Con movimiento reducido, solo navega. */
 export function openPassportFrom(cover: HTMLElement | null, go: () => void) {
@@ -21,7 +23,7 @@ export function openPassportFrom(cover: HTMLElement | null, go: () => void) {
     return;
   }
   document.getElementById(OVERLAY_ID)?.remove();
-  // La capa mide lo que la tapa sin inclinar, centrada donde está ahora.
+  // La capa mide lo que la tapa sin inclinar y se centra donde está la tapa; la copia conserva su inclinación.
   const layer = document.createElement("div");
   layer.id = OVERLAY_ID;
   layer.setAttribute("aria-hidden", "true");
@@ -33,21 +35,12 @@ export function openPassportFrom(cover: HTMLElement | null, go: () => void) {
     height: `${h}px`,
     zIndex: "9999",
     pointerEvents: "none",
-    transformOrigin: "top left",
-    background: "var(--passport-cover)",
-    borderLeft: "7px solid var(--passport-spine)",
-    borderRadius: "8px",
-    boxSizing: "border-box",
-    overflow: "hidden",
+    transformOrigin: "center center",
+    willChange: "transform",
   });
   const clone = cover.cloneNode(true) as HTMLElement;
-  clone.dataset.role = "content";
-  clone.style.transform = "none";
-  clone.style.position = "absolute";
-  clone.style.inset = "0";
-  clone.style.margin = "0";
-  clone.style.borderLeft = "0";
-  clone.style.boxShadow = "none";
+  clone.dataset.role = "cover";
+  Object.assign(clone.style, { position: "absolute", inset: "0", margin: "0" });
   layer.appendChild(clone);
   document.body.appendChild(layer);
   // Por si la libreta no llega a retirarla, nunca se queda tapando la pantalla.
@@ -56,8 +49,8 @@ export function openPassportFrom(cover: HTMLElement | null, go: () => void) {
 }
 
 /**
- * La libreta ya tiene algo que enseñar: la tapa se escala hasta el libro (`target`), se funde y `book` aparece.
- * Sin capa (otra entrada, movimiento reducido) no hace nada y el libro se ve tal cual.
+ * La libreta ya está montada: la tapa viaja hasta `target` (la página que ocupa su lugar), y entonces se funde
+ * mientras `book` aparece. Sin capa (entrada directa, movimiento reducido) no hace nada.
  */
 export function closePassportOpening(target: () => HTMLElement | null, book: HTMLElement | null) {
   const layer = document.getElementById(OVERLAY_ID);
@@ -77,20 +70,26 @@ export function closePassportOpening(target: () => HTMLElement | null, book: HTM
         finish();
         return;
       }
+      const s = Math.min(t.width / w, t.height / h);
       const from = layer.getBoundingClientRect();
-      const move = layer.animate(
-        [
-          { transform: "translate(0, 0) scale(1, 1)" },
-          { transform: `translate(${t.left - from.left}px, ${t.top - from.top}px) scale(${t.width / w}, ${t.height / h})` },
-        ],
-        { duration: SCALE_MS, easing: "cubic-bezier(0.2, 0, 0, 1)", fill: "forwards" },
-      );
-      // El texto de la tapa se apaga pronto para que no se vea estirado.
-      layer.querySelector<HTMLElement>("[data-role=content]")?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: SCALE_MS * 0.45, easing: "linear", fill: "forwards" });
+      const dx = t.left + t.width / 2 - (from.left + from.width / 2);
+      const dy = t.top + t.height / 2 - (from.top + from.height / 2);
+      const move = layer.animate([{ transform: "translate(0, 0) scale(1)" }, { transform: `translate(${dx}px, ${dy}px) scale(${s})` }], {
+        duration: TRAVEL_MS,
+        easing: EASE,
+        fill: "forwards",
+      });
+      // La tapa se endereza durante el viaje (su inclinación es la del perfil).
+      const tilt = getComputedStyle(layer.querySelector<HTMLElement>("[data-role=cover]")!).transform;
+      layer.querySelector<HTMLElement>("[data-role=cover]")?.animate([{ transform: tilt === "none" ? "rotate(0deg)" : tilt }, { transform: "rotate(0deg)" }], { duration: TRAVEL_MS, easing: EASE, fill: "forwards" });
       move.onfinish = () => {
         book?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: FADE_MS, easing: "linear" });
         if (book) book.style.opacity = "";
-        const fade = layer.animate([{ opacity: 1 }, { opacity: 0 }], { duration: FADE_MS, easing: "linear", fill: "forwards" });
+        const fade = layer.animate([{ transform: `translate(${dx}px, ${dy}px) scale(${s})`, opacity: 1 }, { transform: `translate(${dx}px, ${dy}px) scale(${s})`, opacity: 0 }], {
+          duration: FADE_MS,
+          easing: "linear",
+          fill: "forwards",
+        });
         fade.onfinish = finish;
         fade.oncancel = finish;
       };

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { FOCUS, LABEL, SERIF } from "@/components/plans/home/pieces";
 import {
@@ -23,12 +23,17 @@ import { CountryStamp, HITO_NAME, HitoStamp, PlanStamp } from "./stamps";
 
 /** La libreta (tableros «Pasaporte · la libreta»): página de datos + una página por cada 3 viajes de un año. */
 
-const W = 358;
-const H = 590;
+/** Medidas lógicas de una página. Móvil: 358 × 590. Escritorio (doble página): 452 × 620, casi la proporción de la tapa. */
+type Dims = { w: number; h: number; tops: number[]; stack: number };
+const MOBILE: Dims = { w: 358, h: 590, tops: [56, 224, 390], stack: 108 };
+const WIDE: Dims = { w: 452, h: 620, tops: [60, 238, 416], stack: 116 };
+const DimsContext = createContext<Dims>(MOBILE);
+const useDims = () => useContext(DimsContext);
 const SPINE = 6;
-const SPREAD_W = W * 2 + SPINE;
-const TAB_W = 48;
-const SLOT_TOPS = [56, 224, 390];
+const TAB_W = 52;
+const TAB_H = 104;
+type Side = "left" | "right" | "single";
+const SIDE_RADIUS: Record<Side, string> = { left: "rounded-l-[8px]", right: "rounded-r-[8px]", single: "rounded-[8px]" };
 const EASE_IN = "cubic-bezier(0.3, 0, 1, 1)";
 const EASE_OUT = "cubic-bezier(0.2, 0, 0, 1)";
 const TURN_MS = 240;
@@ -45,15 +50,20 @@ export default function Libreta({ nombre, sellos }: { nombre: string; sellos: Se
   const boxRef = useRef<HTMLDivElement>(null);
   const [wide, setWide] = useState(false);
   const [scale, setScale] = useState(1);
+  const dims = wide ? WIDE : MOBILE;
+  const W = dims.w;
+  const H = dims.h;
+  const SPREAD_W = W * 2 + SPINE;
   useEffect(() => {
     const el = boxRef.current;
     if (!el) return;
     const measure = () => {
       const isWide = window.matchMedia("(min-width: 768px)").matches;
       setWide(isWide);
-      const byWidth = el.clientWidth / (isWide ? SPREAD_W + TAB_W : W);
-      const byHeight = isWide ? (window.innerHeight - 210) / H : Infinity;
-      setScale(Math.min(isWide ? 1.4 : 1.25, Math.max(0.6, Math.min(byWidth, byHeight))));
+      const d = isWide ? WIDE : MOBILE;
+      const byWidth = el.clientWidth / (isWide ? d.w * 2 + SPINE + TAB_W : d.w);
+      const byHeight = isWide ? (window.innerHeight - 200) / d.h : Infinity;
+      setScale(Math.min(isWide ? 1 : 1.25, Math.max(0.5, Math.min(byWidth, byHeight))));
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -168,8 +178,8 @@ export default function Libreta({ nombre, sellos }: { nombre: string; sellos: Se
   };
 
   const pageAt = (i: number) => pages[i] ?? null;
-  const view = (p: PassportPage | null, cover = false, number = 0) => (
-    <PageView page={p} nombre={nombre} stats={stats} total={pages.length} cover={cover} number={number} isNew={isNew} />
+  const view = (p: PassportPage | null, side: Side, cover = false, number = 0) => (
+    <PageView page={p} nombre={nombre} stats={stats} total={pages.length} cover={cover} number={number} isNew={isNew} side={side} />
   );
   const layer = (content: React.ReactNode, z: number, origin: "left" | "right", ref?: React.Ref<HTMLDivElement>) => (
     <div ref={ref} className="absolute top-0" style={{ left: 0, width: W, height: H, transformOrigin: `${origin} center`, zIndex: z }}>
@@ -182,7 +192,7 @@ export default function Libreta({ nombre, sellos }: { nombre: string; sellos: Se
     const cur = wide ? (side === "left" ? (index === 0 ? -1 : index) : index === 0 ? 0 : index + 1) : index;
     const before = prev ? (wide ? (side === "left" ? (prev.index === 0 ? -1 : prev.index) : prev.index === 0 ? 0 : prev.index + 1) : prev.index) : null;
     const origin = side === "left" ? "right" : "left";
-    const make = (i: number) => view(i < 0 ? null : pageAt(i), i < 0, i + 1);
+    const make = (i: number) => view(i < 0 ? null : pageAt(i), wide ? side : "single", i < 0, i + 1);
     if (!prev || before === null || prev.reduced) return layer(make(cur), 1, origin);
     // Hacia delante: la nueva izquierda y la vieja derecha son las que se mueven; hacia atrás, al revés.
     const topIsNew = side === "left" ? !prev.back : prev.back;
@@ -208,7 +218,7 @@ export default function Libreta({ nombre, sellos }: { nombre: string; sellos: Se
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-[460px] flex-col md:max-w-[860px]" onKeyDown={onKey}>
+    <div className="mx-auto flex w-full max-w-[460px] flex-col md:max-w-[1080px]" onKeyDown={onKey}>
       <nav aria-label="Saltar a" className="flex gap-2 overflow-x-auto pb-3 pt-1 md:hidden">
         <Chip active={spreadHasDatos} onClick={() => goToPage(0)}>
           Datos
@@ -222,10 +232,11 @@ export default function Libreta({ nombre, sellos }: { nombre: string; sellos: Se
 
       <div ref={boxRef} className="w-full">
         <div className="relative mx-auto" style={{ width: (wide ? SPREAD_W + TAB_W : W) * scale, height: H * scale }}>
-          <div ref={fadeRef} data-passport-book className="absolute left-0 top-0" style={{ width: wide ? SPREAD_W : W, height: H, transform: `scale(${scale})`, transformOrigin: "top left" }}>
+          <div ref={fadeRef} data-passport-book data-passport-target={wide ? undefined : ""} className="absolute left-0 top-0" style={{ width: wide ? SPREAD_W : W, height: H, transform: `scale(${scale})`, transformOrigin: "top left" }}>
+            <DimsContext.Provider value={dims}>
             {wide ? (
               <>
-                <div className="absolute left-0 top-0" style={{ width: W, height: H }}>
+                <div data-passport-target className="absolute left-0 top-0" style={{ width: W, height: H }}>
                   {half("left")}
                 </div>
                 <div aria-hidden="true" className="absolute top-0 bg-[var(--border-strong)]" style={{ left: W, width: SPINE, height: H }} />
@@ -236,14 +247,15 @@ export default function Libreta({ nombre, sellos }: { nombre: string; sellos: Se
             ) : (
               half("right")
             )}
+            </DimsContext.Provider>
           </div>
           {wide && (
-            <div className="absolute flex flex-col gap-1" style={{ left: SPREAD_W * scale, top: 24 * scale }}>
-              <EdgeTab active={spreadHasDatos} onClick={() => goToPage(0)} h={88 * scale}>
+            <div className="absolute flex flex-col" style={{ left: SPREAD_W * scale, top: 28 * scale, gap: 6 * scale }}>
+              <EdgeTab active={spreadHasDatos} onClick={() => goToPage(0)} h={TAB_H * scale} w={TAB_W * scale}>
                 Datos
               </EdgeTab>
               {years.map((y) => (
-                <EdgeTab key={y} active={spreadYears.includes(y)} onClick={() => jumpToYear(y)} h={88 * scale}>
+                <EdgeTab key={y} active={spreadYears.includes(y)} onClick={() => jumpToYear(y)} h={TAB_H * scale} w={TAB_W * scale}>
                   {y}
                 </EdgeTab>
               ))}
@@ -267,13 +279,13 @@ export default function Libreta({ nombre, sellos }: { nombre: string; sellos: Se
   );
 }
 
-function EdgeTab({ active, onClick, h, children }: { active: boolean; onClick: () => void; h: number; children: React.ReactNode }) {
+function EdgeTab({ active, onClick, h, w, children }: { active: boolean; onClick: () => void; h: number; w: number; children: React.ReactNode }) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-current={active ? "page" : undefined}
-      style={{ width: TAB_W - 4, height: h, writingMode: "vertical-rl" }}
+      style={{ width: w, height: h, writingMode: "vertical-rl" }}
       className={`flex items-center justify-center rounded-r-[8px] border border-l-0 text-[14px] font-[var(--fw-semibold)] leading-none ${FOCUS} ${
         active ? "border-[var(--primary)] bg-[var(--primary)] text-[var(--contrast)]" : "border-[var(--border-strong)] bg-surface-2 text-app"
       }`}
@@ -305,7 +317,7 @@ function NavButton({ label, disabled, onClick, children }: { label: string; disa
       aria-label={label}
       disabled={disabled}
       onClick={onClick}
-      className={`inline-flex size-11 items-center justify-center rounded-[8px] border border-[var(--border-strong)] bg-surface-2 text-app disabled:opacity-[var(--disabled-opacity)] ${FOCUS}`}
+      className={`inline-flex size-11 items-center justify-center rounded-[8px] border border-[var(--border-strong)] bg-surface-2 text-app disabled:opacity-[var(--disabled-opacity)] md:size-[52px] ${FOCUS}`}
     >
       {children}
     </button>
@@ -314,22 +326,24 @@ function NavButton({ label, disabled, onClick, children }: { label: string; disa
 
 /** Fondo de seguridad: 10 ondas + roseta, trazo de 1 px. Un SVG estático por página, sin filtros. */
 function Guilloche({ seed }: { seed: number }) {
-  const bases = [59, 119, 172, 217, 259, 301, 350, 404, 459, 512];
-  const roseta = { x: 318, y: 530 };
+  const { w: W, h: H } = useDims();
+  const k = H / 590;
+  const bases = [59, 119, 172, 217, 259, 301, 350, 404, 459, 512].map((b) => b * k);
+  const roseta = { x: W - 40, y: H - 60 };
   const waves = useMemo(
     () =>
       bases.map((base, k) => {
         const p1 = ((hash(seed, k) % 628) / 100) * 1;
         const p2 = ((hash(seed, k + 20) % 628) / 100) * 1;
         let pts = "";
-        for (let x = 0; x <= 360; x += 9) {
+        for (let x = 0; x <= W + 9; x += 9) {
           const y = base + 7 * Math.sin(x / 38 + p1) + 4 * Math.sin(x / 15 + p2);
           pts += `${x},${y.toFixed(1)} `;
         }
         return pts.trim();
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [seed],
+    [seed, W, H],
   );
   return (
     <svg aria-hidden="true" width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="pointer-events-none absolute left-0 top-0" fill="none" stroke="var(--passport-line)" strokeWidth="1">
@@ -351,6 +365,7 @@ function PageView({
   cover = false,
   number,
   isNew,
+  side,
 }: {
   page: PassportPage | null;
   nombre: string;
@@ -359,22 +374,22 @@ function PageView({
   cover?: boolean;
   number: number;
   isNew: (s: Pick<Sello, "id" | "nuevo">) => boolean;
+  side: Side;
 }) {
-  if (cover) {
-    // El interior de la tapa, a la izquierda de la página de datos.
-    return <div className="rounded-[8px]" style={{ width: W, height: H, background: "var(--passport-cover)", borderRight: "1px solid var(--passport-spine)" }} />;
-  }
+  const { w: W, h: H } = useDims();
+  const radius = SIDE_RADIUS[side];
+  if (cover) return <Guarda nombre={nombre} since={stats.since} className={radius} />;
   if (!page) {
     // Página aún sin sellar: dice por qué está vacía y deja dos huecos para el próximo viaje.
     return (
-      <div className="relative overflow-hidden rounded-[8px] border border-app bg-surface text-app" style={{ width: W, height: H }}>
+      <div className={`relative overflow-hidden border border-app bg-surface text-app ${radius}`} style={{ width: W, height: H }}>
         <Guilloche seed={99} />
         <div className={`absolute inset-x-4 top-[14px] flex justify-between ${LABEL}`}>
           <span>VISADOS</span>
           <span className="tabular-nums">PÁG. {pad2(number)}</span>
         </div>
         <span aria-hidden="true" className="absolute rounded-[8px] border-2 border-dashed border-[var(--border-strong)]" style={{ left: 20, top: 84, width: 150, height: 103 }} />
-        <span aria-hidden="true" className="absolute rounded-full border-2 border-dashed border-[var(--border-strong)]" style={{ left: 214, top: 70, width: 104, height: 104 }} />
+        <span aria-hidden="true" className="absolute rounded-full border-2 border-dashed border-[var(--border-strong)]" style={{ left: W - 144, top: 70, width: 104, height: 104 }} />
         <p className="absolute inset-x-4 m-0 text-center text-[14px] leading-[1.5] text-muted" style={{ top: 236 }}>
           Aquí irá tu próximo sello
         </p>
@@ -382,13 +397,63 @@ function PageView({
     );
   }
   return (
-    <div className="relative overflow-hidden rounded-[8px] border border-app bg-surface text-app" style={{ width: W, height: H }}>
+    <div className={`relative overflow-hidden border border-app bg-surface text-app ${radius}`} style={{ width: W, height: H }}>
       <Guilloche seed={page.number} />
       <div className={`absolute inset-x-4 top-[14px] flex justify-between ${LABEL}`}>
         <span>{page.kind === "datos" ? "PÁGINA DE DATOS" : "VISADOS"}</span>
         <span className="tabular-nums">PÁG. {pad2(page.number)}</span>
       </div>
       {page.kind === "datos" ? <DatosPage nombre={nombre} stats={stats} /> : <YearPage page={page} total={total} isNew={isNew} />}
+    </div>
+  );
+}
+
+/** Guarda: el interior de la tapa, a la izquierda de la página de datos (tablero «Opción B»). Siempre en el verde de la tapa. */
+function Guarda({ nombre, since, className = "" }: { nombre: string; since: string | null; className?: string }) {
+  const { w: W, h: H } = useDims();
+  return (
+    <div className={`relative overflow-hidden ${className}`} style={{ width: W, height: H, background: "var(--passport-cover)", color: "var(--passport-foil)" }}>
+      <svg aria-hidden="true" width={W} height={H} className="absolute inset-0">
+        <defs>
+          <pattern id="passport-guarda" width="88" height="88" patternUnits="userSpaceOnUse">
+            <g fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" opacity="0.16">
+              <circle cx="22" cy="22" r="12" />
+              <ellipse cx="22" cy="22" rx="5.5" ry="12" />
+              <path d="M10 22h24" />
+              <path d="M48 70c8-16 20-22 32-26" strokeDasharray="3 3" />
+              <circle cx="48" cy="70" r="2" />
+              <circle cx="80" cy="44" r="2" />
+              <circle cx="66" cy="66" r="12" />
+              <ellipse cx="66" cy="66" rx="5.5" ry="12" />
+              <path d="M54 66h24" />
+            </g>
+          </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#passport-guarda)" />
+      </svg>
+      <div
+        className="absolute flex flex-col items-center gap-3 rounded-[8px] border border-current text-center"
+        style={{ left: 48, right: 48, top: "50%", transform: "translateY(-50%)", padding: "32px 24px", background: "var(--passport-cover)" }}
+      >
+        <svg aria-hidden="true" width="64" height="64" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" className="shrink-0">
+          <circle cx="32" cy="32" r="22" />
+          <ellipse cx="32" cy="32" rx="10" ry="22" />
+          <path d="M10 32h44" />
+          <path d="M13 21h38" />
+          <path d="M13 43h38" />
+          <circle cx="32" cy="32" r="28" strokeDasharray="1.5 3" />
+          <path d="M18 46c6-14 18-20 30-26" strokeDasharray="3 3" strokeWidth="2" />
+          <circle cx="18" cy="46" r="2.6" fill="currentColor" />
+          <circle cx="48" cy="20" r="2.6" fill="currentColor" />
+        </svg>
+        <p className="m-0 text-[12px] font-[var(--fw-semibold)] leading-[1.4] tracking-[0.08em]">ESTE PASAPORTE PERTENECE A</p>
+        <p className={`m-0 text-[40px] leading-[1.1] ${SERIF}`}>{nombre}</p>
+        <span aria-hidden="true" className="h-px w-12 bg-current" />
+        <p className="m-0 text-[14px] leading-[1.5]">{since ? `Frimee · desde ${monthYearLabel(since)}` : "Frimee"}</p>
+      </div>
+      <p className="absolute inset-x-0 m-0 text-center text-[12px] font-[var(--fw-semibold)] leading-[1.4] tracking-[0.22em]" style={{ bottom: 20 }}>
+        FRIMEE
+      </p>
     </div>
   );
 }
@@ -473,10 +538,11 @@ const stampIn = (isNew: boolean, delayMs: number): React.CSSProperties | undefin
   isNew ? { animation: `passport-stamp-in 240ms cubic-bezier(0.2, 0, 0, 1) ${delayMs}ms both` } : undefined;
 
 function TripView({ trip, slot, isNew }: { trip: Trip; slot: number; isNew: (s: Pick<Sello, "id" | "nuevo">) => boolean }) {
-  const y = SLOT_TOPS[slot];
+  const { w: W, tops, stack } = useDims();
+  const y = tops[slot];
   const flip = slot % 2 === 1;
   const multi = trip.paises.length >= 2;
-  const planX = flip ? 176 : 16;
+  const planX = flip ? W - 182 : 16;
   const planY = y + 12;
   const label = trip.info?.titulo ?? "Viaje";
   const nuevoPlan = trip.plan ? isNew(trip.plan) : false;
@@ -497,8 +563,8 @@ function TripView({ trip, slot, isNew }: { trip: Trip; slot: number; isNew: (s: 
         </span>
       )}
       {shown.map((p, i) => {
-        const x = multi ? (flip ? 28 + (i % 2) * 14 : 232 - (i % 2) * 14) : flip ? 24 : 214;
-        const top = multi ? y + i * 108 : y;
+        const x = multi ? (flip ? 28 + (i % 2) * 14 : W - 126 - (i % 2) * 14) : flip ? 24 : W - 144;
+        const top = multi ? y + i * stack : y;
         const nuevo = isNew(p);
         return (
           <span key={p.id} role="img" aria-label={`${countryName(p.country_code ?? "")}, sello del ${dateLabel(p.stamped_at)}${nuevo ? ", nuevo" : ""}`} className="absolute block leading-[0]" style={{ left: Math.min(x, W - size - 8), top, ...stampIn(nuevo, 420 + i * 60) }}>
@@ -508,7 +574,7 @@ function TripView({ trip, slot, isNew }: { trip: Trip; slot: number; isNew: (s: 
         );
       })}
       {extra > 0 && (
-        <span className="absolute inline-flex h-6 items-center rounded-full border border-[var(--border-strong)] bg-surface-2 px-2 text-[12px] font-[var(--fw-semibold)] leading-none" style={{ left: flip ? 28 : 232, top: y + 3 * 108 - 4 }}>
+        <span className="absolute inline-flex h-6 items-center rounded-full border border-[var(--border-strong)] bg-surface-2 px-2 text-[12px] font-[var(--fw-semibold)] leading-none" style={{ left: flip ? 28 : W - 126, top: y + 3 * stack - 4 }}>
           +{extra}
         </span>
       )}
@@ -520,7 +586,7 @@ function TripView({ trip, slot, isNew }: { trip: Trip; slot: number; isNew: (s: 
             role="img"
             aria-label={`Hito: ${HITO_NAME[h.hito!]}`}
             className="absolute block leading-[0]"
-            style={{ left: (W - hitoRowW) / 2 + i * (hitoSize + hitoGap), top: SLOT_TOPS[hitoSlot] + 24, ...stampIn(nuevo, 540 + i * 60) }}
+            style={{ left: (W - hitoRowW) / 2 + i * (hitoSize + hitoGap), top: tops[hitoSlot] + 24, ...stampIn(nuevo, 540 + i * 60) }}
           >
             <HitoStamp hito={h.hito!} id={h.id} stampedAt={h.stamped_at} size={hitoSize} tilt={paisTilt(h.id) / 2} nuevo={nuevo} />
             {nuevo && <NuevoPill className="-right-2 -top-2.5" />}

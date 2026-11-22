@@ -11,12 +11,14 @@ import { getPublicUserProfile } from "@/services/api/repositories/users.reposito
 import { leerPasaporte } from "@/services/api/endpoints/pasaporte.endpoint";
 import type { PasaporteLeido } from "@/lib/passport";
 import { closePassportOpening } from "@/lib/passportOpen";
+import { readPassportCache } from "@/lib/passportCache";
 
 /** Tu pasaporte abierto: la libreta con sus páginas. Se llega desde «Abrir pasaporte» en tu perfil. */
 export default function PassportClient() {
   const router = useRouter();
   const { user } = useAuth();
-  const [data, setData] = useState<{ nombre: string; pasaporte: PasaporteLeido } | null>(null);
+  // Si vienes del perfil, ya hay datos: la libreta aparece al instante y se refresca por detrás.
+  const [data, setData] = useState<{ nombre: string; pasaporte: PasaporteLeido } | null>(() => readPassportCache());
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const userId = user?.id;
@@ -50,7 +52,7 @@ export default function PassportClient() {
       <div className="relative mx-auto min-h-dvh max-w-[1440px]">
         <AppSidebar />
         <main className="px-safe pb-[calc(var(--space-20)+env(safe-area-inset-bottom))] pt-mobile-safe-top md:py-[var(--space-8)] md:pr-[var(--space-14)]">
-          <div className="mx-auto flex w-full max-w-[460px] md:max-w-[860px] items-center gap-1 pb-2">
+          <div className="mx-auto flex w-full max-w-[460px] md:max-w-[1080px] items-center gap-1 pb-2">
             <button type="button" onClick={() => router.back()} aria-label="Volver al perfil" className={`inline-flex size-11 items-center justify-center rounded-[8px] text-app ${FOCUS}`}>
               <ChevronLeft className="size-[22px]" aria-hidden />
             </button>
@@ -58,7 +60,7 @@ export default function PassportClient() {
           </div>
 
           {failed ? (
-            <div role="alert" className="mx-auto flex max-w-[460px] md:max-w-[860px] flex-col items-start gap-3 p-4">
+            <div role="alert" className="mx-auto flex max-w-[460px] md:max-w-[1080px] flex-col items-start gap-3 p-4">
               <p className="m-0 text-[16px] font-[var(--fw-semibold)]">No se pudo abrir tu pasaporte</p>
               <p className="m-0 text-[14px] leading-[1.5] text-muted">Comprueba la conexión y vuelve a intentarlo.</p>
               <button
@@ -73,7 +75,7 @@ export default function PassportClient() {
               </button>
             </div>
           ) : !data ? (
-            <div role="status" aria-label="Cargando el pasaporte" className="mx-auto max-w-[460px] md:max-w-[860px]">
+            <div role="status" aria-label="Cargando el pasaporte" className="mx-auto max-w-[460px] md:max-w-[1080px]">
               <div className="skeleton-shimmer aspect-[358/590] w-full rounded-[8px]" />
             </div>
           ) : (

@@ -15,6 +15,7 @@ import { CARD, FILL_BTN, FOCUS, GHOST_BTN, LABEL, SERIF, TEXT_BTN } from "@/comp
 import { leerPasaporte } from "@/services/api/endpoints/pasaporte.endpoint";
 import { computeStats, countryName, dateLabel, type PasaporteLeido, type Sello } from "@/lib/passport";
 import { openPassportFrom } from "@/lib/passportOpen";
+import { setPassportCache } from "@/lib/passportCache";
 import { GhostPlanStamp, PassportCover } from "./PassportCover";
 import { CountryStamp, PlanStamp } from "./stamps";
 
@@ -208,6 +209,8 @@ function PassportCard({ nombre, plans, pasaporte, now }: { nombre: string; plans
   // La tapa que se ve (móvil o escritorio) es la que se escala al abrir.
   const openPassport = () => {
     const cover = [...document.querySelectorAll<HTMLElement>("[data-passport-cover]")].find((e) => e.getClientRects().length > 0)?.firstElementChild as HTMLElement | null;
+    // La libreta se abre con lo ya leído: así la tapa puede viajar enseguida, sin esperar a la red.
+    if (pasaporte) setPassportCache(nombre, pasaporte);
     openPassportFrom(cover ?? null, () => router.push("/passport"));
   };
 
