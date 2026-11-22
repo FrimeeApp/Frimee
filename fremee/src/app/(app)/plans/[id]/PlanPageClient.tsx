@@ -13,7 +13,7 @@ import { fetchPlansByIds, fetchPlanUserRol, updatePlanEndpoint, type PlanByIdRow
 import CreatePlanModal, { type EditPlanInitialValues } from "@/components/plans/modals/CreatePlanModal";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { fetchSubplanes, updateSubplanTransporte, updateSubplanViaje, type SubplanRow, type TipoSubplan, TIPOS_TRANSPORTE, isTipoSubplan } from "@/services/api/endpoints/subplanes.endpoint";
-import { getBalancesForPlanEndpoint, listGastosForPlanEndpoint, pagarLiquidacionEndpoint, uploadComprobanteEndpoint, type BalanceRow, type GastoRow } from "@/services/api/endpoints/gastos.endpoint";
+import { getBalancesForPlanEndpoint, deshacerPagoEndpoint, listGastosForPlanEndpoint, type BalanceRow, type GastoRow } from "@/services/api/endpoints/gastos.endpoint";
 import DayRouteMap from "@/components/plans/DayRouteMap";
 import { findMissingLegs, useComputeMissingLegs } from "@/hooks/useComputeMissingLegs";
 import AddGastoSheet from "@/components/plans/modals/AddGastoSheet";
@@ -39,6 +39,9 @@ import { AddSubplanSheet, TRANSPORT_MAP, type AddSheetProps } from "./_component
 import { isoDateOnly, groupByDay, normalizeDateKey, summarizeRecipients, getOccupiedIntervals, timeToMin, mergeIntervals, type Interval } from "./_components/plan-utils";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
 import { CloseButton } from "@/components/ui/IconButton";
+import { useToast } from "@/components/ui/Toaster";
+import { shareOf } from "@/lib/gastos-shares";
+import { PayDebtSheet, type PaidResult } from "@/components/plans/modals/PayDebtSheet";
 import { Tabs } from "@/components/ui/Tabs";
 import { isPlanFinished, isoToPlanWhen, planWhenToIso } from "@/lib/plan-dates";
 import { PLACE_TBD } from "@/hooks/useCreatePlan";
@@ -123,7 +126,8 @@ const ExternalLinkIcon = ({ className = "size-icon" }: { className?: string }) =
 /* ───────────── page ───────────── */
 
 export default function PlanDetailPage({ presentation = "page" }: { presentation?: "page" | "overlay" } = {}) {
-  const { loading, user } = useAuth();
+  const { loading, user, profile } = useAuth();
+  const { toast, toastError } = useToast();
   const { startCall, joinCall, callState } = useCallContext();
   const reloadCallMessagesRef = useRef<(() => void) | null>(null);
   const router = useRouter();
@@ -182,6 +186,7 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
   const [addSheetInitialUbicacion, setAddSheetInitialUbicacion] = useState<{ nombre: string; lat?: number; lng?: number; buscar?: string } | undefined>();
   const [editingSubplan, setEditingSubplan] = useState<SubplanRow | null>(null);
   const [showAddGastoSheet, setShowAddGastoSheet] = useState(false);
+  const [editingGasto, setEditingGasto] = useState<GastoRow | null>(null);
   const [mobileCreateOpen, setMobileCreateOpen] = useState(false);
   const [photoAlbumRefreshKey, setPhotoAlbumRefreshKey] = useState(0);
   const [fabFiles, setFabFiles] = useState<File[] | null>(null);
@@ -191,17 +196,9 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
   const [selectedGastoId, setSelectedGastoId] = useState<number | null>(null);
   const [balances, setBalances] = useState<BalanceRow[]>(initialCache?.balances ?? []);
   const [pagarDeuda, setPagarDeuda] = useState<BalanceRow | null>(null);
-  const [comprobanteFile, setComprobanteFile] = useState<File | null>(null);
-  const [comprobantePreview, setComprobantePreview] = useState<string | null>(null);
-  const [pagandoId, setPagandoId] = useState<number | null>(null);
   const [editingTransporteId, setEditingTransporteId] = useState<number | null>(null);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const { isClosing: invoiceClosing, requestClose: closeInvoiceModal } = useModalCloseAnimation(() => setShowInvoiceModal(false), showInvoiceModal);
-  const { isClosing: paymentClosing, requestClose: closePaymentModal } = useModalCloseAnimation(() => {
-    setPagarDeuda(null);
-    setComprobanteFile(null);
-    setComprobantePreview(null);
-  }, !!pagarDeuda);
   const [routeEntered, setRouteEntered] = useState(false);
   const [routeClosing, setRouteClosing] = useState(false);
   const [routeDragOffset, setRouteDragOffset] = useState(0);
@@ -435,10 +432,7 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
           .reduce((sum, gasto) => sum + gasto.total, 0)
       : 0;
     const yourShare = user?.id
-      ? confirmedExpenses.reduce((sum, gasto) => {
-          const part = gasto.partes?.find((parte) => parte.user_id === user.id)?.importe ?? 0;
-          return sum + part;
-        }, 0)
+      ? confirmedExpenses.reduce((sum, gasto) => sum + shareOf(gasto, user.id), 0)
       : 0;
     const net = paidByYou - yourShare;
 
@@ -913,7 +907,44 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
     }).catch(console.error);
   };
 
+  const handlePaid = (result: PaidResult) => {
+    loadBalances();
+    toast(`Pago a ${result.toName} marcado`, "success", {
+      label: "Deshacer",
+      onClick: () => {
+        deshacerPagoEndpoint(result.pagoId)
+          .then(loadBalances)
+          .catch(() => toastError("No se ha podido deshacer el pago."));
+      },
+    });
+  };
+
   useEffect(() => { loadGastos(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Gastos y pagos en vivo: si otra persona añade un gasto, marca un pago o lo confirma, se refresca solo.
+  // Un gasto nuevo dispara varios cambios seguidos (el gasto, sus partes, el recálculo): se recarga una vez.
+  useEffect(() => {
+    const planId = Number(id);
+    if (!planId) return;
+    let reloadTimer: ReturnType<typeof setTimeout> | undefined;
+    const reload = () => {
+      clearTimeout(reloadTimer);
+      reloadTimer = setTimeout(() => {
+        loadGastos();
+        loadBalances();
+      }, 400);
+    };
+    const supabase = createBrowserSupabaseClient();
+    const channel = supabase
+      .channel(createRealtimeTopic("gastos-changes", planId))
+      .on("postgres_changes", { event: "*", schema: "public", table: "gastos", filter: `plan_id=eq.${planId}` }, reload)
+      .on("postgres_changes", { event: "*", schema: "public", table: "liquidaciones", filter: `plan_id=eq.${planId}` }, reload)
+      .subscribe();
+    return () => {
+      clearTimeout(reloadTimer);
+      void supabase.removeChannel(channel);
+    };
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => { loadBalances(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const handleGastoCreated = (event: Event) => {
@@ -1480,7 +1511,7 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
         </div>
       )}
 
-      {activeTab === "gastos" && !isPast && canAdd && !showAddSheet && !showAddGastoSheet && (
+      {activeTab === "gastos" && !isPast && canAdd && !showAddSheet && !showAddGastoSheet && !editingGasto && (
         <button
           type="button"
           onClick={openCreateGasto}
@@ -1492,7 +1523,7 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
         </button>
       )}
 
-      {!showAddSheet && !showAddGastoSheet && (
+      {!showAddSheet && !showAddGastoSheet && !editingGasto && (
         activeTab === "itinerario" || activeTab === "fotos"
       ) && (!isPast || membershipChecked || isAdmin) && (membershipChecked || isAdmin) && (
         <div className="pointer-events-none fixed bottom-[calc(env(safe-area-inset-bottom)+16px)] right-[calc(env(safe-area-inset-right)+16px)] z-[65] md:hidden">
@@ -1604,11 +1635,32 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
         />
       )}
 
+      {editingGasto && plan && user && (
+        <AddGastoSheet
+          key={editingGasto.id}
+          planId={plan.id}
+          userId={user.id}
+          planName={plan.titulo}
+          gasto={editingGasto}
+          onClose={() => setEditingGasto(null)}
+          onCreated={() => {
+            loadGastos();
+            loadBalances();
+          }}
+        />
+      )}
+
       <PlanGastoDetailModal
         key={selectedGasto?.id ?? "none"}
         gasto={selectedGasto}
-        planName={plan.titulo}
         currentUserId={user?.id ?? null}
+        members={(planChat?.miembros ?? []).map((m) => ({ id: m.id, nombre: m.nombre, foto: m.profile_image ?? null }))}
+        isAdmin={isAdmin}
+        onEdit={(g) => {
+          setSelectedGastoId(null);
+          setEditingGasto(g);
+        }}
+        onOpenActivity={() => setActiveTab("itinerario")}
         onClose={() => setSelectedGastoId(null)}
         onDeleted={() => {
           // The detail modal closes itself once the voided expense leaves the list.
@@ -1688,85 +1740,20 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
         );
       })()}
 
-      {pagarDeuda && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" onClick={closePaymentModal}>
-          <div data-closing={paymentClosing ? "true" : "false"} className="app-modal-overlay absolute inset-0" />
-          <div
-            data-closing={paymentClosing ? "true" : "false"}
-            className="app-modal-panel relative z-10 w-full max-w-md rounded-t-2xl sm:rounded-2xl bg-app border border-app p-6 flex flex-col gap-5"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-body-sm text-muted">Confirmar pago</p>
-                <p className="mt-1 text-heading-sm font-[var(--fw-bold)] text-app">
-                  {formatMoney(pagarDeuda.importe, expenseSummary.currency)}
-                </p>
-                <p className="mt-1 text-body-sm text-muted">
-                  a <span className="font-[var(--fw-semibold)] text-app">{pagarDeuda.to_nombre ?? "Usuario"}</span>
-                </p>
-              </div>
-              <CloseButton onClick={closePaymentModal} />
-            </div>
-
-            <div>
-              <p className="mb-2 text-caption font-[var(--fw-semibold)] uppercase tracking-[0.08em] text-muted">Comprobante <span className="normal-case font-normal">(opcional)</span></p>
-              {comprobantePreview ? (
-                <div className="relative rounded-xl overflow-hidden border border-app">
-                  <img src={comprobantePreview} alt="Comprobante" className="w-full max-h-48 object-cover" />
-                  <CloseButton
-                    onClick={() => { setComprobanteFile(null); setComprobantePreview(null); }}
-                    label="Quitar comprobante"
-                    tone="light"
-                    iconClassName="size-4"
-                    className="absolute right-2 top-2 bg-black/60 hover:bg-black/80"
-                  />
-                </div>
-              ) : (
-                <label className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border border-dashed border-app bg-surface-2 px-4 py-5 text-center hover:bg-surface transition-colors">
-                  <Upload className="size-6" aria-hidden />
-                  <span className="text-body-sm text-muted">Sube una captura del pago</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={e => {
-                      const f = e.target.files?.[0];
-                      if (!f) return;
-                      setComprobanteFile(f);
-                      setComprobantePreview(URL.createObjectURL(f));
-                    }}
-                  />
-                </label>
-              )}
-            </div>
-
-            <button
-              type="button"
-              disabled={pagandoId === pagarDeuda.liquidacion_id}
-              onClick={async () => {
-                if (!user?.id) return;
-                setPagandoId(pagarDeuda.liquidacion_id);
-                try {
-                  let url: string | null = null;
-                  if (comprobanteFile) url = await uploadComprobanteEndpoint(comprobanteFile, user.id);
-                  await pagarLiquidacionEndpoint(pagarDeuda.liquidacion_id, url);
-                  setPagarDeuda(null);
-                  setComprobanteFile(null);
-                  setComprobantePreview(null);
-                  loadBalances();
-                } catch (err) {
-                  console.error(err);
-                } finally {
-                  setPagandoId(null);
-                }
-              }}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--primary,#298e7d)] px-4 py-3 text-body-sm font-[var(--fw-semibold)] text-white hover:bg-[var(--primary-active,#1c6a5d)] disabled:opacity-50 transition-colors"
-            >
-              {pagandoId === pagarDeuda.liquidacion_id ? "Confirmando…" : "Confirmar pago"}
-            </button>
-          </div>
-        </div>
+      {pagarDeuda && user?.id && (
+        <PayDebtSheet
+          debt={{
+            liquidacionId: pagarDeuda.liquidacion_id,
+            amount: pagarDeuda.importe,
+            toName: pagarDeuda.to_nombre ?? "Usuario",
+            toImage: pagarDeuda.to_profile_image || null,
+            planTitle: plan?.titulo ?? null,
+            currency: expenseSummary.currency,
+          }}
+          me={{ id: user.id, name: profile?.nombre ?? "Tú", image: profile?.profile_image ?? null }}
+          onClose={() => setPagarDeuda(null)}
+          onPaid={handlePaid}
+        />
       )}
     </div>
     </>

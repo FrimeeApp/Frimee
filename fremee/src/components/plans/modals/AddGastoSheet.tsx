@@ -8,7 +8,10 @@ import {
 } from "lucide-react";
 import {
   createGastoEndpoint,
+  fetchGastoItemsEndpoint,
   fetchPlanMiembrosEndpoint,
+  updateGastoEndpoint,
+  type GastoRow,
   type MetodoReparto,
   type PlanMiembro,
   type GastoItemInput,
@@ -18,6 +21,7 @@ import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import type { OcrResult } from "@/app/api/receipts/ocr/route";
 import { todayISO } from "@/lib/form-helpers";
 import { formatMoney } from "@/lib/formatters";
+import { shareOf } from "@/lib/gastos-shares";
 import { buildInternalApiUrl } from "@/config/external";
 import { DatePickerField } from "@/components/ui/DatePickerField";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
@@ -71,51 +75,92 @@ function Av({ m, me }: { m: PlanMiembro; me: boolean }) {
   );
 }
 
+/** Lo que hay que rellenar al editar un gasto: sale del propio gasto (la parte de quien paga no se guarda: es lo que sobra). */
+function seedFrom(g: GastoRow) {
+  const shares = new Map<string, number>();
+  (g.partes ?? []).forEach((p) => shares.set(p.user_id, Number(p.importe)));
+  const own = shareOf(g, g.pagado_por_user_id);
+  if (own > 0.005) shares.set(g.pagado_por_user_id, own);
+
+  const porcentajes: Record<string, string> = {};
+  const cantidades: Record<string, string> = {};
+  const ids = [...shares.keys()];
+  let pctLeft = 100;
+  ids.forEach((id, i) => {
+    const v = shares.get(id) ?? 0;
+    cantidades[id] = toInput(v);
+    // El último se queda con lo que falte para que sumen 100 exactos.
+    const pct = i === ids.length - 1 ? r2(pctLeft) : r2((v / (g.total || 1)) * 100);
+    pctLeft = r2(pctLeft - pct);
+    porcentajes[id] = String(pct).replace(".", ",");
+  });
+  return {
+    titulo: g.titulo,
+    total: toInput(Number(g.total)),
+    moneda: g.moneda || "EUR",
+    fecha: g.fecha_gasto.slice(0, 10),
+    categoriaId: g.categoria_id ?? 0,
+    subplanId: g.subplan_id,
+    pagadoPor: g.pagado_por_user_id,
+    receiptUrl: g.receipt_url ?? null,
+    metodo: g.metodo_reparto,
+    seleccionados: new Set(ids),
+    porcentajes,
+    cantidades,
+  };
+}
+
 type Props = {
   planId: number;
   userId: string;
   planName?: string;
+  /** Si viene, la hoja edita este gasto en vez de crear uno nuevo. */
+  gasto?: GastoRow | null;
   /** Pre-selected date (YYYY-MM-DD), e.g. a day of the itinerary. */
   initialDate?: string;
   onClose: () => void;
   onCreated: () => void;
 };
 
-export default function AddGastoSheet({ planId, userId, planName, initialDate, onClose, onCreated }: Props) {
+export default function AddGastoSheet({ planId, userId, planName, gasto, initialDate, onClose, onCreated }: Props) {
   const { isClosing, requestClose } = useModalCloseAnimation(onClose);
   const { toast } = useToast();
   const [step, setStep] = useState(1);
+  const editing = gasto ?? null;
+  const [seed] = useState(() => (gasto ? seedFrom(gasto) : null));
+  /** Foto de cómo estaba el gasto al abrir, para saber si hay cambios que descartar. */
+  const baseline = useRef<string | null>(null);
 
   // ── step 1 ──
-  const [titulo, setTitulo] = useState("");
-  const [total, setTotal] = useState("");
-  const [moneda, setMoneda] = useState("EUR");
-  const [fechaGasto, setFechaGasto] = useState(initialDate ?? todayISO());
-  const [categoriaId, setCategoriaId] = useState<number>(0);
+  const [titulo, setTitulo] = useState(seed?.titulo ?? "");
+  const [total, setTotal] = useState(seed?.total ?? "");
+  const [moneda, setMoneda] = useState(seed?.moneda ?? "EUR");
+  const [fechaGasto, setFechaGasto] = useState(seed?.fecha ?? initialDate ?? todayISO());
+  const [categoriaId, setCategoriaId] = useState<number>(seed?.categoriaId ?? 0);
   const [categorias, setCategorias] = useState<CategoriaGasto[]>([]);
   const [subplanes, setSubplanes] = useState<SubplanRow[]>([]);
-  const [subplanId, setSubplanId] = useState<number | null>(null);
+  const [subplanId, setSubplanId] = useState<number | null>(seed?.subplanId ?? null);
   /** Fields Frimee filled from the ticket and nobody has touched since. */
   const [delTicket, setDelTicket] = useState<Set<"importe" | "concepto" | "fecha">>(new Set());
 
   // ── ticket ──
   const [ticket, setTicket] = useState<TicketState>("vacio");
   const [ticketError, setTicketError] = useState<string | null>(null);
-  const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
+  const [receiptUrl, setReceiptUrl] = useState<string | null>(seed?.receiptUrl ?? null);
   const cameraRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const ticketRun = useRef(0);
 
   // ── step 2 ──
   const [miembros, setMiembros] = useState<PlanMiembro[]>([]);
-  const [pagadoPor, setPagadoPor] = useState(userId);
-  const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
+  const [pagadoPor, setPagadoPor] = useState(seed?.pagadoPor ?? userId);
+  const [seleccionados, setSeleccionados] = useState<Set<string>>(seed?.seleccionados ?? new Set());
   const [buscar, setBuscar] = useState("");
 
   // ── step 3 ──
-  const [metodo, setMetodo] = useState<MetodoReparto>("IGUAL");
-  const [porcentajes, setPorcentajes] = useState<Record<string, string>>({});
-  const [cantidades, setCantidades] = useState<Record<string, string>>({});
+  const [metodo, setMetodo] = useState<MetodoReparto>(seed?.metodo ?? "IGUAL");
+  const [porcentajes, setPorcentajes] = useState<Record<string, string>>(seed?.porcentajes ?? {});
+  const [cantidades, setCantidades] = useState<Record<string, string>>(seed?.cantidades ?? {});
   const [items, setItems] = useState<Item[]>([]);
   const itemKey = useRef(1);
 
@@ -129,9 +174,23 @@ export default function AddGastoSheet({ planId, userId, planName, initialDate, o
       .then(({ data }) => { if (data) setCategorias(data as CategoriaGasto[]); });
     fetchSubplanes(planId).then(setSubplanes).catch(() => {});
     fetchPlanMiembrosEndpoint(planId)
-      .then((data) => { setMiembros(data); setSeleccionados(new Set(data.map((m) => m.user_id))); })
+      .then((data) => {
+        setMiembros(data);
+        // Al editar, el reparto es el del gasto; al crear, todo el plan.
+        if (!editing) setSeleccionados(new Set(data.map((m) => m.user_id)));
+      })
       .catch(() => {});
-  }, [planId]);
+  }, [planId, editing]);
+
+  // Al editar un gasto «por ítems», se traen sus ítems y con quién se comparte cada uno.
+  useEffect(() => {
+    if (!editing || editing.metodo_reparto !== "POR_ITEMS") return;
+    fetchGastoItemsEndpoint(editing.id)
+      .then((rows) => setItems(rows.map((r) => ({
+        key: itemKey.current++, nombre: r.nombre, cantidad: 1, subtotal: toInput(Number(r.subtotal)), asignados: new Set(r.usuarios),
+      }))))
+      .catch(() => setSaveError("No se han podido cargar los ítems del gasto. Cierra y vuelve a abrir la edición."));
+  }, [editing]);
 
   const totalNum = r2(num(total));
   const nombreDe = (uid: string) => uid === userId ? "Tú" : firstName(miembros.find((m) => m.user_id === uid));
@@ -303,6 +362,27 @@ export default function AddGastoSheet({ planId, userId, planName, initialDate, o
     setSaving(true);
     setSaveError(null);
     try {
+      if (editing) {
+        await updateGastoEndpoint(editing.id, {
+          titulo: titulo.trim(),
+          pagado_por_user_id: pagadoPor,
+          // Si no se toca la fecha, se conserva la hora con la que se guardó.
+          fecha_gasto: fechaGasto === editing.fecha_gasto.slice(0, 10) ? editing.fecha_gasto : fechaGasto,
+          total: totalNum,
+          moneda,
+          metodo_reparto: m,
+          participantes: parts,
+          descripcion: editing.descripcion ?? undefined,
+          items: m === "POR_ITEMS" ? buildItems() : undefined,
+          receipt_url: receiptUrl,
+          categoria_id: categoriaId,
+          subplan_id: subplanId ?? undefined,
+        });
+        onCreated();
+        toast("Gasto actualizado", "success");
+        requestClose();
+        return;
+      }
       await createGastoEndpoint({
         plan_id: planId,
         titulo: titulo.trim(),
@@ -326,7 +406,7 @@ export default function AddGastoSheet({ planId, userId, planName, initialDate, o
       toast(msg, "success");
       requestClose();
     } catch {
-      setSaveError("No se pudo crear el gasto. Comprueba la conexión y vuelve a intentarlo. Lo que has escrito sigue aquí.");
+      setSaveError(editing ? "No se pudo guardar el cambio. Comprueba la conexión y vuelve a intentarlo. Lo que has escrito sigue aquí." : "No se pudo crear el gasto. Comprueba la conexión y vuelve a intentarlo. Lo que has escrito sigue aquí.");
       setSaving(false);
     }
   }
@@ -348,9 +428,22 @@ export default function AddGastoSheet({ planId, userId, planName, initialDate, o
     advance();
   };
 
-  const hasProgress = step > 1 || titulo.trim() !== "" || total.trim() !== "" || ticket !== "vacio" || items.length > 0 || subplanId !== null;
+  const snapshot = () => JSON.stringify({
+    titulo, total, moneda, fechaGasto, categoriaId, subplanId, pagadoPor, receiptUrl, metodo, porcentajes, cantidades,
+    sel: [...seleccionados].sort(),
+    items: items.map((it) => [it.nombre, it.subtotal, [...it.asignados].sort()]),
+  });
+  // Al editar, la foto de partida se toma cuando ya están cargados los ítems (si los hay).
+  useEffect(() => {
+    if (!editing || baseline.current !== null) return;
+    if (editing.metodo_reparto === "POR_ITEMS" && items.length === 0) return;
+    baseline.current = snapshot();
+  });
   function requestDismiss() {
     if (saving || discardOpen) return;
+    const hasProgress = editing
+      ? baseline.current !== null && snapshot() !== baseline.current
+      : step > 1 || titulo.trim() !== "" || total.trim() !== "" || ticket !== "vacio" || items.length > 0 || subplanId !== null;
     if (hasProgress) { setDiscardOpen(true); return; }
     requestClose();
   }
@@ -387,7 +480,7 @@ export default function AddGastoSheet({ planId, userId, planName, initialDate, o
   ) : step === 2 ? (
     <>
       <button type="button" className="wz-tbtn" disabled={!canStep2 || saving} onClick={() => void handleSubmit(true)}>
-        {saving ? "Creando…" : "Crear ya, a partes iguales"}
+        {saving ? (editing ? "Guardando…" : "Creando…") : editing ? "Guardar, a partes iguales" : "Crear ya, a partes iguales"}
       </button>
       <button type="button" className="wz-fbtn" disabled={!canStep2} onClick={advance}>Ajustar reparto</button>
     </>
@@ -395,7 +488,7 @@ export default function AddGastoSheet({ planId, userId, planName, initialDate, o
     <>
       <button type="button" className="wz-tbtn mute" disabled={saving} onClick={() => setStep(2)}>Atrás</button>
       <button type="button" className="wz-fbtn" disabled={saving || !cuadra} onClick={() => void handleSubmit()}>
-        {saving ? <><LoaderCircle className="wz-spin size-[18px]" aria-hidden />Creando…</> : saveError ? "Reintentar" : "Crear gasto"}
+        {saving ? <><LoaderCircle className="wz-spin size-[18px]" aria-hidden />{editing ? "Guardando…" : "Creando…"}</> : saveError ? "Reintentar" : editing ? "Guardar cambios" : "Crear gasto"}
       </button>
     </>
   );
@@ -411,8 +504,8 @@ export default function AddGastoSheet({ planId, userId, planName, initialDate, o
   return (
     <>
       <Wizard
-        label="Nuevo gasto"
-        headTitle={["Nuevo gasto", planName].filter(Boolean).join(" · ")}
+        label={editing ? "Editar gasto" : "Nuevo gasto"}
+        headTitle={[editing ? "Editar gasto" : "Nuevo gasto", planName].filter(Boolean).join(" · ")}
         steps={STEPS}
         step={step}
         onStep={setStep}
@@ -428,6 +521,13 @@ export default function AddGastoSheet({ planId, userId, planName, initialDate, o
             <div role="alert" className="wz-ban">
               <CircleAlert className="mt-[1px] size-[18px] shrink-0" aria-hidden />
               <span>{saveError}</span>
+            </div>
+          )}
+
+          {editing && step === 3 && !saveError && (
+            <div className="wz-ban" role="note">
+              <CircleAlert className="mt-[1px] size-[18px] shrink-0" aria-hidden />
+              <span>Al guardar se recalcularán las deudas del plan. Los pagos ya marcados se mantienen.</span>
             </div>
           )}
 
@@ -756,8 +856,8 @@ export default function AddGastoSheet({ planId, userId, planName, initialDate, o
 
       <DiscardChangesDialog
         open={discardOpen}
-        title="¿Descartar el gasto?"
-        message="Se perderá lo que has rellenado."
+        title={editing ? "¿Descartar los cambios?" : "¿Descartar el gasto?"}
+        message={editing ? "El gasto se queda como estaba." : "Se perderá lo que has rellenado."}
         cancelLabel="Seguir editando"
         onCancel={() => setDiscardOpen(false)}
         onDiscard={() => { setDiscardOpen(false); requestClose(); }}

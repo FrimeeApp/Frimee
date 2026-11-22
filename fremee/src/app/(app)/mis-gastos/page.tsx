@@ -4,25 +4,47 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import AppSidebar from "@/components/common/AppSidebar";
 import LoadingScreen from "@/components/common/LoadingScreen";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Avatar } from "@/components/ui/Avatar";
 import { ExpenseDetailModal, type ExpenseItem } from "@/components/plans/modals/ExpenseDetailModal";
+import { PayDebtSheet, type PaidResult } from "@/components/plans/modals/PayDebtSheet";
 import { Tabs } from "@/components/ui/Tabs";
-import { CountBadge } from "@/components/ui/CountBadge";
+import { useToast } from "@/components/ui/Toaster";
+import { deshacerPagoEndpoint } from "@/services/api/endpoints/gastos.endpoint";
 import { formatMoney, formatShortDate } from "@/lib/formatters";
+import { createRealtimeTopic } from "@/lib/realtime";
 import { useAuth } from "@/providers/AuthProvider";
+import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import {
   listLiquidacionesForUserEndpoint,
   confirmReceiptEndpoint,
   rejectReceiptEndpoint,
 } from "@/services/api/endpoints/liquidaciones.endpoint";
+import {
+  buildPlanOptions,
+  groupByMonth,
+  groupByPlan,
+  isOpen,
+  namesList,
+  needsYou,
+  waitingOthers,
+  type PlanFilter,
+} from "./_components/model";
+import {
+  AlDiaCard,
+  FilteredEmpty,
+  LiquidacionRow,
+  MisGastosSkeleton,
+  PlanChips,
+  PlanList,
+  SERIF,
+  SimpleEmpty,
+  SummaryCard,
+  TabCount,
+  Zone,
+  type Kpis,
+} from "./_components/parts";
 
 type ExpenseTab = "history" | "action";
 
-type PlanFilter = "all" | number;
-
-const formatAmount = formatMoney;
-const formatListDate = formatShortDate;
 
 
 function isNativePlatform() {
@@ -51,6 +73,9 @@ function MisGastosContent() {
   const [activeTab, setActiveTab] = useState<ExpenseTab>("action");
   const [items, setItems] = useState<ExpenseItem[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [payingId, setPayingId] = useState<number | null>(null);
+  const { toast, toastError } = useToast();
   const [actingId, setActingId] = useState<number | null>(null);
   const [selectedPlanId, setSelectedPlanId] = useState<PlanFilter>("all");
   const [selectedExpenseId, setSelectedExpenseId] = useState<number | null>(null);
@@ -59,7 +84,6 @@ function MisGastosContent() {
   useEffect(() => {
     if (!user) return;
     const load = async () => {
-      setDataLoading(true);
       try {
         const rows = await listLiquidacionesForUserEndpoint();
         setItems(
@@ -75,6 +99,7 @@ function MisGastosContent() {
             planId: l.plan_id,
             concept: l.nota,
             estado: l.estado,
+            metodo: l.metodo,
           }))
         );
       } catch {
@@ -84,6 +109,26 @@ function MisGastosContent() {
       }
     };
     void load();
+  }, [user, reloadKey]);
+
+  // Pagos en vivo: cuando alguien te paga, confirma o rechaza, la lista se actualiza sola.
+  useEffect(() => {
+    if (!user) return;
+    let reloadTimer: ReturnType<typeof setTimeout> | undefined;
+    const reload = () => {
+      clearTimeout(reloadTimer);
+      reloadTimer = setTimeout(() => setReloadKey((k) => k + 1), 400);
+    };
+    const supabase = createBrowserSupabaseClient();
+    const channel = supabase
+      .channel(createRealtimeTopic("mis-gastos", user.id))
+      .on("postgres_changes", { event: "*", schema: "public", table: "liquidaciones", filter: `from_user_id=eq.${user.id}` }, reload)
+      .on("postgres_changes", { event: "*", schema: "public", table: "liquidaciones", filter: `to_user_id=eq.${user.id}` }, reload)
+      .subscribe();
+    return () => {
+      clearTimeout(reloadTimer);
+      void supabase.removeChannel(channel);
+    };
   }, [user]);
 
   useEffect(() => {
@@ -98,81 +143,52 @@ function MisGastosContent() {
     window.history.replaceState(null, "", "/mis-gastos");
   }, [searchParams]);
 
-  const pendingItems = useMemo(
-    () => items.filter((i) => i.estado === "PENDIENTE" || i.estado === "EN_REVISION"),
-    [items]
-  );
 
-  const paidItems = useMemo(
-    () => items.filter((i) => i.estado === "CONFIRMADA"),
-    [items]
-  );
-
-  const visibleItems = activeTab === "history" ? paidItems : pendingItems;
+  const openItems = useMemo(() => items.filter(isOpen), [items]);
+  const paidItems = useMemo(() => items.filter((i) => i.estado === "CONFIRMADA"), [items]);
+  const tabItems = activeTab === "history" ? paidItems : openItems;
 
   const selectedExpense = useMemo(
     () => items.find((item) => item.id === selectedExpenseId) ?? null,
     [items, selectedExpenseId]
   );
 
-  const planOptions = useMemo(() => {
-    const uniquePlans = new Map<number, string>();
-    items.forEach((item) => {
-      if (!uniquePlans.has(item.planId)) {
-        uniquePlans.set(item.planId, item.planName);
-      }
-    });
+  const planOptions = useMemo(() => buildPlanOptions(items, tabItems), [items, tabItems]);
 
-    return [...uniquePlans.entries()].map(([id, name]) => ({ id, name }));
-  }, [items]);
-
-  const filteredVisibleItems = useMemo(() => {
-    const scopedItems =
-      selectedPlanId === "all"
-        ? visibleItems
-        : visibleItems.filter((item) => item.planId === selectedPlanId);
-
-    if (activeTab !== "action") return scopedItems;
-
-    const getPriority = (item: ExpenseItem) => {
-      if (item.direction === "incoming" && item.estado === "EN_REVISION") return 0;
-      if (item.direction === "incoming" && item.estado === "PENDIENTE") return 1;
-      if (item.direction === "outgoing" && item.estado === "PENDIENTE") return 2;
-      if (item.direction === "outgoing" && item.estado === "EN_REVISION") return 3;
-      return 4;
-    };
-
-    return [...scopedItems].sort((a, b) => {
-      const priorityDiff = getPriority(a) - getPriority(b);
-      if (priorityDiff !== 0) return priorityDiff;
-      return new Date(b.date).getTime() - new Date(a.date).getTime();
-    });
-  }, [activeTab, selectedPlanId, visibleItems]);
-
-  const selectedPlanName = useMemo(() => {
-    if (selectedPlanId === "all") return null;
-    return planOptions.find((plan) => plan.id === selectedPlanId)?.name ?? null;
-  }, [planOptions, selectedPlanId]);
-
-  const kpis = useMemo(
-    () => ({
-      owedToYou: items
-        .filter((item) => item.direction === "incoming" && item.estado === "PENDIENTE")
-        .reduce((sum, item) => sum + item.amount, 0),
-      youOwe: items
-        .filter((item) => item.direction === "outgoing" && item.estado === "PENDIENTE")
-        .reduce((sum, item) => sum + item.amount, 0),
-      toConfirmAmount: items
-        .filter((item) => item.direction === "incoming" && item.estado === "EN_REVISION")
-        .reduce((sum, item) => sum + item.amount, 0),
-      toConfirmCount: items.filter(
-        (item) => item.direction === "incoming" && item.estado === "EN_REVISION"
-      ).length,
-    }),
-    [items]
+  const scoped = useMemo(
+    () => (selectedPlanId === "all" ? tabItems : tabItems.filter((item) => item.planId === selectedPlanId)),
+    [tabItems, selectedPlanId]
   );
 
-  const unresolvedCount = pendingItems.length;
+  const tocaGroups = useMemo(() => groupByPlan(scoped.filter(needsYou)), [scoped]);
+  const esperaGroups = useMemo(() => groupByPlan(scoped.filter(waitingOthers)), [scoped]);
+  const months = useMemo(() => groupByMonth(scoped), [scoped]);
+  const tocaCount = tocaGroups.reduce((n, g) => n + g.items.length, 0);
+  const esperaCount = esperaGroups.reduce((n, g) => n + g.items.length, 0);
+
+  const selectedPlanName = useMemo(
+    () => (selectedPlanId === "all" ? null : (planOptions.find((plan) => plan.id === selectedPlanId)?.name ?? null)),
+    [planOptions, selectedPlanId]
+  );
+
+  const kpis = useMemo<Kpis>(() => {
+    // «Te deben» incluye lo que te han marcado como pagado y falta confirmar; «Debes» no incluye lo que ya marcaste.
+    const incoming = items.filter((i) => i.direction === "incoming" && isOpen(i));
+    const toConfirm = incoming.filter((i) => i.estado === "EN_REVISION");
+    const outgoing = items.filter((i) => i.direction === "outgoing" && i.estado === "PENDIENTE");
+    const sum = (list: ExpenseItem[]) => list.reduce((s, i) => s + i.amount, 0);
+    return {
+      owed: sum(incoming),
+      owedPeople: new Set(incoming.map((i) => i.counterpartyId)).size,
+      owedPlans: new Set(incoming.map((i) => i.planId)).size,
+      owe: sum(outgoing),
+      oweTo: namesList(outgoing.map((i) => i.counterparty)),
+      toConfirmAmount: sum(toConfirm),
+      toConfirmCount: toConfirm.length,
+    };
+  }, [items]);
+
+  const allClear = !dataLoading && openItems.length === 0;
 
   useEffect(() => {
     if (selectedExpenseId && !items.some((item) => item.id === selectedExpenseId)) {
@@ -180,13 +196,12 @@ function MisGastosContent() {
     }
   }, [items, selectedExpenseId]);
 
-  // Payee confirms receipt → CONFIRMADA
   const handleConfirmReceipt = async (item: ExpenseItem) => {
     setActingId(item.id);
     try {
       await confirmReceiptEndpoint(item.id);
       setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, estado: "CONFIRMADA" } : i)));
-      setActiveTab("history");
+      setSelectedExpenseId(null);
     } catch {
       alert("No se pudo confirmar. Inténtalo de nuevo.");
     } finally {
@@ -194,12 +209,13 @@ function MisGastosContent() {
     }
   };
 
-  // Payee rejects receipt → back to PENDIENTE
   const handleRejectReceipt = async (item: ExpenseItem) => {
     setActingId(item.id);
     try {
       await rejectReceiptEndpoint(item.id);
-      setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, estado: "PENDIENTE" } : i)));
+      // El pago se anula y la deuda vuelve sola con el recálculo: se recarga la lista.
+      setSelectedExpenseId(null);
+      setReloadKey((k) => k + 1);
     } catch {
       alert("No se pudo rechazar. Inténtalo de nuevo.");
     } finally {
@@ -207,8 +223,131 @@ function MisGastosContent() {
     }
   };
 
-  const openPlan = (planId: number) => {
-    router.push(isNativePlatform() ? `/plans/static?id=${planId}` : `/plans/${planId}`);
+  const openPlan = (planId: number, tab?: "gastos") => {
+    const suffix = tab ? `${isNativePlatform() ? "&" : "?"}tab=${tab}` : "";
+    router.push(isNativePlatform() ? `/plans/static?id=${planId}${suffix}` : `/plans/${planId}${suffix}`);
+  };
+  const payItem = (item: ExpenseItem) => {
+    setSelectedExpenseId(null);
+    setPayingId(item.id);
+  };
+  const payingItem = useMemo(() => items.find((i) => i.id === payingId) ?? null, [items, payingId]);
+
+  const handlePaid = (result: PaidResult) => {
+    setReloadKey((k) => k + 1);
+    toast(`Pago a ${result.toName} marcado`, "success", {
+      label: "Deshacer",
+      onClick: () => {
+        deshacerPagoEndpoint(result.pagoId)
+          .then(() => setReloadKey((k) => k + 1))
+          .catch(() => toastError("No se ha podido deshacer el pago."));
+      },
+    });
+  };
+
+  const rowProps = (item: ExpenseItem) => ({
+    item,
+    acting: actingId === item.id,
+    onOpen: () => setSelectedExpenseId(item.id),
+    onConfirm: () => void handleConfirmReceipt(item),
+    onReject: () => void handleRejectReceipt(item),
+    onPay: () => payItem(item),
+  });
+
+  const zoneProps = {
+    actingId,
+    onOpenItem: (item: ExpenseItem) => setSelectedExpenseId(item.id),
+    onConfirm: (item: ExpenseItem) => void handleConfirmReceipt(item),
+    onReject: (item: ExpenseItem) => void handleRejectReceipt(item),
+    onPay: payItem,
+    onOpenPlan: (planId: number) => openPlan(planId),
+  };
+
+  const summary = dataLoading ? null : allClear ? <AlDiaCard /> : <SummaryCard kpis={kpis} stacked />;
+  const filterProps = {
+    options: planOptions,
+    total: tabItems.length,
+    value: selectedPlanId,
+    onChange: setSelectedPlanId,
+  };
+
+  const renderAction = () => {
+    if (dataLoading) return <MisGastosSkeleton />;
+
+    if (allClear) {
+      const latest = [...paidItems]
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+        .slice(0, 2);
+      if (latest.length === 0) return null;
+      return (
+        <section aria-label="Lo último">
+          <h2 className="mt-6 flex items-baseline border-b border-app pb-1 text-[14px] font-[var(--fw-semibold)] text-app">Lo último</h2>
+          {latest.map((item) => (
+            <LiquidacionRow key={item.id} history {...rowProps(item)} />
+          ))}
+          <button
+            type="button"
+            onClick={() => setActiveTab("history")}
+            className="mt-1.5 inline-flex min-h-11 items-center text-[14px] font-[var(--fw-semibold)] text-[var(--chat-accent-text)]"
+          >
+            Ver el historial
+          </button>
+        </section>
+      );
+    }
+
+    if (scoped.length === 0 && selectedPlanName) {
+      const last = paidItems
+        .filter((i) => i.planId === selectedPlanId)
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+      return (
+        <FilteredEmpty
+          planName={selectedPlanName}
+          lastText={
+            last
+              ? last.direction === "incoming"
+                ? `El último pago, de ${last.counterparty}, el ${formatShortDate(last.date)}.`
+                : `Tu último pago, a ${last.counterparty}, el ${formatShortDate(last.date)}.`
+              : null
+          }
+          onHistory={() => setActiveTab("history")}
+          onAll={() => setSelectedPlanId("all")}
+        />
+      );
+    }
+
+    return (
+      <>
+        <Zone id="confirmar" title="Te toca a ti" count={tocaCount} tinted groups={tocaGroups} cap={2} {...zoneProps} />
+        <Zone title="Esperando a otros" count={esperaCount} groups={esperaGroups} cap={3} {...zoneProps} />
+      </>
+    );
+  };
+
+  const renderHistory = () => {
+    if (dataLoading) return <MisGastosSkeleton />;
+    if (months.length === 0) {
+      return (
+        <SimpleEmpty
+          text={selectedPlanName ? `No hay movimientos en el historial de ${selectedPlanName}.` : "Aún no tienes movimientos cerrados."}
+        />
+      );
+    }
+    return months.map((month) => (
+      <section key={month.key} aria-label={month.label}>
+        <h2 className="mt-7 flex items-baseline gap-2 border-b border-app pb-1 text-[14px] font-[var(--fw-semibold)] text-app">
+          {month.label}
+          <span className="ml-auto text-[13px] font-[var(--fw-medium)] tabular-nums text-muted">
+            {[month.received > 0 && `Recibiste ${formatMoney(month.received)}`, month.paid > 0 && `pagaste ${formatMoney(month.paid)}`]
+              .filter(Boolean)
+              .join(" · ")}
+          </span>
+        </h2>
+        {month.items.map((item) => (
+          <LiquidacionRow key={item.id} history {...rowProps(item)} />
+        ))}
+      </section>
+    ));
   };
 
   return (
@@ -219,174 +358,42 @@ function MisGastosContent() {
         <main
           className={`min-h-[calc(100dvh-env(safe-area-inset-top)-clamp(56px,8dvh,64px)-env(safe-area-inset-bottom))] px-safe pb-[calc(clamp(56px,8dvh,64px)+env(safe-area-inset-bottom))] pt-mobile-safe-top transition-[padding] duration-[var(--duration-slow)] [transition-timing-function:var(--ease-standard)] md:min-h-0 md:py-[var(--space-10)] md:pr-[var(--space-14)]`}
         >
-          <section className="mx-auto w-full max-w-[860px]">
-            {/* Título */}
-            <h1 className="text-[var(--font-h2)] font-[var(--fw-regular)] leading-[1.15] text-app md:text-[var(--font-h1)]">
-              Mis gastos
-            </h1>
-            {(kpis.owedToYou > 0 || kpis.youOwe > 0) && (
-              <p className="mt-[var(--space-2)] mb-[var(--space-8)] text-[16px] text-muted">
-                {kpis.owedToYou > 0 && (
-                  <>Te deben <span className="font-[var(--fw-medium)] text-app opacity-60">{formatAmount(kpis.owedToYou)}</span></>
-                )}
-                {kpis.owedToYou > 0 && kpis.youOwe > 0 && " · "}
-                {kpis.youOwe > 0 && (
-                  <>Debes <span className="font-[var(--fw-medium)] text-app opacity-60">{formatAmount(kpis.youOwe)}</span></>
-                )}
-              </p>
-            )}
-            {kpis.owedToYou === 0 && kpis.youOwe === 0 && (
-              <div className="mb-[var(--space-8)]" />
-            )}
+          <section className="mx-auto w-full max-w-[1100px] md:flex md:items-start md:gap-14">
+            <div className="min-w-0 flex-1">
+              <h1 className="text-[32px] leading-none text-app md:text-[48px]" style={SERIF}>
+                Mis gastos
+              </h1>
 
-            {/* Tabs */}
-            <Tabs
-              tabs={[
-                { value: "history", label: "Historial" },
-                {
-                  value: "action",
-                  label: "Por resolver",
-                  badge: unresolvedCount > 0 ? (
-                    <CountBadge count={unresolvedCount} ariaLabel={`${unresolvedCount} por resolver`} className="self-center" />
-                  ) : undefined,
-                },
-              ]}
-              value={activeTab}
-              onChange={(v) => setActiveTab(v as ExpenseTab)}
-              className="mb-0 items-center"
-              fontWeight="var(--fw-semibold)"
-            />
+              <div className="mt-4 md:hidden">{summary}</div>
 
-            {/* Filtro por plan — debajo de los tabs */}
-            {planOptions.length > 0 && (
-              <div className="flex justify-end pt-[var(--space-3)] pb-[var(--space-1)]">
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      className="flex items-center gap-[5px] text-caption text-muted transition-colors hover:text-app"
-                    >
-                      <svg viewBox="0 0 24 24" fill="none" className="size-[12px] shrink-0" aria-hidden="true" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M3 6h18M7 12h10M11 18h2" />
-                      </svg>
-                      <span className="font-[var(--fw-medium)]">
-                        {selectedPlanId === "all" ? "Todos los planes" : selectedPlanName}
-                      </span>
-                      <svg viewBox="0 0 24 24" fill="none" className="size-[10px] shrink-0" aria-hidden="true" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M6 9l6 6 6-6" />
-                      </svg>
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent align="end" className="w-[min(300px,calc(100vw-32px))] p-[var(--space-2)]">
-                    <div className="max-h-[calc(5*44px)] overflow-y-auto space-y-[2px]">
-                      <PlanFilterOption
-                        label="Todos los planes"
-                        count={visibleItems.length}
-                        active={selectedPlanId === "all"}
-                        onClick={() => setSelectedPlanId("all")}
-                      />
-                      {planOptions.map((plan) => (
-                        <PlanFilterOption
-                          key={plan.id}
-                          label={plan.name}
-                          count={visibleItems.filter((item) => item.planId === plan.id).length}
-                          active={selectedPlanId === plan.id}
-                          onClick={() => setSelectedPlanId(plan.id)}
-                        />
-                      ))}
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              </div>
-            )}
+              <Tabs
+                tabs={[
+                  {
+                    value: "action",
+                    label: "Por resolver",
+                    badge: openItems.length > 0 ? <TabCount count={openItems.length} /> : undefined,
+                  },
+                  { value: "history", label: "Historial" },
+                ]}
+                value={activeTab}
+                onChange={(v) => setActiveTab(v as ExpenseTab)}
+                className="mb-0 mt-5 items-center md:mt-6"
+                fontWeight="var(--fw-semibold)"
+              />
 
-            <div className="flex flex-col">
-              {dataLoading ? (
-                <SkeletonList />
-              ) : filteredVisibleItems.length === 0 ? (
-                <GastosEmptyState tab={activeTab} selectedPlanName={selectedPlanName} />
-              ) : (
-                filteredVisibleItems.map((item) => {
-                  const incoming = item.direction === "incoming";
-                  // Always the other person: the sign of the amount says who pays whom («Sara −30 €»).
-                  const senderName = item.counterparty;
-                  const senderImage = item.counterpartyImage;
-                  const secondaryLine = [
-                    item.concept || item.planName,
-                    item.concept ? item.planName : null,
-                    formatListDate(item.date),
-                  ]
-                    .filter(Boolean)
-                    .join(" · ");
-
-                  const needsAction = incoming && item.estado === "EN_REVISION";
-                  return (
-                    <article
-                      key={item.id}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => setSelectedExpenseId(item.id)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          setSelectedExpenseId(item.id);
-                        }
-                      }}
-                      className="flex cursor-pointer items-center gap-3 transition-colors hover:bg-surface-inset/50 focus:outline-none"
-                    >
-                      <ExpenseAvatar name={senderName} image={senderImage} />
-
-                      <div className="flex min-w-0 flex-1 items-center gap-2 py-[var(--space-4)]">
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-body-sm font-[var(--fw-semibold)] text-app">{senderName}</p>
-                          <p className="truncate text-caption text-muted">{secondaryLine}</p>
-                        </div>
-
-                        <div className="flex shrink-0 items-center gap-2">
-                          {needsAction ? (
-                            <>
-                              <button
-                                type="button"
-                                disabled={actingId === item.id}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  void handleRejectReceipt(item);
-                                }}
-                                className="rounded-chip border border-app px-2.5 py-1 text-caption font-[var(--fw-medium)] text-muted disabled:opacity-50"
-                              >
-                                No recibido
-                              </button>
-                              <button
-                                type="button"
-                                disabled={actingId === item.id}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  void handleConfirmReceipt(item);
-                                }}
-                                className="rounded-chip bg-[#16a34a] px-2.5 py-1 text-caption font-[var(--fw-semibold)] text-white disabled:opacity-50"
-                              >
-                                {actingId === item.id ? "..." : "Confirmar"}
-                              </button>
-                            </>
-                          ) : (
-                            <div className="flex items-center gap-[var(--space-3)]">
-                              <p
-                                className={`text-body-sm font-[var(--fw-semibold)] text-app ${activeTab === "action" ? "opacity-55" : ""}`}
-                              >
-                                {incoming ? "+" : "-"}{formatAmount(item.amount)}
-                              </p>
-                              <svg viewBox="0 0 24 24" fill="none" className="size-[15px] shrink-0 text-muted" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                <path d="M9 18l6-6-6-6" />
-                              </svg>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </article>
-                  );
-                })
+              {!allClear && (
+                <div className="md:hidden">
+                  <PlanChips {...filterProps} />
+                </div>
               )}
+
+              {activeTab === "action" ? renderAction() : renderHistory()}
             </div>
+
+            <aside aria-label="Resumen" className="hidden w-[360px] flex-none flex-col gap-4 md:flex md:pt-1">
+              {summary}
+              <PlanList {...filterProps} />
+            </aside>
           </section>
         </main>
       </div>
@@ -396,84 +403,26 @@ function MisGastosContent() {
         profileName={profile?.nombre ?? "Tú"}
         actingId={actingId}
         onClose={() => setSelectedExpenseId(null)}
-        onOpenPlan={openPlan}
+        onOpenPlan={(planId) => openPlan(planId)}
+        onPay={payItem}
         onConfirm={(item) => void handleConfirmReceipt(item)}
         onReject={(item) => void handleRejectReceipt(item)}
       />
+
+      {payingItem && user && (
+        <PayDebtSheet
+          debt={{
+            liquidacionId: payingItem.id,
+            amount: payingItem.amount,
+            toName: payingItem.counterparty,
+            toImage: payingItem.counterpartyImage,
+            planTitle: payingItem.planName,
+          }}
+          me={{ id: user.id, name: profile?.nombre ?? "Tú", image: profile?.profile_image ?? null }}
+          onClose={() => setPayingId(null)}
+          onPaid={handlePaid}
+        />
+      )}
     </div>
-  );
-}
-
-
-// ── Empty state ───────────────────────────────────────────────────────────────
-
-function GastosEmptyState({ tab, selectedPlanName }: { tab: ExpenseTab; selectedPlanName: string | null }) {
-  const msg = selectedPlanName
-    ? `No hay movimientos ${tab === "history" ? "en historial" : "por resolver"} en ${selectedPlanName}.`
-    : tab === "history"
-      ? "Aún no tienes movimientos cerrados."
-      : "No tienes nada por resolver. ¡Todo al día!";
-
-  return (
-    <div className="py-[var(--space-10)] text-center">
-      <p className="text-body-sm text-muted">{msg}</p>
-    </div>
-  );
-}
-
-// ── Skeleton ──────────────────────────────────────────────────────────────────
-
-function SkeletonList() {
-  return (
-    <div className="flex flex-col gap-[var(--space-4)] py-[var(--space-2)]" aria-label="Cargando gastos" role="status">
-      {[1, 2].map((i) => (
-        <div key={i} className="flex items-center gap-3">
-          <div className="skeleton-shimmer size-11 shrink-0 rounded-full" />
-          <div className="skeleton-shimmer h-[14px] w-[148px] rounded-full" />
-          <div className="skeleton-shimmer ml-auto h-[14px] w-[58px] rounded-full opacity-70" />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-
-// ── Icons ─────────────────────────────────────────────────────────────────────
-
-function ExpenseAvatar({ name, image }: { name: string; image: string | null }) {
-  return <Avatar name={name} src={image} size="lg" />;
-}
-
-
-function PlanFilterOption({
-  label,
-  count,
-  active,
-  onClick,
-}: {
-  label: string;
-  count: number;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex w-full items-center justify-between rounded-[10px] px-[var(--space-3)] py-[10px] text-left text-body-sm transition-colors ${
-        active ? "bg-surface-inset text-app" : "text-app hover:bg-surface"
-      }`}
-    >
-      <span className={`min-w-0 truncate ${active ? "font-[var(--fw-semibold)]" : "font-[var(--fw-medium)]"}`}>
-        {label}
-      </span>
-      <div className="ml-[var(--space-3)] flex shrink-0 items-center">
-        <span className={`inline-flex min-w-[22px] items-center justify-center rounded-full px-1.5 py-[2px] text-[14px] font-[var(--fw-semibold)] ${
-          active ? "bg-[var(--primary)] text-[var(--contrast)]" : "bg-app text-muted"
-        }`}>
-          {count}
-        </span>
-      </div>
-    </button>
   );
 }

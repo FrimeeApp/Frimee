@@ -1,5 +1,6 @@
 import type { BalanceRow, GastoRow } from "@/services/api/endpoints/gastos.endpoint";
 import { formatMoney } from "@/lib/formatters";
+import { shareOf } from "@/lib/gastos-shares";
 
 /* Resumen / factura de gastos de un plan.
  * buildGastosPdf() prepara los datos y los reparte en páginas A4 (794 × 1123 px);
@@ -116,6 +117,8 @@ export function buildGastosPdf(input: PdfInput): PdfModel {
   confirmed.forEach((g) => {
     per.get(g.pagado_por_user_id)!.paid += g.total;
     g.partes?.forEach((p) => { per.get(p.user_id)!.share += p.importe; });
+    // La parte de quien paga no se guarda: es lo que queda del total.
+    per.get(g.pagado_por_user_id)!.share += shareOf(g, g.pagado_por_user_id);
   });
   const rawBal = [...per.values()].map((p) => ({ ...p, saldo: p.paid - p.share })).sort((a, b) => b.saldo - a.saldo);
   const maxAbs = Math.max(0.01, ...rawBal.map((b) => Math.abs(b.saldo)));
@@ -410,7 +413,7 @@ export async function renderGastosPdf(m: PdfModel): Promise<Blob> {
         });
         y += H.gap;
       } else if (b.t === "balance") {
-        y = h2("Balance por persona", y, "Pagó − le toca");
+        y = h2("Balance por persona", y, "Pagó menos lo que le toca");
         y = thead([{ s: "Persona", x: L }, { s: "Pagó", x: L + 230, a: "right" }, { s: "Le toca", x: L + 330, a: "right" }, { s: "Saldo", x: L + 350 }], y);
         b.rows.forEach((r) => {
           font(11.5, "bold");

@@ -26,6 +26,7 @@ import { Sheet } from "@/components/chat/bitacora/Sheet";
 import { InChatList, IN_CHAT_LABEL } from "@/components/chat/info/InChatList";
 import { BlockConfirm } from "@/components/chat/info/BlockConfirm";
 import { useBloqueos } from "@/hooks/useBloqueos";
+import { shareOf } from "@/lib/gastos-shares";
 
 type Member = ChatListItem["miembros"][number];
 
@@ -677,7 +678,7 @@ function GastosSummary({ gastos, currentUserId, members, onOpen }: { gastos: Gas
   const moneda = gastos[0].moneda || "EUR";
   const same = gastos.filter((g) => (g.moneda || "EUR") === moneda);
   const total = same.reduce((s, g) => s + Number(g.total), 0);
-  const mine = same.reduce((s, g) => s + (g.partes ?? []).filter((p) => p.user_id === currentUserId).reduce((a, p) => a + Number(p.importe), 0), 0);
+  const mine = same.reduce((s, g) => s + shareOf(g, currentUserId), 0);
   const payers = new Set(same.map((g) => g.pagado_por_user_id));
   const payerId = same[0].pagado_por_user_id;
   const payerName = payerId === currentUserId ? "ti"

@@ -50,7 +50,7 @@ export function ExpenseSummaryCard({
         <>
           {debt > 0 ? (
             <p className="mt-3 flex flex-wrap items-baseline gap-x-2">
-              <span className="w-full text-[13px] font-[var(--fw-semibold)] text-[var(--warning)]">Debes</span>
+              <span className="w-full text-[13px] font-[var(--fw-semibold)] text-app">Debes</span>
               <span className="text-[32px] leading-none tabular-nums text-app" style={SERIF}>{formatMoney(debt, s.currency)}</span>
               <span className="text-[14px] text-muted">a {joinNames(mine.map((b) => firstName(b.to_nombre)))}</span>
             </p>

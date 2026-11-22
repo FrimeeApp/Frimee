@@ -10,6 +10,8 @@ export type LiquidacionRow = {
   fecha: string;
   nota: string | null;
   estado: "PENDIENTE" | "EN_REVISION" | "CONFIRMADA" | "ANULADA";
+  metodo: "BIZUM" | "TRANSFERENCIA" | "EFECTIVO" | "OTRO" | "STRIPE" | null;
+  comprobante_url: string | null;
   counterparty_id: string;
   counterparty_nombre: string | null;
   counterparty_username: string | null;
@@ -21,14 +23,6 @@ export async function listLiquidacionesForUserEndpoint(): Promise<LiquidacionRow
   const { data, error } = await supabase.rpc("fn_liquidaciones_list_for_user");
   if (error) throw error;
   return (data ?? []) as LiquidacionRow[];
-}
-
-export async function requestConfirmationEndpoint(liquidacionId: number): Promise<void> {
-  const supabase = createBrowserSupabaseClient();
-  const { error } = await supabase.rpc("fn_liquidacion_request_confirmation", {
-    p_liquidacion_id: liquidacionId,
-  });
-  if (error) throw error;
 }
 
 export async function confirmReceiptEndpoint(liquidacionId: number): Promise<void> {
