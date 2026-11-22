@@ -175,7 +175,7 @@ export default function StampPopover({
     body = confirming ? (
       <div role="alertdialog" aria-label="Confirmar «No fui a este viaje»" className="flex flex-col gap-3 rounded-[8px] border border-app p-3">
         <p className="m-0 text-[14px] leading-[1.5]">
-          ¿Quitar «{plan?.titulo ?? "este viaje"}» de tu pasaporte? Se quitarán {lista(quita)}.
+          ¿Quitar «{plan?.titulo ?? "este viaje"}» de tu pasaporte? Se quitarán {lista(quita)}. Puedes volver a añadirlo desde el plan.
         </p>
         <div className="grid grid-cols-2 gap-2">
           <button type="button" disabled={busy} onClick={() => setConfirming(false)} className={`${GHOST_BTN} !h-11 !text-[14px]`}>

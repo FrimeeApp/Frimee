@@ -64,3 +64,16 @@ export async function marcarNoFui(planId: number): Promise<void> {
   const { error } = await createBrowserSupabaseClient().rpc("fn_passport_no_fui", { p_plan_id: planId });
   if (error) throw error;
 }
+
+/** ¿Marcaste «No fui a este viaje» en este plan? */
+export async function estadoNoFui(planId: number): Promise<boolean> {
+  const { data, error } = await createBrowserSupabaseClient().rpc("fn_passport_no_fui_estado", { p_plan_id: planId });
+  if (error) throw error;
+  return Boolean(data);
+}
+
+/** Deshace «No fui»: vuelves a recibir los sellos del viaje. */
+export async function volverASellar(planId: number): Promise<void> {
+  const { error } = await createBrowserSupabaseClient().rpc("fn_passport_si_fui", { p_plan_id: planId });
+  if (error) throw error;
+}
