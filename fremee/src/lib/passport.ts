@@ -25,6 +25,8 @@ export type Sello = {
   ruta?: { tipo: "flight" | "ferry" | "train"; desde: string; hasta: string } | null;
   /** Solo en el sello de plan: las personas que fueron, tal como las puede ver quien mira (nombres de pila, hasta 3). */
   gente?: SelloGente | null;
+  /** Solo en el sello de plan propio: fotos y vídeos del álbum del viaje. */
+  fotos?: number | null;
 };
 
 export type SelloGente = { total: number; nombres: { id: string; nombre: string; foto: string | null }[] };
