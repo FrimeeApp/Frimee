@@ -23,7 +23,22 @@ export type Sello = {
   plan: SelloPlan | null;
   /** Solo en el sello de plan y solo para su dueño: primer billete de transporte del viaje. */
   ruta?: { tipo: "flight" | "ferry" | "train"; desde: string; hasta: string } | null;
+  /** Solo en el sello de plan: las personas que fueron, tal como las puede ver quien mira (nombres de pila, hasta 3). */
+  gente?: SelloGente | null;
 };
+
+export type SelloGente = { total: number; nombres: { id: string; nombre: string; foto: string | null }[] };
+
+/** «Con Marc», «Con Marc y Aina», «Con Marc, Aina y Lía», «Con Marc, Aina y 2 más»; null si no hay nadie que mostrar. */
+export function gentePhrase(g: SelloGente | null | undefined): string | null {
+  if (!g || g.total <= 0 || g.nombres.length === 0) return null;
+  const n = g.nombres.map((x) => x.nombre);
+  if (g.total === 1) return `Con ${n[0]}`;
+  if (g.total === 2) return `Con ${n[0]} y ${n[1] ?? "1 más"}`;
+  if (g.total === 3 && n.length >= 3) return `Con ${n[0]}, ${n[1]} y ${n[2]}`;
+  const rest = g.total - 2;
+  return `Con ${n[0]}, ${n[1]} y ${rest} más`;
+}
 
 export type PasaporteAjustes = { passport_visibility: "TODOS" | "AMISTADES" | "SOLO_YO"; show_plan_stamps: boolean; show_companions: boolean };
 

@@ -9,7 +9,7 @@ import { BOOK, PAPER_VARS, PaperGuilloche } from "@/components/profile/passport/
 import { CountryStamp, HitoStamp, PlanStamp, noFuiQuita } from "@/components/profile/passport/stamps";
 import { useAuth } from "@/providers/AuthProvider";
 import { leerPasaporte, marcarNoFui, marcarSellosVistos } from "@/services/api/endpoints/pasaporte.endpoint";
-import { buildPages, countryName, countryOrdinal, groupTrips, hash, pendingTrips, tripPageNumber, unseenIds, type Sello, type Trip } from "@/lib/passport";
+import { buildPages, countryName, countryOrdinal, gentePhrase, groupTrips, hash, pendingTrips, tripPageNumber, unseenIds, type Sello, type Trip } from "@/lib/passport";
 
 /**
  * Pantalla «Sello nuevo» (tablero SelloNuevo): celebra un viaje recién sellado, una sola vez.
@@ -232,7 +232,7 @@ export default function NewStampClient() {
 
         <div className="flex flex-col items-center md:col-start-2 md:row-start-2 md:items-start md:self-start">
           <p className="m-0 px-2 text-center text-[16px] leading-[1.6] text-muted md:px-0 md:text-left">{nota}</p>
-          {/* Acompañantes: pendiente del backend de acompañantes (backlog). */}
+          {gentePhrase(trip.plan?.gente) && <p className="m-0 mt-2 px-2 text-center text-[16px] leading-[1.6] text-muted md:px-0 md:text-left">{gentePhrase(trip.plan?.gente)}</p>}
           <div className="mt-5 hidden items-center gap-2 md:flex">
             {primary}
             {notThere}
