@@ -12,21 +12,22 @@ import {
   hash,
   machineLines,
   monthYearLabel,
-  tripSlots,
   type PassportPage,
   type PassportStats,
   type Sello,
   type Trip,
 } from "@/lib/passport";
+import type { Placed } from "@/lib/passportLayout";
+import { freeBands, layoutPage } from "@/lib/passportLayout";
 import { marcarSellosVistos } from "@/services/api/endpoints/pasaporte.endpoint";
 import { CountryStamp, HITO_NAME, HitoStamp, PlanStamp } from "./stamps";
 
 /** La libreta (tableros «Pasaporte · la libreta»): página de datos + una página por cada 3 viajes de un año. */
 
 /** Medidas lógicas de una página. Móvil: 358 × 590. Escritorio (doble página): 452 × 620, casi la proporción de la tapa. */
-type Dims = { w: number; h: number; tops: number[]; stack: number };
-const MOBILE: Dims = { w: 358, h: 590, tops: [56, 224, 390], stack: 108 };
-const WIDE: Dims = { w: 452, h: 620, tops: [60, 238, 416], stack: 116 };
+type Dims = { w: number; h: number };
+const MOBILE: Dims = { w: 358, h: 590 };
+const WIDE: Dims = { w: 452, h: 620 };
 const DimsContext = createContext<Dims>(MOBILE);
 const useDims = () => useContext(DimsContext);
 const SPINE = 6;
@@ -410,11 +411,7 @@ function PageView({
           <span>VISADOS</span>
           <span className="tabular-nums">PÁG. {pad2(number)}</span>
         </div>
-        <span aria-hidden="true" className="absolute rounded-[8px] border-2 border-dashed border-[var(--border-strong)]" style={{ left: 20, top: 84, width: 150, height: 103 }} />
-        <span aria-hidden="true" className="absolute rounded-full border-2 border-dashed border-[var(--border-strong)]" style={{ left: W - 144, top: 70, width: 104, height: 104 }} />
-        <p className="absolute inset-x-4 m-0 text-center text-[14px] leading-[1.5] text-muted" style={{ top: 236 }}>
-          Aquí irá tu próximo sello
-        </p>
+        <FreeSlots trips={[]} />
       </div>
     );
   }
@@ -531,9 +528,6 @@ function DatosPage({ nombre, stats }: { nombre: string; stats: PassportStats }) 
   );
 }
 
-const planTilt = (id: number) => -6 + (hash(id, 11) % 11);
-const paisTilt = (id: number) => -8 + (hash(id, 12) % 18);
-
 function NuevoPill({ className }: { className?: string }) {
   return (
     <span className={`absolute h-[22px] rounded-full bg-[var(--passport-ink-new)] px-2 text-[12px] font-[var(--fw-semibold)] leading-[22px] text-[var(--contrast)] ${className ?? ""}`}>
@@ -543,14 +537,38 @@ function NuevoPill({ className }: { className?: string }) {
 }
 
 function YearPage({ page, total, isNew }: { page: Extract<PassportPage, { kind: "year" }>; total: number; isNew: (s: Pick<Sello, "id" | "nuevo">) => boolean }) {
-  const starts = page.trips.map((_, i) => page.trips.slice(0, i).reduce((n, t) => n + tripSlots(t), 0));
+  const dims = useDims();
+  const placed = useMemo(() => layoutPage(page.trips, dims), [page.trips, dims]);
   return (
     <>
       <h2 className={`absolute left-4 top-[34px] m-0 text-[28px] leading-[1.1] ${SERIF}`}>{page.year}</h2>
-      {page.trips.map((t, i) => (
-        <TripView key={t.planId} trip={t} slot={starts[i]} isNew={isNew} />
+      {placed.map((p) => (
+        <PlacedStamp key={p.key} p={p} isNew={isNew} />
       ))}
+      {/* La última página, si le quedan franjas, enseña dónde irá lo siguiente. */}
+      {page.number === total && <FreeSlots trips={page.trips} />}
       {page.continues && page.number < total && <p className="absolute inset-x-4 bottom-3 m-0 text-right text-[12px] leading-[1.4] text-muted">Sigue en la pág. {pad2(page.number + 1)}</p>}
+    </>
+  );
+}
+
+/** «Aquí irá tu próximo sello»: rectángulo y círculo discontinuos en los huecos de plan y país de la primera franja libre. */
+function FreeSlots({ trips }: { trips: Trip[] }) {
+  const dims = useDims();
+  const free = useMemo(() => freeBands(trips, dims), [trips, dims]);
+  if (free.length === 0) return null;
+  const first = free[0];
+  return (
+    <>
+      {free.map((f) => (
+        <span key={f.band}>
+          <span aria-hidden="true" className="absolute rounded-[8px] border-2 border-dashed border-[var(--border-strong)]" style={{ left: f.plan.x, top: f.plan.y, width: f.plan.w, height: f.plan.h }} />
+          <span aria-hidden="true" className="absolute rounded-full border-2 border-dashed border-[var(--border-strong)]" style={{ left: f.country.x, top: f.country.y, width: f.country.size, height: f.country.size }} />
+        </span>
+      ))}
+      <p className="absolute inset-x-4 m-0 text-center text-[14px] leading-[1.5] text-muted" style={{ top: first.plan.y + first.plan.h + 20 }}>
+        Aquí irá tu próximo sello
+      </p>
     </>
   );
 }
@@ -559,62 +577,37 @@ function YearPage({ page, total, isNew }: { page: Extract<PassportPage, { kind: 
 const stampIn = (isNew: boolean, delayMs: number): React.CSSProperties | undefined =>
   isNew ? { animation: `passport-stamp-in 240ms cubic-bezier(0.2, 0, 0, 1) ${delayMs}ms both` } : undefined;
 
-function TripView({ trip, slot, isNew }: { trip: Trip; slot: number; isNew: (s: Pick<Sello, "id" | "nuevo">) => boolean }) {
-  const { w: W, tops, stack } = useDims();
-  const y = tops[slot];
-  const flip = slot % 2 === 1;
-  const multi = trip.paises.length >= 2;
-  const planX = flip ? W - 182 : 16;
-  const planY = y + 12;
-  const label = trip.info?.titulo ?? "Viaje";
-  const nuevoPlan = trip.plan ? isNew(trip.plan) : false;
-  const shown = multi ? trip.paises.slice(0, 3) : trip.paises;
-  const extra = multi ? trip.paises.length - shown.length : 0;
-  const size = multi ? (shown.length > 2 ? 84 : 88) : 104;
-  const hitoSlot = slot + (multi ? 2 : 1);
-  const hitos = trip.hitos.slice(0, 3);
-  const hitoSize = hitos.length > 2 ? 88 : 92;
-  const hitoGap = 14;
-  const hitoRowW = hitos.length * hitoSize + (hitos.length - 1) * hitoGap;
+function PlacedStamp({ p, isNew }: { p: Placed; isNew: (s: Pick<Sello, "id" | "nuevo">) => boolean }) {
+  if (p.kind === "more") {
+    return (
+      <span className="absolute inline-flex h-6 items-center rounded-full border border-[var(--border-strong)] bg-surface-2 px-2 text-[12px] font-[var(--fw-semibold)] leading-none" style={{ left: p.x, top: p.y }}>
+        {p.label}
+      </span>
+    );
+  }
+  const s = p.sello;
+  const nuevo = isNew(s);
+  const base = "absolute block leading-[0]";
+  if (p.kind === "plan") {
+    return (
+      <span role="img" aria-label={`${s.plan?.titulo ?? "Viaje"}, ${dateLabel(s.stamped_at)}${nuevo ? ", sello nuevo" : ""}`} className={base} style={{ left: p.x, top: p.y, ...stampIn(nuevo, 300) }}>
+        <PlanStamp sello={s} size={p.size} tilt={p.rot} nuevo={nuevo} />
+        {nuevo && <NuevoPill className="-right-1.5 -top-2.5" />}
+      </span>
+    );
+  }
+  if (p.kind === "country") {
+    return (
+      <span role="img" aria-label={`${countryName(s.country_code ?? "")}, sello del ${dateLabel(s.stamped_at)}${nuevo ? ", nuevo" : ""}`} className={base} style={{ left: p.x, top: p.y, ...stampIn(nuevo, 420) }}>
+        <CountryStamp sello={s} size={p.size} tilt={p.rot} nuevo={nuevo} />
+        {nuevo && <NuevoPill className="-right-2 -top-2.5" />}
+      </span>
+    );
+  }
   return (
-    <>
-      {trip.plan && (
-        <span role="img" aria-label={`${label}${trip.info ? `, ${dateLabel(trip.date)}` : ""}${nuevoPlan ? ", sello nuevo" : ""}`} className="absolute block leading-[0]" style={{ left: planX, top: planY, ...stampIn(nuevoPlan, 300) }}>
-          <PlanStamp sello={trip.plan} tilt={planTilt(trip.plan.id)} nuevo={nuevoPlan} />
-          {nuevoPlan && <NuevoPill className="-right-1.5 -top-2.5" />}
-        </span>
-      )}
-      {shown.map((p, i) => {
-        const x = multi ? (flip ? 28 + (i % 2) * 14 : W - 126 - (i % 2) * 14) : flip ? 24 : W - 144;
-        const top = multi ? y + i * stack : y;
-        const nuevo = isNew(p);
-        return (
-          <span key={p.id} role="img" aria-label={`${countryName(p.country_code ?? "")}, sello del ${dateLabel(p.stamped_at)}${nuevo ? ", nuevo" : ""}`} className="absolute block leading-[0]" style={{ left: Math.min(x, W - size - 8), top, ...stampIn(nuevo, 420 + i * 60) }}>
-            <CountryStamp sello={p} size={size} tilt={paisTilt(p.id)} nuevo={nuevo} />
-            {nuevo && <NuevoPill className="-right-2 -top-2.5" />}
-          </span>
-        );
-      })}
-      {extra > 0 && (
-        <span className="absolute inline-flex h-6 items-center rounded-full border border-[var(--border-strong)] bg-surface-2 px-2 text-[12px] font-[var(--fw-semibold)] leading-none" style={{ left: flip ? 28 : W - 126, top: y + 3 * stack - 4 }}>
-          +{extra}
-        </span>
-      )}
-      {hitos.map((h, i) => {
-        const nuevo = isNew(h);
-        return (
-          <span
-            key={h.id}
-            role="img"
-            aria-label={`Hito: ${HITO_NAME[h.hito!]}`}
-            className="absolute block leading-[0]"
-            style={{ left: (W - hitoRowW) / 2 + i * (hitoSize + hitoGap), top: tops[hitoSlot] + 24, ...stampIn(nuevo, 540 + i * 60) }}
-          >
-            <HitoStamp hito={h.hito!} id={h.id} stampedAt={h.stamped_at} size={hitoSize} tilt={paisTilt(h.id) / 2} nuevo={nuevo} />
-            {nuevo && <NuevoPill className="-right-2 -top-2.5" />}
-          </span>
-        );
-      })}
-    </>
+    <span role="img" aria-label={`Hito: ${HITO_NAME[s.hito!]}`} className={base} style={{ left: p.x, top: p.y, ...stampIn(nuevo, 540) }}>
+      <HitoStamp hito={s.hito!} id={s.id} stampedAt={s.stamped_at} size={p.size} tilt={p.rot} nuevo={nuevo} />
+      {nuevo && <NuevoPill className="-right-2 -top-2.5" />}
+    </span>
   );
 }

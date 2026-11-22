@@ -45,9 +45,9 @@ export type PassportPage =
   | { kind: "year"; number: number; year: number; trips: Trip[]; continues: boolean };
 
 export const SLOTS_PER_PAGE = 3;
-/** Un viaje con varios países ocupa dos huecos y los hitos van en su propio hueco. */
+/** Un viaje ocupa una franja de la página; con 2 o más países, dos. Los hitos van dentro de su franja. */
 export function tripSlots(t: Trip) {
-  return (t.paises.length >= 2 ? 2 : 1) + (t.hitos.length ? 1 : 0);
+  return t.paises.length >= 2 ? 2 : 1;
 }
 
 const MONTHS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sept", "oct", "nov", "dic"];
