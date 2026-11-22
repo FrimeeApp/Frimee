@@ -217,7 +217,7 @@ export function NotifItem({
   const isPlanInvite = n.tipo === "plan_invite" && n.entity_id;
   const added = n.tipo === "plan_added" || n.tipo === "plan_join_request" ? planChatMeta(n.tipo, n.entity_id) : null;
   const isJoinRequest = n.tipo === "plan_join_request" && Boolean(added?.planId && added.userId);
-  const pollReopen = n.tipo === "sello_nuevo" ? { href: "/passport", label: "" } : n.tipo === "poll_reopen" ? pollReopenMeta(n.entity_id) : n.tipo === "poll_draw" ? pollDrawMeta(n.entity_id) : n.tipo.startsWith("pago_") ? pagoMeta(n.tipo, n.entity_id) : null;
+  const pollReopen = n.tipo === "sello_nuevo" ? { href: `/passport/new-stamp?plan=${n.entity_id}`, label: "" } : n.tipo === "poll_reopen" ? pollReopenMeta(n.entity_id) : n.tipo === "poll_draw" ? pollDrawMeta(n.entity_id) : n.tipo.startsWith("pago_") ? pagoMeta(n.tipo, n.entity_id) : null;
   const router = useRouter();
   const [joinError, setJoinError] = useState(false);
   const handleJoinRequest = async (accept: boolean) => {

@@ -64,12 +64,15 @@ export default function Libreta({
   sellos,
   intro,
   jumpTo,
+  startPage,
   onOpenStamp,
 }: {
   nombre: string;
   sellos: Sello[];
   intro?: LibretaIntro;
   jumpTo?: { page: number; nonce: number } | null;
+  /** Página (desde 1) por la que se abre; sin ella, la tapa en escritorio y la última página en móvil. */
+  startPage?: number;
   onOpenStamp?: (s: Sello, el: HTMLElement) => void;
 }) {
   const trips = useMemo(() => groupTrips(sellos), [sellos]);
@@ -150,7 +153,7 @@ export default function Libreta({
   }, [intro, measured, wide]);
 
     // En escritorio se abre por la tapa (guarda y página de datos); en móvil, por la última página sellada.
-  const [rawIndex, setIndex] = useState(() => (typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches ? 0 : pages.length - 1));
+  const [rawIndex, setIndex] = useState(() => (startPage ? startPage - 1 : typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches ? 0 : pages.length - 1));
   // En ancho la página izquierda siempre es par (índice impar); al pasar de móvil a ancho se recoloca.
   const clamped = Math.min(rawIndex, pages.length - 1);
   const index = wide ? (clamped === 0 ? 0 : 2 * Math.ceil(clamped / 2) - 1) : clamped;
@@ -449,8 +452,9 @@ function NavButton({ label, disabled, onClick, children }: { label: string; disa
 }
 
 /** Fondo de seguridad: 10 ondas + roseta, trazo de 1 px. Un SVG estático por página, sin filtros. */
-function Guilloche({ seed }: { seed: number }) {
-  const { w: W, h: H } = useDims();
+export function Guilloche({ seed, size }: { seed: number; size?: Dims }) {
+  const dims = useDims();
+  const { w: W, h: H } = size ?? dims;
   const k = H / 590;
   const bases = [59, 119, 172, 217, 259, 301, 350, 404, 459, 512].map((b) => b * k);
   const roseta = { x: W - 40, y: H - 60 };

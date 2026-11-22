@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { GuestBanner } from "@/components/auth/GuestBanner";
 import { CallProvider } from "@/providers/CallProvider";
+import NewStampOnOpen from "@/components/profile/passport/NewStampOnOpen";
 import { PushProvider } from "@/providers/PushProvider";
 
 export default function AppLayout({ children, modal }: { children: ReactNode; modal: ReactNode }) {
@@ -17,6 +18,7 @@ export default function AppLayout({ children, modal }: { children: ReactNode; mo
             />
             {/* Before the page: on phones it takes its own space at the top (see GuestBanner). */}
             <GuestBanner />
+            <NewStampOnOpen />
             {children}
             {modal}
           </div>

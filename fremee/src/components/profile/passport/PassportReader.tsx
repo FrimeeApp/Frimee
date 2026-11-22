@@ -26,6 +26,7 @@ export default function PassportReader({
   fromCover = null,
   profile = null,
   closing = false,
+  startPage,
   onRequestClose,
   onClosed,
 }: {
@@ -43,6 +44,8 @@ export default function PassportReader({
   /** Capa del perfil que se funde al abrir y vuelve al cerrar. */
   profile?: HTMLElement | null;
   closing?: boolean;
+  /** Página (desde 1) por la que se abre el libro. */
+  startPage?: number;
   onRequestClose: () => void;
   onClosed?: () => void;
 }) {
@@ -132,7 +135,7 @@ export default function PassportReader({
             <Libreta key="preview" nombre={nombre} sellos={sellos.filter((x) => !x.hidden && ((ajustes?.show_plan_stamps ?? true) || x.kind === "pais"))} />
           </>
         ) : (
-          <Libreta nombre={nombre} sellos={sellos} intro={intro} jumpTo={jump} onOpenStamp={readOnly ? undefined : (sello, el) => setSheet({ sello, el })} />
+          <Libreta nombre={nombre} sellos={sellos} intro={intro} jumpTo={jump} startPage={startPage} onOpenStamp={readOnly ? undefined : (sello, el) => setSheet({ sello, el })} />
         )}
         {privacyOpen && (
           <PassportPrivacySheet

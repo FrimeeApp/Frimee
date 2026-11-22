@@ -1,18 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import PassportReader from "@/components/profile/passport/PassportReader";
 import { GHOST_BTN } from "@/components/plans/home/pieces";
 import { useAuth } from "@/providers/AuthProvider";
 import { getPublicUserProfile } from "@/services/api/repositories/users.repository";
 import { leerPasaporte } from "@/services/api/endpoints/pasaporte.endpoint";
-import type { PasaporteLeido } from "@/lib/passport";
+import { buildPages, groupTrips, tripPageNumber, type PasaporteLeido } from "@/lib/passport";
 
 /** Entrada directa al pasaporte (enlaces y avisos). Desde el perfil se abre como capa encima de él, sin pasar por aquí. */
 export default function PassportClient() {
   const router = useRouter();
   const { user } = useAuth();
+  // ?plan=<id>: abre el libro por la página de ese viaje (así llegas desde «Sello nuevo»).
+  const planParam = Number(useSearchParams().get("plan")) || null;
   const [data, setData] = useState<{ nombre: string; pasaporte: PasaporteLeido } | null>(null);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -35,7 +37,10 @@ export default function PassportClient() {
     };
   }, [userId, attempt]);
 
-  if (data) return <PassportReader nombre={data.nombre} sellos={data.pasaporte.sellos} ajustes={data.pasaporte.ajustes} userId={userId} onRequestClose={() => router.back()} />;
+  if (data) {
+    const startPage = planParam ? tripPageNumber(buildPages(groupTrips(data.pasaporte.sellos)), planParam) ?? undefined : undefined;
+    return <PassportReader nombre={data.nombre} sellos={data.pasaporte.sellos} ajustes={data.pasaporte.ajustes} userId={userId} startPage={startPage} onRequestClose={() => router.back()} />;
+  }
 
   return (
     <div className="min-h-dvh bg-[var(--passport-table)] px-4 pt-mobile-safe-top text-app">

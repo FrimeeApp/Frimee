@@ -8,7 +8,7 @@ import { EyeOff, Images, MapPin, X } from "lucide-react";
 import { FOCUS, GHOST_BTN } from "@/components/plans/home/pieces";
 import { countryName, countryOrdinal, dateLabel, planRangeLabel, type Sello } from "@/lib/passport";
 import { marcarNoFui } from "@/services/api/endpoints/pasaporte.endpoint";
-import { HITO_NAME } from "./stamps";
+import { HITO_NAME, noFuiQuita } from "./stamps";
 
 /**
  * Ventana de un sello (plan, país o hito), tablero «Sello abierto».
@@ -166,16 +166,10 @@ export default function StampPopover({
     const n = pais?.country_code ? countryOrdinal(sellos, pais.country_code, pais.id) : 0;
     title = plan?.titulo ?? "Viaje";
     sub = [plan ? planRangeLabel(plan).toLowerCase() : dateLabel(sello.stamped_at), n > 1 && pais?.country_code ? `${n}.º sello de ${countryName(pais.country_code)}` : null].filter(Boolean).join(" · ");
-    // Lo que quita «No fui»: su sello, los de país y los hitos del viaje.
-    const delViaje = sellos.filter((x) => x.plan_id === sello.plan_id && !x.hidden);
-    const paises = delViaje.filter((x) => x.kind === "pais" && x.country_code).map((x) => countryName(x.country_code!));
-    const hitos = delViaje.filter((x) => x.kind === "hito" && x.hito).map((x) => `«${HITO_NAME[x.hito!]}»`);
-    const lista = (xs: string[]) => (xs.length > 1 ? `${xs.slice(0, -1).join(", ")} y ${xs[xs.length - 1]}` : xs[0]);
-    const quita = ["su sello", paises.length ? (paises.length === 1 ? `el de ${paises[0]}` : `los de ${lista(paises)}`) : null, hitos.length ? (hitos.length === 1 ? `el hito ${hitos[0]}` : `los hitos ${lista(hitos)}`) : null].filter((x): x is string => Boolean(x));
     body = confirming ? (
       <div role="alertdialog" aria-label="Confirmar «No fui a este viaje»" className="flex flex-col gap-3 rounded-[8px] border border-app p-3">
         <p className="m-0 text-[14px] leading-[1.5]">
-          ¿Quitar «{plan?.titulo ?? "este viaje"}» de tu pasaporte? Se quitarán {lista(quita)}. Puedes volver a añadirlo desde el plan.
+          ¿Quitar «{plan?.titulo ?? "este viaje"}» de tu pasaporte? Se quitarán {noFuiQuita(sellos, sello.plan_id)}. Puedes volver a añadirlo desde el plan.
         </p>
         <div className="grid grid-cols-2 gap-2">
           <button type="button" disabled={busy} onClick={() => setConfirming(false)} className={`${GHOST_BTN} !h-11 !text-[14px]`}>
