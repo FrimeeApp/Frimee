@@ -3,13 +3,13 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Capacitor } from "@capacitor/core";
 import { useRouter } from "next/navigation";
-import { X } from "lucide-react";
-import { FILL_BTN, FOCUS, GHOST_BTN, SERIF, TEXT_BTN } from "@/components/plans/home/pieces";
+import { EyeOff, Images, MapPin, X } from "lucide-react";
+import { FILL_BTN, FOCUS, GHOST_BTN, SERIF } from "@/components/plans/home/pieces";
 import { countryName, countryOrdinal, dateLabel, planDays, planRangeLabel, type Sello } from "@/lib/passport";
 import { marcarNoFui, ocultarSello } from "@/services/api/endpoints/pasaporte.endpoint";
 import { CountryStamp, HITO_NAME, HitoStamp, PlanStamp } from "./stamps";
 
-/** Hoja del sello (tablero «Sello abierto»): el sello en grande, de qué viaje es y sus acciones. Solo para el dueño del pasaporte. */
+/** Hoja del sello (tablero «Sello abierto»): hoja inferior con los sellos del viaje, su título y las acciones. Solo para el dueño del pasaporte. */
 
 const planPath = (id: number) => (Capacitor.isNativePlatform() ? `/plans/static?id=${id}` : `/plans/${id}`);
 const albumPath = (id: number) => (Capacitor.isNativePlatform() ? `/plans/static/album?id=${id}` : `/plans/${id}/album`);
@@ -39,16 +39,16 @@ export default function StampSheet({
   }, []);
   useEffect(() => closeRef.current?.focus(), []);
 
-  // El plan del viaje: el sello de plan lo lleva; los de país y hito, el sello de plan hermano si lo hay.
-  const planSello = sello.kind === "plan" ? sello : sellos.find((s) => s.plan_id === sello.plan_id && s.kind === "plan" && s.plan) ?? null;
+  // El viaje del sello: su plan, su sello de plan y su sello de país (los de la misma hoja del diseño).
+  const planSello = sello.kind === "plan" ? sello : sellos.find((s) => s.plan_id === sello.plan_id && s.kind === "plan") ?? null;
   const plan = sello.plan ?? planSello?.plan ?? null;
-  const titulo = sello.kind === "pais" ? countryName(sello.country_code ?? "") : sello.kind === "hito" ? HITO_NAME[sello.hito!] : plan?.titulo ?? "Viaje";
-
-  // «21–25 NOV 2026 · 5 días · tu 2.º sello de Portugal»
   const countrySello = sello.kind === "pais" ? sello : sellos.find((s) => s.plan_id === sello.plan_id && s.kind === "pais") ?? null;
+  const titulo = sello.kind === "hito" ? HITO_NAME[sello.hito!] : plan?.titulo ?? (countrySello?.country_code ? countryName(countrySello.country_code) : "Viaje");
+
+  // «21–25 nov 2026 · 5 días · tu 2.º sello de Portugal»
   const ordinal = countrySello?.country_code ? countryOrdinal(sellos, countrySello.country_code, countrySello.id) : 0;
   const parts = [
-    plan ? planRangeLabel(plan) : dateLabel(sello.stamped_at),
+    plan ? planRangeLabel(plan).toLowerCase() : dateLabel(sello.stamped_at),
     plan ? `${planDays(plan)} ${planDays(plan) === 1 ? "día" : "días"}` : null,
     ordinal > 0 && countrySello?.country_code ? `tu ${ordinal}.º sello de ${countryName(countrySello.country_code)}` : null,
   ].filter(Boolean);
@@ -67,72 +67,89 @@ export default function StampSheet({
   };
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/40 md:items-center md:p-8" onClick={onClose}>
-      <div
+    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/[0.62]" onClick={onClose}>
+      <section
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        aria-label={titulo}
+        aria-label={`Sello de ${titulo}`}
         onClick={(e) => e.stopPropagation()}
-        className="flex max-h-dvh w-full max-w-[460px] flex-col gap-4 overflow-y-auto rounded-t-[16px] border border-app bg-surface p-4 pb-[calc(16px+env(safe-area-inset-bottom))] text-app md:rounded-[8px]"
+        className="flex max-h-dvh w-full max-w-[460px] flex-col gap-4 overflow-y-auto rounded-t-[8px] border-t border-app bg-surface px-4 pb-[calc(16px+env(safe-area-inset-bottom))] pt-2 text-app shadow-[0_12px_24px_rgba(0,0,0,0.3),0_4px_8px_rgba(0,0,0,0.2)]"
       >
-        <div className="flex justify-end">
-          <button ref={closeRef} type="button" onClick={onClose} aria-label="Cerrar" className={`-mr-1 -mt-1 inline-flex size-11 items-center justify-center rounded-[8px] text-app ${FOCUS}`}>
+        <div className="relative flex h-7 shrink-0 justify-center">
+          <span aria-hidden="true" className="mt-1 h-1 w-9 rounded-full bg-[var(--border-strong)]" />
+          <button ref={closeRef} type="button" onClick={onClose} aria-label="Cerrar" className={`absolute -right-2 -top-1 inline-flex size-11 items-center justify-center rounded-[8px] text-app ${FOCUS}`}>
             <X className="size-[22px]" aria-hidden />
           </button>
         </div>
 
-        <div className="-mt-6 flex h-[200px] items-center justify-center rounded-[8px] bg-surface-2">
-          {sello.kind === "plan" ? (
-            <PlanStamp sello={sello} size={220} tilt={-4} />
-          ) : sello.kind === "pais" ? (
-            <CountryStamp sello={sello} size={168} tilt={6} />
+        <div className="flex h-[150px] shrink-0 items-center justify-center gap-1">
+          {sello.kind === "hito" ? (
+            <HitoStamp hito={sello.hito!} id={sello.id} size={140} tilt={-3} />
           ) : (
-            <HitoStamp hito={sello.hito!} id={sello.id} size={168} tilt={-3} />
+            <>
+              {(planSello ?? null) && <PlanStamp sello={planSello!} size={190} tilt={-4} />}
+              {countrySello && <CountryStamp sello={countrySello} size={120} tilt={8} />}
+            </>
           )}
         </div>
 
-        <div className="flex flex-col gap-1">
-          <h2 className={`m-0 text-[28px] leading-[1.15] ${SERIF}`}>{titulo}</h2>
-          <p className="m-0 text-[14px] leading-[1.5] text-muted">{parts.join(" · ")}</p>
+        <div className="text-center">
+          <h2 className={`m-0 text-[32px] leading-[1.15] ${SERIF}`}>{titulo}</h2>
+          <p className="m-0 mt-1 text-[14px] leading-[1.5] tabular-nums text-muted">{parts.join(" · ")}</p>
         </div>
 
         {confirming ? (
           <div role="alertdialog" aria-label="Confirmar «No fui a este viaje»" className="flex flex-col gap-3 rounded-[8px] border border-app p-3">
             <p className="m-0 text-[14px] leading-[1.5]">Se quitan todos tus sellos de «{plan?.titulo ?? "este viaje"}» y no se vuelven a poner solos.</p>
-            <div className="flex gap-2">
-              <button type="button" disabled={busy} onClick={() => setConfirming(false)} className={`${GHOST_BTN} flex-1`}>
+            <div className="grid grid-cols-2 gap-2">
+              <button type="button" disabled={busy} onClick={() => setConfirming(false)} className={`${GHOST_BTN} !text-[14px]`}>
                 Cancelar
               </button>
-              <button type="button" disabled={busy} onClick={() => void run(() => marcarNoFui(sello.plan_id), () => onNoFui(sello.plan_id))} className={`${FILL_BTN} flex-1`}>
+              <button type="button" disabled={busy} onClick={() => void run(() => marcarNoFui(sello.plan_id), () => onNoFui(sello.plan_id))} className={`${FILL_BTN} !text-[14px]`}>
                 Quitar sellos
               </button>
             </div>
           </div>
         ) : (
-          <div className="flex flex-col gap-2">
-            <button type="button" onClick={() => router.push(planPath(sello.plan_id))} className={`${FILL_BTN} w-full`}>
-              Ver el plan
-            </button>
-            <button type="button" onClick={() => router.push(albumPath(sello.plan_id))} className={`${GHOST_BTN} w-full`}>
-              Ver el álbum
-            </button>
-            <div className="flex flex-col items-stretch">
-              <button type="button" disabled={busy} onClick={() => void run(() => ocultarSello(sello.id, true), () => onHidden(sello))} className={`${TEXT_BTN} min-h-11 justify-center`}>
+          <>
+            <div className="grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => router.push(planPath(sello.plan_id))} className={`${GHOST_BTN} bg-surface-2 !text-[14px] leading-[1.2]`}>
+                <MapPin className="size-[18px]" aria-hidden />
+                Ver el plan
+              </button>
+              <button type="button" onClick={() => router.push(albumPath(sello.plan_id))} className={`${GHOST_BTN} bg-surface-2 !text-[14px] leading-[1.2]`}>
+                <Images className="size-[18px]" aria-hidden />
+                Ver el álbum
+              </button>
+            </div>
+            <div className="flex flex-col">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void run(() => ocultarSello(sello.id, true), () => onHidden(sello))}
+                className={`inline-flex h-11 w-full items-center justify-center gap-2 rounded-[8px] text-[14px] font-[var(--fw-semibold)] leading-[1.2] text-muted ${FOCUS}`}
+              >
+                <EyeOff className="size-[18px]" aria-hidden />
                 Ocultar este sello
               </button>
-              <button type="button" disabled={busy} onClick={() => setConfirming(true)} className={`${TEXT_BTN} min-h-11 justify-center !text-[var(--text-secondary)]`}>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setConfirming(true)}
+                className={`inline-flex h-11 w-full items-center justify-center rounded-[8px] text-[14px] font-[var(--fw-semibold)] leading-[1.2] text-muted ${FOCUS}`}
+              >
                 No fui a este viaje
               </button>
             </div>
-          </div>
+          </>
         )}
         {error && (
-          <p role="alert" className="m-0 text-[14px] leading-[1.5] text-[var(--error)]">
+          <p role="alert" className="m-0 text-center text-[14px] leading-[1.5] text-[var(--error)]">
             {error}
           </p>
         )}
-      </div>
+      </section>
     </div>
   );
 }
