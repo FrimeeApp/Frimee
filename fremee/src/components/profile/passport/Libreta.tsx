@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { FOCUS, LABEL, SERIF } from "@/components/plans/home/pieces";
 import {
@@ -20,6 +20,8 @@ import {
 import type { Placed } from "@/lib/passportLayout";
 import { freeBands, layoutPage } from "@/lib/passportLayout";
 import { marcarSellosVistos } from "@/services/api/endpoints/pasaporte.endpoint";
+import { playOpen } from "@/lib/passportOpen";
+import { PassportCover } from "./PassportCover";
 import { CountryStamp, HITO_NAME, HitoStamp, PlanStamp } from "./stamps";
 
 /** La libreta (tableros «Pasaporte · la libreta»): página de datos + una página por cada 3 viajes de un año. */
@@ -42,7 +44,18 @@ const FADE_MS = 160;
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
-export default function Libreta({ nombre, sellos }: { nombre: string; sellos: Sello[] }) {
+/** Apertura desde el perfil: la tapa vuela hasta la página derecha, se pliega sobre el lomo y descubre el libro. */
+export type LibretaIntro = {
+  fromCover: HTMLElement;
+  profile?: HTMLElement | null;
+  /** Fondo del lector: solo el fondo, para que el contenido no se funda con él. */
+  deskRef: RefObject<HTMLElement | null>;
+  /** Título y demás elementos del lector que entran al final. */
+  chromeRefs?: RefObject<HTMLElement | null>[];
+  onDone?: () => void;
+};
+
+export default function Libreta({ nombre, sellos, intro }: { nombre: string; sellos: Sello[]; intro?: LibretaIntro }) {
   const trips = useMemo(() => groupTrips(sellos), [sellos]);
   const pages = useMemo(() => buildPages(trips), [trips]);
   const stats = useMemo(() => computeStats(sellos), [sellos]);
@@ -51,11 +64,16 @@ export default function Libreta({ nombre, sellos }: { nombre: string; sellos: Se
   const boxRef = useRef<HTMLDivElement>(null);
   const [wide, setWide] = useState(false);
   const [scale, setScale] = useState(1);
+  const [measured, setMeasured] = useState(false);
   const dims = wide ? WIDE : MOBILE;
   const W = dims.w;
   const H = dims.h;
   const SPREAD_W = W * 2 + SPINE;
-  useEffect(() => {
+  // La tapa del lector mantiene la proporción de la tapa (132 × 185) y cabe en una página.
+  const coverW = Math.min(W, (H * 132) / 185);
+  const coverH = (coverW * 185) / 132;
+  // Antes de pintar: la apertura necesita saber ya si es doble página y a qué escala.
+  useLayoutEffect(() => {
     const el = boxRef.current;
     if (!el) return;
     const measure = () => {
@@ -65,6 +83,7 @@ export default function Libreta({ nombre, sellos }: { nombre: string; sellos: Se
       const byWidth = el.clientWidth / (isWide ? d.w * 2 + SPINE + TAB_W : d.w);
       const byHeight = isWide ? (window.innerHeight - 200) / d.h : Infinity;
       setScale(Math.min(isWide ? 1 : 1.25, Math.max(0.5, Math.min(byWidth, byHeight))));
+      setMeasured(true);
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -75,6 +94,44 @@ export default function Libreta({ nombre, sellos }: { nombre: string; sellos: Se
       window.removeEventListener("resize", measure);
     };
   }, []);
+
+  const rightRef = useRef<HTMLDivElement>(null);
+  const spineRef = useRef<HTMLDivElement>(null);
+  const leftRef = useRef<HTMLDivElement>(null);
+  const tabsRef = useRef<HTMLDivElement>(null);
+  const controlsRef = useRef<HTMLDivElement>(null);
+  const chipsRef = useRef<HTMLElement>(null);
+  const coverMoveRef = useRef<HTMLDivElement>(null);
+  const coverFoldRef = useRef<HTMLDivElement>(null);
+  const introRan = useRef(false);
+  const [introDone, setIntroDone] = useState(!intro);
+  useLayoutEffect(() => {
+    if (!intro || !measured || introRan.current) return;
+    const cm = coverMoveRef.current;
+    const cf = coverFoldRef.current;
+    const desk = intro.deskRef.current;
+    const right = rightRef.current;
+    if (!cm || !cf || !desk || !right) {
+      queueMicrotask(() => setIntroDone(true));
+      return;
+    }
+    introRan.current = true;
+    const chrome = ([controlsRef.current, wide ? null : chipsRef.current, ...(intro.chromeRefs ?? []).map((r) => r.current)] as (HTMLElement | null)[]).filter((e): e is HTMLElement => Boolean(e));
+    void playOpen({
+      fromCover: intro.fromCover,
+      coverMove: cm,
+      coverFold: cf,
+      profile: intro.profile,
+      desk,
+      right: ([right, spineRef.current] as (HTMLElement | null)[]).filter((e): e is HTMLElement => Boolean(e)),
+      left: wide ? leftRef.current : null,
+      tabs: wide ? tabsRef.current : null,
+      chrome,
+    }).then(() => {
+      setIntroDone(true);
+      intro.onDone?.();
+    });
+  }, [intro, measured, wide]);
 
   // Se abre por la última página sellada: las páginas van por orden de fecha, como en un pasaporte.
   const [rawIndex, setIndex] = useState(() => pages.length - 1);
@@ -242,7 +299,7 @@ export default function Libreta({ nombre, sellos }: { nombre: string; sellos: Se
 
   return (
     <div className="mx-auto flex w-full max-w-[460px] flex-col md:max-w-[1080px]">
-      <nav aria-label="Saltar a" className="flex gap-2 overflow-x-auto pb-3 pt-1 md:hidden">
+      <nav ref={chipsRef} aria-label="Saltar a" className="flex gap-2 overflow-x-auto pb-3 pt-1 md:hidden">
         <Chip active={spreadHasDatos} onClick={() => goToPage(0)}>
           Datos
         </Chip>
@@ -255,25 +312,39 @@ export default function Libreta({ nombre, sellos }: { nombre: string; sellos: Se
 
       <div ref={boxRef} className="w-full">
         <div className="relative mx-auto" style={{ width: (wide ? SPREAD_W + TAB_W : W) * scale, height: H * scale }}>
-          <div ref={fadeRef} data-passport-book data-passport-target={wide ? undefined : ""} className="absolute left-0 top-0" style={{ width: wide ? SPREAD_W : W, height: H, transform: `scale(${scale})`, transformOrigin: "top left" }}>
+          <div ref={fadeRef} className="absolute left-0 top-0" style={{ width: wide ? SPREAD_W : W, height: H, transform: `scale(${scale})`, transformOrigin: "top left" }}>
             <DimsContext.Provider value={dims}>
             {wide ? (
               <>
-                <div data-passport-target className="absolute left-0 top-0" style={{ width: W, height: H }}>
+                <div ref={leftRef} className="absolute left-0 top-0" style={{ width: W, height: H }}>
                   {half("left")}
                 </div>
-                <div aria-hidden="true" className="absolute top-0 bg-[var(--border-strong)]" style={{ left: W, width: SPINE, height: H }} />
-                <div className="absolute top-0" style={{ left: W + SPINE, width: W, height: H }}>
+                <div ref={spineRef} aria-hidden="true" className="absolute top-0 bg-[var(--border-strong)]" style={{ left: W, width: SPINE, height: H }} />
+                <div ref={rightRef} className="absolute top-0" style={{ left: W + SPINE, width: W, height: H }}>
                   {half("right")}
                 </div>
               </>
             ) : (
-              half("right")
+              <div ref={rightRef} className="absolute left-0 top-0" style={{ width: W, height: H }}>
+                {half("right")}
+              </div>
+            )}
+            {/* Tapa del lector: solo existe durante la apertura, centrada sobre la página derecha. */}
+            {!introDone && (
+              <div
+                ref={coverMoveRef}
+                className="absolute"
+                style={{ left: (wide ? W + SPINE : 0) + (W - coverW) / 2, top: (H - coverH) / 2, width: coverW, height: coverH, zIndex: 20 }}
+              >
+                <div ref={coverFoldRef}>
+                  <PassportCover name={nombre} width={coverW} tilt={0} />
+                </div>
+              </div>
             )}
             </DimsContext.Provider>
           </div>
           {wide && (
-            <div className="absolute flex flex-col" style={{ left: SPREAD_W * scale, top: 28 * scale, gap: 6 * scale }}>
+            <div ref={tabsRef} className="absolute flex flex-col" style={{ left: SPREAD_W * scale, top: 28 * scale, gap: 6 * scale }}>
               <EdgeTab active={spreadHasDatos} onClick={() => goToPage(0)} h={TAB_H * scale} w={TAB_W * scale}>
                 Datos
               </EdgeTab>
@@ -287,7 +358,7 @@ export default function Libreta({ nombre, sellos }: { nombre: string; sellos: Se
         </div>
       </div>
 
-      <div className="flex items-center justify-between pb-4 pt-3">
+      <div ref={controlsRef} className="flex items-center justify-between pb-4 pt-3">
         <NavButton label="Página anterior" disabled={unit(index) === 0} onClick={() => goToUnit(unit(index) - 1)}>
           <ChevronLeft className="size-[22px]" aria-hidden />
         </NavButton>

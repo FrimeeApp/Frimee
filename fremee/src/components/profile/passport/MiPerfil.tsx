@@ -2,7 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Capacitor } from "@capacitor/core";
 import { CalendarDays, ChevronRight, Lock, MapPin, Settings, Users } from "lucide-react";
@@ -14,9 +15,8 @@ import { TicketTypeIcon } from "@/components/wallet/TicketTypeIcon";
 import { CARD, FILL_BTN, FOCUS, GHOST_BTN, LABEL, SERIF, TEXT_BTN } from "@/components/plans/home/pieces";
 import { leerPasaporte } from "@/services/api/endpoints/pasaporte.endpoint";
 import { computeStats, countryName, dateLabel, type PasaporteLeido, type Sello } from "@/lib/passport";
-import { openPassportFrom } from "@/lib/passportOpen";
-import { setPassportCache } from "@/lib/passportCache";
 import { GhostPlanStamp, PassportCover } from "./PassportCover";
+import PassportReader from "./PassportReader";
 import { CountryStamp, PlanStamp } from "./stamps";
 
 /** Tu perfil (tableros «Perfil»): cabecera, pasaporte y cartera. Nada más: aquí eres viajero, no hay lista de planes. */
@@ -109,7 +109,7 @@ export default function MiPerfil({
   const goSettings = () => router.push("/settings");
 
   return (
-    <div className="mx-auto w-full max-w-[1080px]">
+    <div data-profile-root className="mx-auto w-full max-w-[1080px]">
       {isGuest && (
         <div className="mb-[var(--space-4)] flex min-h-[52px] items-center gap-2.5 rounded-[8px] border border-app bg-surface pl-3 pr-1 md:hidden">
           <span className="flex-1 text-[14px] leading-tight text-app">Estás en modo invitado</span>
@@ -206,12 +206,31 @@ function PassportCard({ nombre, plans, pasaporte, now }: { nombre: string; plans
   }, [plans, now]);
 
   const goCreate = () => router.push("/calendar?create=1");
-  // La tapa que se ve (móvil o escritorio) es la que se escala al abrir.
+  // El pasaporte se abre como capa encima del perfil (para que la tapa pueda volar desde su sitio) y el historial
+  // lleva un paso propio: «atrás» lo cierra.
+  const [reader, setReader] = useState<{ from: HTMLElement | null } | null>(null);
+  const [closing, setClosing] = useState(false);
+  useEffect(() => {
+    if (!reader) return;
+    const onPop = () => setClosing(true);
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [reader]);
+  const closeReader = useCallback(() => {
+    setReader(null);
+    setClosing(false);
+  }, []);
   const openPassport = () => {
-    const cover = [...document.querySelectorAll<HTMLElement>("[data-passport-cover]")].find((e) => e.getClientRects().length > 0)?.firstElementChild as HTMLElement | null;
-    // La libreta se abre con lo ya leído: así la tapa puede viajar enseguida, sin esperar a la red.
-    if (pasaporte) setPassportCache(nombre, pasaporte);
-    openPassportFrom(cover ?? null, () => router.push("/passport"));
+    if (!pasaporte) {
+      // Sin los sellos leídos, la entrada directa los vuelve a pedir.
+      router.push("/passport");
+      return;
+    }
+    // La tapa que se ve (móvil o escritorio) es la que vuela.
+    const from = ([...document.querySelectorAll<HTMLElement>("[data-passport-cover]")].find((e) => e.getClientRects().length > 0)?.firstElementChild as HTMLElement | null) ?? null;
+    window.history.pushState({ passportReader: true }, "");
+    setClosing(false);
+    setReader({ from });
   };
 
   let headline: string;
@@ -338,6 +357,20 @@ function PassportCard({ nombre, plans, pasaporte, now }: { nombre: string; plans
           </ul>
         </div>
       )}
+      {reader &&
+        pasaporte &&
+        createPortal(
+          <PassportReader
+            nombre={nombre}
+            sellos={pasaporte.sellos}
+            fromCover={reader.from}
+            profile={document.querySelector<HTMLElement>("[data-profile-root]")}
+            closing={closing}
+            onRequestClose={() => window.history.back()}
+            onClosed={closeReader}
+          />,
+          document.body,
+        )}
     </section>
   );
 }
