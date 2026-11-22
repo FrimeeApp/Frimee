@@ -223,15 +223,15 @@ export function HitoStamp({ hito, id, stampedAt, size = 64, tilt = 0, nuevo = fa
           <path d="M42 48l-8 8 8 8" transform="translate(-4 -8)" />
         </g>
       ) : (
-        <text x="48" y={t.sub ? 52 : 56} textAnchor="middle" fontFamily={SERIF} fontSize={t.big.length > 1 ? 30 : 34} fill={c}>
+        <text x="48" y={t.sub ? 59 : 56} textAnchor="middle" fontFamily={SERIF} fontSize={t.sub ? 26 : t.big.length > 1 ? 30 : 34} fill={c}>
           {t.big}
         </text>
       )}
-      <text x="48" y={hito === "de_vuelta" ? 74 : t.sub ? 36 : 68} textAnchor="middle" fontFamily={SANS} fontSize="7.5" fontWeight="700" letterSpacing="1.2" fill={c}>
+      <text x="48" y={hito === "de_vuelta" ? 74 : t.sub ? 33 : 68} textAnchor="middle" fontFamily={SANS} fontSize="7.5" fontWeight="700" letterSpacing="1.2" fill={c}>
         {t.label}
       </text>
       {t.sub && (
-        <text x="48" y="68" textAnchor="middle" fontFamily={SANS} fontSize="7.5" fontWeight="700" letterSpacing="1.2" fill={c}>
+        <text x="48" y="70" textAnchor="middle" fontFamily={SANS} fontSize="7.5" fontWeight="700" letterSpacing="1.2" fill={c}>
           {t.sub}
         </text>
       )}
