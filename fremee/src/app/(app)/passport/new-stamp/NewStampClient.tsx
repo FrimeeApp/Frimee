@@ -25,14 +25,14 @@ const RECENT_DAYS = 7;
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
-/** Escala la página de ejemplo para que quepa en pantallas estrechas (sin pasar de 1). */
+/** Escala la página de ejemplo al ancho disponible (hasta 420 px; en pantallas estrechas, más pequeña). */
 function useFit(base: number) {
   const ref = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const measure = () => setScale(Math.min(1, el.clientWidth / base));
+    const measure = () => setScale(el.clientWidth / base);
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
@@ -101,6 +101,13 @@ export default function NewStampClient() {
     ids.forEach((id) => marked.current.add(id));
     marcarSellosVistos(ids).catch((err) => console.error("[pasaporte] No se marcaron los sellos como vistos:", (err as { message?: string } | null)?.message ?? err));
   }, [trip]);
+
+  useEffect(() => {
+    if (!confirming) return;
+    const key = (e: KeyboardEvent) => e.key === "Escape" && !busy && setConfirming(false);
+    document.addEventListener("keydown", key);
+    return () => document.removeEventListener("keydown", key);
+  }, [confirming, busy]);
 
   const next = useCallback(() => {
     setConfirming(false);
@@ -178,79 +185,99 @@ export default function NewStampClient() {
         ? `Terminó «${titulo}». Su sello ya está en ${donde}.`
         : `Terminó «${titulo}». Su sello ya está en ${donde}, ${nombresPaises.length > 1 ? "junto a los de" : "junto al de"} ${lista(nombresPaises)}.`;
 
+  const primary = (
+    <button type="button" className={`${FILL_BTN} w-full md:w-auto md:px-6 ${FOCUS}`} onClick={() => (isLast ? router.replace(`/passport?plan=${trip.planId}`) : next())}>
+      {isLast ? "Abrir mi pasaporte" : "Siguiente sello"}
+    </button>
+  );
+  const notThere = (
+    <button
+      type="button"
+      onClick={() => setConfirming(true)}
+      className={`inline-flex h-11 w-full items-center justify-center rounded-[8px] text-[14px] font-[var(--fw-semibold)] leading-[1.2] text-muted hover:text-app md:w-auto md:px-4 ${FOCUS}`}
+    >
+      No fui a este viaje
+    </button>
+  );
+
   return (
-    <div className="min-h-dvh bg-app text-app">
-      <div className="mx-auto flex min-h-dvh w-full max-w-[460px] flex-col px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-mobile-safe-top md:py-8">
-        <div className="flex h-14 shrink-0 items-center justify-between">
-          <button
-            type="button"
-            aria-label="Cerrar"
-            onClick={() => router.replace(profileHref)}
-            className={`-ml-3 inline-flex size-11 items-center justify-center rounded-[8px] text-app ${FOCUS}`}
-          >
-            <X className="size-[22px]" aria-hidden />
-          </button>
-          {total > 1 && <span className="text-[14px] tabular-nums text-muted">{position + 1} de {total}</span>}
+    <div className="flex min-h-dvh flex-col bg-app text-app">
+      <div className="mx-auto flex h-14 w-full max-w-[960px] shrink-0 items-center justify-between px-2 pt-mobile-safe-top md:px-6">
+        <button type="button" aria-label="Cerrar" onClick={() => router.replace(profileHref)} className={`inline-flex size-11 items-center justify-center rounded-[8px] text-app ${FOCUS}`}>
+          <X className="size-[22px]" aria-hidden />
+        </button>
+        {total > 1 && <span aria-live="polite" className="pr-3 text-[14px] tabular-nums text-muted">{position + 1} de {total}</span>}
+      </div>
+
+      {/*
+        Móvil: título, página y nota en una columna, con los botones fijos abajo.
+        Escritorio: la página a la izquierda; título, nota y botones a la derecha.
+        key: al pasar de un viaje al siguiente, todo se vuelve a estampar.
+      */}
+      <div
+        key={trip.planId}
+        className="mx-auto grid w-full max-w-[960px] flex-1 grid-cols-1 content-start gap-x-16 gap-y-5 px-4 pb-4 md:grid-cols-[420px_minmax(0,400px)] md:content-center md:justify-center md:gap-y-3 md:px-12 md:pb-16"
+      >
+        <div role="status" className="flex flex-col items-center gap-2 text-center md:col-start-2 md:row-start-1 md:items-start md:self-end md:text-left">
+          <p className="m-0 inline-flex items-center gap-1.5 text-[12px] font-[var(--fw-semibold)] leading-[1.4] tracking-[.02em] text-[var(--chat-accent-text)]">
+            <Stamp className="size-4 shrink-0" strokeWidth={2} aria-hidden />
+            SELLO NUEVO
+          </p>
+          <h1 className={`m-0 text-[32px] leading-[1.1] md:text-[48px] ${SERIF}`}>{lugar} ya está en tu pasaporte</h1>
         </div>
 
-        {/* key: al pasar de un viaje al siguiente, todo se vuelve a estampar. */}
-        <div key={trip.planId} className="flex flex-1 flex-col">
-          <div role="status" className="flex flex-col items-center text-center">
-            <p className="m-0 inline-flex items-center gap-1.5 text-[12px] font-[var(--fw-semibold)] leading-[1.4] tracking-[.02em] text-[var(--chat-accent-text)]">
-              <Stamp className="size-4 shrink-0" strokeWidth={2} aria-hidden />
-              SELLO NUEVO
-            </p>
-            <h1 className={`m-0 mt-2 text-[32px] leading-[1.15] ${SERIF}`}>{lugar} ya está en tu pasaporte</h1>
-          </div>
+        <div className="md:col-start-1 md:row-span-2 md:row-start-1 md:self-center">
+          <MiniPage trip={trip} year={year} page={pagina} />
+        </div>
 
-          <div className="mt-5">
-            <MiniPage trip={trip} year={year} page={pagina} />
-          </div>
-
-          {/* La nota y los botones van pegados abajo; sin acompañantes no hay nada entre la página y ellos. */}
-          <div className="mt-auto flex flex-col pt-6">
-            {confirming ? (
-              <div role="alertdialog" aria-label="Confirmar «No fui a este viaje»" className="flex flex-col gap-3 rounded-[8px] border border-app p-3">
-                <p className="m-0 text-[14px] leading-[1.5]">
-                  ¿Quitar «{titulo}» de tu pasaporte? Se quitarán {noFuiQuita(sellos, trip.planId)}. Puedes volver a añadirlo desde el plan.
-                </p>
-                {actionError && (
-                  <p role="alert" className="m-0 text-[14px] leading-[1.5] text-[var(--error)]">
-                    {actionError}
-                  </p>
-                )}
-                <div className="grid grid-cols-2 gap-2">
-                  <button type="button" disabled={busy} onClick={() => { setConfirming(false); setActionError(null); }} className={`${GHOST_BTN} !h-11 !text-[14px]`}>
-                    Cancelar
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void noFui()}
-                    className={`inline-flex h-11 items-center justify-center rounded-[8px] bg-[var(--error)] px-4 text-[14px] font-[var(--fw-semibold)] text-[var(--error-contrast)] disabled:opacity-[var(--disabled-opacity)] ${FOCUS}`}
-                  >
-                    Quitar
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <>
-                <p className="m-0 mb-4 px-2 text-center text-[16px] leading-[1.6] text-muted">{nota}</p>
-                <button type="button" className={`${FILL_BTN} w-full ${FOCUS}`} onClick={() => (isLast ? router.replace(`/passport?plan=${trip.planId}`) : next())}>
-                  {isLast ? "Abrir mi pasaporte" : "Siguiente sello"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirming(true)}
-                  className={`mt-1 inline-flex h-11 w-full items-center justify-center rounded-[8px] text-[14px] font-[var(--fw-semibold)] leading-[1.2] text-muted hover:text-app ${FOCUS}`}
-                >
-                  No fui a este viaje
-                </button>
-              </>
-            )}
+        <div className="flex flex-col items-center md:col-start-2 md:row-start-2 md:items-start md:self-start">
+          <p className="m-0 px-2 text-center text-[16px] leading-[1.6] text-muted md:px-0 md:text-left">{nota}</p>
+          {/* Acompañantes: pendiente del backend de acompañantes (backlog). */}
+          <div className="mt-5 hidden items-center gap-2 md:flex">
+            {primary}
+            {notThere}
           </div>
         </div>
       </div>
+
+      {/* Móvil: botones fijos abajo, sin huecos. */}
+      <div className="sticky bottom-0 mx-auto flex w-full max-w-[460px] shrink-0 flex-col gap-1 border-t border-app bg-app px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-3 md:hidden">
+        {primary}
+        {notThere}
+      </div>
+
+      {confirming && (
+        <>
+          <div aria-hidden="true" className="fixed inset-0 z-[60] bg-black/60" onClick={() => !busy && setConfirming(false)} />
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="no-fui-title"
+            className="fixed left-1/2 top-1/2 z-[61] flex w-[min(420px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 flex-col gap-4 rounded-[8px] border border-app bg-surface p-6 text-app shadow-[0_12px_24px_rgba(0,0,0,0.3),0_4px_8px_rgba(0,0,0,0.2)]"
+          >
+            <h2 id="no-fui-title" className="m-0 text-[20px] font-[var(--fw-semibold)] leading-tight">¿Quitar «{titulo}» de tu pasaporte?</h2>
+            <p className="m-0 text-[16px] leading-[1.5] text-muted">Se quitarán {noFuiQuita(sellos, trip.planId)}. Puedes volver a añadirlo desde el plan.</p>
+            {actionError && (
+              <p role="alert" className="m-0 text-[14px] leading-[1.5] text-[var(--error)]">
+                {actionError}
+              </p>
+            )}
+            <div className="flex flex-col-reverse gap-2 md:flex-row md:justify-end">
+              <button type="button" autoFocus disabled={busy} onClick={() => { setConfirming(false); setActionError(null); }} className={`${GHOST_BTN} !h-11 !text-[14px]`}>
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void noFui()}
+                className={`inline-flex h-11 items-center justify-center rounded-[8px] bg-[var(--error)] px-4 text-[14px] font-[var(--fw-semibold)] text-[var(--error-contrast)] disabled:opacity-[var(--disabled-opacity)] ${FOCUS}`}
+              >
+                {busy ? "Quitando…" : "Quitar"}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -265,7 +292,7 @@ function MiniPage({ trip, year, page }: { trip: Trip; year: number; page: number
   const planX = pais ? 22 : (PAGE_W - 162) / 2;
 
   return (
-    <div ref={boxRef} className="flex w-full justify-center">
+    <div ref={boxRef} className="mx-auto flex w-full max-w-[420px] justify-center">
       <div style={{ width: PAGE_W * scale, height: h * scale }}>
         <div
           role="img"
