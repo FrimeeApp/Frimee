@@ -42,7 +42,7 @@ export default function PassportPrivacySheet({
   onChange: (a: PasaporteAjustes) => void;
   /** Sin él, la fila «Sellos ocultos» no sale (solo existe dentro del lector). */
   onOpenHidden?: () => void;
-  /** Sin él, no sale «Ver como tus amistades». */
+  /** Sin él, no sale «Ver tu pasaporte como lo ven los demás». */
   onPreview?: () => void;
   onClose: () => void;
 }) {
@@ -229,7 +229,7 @@ export default function PassportPrivacySheet({
           </span>
           {onPreview && (
             <button type="button" className={btn2} onClick={onPreview} disabled={onlyMe}>
-              <Eye className="size-[18px] shrink-0" strokeWidth={2} aria-hidden /> Ver como tus amistades
+              <Eye className="size-[18px] shrink-0" strokeWidth={2} aria-hidden /> Ver tu pasaporte como lo ven los demás
             </button>
           )}
           {shareUrl && (

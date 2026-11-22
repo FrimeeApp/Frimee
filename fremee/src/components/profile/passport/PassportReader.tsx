@@ -56,7 +56,7 @@ export default function PassportReader({
   const [indexOpen, setIndexOpen] = useState(false);
   const [indexTab, setIndexTab] = useState<IndexTab>("paises");
   const [privacyOpen, setPrivacyOpen] = useState(false);
-  // «Ver como tus amistades»: el pasaporte tal como lo ven los demás (sin ocultos y, si lo quitaste, sin sellos de plan).
+  // «Ver tu pasaporte como lo ven los demás»: el pasaporte tal como lo ven los demás (sin ocultos y, si lo quitaste, sin sellos de plan).
   const [preview, setPreview] = useState(false);
   const [ajustes, setAjustes] = useState(ajustesIniciales);
   const [jump, setJump] = useState<{ page: number; nonce: number } | null>(null);
@@ -117,8 +117,15 @@ export default function PassportReader({
         {preview ? (
           <>
             <div role="status" className="mx-auto mb-3 flex w-full max-w-[460px] items-center gap-3 rounded-[8px] border border-app bg-surface px-3 py-2 md:max-w-[1080px]">
-              <span className="flex-1 text-[14px] leading-[1.5]">Así lo ven tus amistades.</span>
-              <button type="button" onClick={() => setPreview(false)} className={`min-h-11 px-2 text-[14px] font-[var(--fw-semibold)] text-[var(--primary)] ${FOCUS}`}>
+              <span className="flex-1 text-[14px] leading-[1.5]">{ajustes?.passport_visibility === "TODOS" ? "Así ve tu pasaporte cualquiera en Frimee." : "Así ven tu pasaporte tus amistades."}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  // Mirar, cambiar algo y volver a mirar: se vuelve al diálogo de privacidad, no al lector.
+                  setPreview(false);
+                  setPrivacyOpen(true);
+                }}
+                className={`min-h-11 px-2 text-[14px] font-[var(--fw-semibold)] text-[var(--primary)] ${FOCUS}`}>
                 Salir de la vista previa
               </button>
             </div>
