@@ -200,6 +200,7 @@ export function computeStats(sellos: Sello[]): PassportStats {
 /** Línea de máquina decorativa del pie de la página de datos. */
 export function machineLines(nombre: string, stats: PassportStats) {
   const clean = nombre
+    .replace(/-/g, " ")
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
     .toUpperCase()
@@ -233,4 +234,25 @@ export function routeCode(label: string) {
   if (/^[A-Za-z]{3,4}$/.test(t)) return t.toUpperCase();
   const word = t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z ]/g, "").trim().split(/\s+/)[0] ?? "";
   return word.slice(0, 3).toUpperCase();
+}
+
+/**
+ * Líneas del nombre en la tapa, que es el sitio más estrecho. En orden de preferencia: nombre y apellido en una línea;
+ * en dos; y si tampoco cabe, solo el nombre de pila. `cap` = letras que caben en una línea (nunca se encoge la letra).
+ * Con varios nombres no se sabe dónde empiezan los apellidos: se usa la última palabra, que sí es apellido.
+ */
+export function coverNameLines(nombre: string, cap = 12): string[] {
+  const words = nombre.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return [];
+  const first = words[0];
+  const surname = words.length > 1 ? words[words.length - 1] : undefined;
+  if (!surname) return [first];
+  if (`${first} ${surname}`.length <= cap) return [`${first} ${surname}`];
+  if (first.length <= cap && surname.length <= cap) return [first, surname];
+  return [first];
+}
+
+/** Solo el nombre de pila, para textos como «Pasaporte de María» o «Coincidís en…». */
+export function firstName(nombre: string) {
+  return nombre.trim().split(/\s+/)[0] ?? "";
 }

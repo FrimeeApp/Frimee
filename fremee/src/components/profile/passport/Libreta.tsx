@@ -537,7 +537,7 @@ function Guarda({ nombre, since, className = "" }: { nombre: string; since: stri
           <circle cx="48" cy="20" r="2.6" fill="currentColor" />
         </svg>
         <p className="m-0 text-[12px] font-[var(--fw-semibold)] leading-[1.4] tracking-[0.08em]">ESTE PASAPORTE PERTENECE A</p>
-        <p className={`m-0 text-[40px] leading-[1.1] ${SERIF}`}>{nombre}</p>
+        <p title={nombre} className={`m-0 line-clamp-2 break-words leading-[1.1] ${nombre.trim().length > 22 ? "text-[32px]" : "text-[40px]"} ${SERIF}`}>{nombre}</p>
         <span aria-hidden="true" className="h-px w-12 bg-current" />
         <p className="m-0 text-[14px] leading-[1.5]">{since ? `Frimee · desde ${monthYearLabel(since)}` : "Frimee"}</p>
       </div>
@@ -552,7 +552,7 @@ function Field({ label, value, small }: { label: string; value: string; small?: 
   return (
     <div className="flex min-w-0 flex-col gap-0.5">
       <span className={LABEL}>{label}</span>
-      <span className={`tabular-nums font-[var(--fw-semibold)] ${small ? "text-[14px] leading-[1.5]" : "text-[16px] leading-[1.35]"}`}>{value}</span>
+      <span className={`break-words tabular-nums font-[var(--fw-semibold)] ${small ? "text-[14px] leading-[1.5]" : "text-[16px] leading-[1.35]"}`}>{value}</span>
     </div>
   );
 }

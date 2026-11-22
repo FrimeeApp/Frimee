@@ -26,6 +26,14 @@ type Loaded = { plans: FeedPlanItemDto[]; tickets: PlanTicket[]; pasaporte: Pasa
 const DAY_MS = 86_400_000;
 const MONTHS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sept", "oct", "nov", "dic"];
 
+/** El nombre baja por tramos para que la cabecera no crezca: hasta 18 letras, hasta 26 y más. */
+function nameSize(nombre: string) {
+  const n = nombre.trim().length;
+  if (n <= 18) return "text-[32px] md:text-[48px]";
+  if (n <= 26) return "text-[28px] md:text-[40px]";
+  return "text-[24px] md:text-[32px]";
+}
+
 const planPath = (id: number) => (Capacitor.isNativePlatform() ? `/plans/static?id=${id}` : `/plans/${id}`);
 
 function dayMonth(d: Date) {
@@ -160,7 +168,9 @@ export default function MiPerfil({
           )}
           <span className="flex min-w-0 flex-col items-start gap-0.5">
             <span className={LABEL}>TU PERFIL</span>
-            <span className={`text-[32px] leading-[1.05] md:text-[48px] ${SERIF}`}>{nombre}</span>
+            <span title={nombre} className={`line-clamp-2 break-words ${nameSize(nombre)} leading-[1.05] ${SERIF}`}>
+              {nombre}
+            </span>
           </span>
         </Link>
       </div>
