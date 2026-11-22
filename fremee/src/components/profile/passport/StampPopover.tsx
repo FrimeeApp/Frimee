@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { Capacitor } from "@capacitor/core";
 import { useRouter } from "next/navigation";
 import { EyeOff, Images, MapPin, X } from "lucide-react";
-import { FILL_BTN, FOCUS, GHOST_BTN } from "@/components/plans/home/pieces";
+import { FOCUS, GHOST_BTN } from "@/components/plans/home/pieces";
 import { countryName, countryOrdinal, dateLabel, planRangeLabel, type Sello } from "@/lib/passport";
 import { marcarNoFui } from "@/services/api/endpoints/pasaporte.endpoint";
 import { HITO_NAME } from "./stamps";
@@ -155,7 +155,7 @@ export default function StampPopover({
   // ---- contenido según el tipo de sello
   const planSello = sello.kind === "plan" ? sello : sellos.find((s) => s.plan_id === sello.plan_id && s.kind === "plan") ?? null;
   const plan = sello.plan ?? planSello?.plan ?? null;
-  const btn = `${GHOST_BTN} bg-surface-2 !h-11 !text-[14px] leading-[1.2]`;
+  const btn = `${GHOST_BTN} bg-surface-2 !h-11 !px-3 !text-[14px] leading-[1.2]`;
 
   let title: string;
   let sub: string;
@@ -165,16 +165,29 @@ export default function StampPopover({
     const pais = sellos.find((s) => s.plan_id === sello.plan_id && s.kind === "pais" && s.country_code);
     const n = pais?.country_code ? countryOrdinal(sellos, pais.country_code, pais.id) : 0;
     title = plan?.titulo ?? "Viaje";
-    sub = [plan ? planRangeLabel(plan).toLowerCase() : dateLabel(sello.stamped_at), n > 0 && pais?.country_code ? `${n}.º sello de ${countryName(pais.country_code)}` : null].filter(Boolean).join(" · ");
+    sub = [plan ? planRangeLabel(plan).toLowerCase() : dateLabel(sello.stamped_at), n > 1 && pais?.country_code ? `${n}.º sello de ${countryName(pais.country_code)}` : null].filter(Boolean).join(" · ");
+    // Lo que quita «No fui»: su sello, los de país y los hitos del viaje.
+    const delViaje = sellos.filter((x) => x.plan_id === sello.plan_id && !x.hidden);
+    const paises = delViaje.filter((x) => x.kind === "pais" && x.country_code).map((x) => countryName(x.country_code!));
+    const hitos = delViaje.filter((x) => x.kind === "hito" && x.hito).map((x) => `«${HITO_NAME[x.hito!]}»`);
+    const lista = (xs: string[]) => (xs.length > 1 ? `${xs.slice(0, -1).join(", ")} y ${xs[xs.length - 1]}` : xs[0]);
+    const quita = ["su sello", paises.length ? (paises.length === 1 ? `el de ${paises[0]}` : `los de ${lista(paises)}`) : null, hitos.length ? (hitos.length === 1 ? `el hito ${hitos[0]}` : `los hitos ${lista(hitos)}`) : null].filter((x): x is string => Boolean(x));
     body = confirming ? (
       <div role="alertdialog" aria-label="Confirmar «No fui a este viaje»" className="flex flex-col gap-3 rounded-[8px] border border-app p-3">
-        <p className="m-0 text-[14px] leading-[1.5]">Se quitan todos tus sellos de «{plan?.titulo ?? "este viaje"}» y no se vuelven a poner solos.</p>
+        <p className="m-0 text-[14px] leading-[1.5]">
+          ¿Quitar «{plan?.titulo ?? "este viaje"}» de tu pasaporte? Se quitarán {lista(quita)}.
+        </p>
         <div className="grid grid-cols-2 gap-2">
           <button type="button" disabled={busy} onClick={() => setConfirming(false)} className={`${GHOST_BTN} !h-11 !text-[14px]`}>
             Cancelar
           </button>
-          <button type="button" disabled={busy} onClick={() => void run(() => marcarNoFui(sello.plan_id), () => onNoFui(sello.plan_id))} className={`${FILL_BTN} !h-11 !text-[14px]`}>
-            Quitar sellos
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void run(() => marcarNoFui(sello.plan_id), () => onNoFui(sello.plan_id))}
+            className={`inline-flex h-11 items-center justify-center rounded-[8px] bg-[var(--error)] px-4 text-[14px] font-[var(--fw-semibold)] text-[var(--error-contrast)] disabled:opacity-[var(--disabled-opacity)] ${FOCUS}`}
+          >
+            Quitar
           </button>
         </div>
       </div>
@@ -182,26 +195,27 @@ export default function StampPopover({
       <>
         <div className="grid grid-cols-2 gap-2">
           <button type="button" className={btn} onClick={() => router.push(planPath(sello.plan_id))}>
-            <MapPin className="size-[18px]" aria-hidden /> Ver el plan
+            <MapPin className="size-[18px] shrink-0" strokeWidth={2} aria-hidden /> Ver el plan
           </button>
           <button type="button" className={btn} onClick={() => router.push(albumPath(sello.plan_id))}>
-            <Images className="size-[18px]" aria-hidden /> Ver el álbum
+            <Images className="size-[18px] shrink-0" strokeWidth={2} aria-hidden /> Ver el álbum
           </button>
         </div>
-        <div className="flex flex-col">
+        {/* «Ocultar» (reversible) a la izquierda; «No fui» (quita sellos) a la derecha y en rojo. */}
+        <div className="flex items-center justify-between">
           <button
             type="button"
             disabled={busy}
             onClick={() => void run(() => onHide(sello.plan_id), () => onHidden(sello.plan_id))}
-            className={`inline-flex h-11 w-full items-center justify-center gap-2 rounded-[8px] text-[14px] font-[var(--fw-semibold)] leading-[1.2] text-muted hover:text-app ${FOCUS}`}
+            className={`inline-flex h-11 items-center gap-2 rounded-[8px] px-1 text-[14px] font-[var(--fw-semibold)] leading-[1.2] text-muted hover:text-app ${FOCUS}`}
           >
-            <EyeOff className="size-[18px]" aria-hidden /> Ocultar este sello
+            <EyeOff className="size-[18px] shrink-0" strokeWidth={2} aria-hidden /> Ocultar
           </button>
           <button
             type="button"
             disabled={busy}
             onClick={() => setConfirming(true)}
-            className={`inline-flex h-11 w-full items-center justify-center rounded-[8px] text-[14px] font-[var(--fw-semibold)] leading-[1.2] text-muted hover:text-app ${FOCUS}`}
+            className={`inline-flex h-11 items-center rounded-[8px] px-1 text-[14px] font-[var(--fw-semibold)] leading-[1.2] text-[var(--error)] ${FOCUS}`}
           >
             No fui a este viaje
           </button>
@@ -232,14 +246,14 @@ export default function StampPopover({
     // Los hitos se ocultan junto con su viaje, no por separado.
     body = (
       <button type="button" className={btn} onClick={() => router.push(planPath(sello.plan_id))}>
-        <MapPin className="size-[18px]" aria-hidden /> Ver el plan
+        <MapPin className="size-[18px] shrink-0" strokeWidth={2} aria-hidden /> Ver el plan
       </button>
     );
   }
 
   const content = (
     <>
-      <div>
+      <div className="pr-10">
         <h2 id={titleId} className="m-0 text-[16px] font-[var(--fw-semibold)] leading-snug text-app">
           {title}
         </h2>
@@ -267,7 +281,7 @@ export default function StampPopover({
         aria-modal="false"
         aria-labelledby={titleId}
         style={{ position: "fixed", left: pos?.left ?? -9999, top: pos?.top ?? -9999 }}
-        className="relative z-[80] flex w-[300px] flex-col gap-3 rounded-[8px] border border-app bg-surface p-4 pr-12 text-app shadow-[0_4px_12px_rgba(0,0,0,0.3),0_2px_4px_rgba(0,0,0,0.2)]"
+        className="relative z-[80] flex w-[320px] flex-col gap-3 rounded-[8px] border border-app bg-surface p-4 text-app shadow-[0_4px_12px_rgba(0,0,0,0.3),0_2px_4px_rgba(0,0,0,0.2)]"
       >
         {closeBtn}
         {content}
