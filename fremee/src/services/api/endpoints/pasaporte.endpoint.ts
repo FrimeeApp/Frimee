@@ -52,3 +52,15 @@ export async function marcarSellosVistos(ids: number[]): Promise<void> {
   const { error } = await createBrowserSupabaseClient().rpc("fn_passport_marcar_vistos", { p_stamp_ids: ids });
   if (error) throw error;
 }
+
+/** Oculta un sello (solo lo ves tú, en «Sellos ocultos») o vuelve a mostrarlo. */
+export async function ocultarSello(stampId: number, oculto: boolean): Promise<void> {
+  const { error } = await createBrowserSupabaseClient().rpc("fn_passport_ocultar", { p_stamp_id: stampId, p_oculto: oculto });
+  if (error) throw error;
+}
+
+/** «No fui a este viaje»: quita tus sellos de ese plan y evita que vuelvan. */
+export async function marcarNoFui(planId: number): Promise<void> {
+  const { error } = await createBrowserSupabaseClient().rpc("fn_passport_no_fui", { p_plan_id: planId });
+  if (error) throw error;
+}

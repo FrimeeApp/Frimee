@@ -2,16 +2,29 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ChevronRight, X } from "lucide-react";
-import { FOCUS } from "@/components/plans/home/pieces";
-import { buildIndex, dateLabel, planRangeLabel, type PassportPage, type Sello } from "@/lib/passport";
+import { FOCUS, GHOST_BTN } from "@/components/plans/home/pieces";
+import { buildIndex, countryName, dateLabel, planRangeLabel, type PassportPage, type Sello } from "@/lib/passport";
 import { CountryStamp, HITO_NAME, HitoStamp, PlanStamp } from "./stamps";
 
 /** Índice del pasaporte (tablero «Índice»): países, planes e hitos en texto, cada uno con su página. Pulsar uno salta a ella. */
 
-type Tab = "paises" | "planes" | "hitos";
+type Tab = "paises" | "planes" | "hitos" | "ocultos";
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
-export default function PassportIndex({ sellos, pages, onPick, onClose }: { sellos: Sello[]; pages: PassportPage[]; onPick: (pageNumber: number) => void; onClose: () => void }) {
+export default function PassportIndex({
+  sellos,
+  pages,
+  onPick,
+  onClose,
+  onRestore,
+}: {
+  sellos: Sello[];
+  pages: PassportPage[];
+  onPick: (pageNumber: number) => void;
+  onClose: () => void;
+  /** Vuelve a mostrar un sello oculto (solo en tu pasaporte). */
+  onRestore?: (s: Sello) => Promise<void>;
+}) {
   const data = useMemo(() => buildIndex(sellos, pages), [sellos, pages]);
   const [tab, setTab] = useState<Tab>("paises");
   const panelRef = useRef<HTMLDivElement>(null);
@@ -26,6 +39,7 @@ export default function PassportIndex({ sellos, pages, onPick, onClose }: { sell
     { id: "paises", label: "Países", n: data.paises.length },
     { id: "planes", label: "Planes", n: data.planes.length },
     ...(data.hitos.length > 0 ? [{ id: "hitos" as const, label: "Hitos", n: data.hitos.length }] : []),
+    ...(onRestore && data.ocultos.length > 0 ? [{ id: "ocultos" as const, label: "Ocultos", n: data.ocultos.length }] : []),
   ];
 
   return (
@@ -80,6 +94,14 @@ export default function PassportIndex({ sellos, pages, onPick, onClose }: { sell
                 <HitoStamp hito={h.sello.hito!} id={h.sello.id} size={52} />
               </Row>
             ))}
+          {tab === "ocultos" && (
+            <>
+              <li className="py-3 text-[14px] leading-[1.5] text-muted">Solo los ves tú. No salen en las páginas ni los ve nadie más.</li>
+              {data.ocultos.map((o, i) => (
+                <HiddenRow key={o.id} first={i === 0} sello={o} onRestore={onRestore} />
+              ))}
+            </>
+          )}
           {((tab === "paises" && data.paises.length === 0) || (tab === "planes" && data.planes.length === 0)) && (
             <li className="py-6 text-[14px] leading-[1.5] text-muted">Aún no hay sellos. Llegan el día siguiente a que termine cada viaje.</li>
           )}
@@ -106,6 +128,36 @@ function Row({ first, page, title, sub, onClick, children }: { first: boolean; p
             <ChevronRight className="size-[18px] shrink-0 text-muted" aria-hidden />
           </>
         )}
+      </button>
+    </li>
+  );
+}
+
+function HiddenRow({ first, sello, onRestore }: { first: boolean; sello: Sello; onRestore?: (s: Sello) => Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const title = sello.kind === "pais" ? countryName(sello.country_code ?? "") : sello.kind === "hito" ? HITO_NAME[sello.hito!] : sello.plan?.titulo ?? "Viaje";
+  const restore = async () => {
+    setBusy(true);
+    setFailed(false);
+    try {
+      await onRestore?.(sello);
+    } catch {
+      setFailed(true);
+      setBusy(false);
+    }
+  };
+  return (
+    <li className={`flex min-h-[72px] items-center gap-3 py-1 ${first ? "" : "border-t border-app"}`}>
+      <span aria-hidden="true" className="flex w-[72px] shrink-0 items-center justify-center">
+        {sello.kind === "pais" ? <CountryStamp sello={sello} size={52} tilt={0} /> : sello.kind === "hito" ? <HitoStamp hito={sello.hito!} id={sello.id} size={52} /> : <PlanStamp sello={sello} size={72} tilt={0} />}
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="truncate text-[16px] font-[var(--fw-semibold)] leading-[1.35]">{title}</span>
+        <span className="truncate text-[14px] leading-[1.5] tabular-nums text-muted">{failed ? "No se pudo. Reintenta." : dateLabel(sello.stamped_at)}</span>
+      </span>
+      <button type="button" disabled={busy} onClick={() => void restore()} className={`${GHOST_BTN} !h-11 shrink-0 !px-3 !text-[14px]`}>
+        Mostrar
       </button>
     </li>
   );

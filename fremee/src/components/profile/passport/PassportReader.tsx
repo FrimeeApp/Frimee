@@ -5,7 +5,9 @@ import { ChevronLeft, List } from "lucide-react";
 import { FOCUS } from "@/components/plans/home/pieces";
 import { playClose, prefersReducedMotion } from "@/lib/passportOpen";
 import { buildPages, groupTrips, type Sello } from "@/lib/passport";
+import { ocultarSello } from "@/services/api/endpoints/pasaporte.endpoint";
 import PassportIndex from "./PassportIndex";
+import StampSheet from "./StampSheet";
 import Libreta, { type LibretaIntro } from "./Libreta";
 
 /**
@@ -14,7 +16,7 @@ import Libreta, { type LibretaIntro } from "./Libreta";
  */
 export default function PassportReader({
   nombre,
-  sellos,
+  sellos: sellosIniciales,
   fromCover = null,
   profile = null,
   closing = false,
@@ -35,6 +37,9 @@ export default function PassportReader({
   const deskRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLDivElement>(null);
   const [reduced] = useState(prefersReducedMotion);
+  // Ocultar un sello o decir «no fui» cambia el pasaporte al momento, sin volver a leerlo.
+  const [sellos, setSellos] = useState(sellosIniciales);
+  const [sheet, setSheet] = useState<Sello | null>(null);
   const [indexOpen, setIndexOpen] = useState(false);
   const [jump, setJump] = useState<{ page: number; nonce: number } | null>(null);
   const pages = useMemo(() => buildPages(groupTrips(sellos)), [sellos]);
@@ -61,12 +66,13 @@ export default function PassportReader({
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       // Esc cierra primero el índice y luego el pasaporte.
-      if (indexOpen) setIndexOpen(false);
+      if (sheet) setSheet(null);
+      else if (indexOpen) setIndexOpen(false);
       else onRequestClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onRequestClose, indexOpen]);
+  }, [onRequestClose, indexOpen, sheet]);
 
   return (
     <div ref={rootRef} role="dialog" aria-modal="true" aria-label="Pasaporte" className="fixed inset-0 z-[70] overflow-y-auto text-app">
@@ -83,15 +89,34 @@ export default function PassportReader({
             </button>
           )}
         </div>
-        <Libreta nombre={nombre} sellos={sellos} intro={intro} jumpTo={jump} />
+        <Libreta nombre={nombre} sellos={sellos} intro={intro} jumpTo={jump} onOpenStamp={setSheet} />
         {indexOpen && (
           <PassportIndex
             sellos={sellos}
             pages={pages}
             onClose={() => setIndexOpen(false)}
+            onRestore={async (s) => {
+              await ocultarSello(s.id, false);
+              setSellos((all) => all.map((x) => (x.id === s.id ? { ...x, hidden: false } : x)));
+            }}
             onPick={(page) => {
               setIndexOpen(false);
               setJump((j) => ({ page, nonce: (j?.nonce ?? 0) + 1 }));
+            }}
+          />
+        )}
+        {sheet && (
+          <StampSheet
+            sello={sheet}
+            sellos={sellos}
+            onClose={() => setSheet(null)}
+            onHidden={(s) => {
+              setSellos((all) => all.map((x) => (x.id === s.id ? { ...x, hidden: true } : x)));
+              setSheet(null);
+            }}
+            onNoFui={(planId) => {
+              setSellos((all) => all.filter((x) => x.plan_id !== planId));
+              setSheet(null);
             }}
           />
         )}

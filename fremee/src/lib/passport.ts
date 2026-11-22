@@ -261,6 +261,8 @@ export type IndexData = {
   paises: { code: string; name: string; count: number; last: string; page: number | null; sello: Sello }[];
   planes: { titulo: string; page: number | null; sello: Sello }[];
   hitos: { page: number | null; sello: Sello }[];
+  /** Sellos ocultos (solo los ve su dueño), del más reciente al más antiguo. */
+  ocultos: Sello[];
 };
 
 /** Índice en texto: cada país, plan e hito con su página. Incluye lo que la página no llega a enseñar (4.º país, 2.º hito…). */
@@ -290,5 +292,14 @@ export function buildIndex(sellos: Sello[], pages: PassportPage[]): IndexData {
     .filter((s) => s.kind === "hito" && s.hito)
     .sort(byDateDesc)
     .map((s) => ({ page: tripPage.get(s.plan_id) ?? null, sello: s }));
-  return { paises, planes, hitos };
+  const ocultos = sellos.filter((s) => s.hidden).sort(byDateDesc);
+  return { paises, planes, hitos, ocultos };
+}
+
+/** «Tu 2.º sello de Portugal»: el lugar de este sello de país entre los tuyos de ese país, por fecha. */
+export function countryOrdinal(sellos: Sello[], code: string, stampId: number): number {
+  const all = sellos
+    .filter((s) => !s.hidden && s.kind === "pais" && s.country_code === code)
+    .sort((a, b) => (a.stamped_at < b.stamped_at ? -1 : a.stamped_at > b.stamped_at ? 1 : a.id - b.id));
+  return all.findIndex((s) => s.id === stampId) + 1;
 }

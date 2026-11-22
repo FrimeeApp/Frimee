@@ -31,6 +31,8 @@ type Dims = { w: number; h: number };
 const MOBILE: Dims = { w: 358, h: 590 };
 const WIDE: Dims = { w: 452, h: 620 };
 const DimsContext = createContext<Dims>(MOBILE);
+/** Pulsar un sello abre su hoja (solo en tu propio pasaporte). */
+const StampOpenContext = createContext<((s: Sello) => void) | null>(null);
 const useDims = () => useContext(DimsContext);
 const SPINE = 6;
 const TAB_W = 52;
@@ -55,7 +57,19 @@ export type LibretaIntro = {
   onDone?: () => void;
 };
 
-export default function Libreta({ nombre, sellos, intro, jumpTo }: { nombre: string; sellos: Sello[]; intro?: LibretaIntro; jumpTo?: { page: number; nonce: number } | null }) {
+export default function Libreta({
+  nombre,
+  sellos,
+  intro,
+  jumpTo,
+  onOpenStamp,
+}: {
+  nombre: string;
+  sellos: Sello[];
+  intro?: LibretaIntro;
+  jumpTo?: { page: number; nonce: number } | null;
+  onOpenStamp?: (s: Sello) => void;
+}) {
   const trips = useMemo(() => groupTrips(sellos), [sellos]);
   const pages = useMemo(() => buildPages(trips), [trips]);
   const stats = useMemo(() => computeStats(sellos), [sellos]);
@@ -136,7 +150,8 @@ export default function Libreta({ nombre, sellos, intro, jumpTo }: { nombre: str
     // En escritorio se abre por la tapa (guarda y página de datos); en móvil, por la última página sellada.
   const [rawIndex, setIndex] = useState(() => (typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches ? 0 : pages.length - 1));
   // En ancho la página izquierda siempre es par (índice impar); al pasar de móvil a ancho se recoloca.
-  const index = wide ? (rawIndex === 0 ? 0 : 2 * Math.ceil(rawIndex / 2) - 1) : rawIndex;
+  const clamped = Math.min(rawIndex, pages.length - 1);
+  const index = wide ? (clamped === 0 ? 0 : 2 * Math.ceil(clamped / 2) - 1) : clamped;
   const [prev, setPrev] = useState<{ index: number; back: boolean; reduced: boolean } | null>(null);
   const fadeRef = useRef<HTMLDivElement>(null);
   const busy = useRef(false);
@@ -321,6 +336,7 @@ export default function Libreta({ nombre, sellos, intro, jumpTo }: { nombre: str
       <div ref={boxRef} className="w-full">
         <div className="relative mx-auto" style={{ width: (wide ? SPREAD_W + TAB_W : W) * scale, height: H * scale }}>
           <div ref={fadeRef} className="absolute left-0 top-0" style={{ width: wide ? SPREAD_W : W, height: H, transform: `scale(${scale})`, transformOrigin: "top left" }}>
+            <StampOpenContext.Provider value={onOpenStamp ?? null}>
             <DimsContext.Provider value={dims}>
             {wide ? (
               <>
@@ -350,6 +366,7 @@ export default function Libreta({ nombre, sellos, intro, jumpTo }: { nombre: str
               </div>
             )}
             </DimsContext.Provider>
+            </StampOpenContext.Provider>
           </div>
           {wide && (
             <div ref={tabsRef} className="absolute flex flex-col" style={{ left: SPREAD_W * scale, top: 28 * scale, gap: 6 * scale }}>
@@ -654,6 +671,7 @@ const stampIn = (isNew: boolean, delayMs: number): React.CSSProperties | undefin
   isNew ? { animation: `passport-stamp-in 240ms cubic-bezier(0.2, 0, 0, 1) ${delayMs}ms both` } : undefined;
 
 function PlacedStamp({ p, isNew }: { p: Placed; isNew: (s: Pick<Sello, "id" | "nuevo">) => boolean }) {
+  const open = useContext(StampOpenContext);
   if (p.kind === "more") {
     return (
       <span className="absolute inline-flex h-6 items-center rounded-full border border-[var(--border-strong)] bg-surface-2 px-2 text-[12px] font-[var(--fw-semibold)] leading-none" style={{ left: p.x, top: p.y }}>
@@ -663,27 +681,34 @@ function PlacedStamp({ p, isNew }: { p: Placed; isNew: (s: Pick<Sello, "id" | "n
   }
   const s = p.sello;
   const nuevo = isNew(s);
-  const base = "absolute block leading-[0]";
-  if (p.kind === "plan") {
-    return (
-      <span role="img" aria-label={`${s.plan?.titulo ?? "Viaje"}, ${dateLabel(s.stamped_at)}${nuevo ? ", sello nuevo" : ""}`} className={base} style={{ left: p.x, top: p.y, ...stampIn(nuevo, 300) }}>
-        <PlanStamp sello={s} size={p.size} tilt={p.rot} nuevo={nuevo} />
-        {nuevo && <NuevoPill className="-right-1.5 -top-2.5" />}
-      </span>
-    );
-  }
-  if (p.kind === "country") {
-    return (
-      <span role="img" aria-label={`${countryName(s.country_code ?? "")}, sello del ${dateLabel(s.stamped_at)}${nuevo ? ", nuevo" : ""}`} className={base} style={{ left: p.x, top: p.y, ...stampIn(nuevo, 420) }}>
-        <CountryStamp sello={s} size={p.size} tilt={p.rot} nuevo={nuevo} />
-        {nuevo && <NuevoPill className="-right-2 -top-2.5" />}
-      </span>
-    );
-  }
-  return (
-    <span role="img" aria-label={`Hito: ${HITO_NAME[s.hito!]}`} className={base} style={{ left: p.x, top: p.y, ...stampIn(nuevo, 540) }}>
+  const label =
+    p.kind === "plan"
+      ? `${s.plan?.titulo ?? "Viaje"}, ${dateLabel(s.stamped_at)}${nuevo ? ", sello nuevo" : ""}`
+      : p.kind === "country"
+        ? `${countryName(s.country_code ?? "")}, sello del ${dateLabel(s.stamped_at)}${nuevo ? ", nuevo" : ""}`
+        : `Hito: ${HITO_NAME[s.hito!]}`;
+  const delay = p.kind === "plan" ? 300 : p.kind === "country" ? 420 : 540;
+  const content =
+    p.kind === "plan" ? (
+      <PlanStamp sello={s} size={p.size} tilt={p.rot} nuevo={nuevo} />
+    ) : p.kind === "country" ? (
+      <CountryStamp sello={s} size={p.size} tilt={p.rot} nuevo={nuevo} />
+    ) : (
       <HitoStamp hito={s.hito!} id={s.id} size={p.size} tilt={p.rot} nuevo={nuevo} />
-      {nuevo && <NuevoPill className="-right-2 -top-2.5" />}
+    );
+  const pill = nuevo && <NuevoPill className={p.kind === "plan" ? "-right-1.5 -top-2.5" : "-right-2 -top-2.5"} />;
+  const style = { left: p.x, top: p.y, ...stampIn(nuevo, delay) };
+  const base = "absolute block rounded-[8px] leading-[0]";
+  // Con hoja (tu pasaporte) cada sello es un botón; sin ella, solo una imagen con su descripción.
+  return open ? (
+    <button type="button" onClick={() => open(s)} aria-label={label} className={`${base} ${FOCUS}`} style={style}>
+      {content}
+      {pill}
+    </button>
+  ) : (
+    <span role="img" aria-label={label} className={base} style={style}>
+      {content}
+      {pill}
     </span>
   );
 }
