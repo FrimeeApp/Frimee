@@ -111,6 +111,7 @@ export type LibretaOutro = {
 export default function Libreta({
   nombre,
   ciudad = null,
+  emptyPage = null,
   sellos,
   intro,
   jumpTo,
@@ -121,6 +122,8 @@ export default function Libreta({
   nombre: string;
   /** Ciudad base, si la hay y quien mira puede verla. */
   ciudad?: string | null;
+  /** Pasaporte sin sellos: la primera hoja en blanco explica por qué y ofrece crear un plan o ver el ejemplo. */
+  emptyPage?: EmptyPageActions | null;
   sellos: Sello[];
   intro?: LibretaIntro;
   jumpTo?: { page: number; nonce: number } | null;
@@ -387,7 +390,7 @@ export default function Libreta({
 
   const pageAt = (i: number) => pages[i] ?? null;
   const view = (p: PassportPage | null, side: Side, cover = false, number = 0) => (
-    <PageView page={p} nombre={nombre} ciudad={ciudad} stats={stats} total={pages.length} cover={cover} number={number} isNew={isNew} side={side} />
+    <PageView page={p} nombre={nombre} ciudad={ciudad} emptyPage={emptyPage} stats={stats} total={pages.length} cover={cover} number={number} isNew={isNew} side={side} />
   );
   const layer = (content: React.ReactNode, z: number, origin: "left" | "right", ref?: React.Ref<HTMLDivElement>) => (
     <div ref={ref} className="absolute top-0" style={{ left: 0, width: W, height: H, transformOrigin: `${origin} center`, zIndex: z }}>
@@ -604,6 +607,7 @@ function PageView({
   page,
   nombre,
   ciudad,
+  emptyPage,
   stats,
   total,
   cover = false,
@@ -614,6 +618,7 @@ function PageView({
   page: PassportPage | null;
   nombre: string;
   ciudad: string | null;
+  emptyPage: EmptyPageActions | null;
   stats: PassportStats;
   total: number;
   cover?: boolean;
@@ -630,6 +635,7 @@ function PageView({
           <span>VISADOS · VISAS</span>
           <span className="tabular-nums">{pad2(number)}</span>
         </div>
+        {emptyPage && number === 2 && <EmptyPage actions={emptyPage} />}
       </Paper>
     );
   }
@@ -647,6 +653,35 @@ function PageView({
         </>
       )}
     </Paper>
+  );
+}
+
+export type EmptyPageActions = {
+  onCreate: () => void;
+  onExample: () => void;
+  exampleLoading?: boolean;
+  exampleError?: string | null;
+};
+
+/** Primera hoja en blanco de un pasaporte sin sellos (tablero «Estados»). */
+function EmptyPage({ actions }: { actions: EmptyPageActions }) {
+  const btn = "inline-flex h-[46px] w-full items-center justify-center rounded-[8px] px-4 text-[15px] font-[var(--fw-semibold)] leading-[1.2] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]";
+  return (
+    <div className="absolute inset-x-6 top-[86px] flex flex-col items-center text-center">
+      <span aria-hidden="true" className="h-[104px] w-[150px] -rotate-[5deg] rounded-[8px] border-2 border-dashed" style={{ borderColor: BOOK.slot }} />
+      <span aria-hidden="true" className="-mt-[30px] ml-[140px] size-[100px] rotate-[6deg] rounded-full border-2 border-dashed" style={{ borderColor: BOOK.slot }} />
+      <h3 className={`m-0 mt-6 text-[28px] leading-[1.15] ${SERIF}`}>Esta página está en blanco</h3>
+      <p className="m-0 mt-2 text-[16px] leading-[1.6]" style={{ color: BOOK.label }}>Cuando termine tu primer viaje con Frimee, aquí irá su sello.</p>
+      <div className="mt-6 flex w-full flex-col gap-2">
+        <button type="button" onClick={actions.onCreate} className={`${btn} bg-[var(--primary)] text-[var(--contrast)]`}>
+          Crea tu primer plan
+        </button>
+        <button type="button" onClick={actions.onExample} disabled={actions.exampleLoading} className={`${btn} border border-[var(--border-strong)] bg-[var(--surface-2)] disabled:opacity-60`}>
+          {actions.exampleLoading ? "Abriendo el ejemplo…" : "Ver el ejemplo"}
+        </button>
+        {actions.exampleError && <p role="alert" className="m-0 text-[14px] text-[var(--error)]">{actions.exampleError}</p>}
+      </div>
+    </div>
   );
 }
 
