@@ -110,6 +110,7 @@ export type LibretaOutro = {
 
 export default function Libreta({
   nombre,
+  ciudad = null,
   sellos,
   intro,
   jumpTo,
@@ -118,6 +119,8 @@ export default function Libreta({
   onOpenStamp,
 }: {
   nombre: string;
+  /** Ciudad base, si la hay y quien mira puede verla. */
+  ciudad?: string | null;
   sellos: Sello[];
   intro?: LibretaIntro;
   jumpTo?: { page: number; nonce: number } | null;
@@ -384,7 +387,7 @@ export default function Libreta({
 
   const pageAt = (i: number) => pages[i] ?? null;
   const view = (p: PassportPage | null, side: Side, cover = false, number = 0) => (
-    <PageView page={p} nombre={nombre} stats={stats} total={pages.length} cover={cover} number={number} isNew={isNew} side={side} />
+    <PageView page={p} nombre={nombre} ciudad={ciudad} stats={stats} total={pages.length} cover={cover} number={number} isNew={isNew} side={side} />
   );
   const layer = (content: React.ReactNode, z: number, origin: "left" | "right", ref?: React.Ref<HTMLDivElement>) => (
     <div ref={ref} className="absolute top-0" style={{ left: 0, width: W, height: H, transformOrigin: `${origin} center`, zIndex: z }}>
@@ -600,6 +603,7 @@ function Paper({ side, seed, number, soft = false, rosetteY, children }: { side:
 function PageView({
   page,
   nombre,
+  ciudad,
   stats,
   total,
   cover = false,
@@ -609,6 +613,7 @@ function PageView({
 }: {
   page: PassportPage | null;
   nombre: string;
+  ciudad: string | null;
   stats: PassportStats;
   total: number;
   cover?: boolean;
@@ -631,7 +636,7 @@ function PageView({
   return (
     <Paper side={side} seed={page.number} number={page.kind === "datos" ? undefined : page.number} soft rosetteY={page.kind === "datos" ? 0.74 : undefined}>
       {page.kind === "datos" ? (
-        <DatosPage nombre={nombre} stats={stats} />
+        <DatosPage nombre={nombre} ciudad={ciudad} stats={stats} />
       ) : (
         <>
           <div className={`absolute inset-x-5 top-4 flex justify-between ${LABEL}`}>
@@ -712,7 +717,7 @@ function Field({ label, value, big, wrap }: { label: string; value: string; big?
 }
 
 /** Página de datos tipo documento: cabecera, foto con firma, campos, sellos por país y línea de máquina. */
-function DatosPage({ nombre, stats }: { nombre: string; stats: PassportStats }) {
+function DatosPage({ nombre, ciudad, stats }: { nombre: string; ciudad: string | null; stats: PassportStats }) {
   const { w: W, h: H } = useDims();
   // Por debajo de 560 px de alto (móvil bajo): foto más pequeña, banda más baja, cifras más pequeñas y sin marca de agua.
   const compact = H < 560;
@@ -764,6 +769,7 @@ function DatosPage({ nombre, stats }: { nombre: string; stats: PassportStats }) 
         </div>
         <div className={`flex min-w-0 flex-1 flex-col ${compact ? "gap-1.5" : "gap-2.5"}`}>
           <Field label="TITULAR / HOLDER" value={nombre.trim().toUpperCase()} wrap />
+          {ciudad && <Field label={bi("RESIDENCIA", "RESIDENCE")} value={ciudad.toUpperCase()} />}
           {stats.since && <Field label={bi("VIAJA DESDE", "SINCE")} value={monthYearLabel(stats.since).toUpperCase()} />}
           {stats.lastStamp && <Field label={bi("ÚLTIMO SELLO", "LAST")} value={`${stats.lastStamp.place} · ${dateLabel(stats.lastStamp.date)}`.toUpperCase()} />}
         </div>

@@ -7,10 +7,11 @@ import { Capacitor } from "@capacitor/core";
 import { ArrowLeftIcon, ChevronRightIcon } from "@/components/icons";
 import {
   Pencil, User, Shield, Calendar, Bell, Moon, Sun, Globe, Clock,
-  Mail, MessageSquare, LogOut, Trash2, KeyRound, Eye, EyeOff, ChevronLeft,
+  Mail, MessageSquare, LogOut, Trash2, KeyRound, Eye, EyeOff, ChevronLeft, MapPin,
 } from "lucide-react";
 import { NotificationSettingsSection } from "@/components/notifications/NotificationSettingsSection";
 import { BirthDatePicker } from "@/components/ui/BirthDatePicker";
+import CiudadBaseField from "@/components/profile/passport/CiudadBaseField";
 import { App } from "@capacitor/app";
 import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
 import { useAuth } from "@/providers/AuthProvider";
@@ -601,6 +602,12 @@ export default function SettingsPage() {
                     disabled={disableEditing}
                   />
                 }
+              />
+              <SettingsRow
+                icon={<MapPin className="size-[18px]" />}
+                label="Lugar de residencia"
+                description="Dónde vives. Se enseña en tu pasaporte a quien pueda verlo."
+                right={<CiudadBaseField disabled={disableEditing} />}
               />
             </SettingsSection>
 
