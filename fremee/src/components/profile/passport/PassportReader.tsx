@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, List } from "lucide-react";
 import { FOCUS } from "@/components/plans/home/pieces";
 import { playClose, prefersReducedMotion } from "@/lib/passportOpen";
-import type { Sello } from "@/lib/passport";
+import { buildPages, groupTrips, type Sello } from "@/lib/passport";
+import PassportIndex from "./PassportIndex";
 import Libreta, { type LibretaIntro } from "./Libreta";
 
 /**
@@ -34,6 +35,10 @@ export default function PassportReader({
   const deskRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLDivElement>(null);
   const [reduced] = useState(prefersReducedMotion);
+  const [indexOpen, setIndexOpen] = useState(false);
+  const [jump, setJump] = useState<{ page: number; nonce: number } | null>(null);
+  const pages = useMemo(() => buildPages(groupTrips(sellos)), [sellos]);
+  const hasStamps = sellos.some((s) => !s.hidden);
   const flight = Boolean(fromCover) && !reduced;
 
   const intro = useMemo<LibretaIntro | undefined>(
@@ -54,11 +59,14 @@ export default function PassportReader({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onRequestClose();
+      if (e.key !== "Escape") return;
+      // Esc cierra primero el índice y luego el pasaporte.
+      if (indexOpen) setIndexOpen(false);
+      else onRequestClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onRequestClose]);
+  }, [onRequestClose, indexOpen]);
 
   return (
     <div ref={rootRef} role="dialog" aria-modal="true" aria-label="Pasaporte" className="fixed inset-0 z-[70] overflow-y-auto text-app">
@@ -69,8 +77,24 @@ export default function PassportReader({
             <ChevronLeft className="size-[22px]" aria-hidden />
           </button>
           <h1 className="m-0 flex-1 font-sans text-[18px] font-[var(--fw-semibold)] leading-[1.3]">Pasaporte</h1>
+          {hasStamps && (
+            <button type="button" onClick={() => setIndexOpen(true)} aria-label="Índice del pasaporte" className={`inline-flex size-11 items-center justify-center rounded-[8px] text-app ${FOCUS}`}>
+              <List className="size-[22px]" aria-hidden />
+            </button>
+          )}
         </div>
-        <Libreta nombre={nombre} sellos={sellos} intro={intro} />
+        <Libreta nombre={nombre} sellos={sellos} intro={intro} jumpTo={jump} />
+        {indexOpen && (
+          <PassportIndex
+            sellos={sellos}
+            pages={pages}
+            onClose={() => setIndexOpen(false)}
+            onPick={(page) => {
+              setIndexOpen(false);
+              setJump((j) => ({ page, nonce: (j?.nonce ?? 0) + 1 }));
+            }}
+          />
+        )}
       </div>
     </div>
   );

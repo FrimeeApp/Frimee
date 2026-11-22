@@ -256,3 +256,39 @@ export function coverNameLines(nombre: string, cap = 12): string[] {
 export function firstName(nombre: string) {
   return nombre.trim().split(/\s+/)[0] ?? "";
 }
+
+export type IndexData = {
+  paises: { code: string; name: string; count: number; last: string; page: number | null; sello: Sello }[];
+  planes: { titulo: string; page: number | null; sello: Sello }[];
+  hitos: { page: number | null; sello: Sello }[];
+};
+
+/** Índice en texto: cada país, plan e hito con su página. Incluye lo que la página no llega a enseñar (4.º país, 2.º hito…). */
+export function buildIndex(sellos: Sello[], pages: PassportPage[]): IndexData {
+  const tripPage = new Map<number, number>();
+  for (const p of pages) if (p.kind === "year") for (const t of p.trips) tripPage.set(t.planId, p.number);
+  const vis = sellos.filter((s) => !s.hidden);
+  const byDateDesc = (a: Sello, b: Sello) => (a.stamped_at < b.stamped_at ? 1 : a.stamped_at > b.stamped_at ? -1 : b.id - a.id);
+
+  const countries = new Map<string, { count: number; last: Sello; page: number | null }>();
+  for (const s of [...vis].filter((x) => x.kind === "pais" && x.country_code).sort((a, b) => -byDateDesc(a, b))) {
+    const code = s.country_code!;
+    const c = countries.get(code);
+    const page = tripPage.get(s.plan_id) ?? null;
+    // La página de un país es la de su primer sello; el resto está en el pasaporte, pero un solo salto basta.
+    countries.set(code, { count: (c?.count ?? 0) + 1, last: s, page: c?.page ?? page });
+  }
+  const paises = [...countries.entries()]
+    .map(([code, c]) => ({ code, name: countryName(code), count: c.count, last: c.last.stamped_at, page: c.page, sello: c.last }))
+    .sort((a, b) => (a.last < b.last ? 1 : a.last > b.last ? -1 : 0));
+
+  const planes = vis
+    .filter((s) => s.kind === "plan")
+    .sort(byDateDesc)
+    .map((s) => ({ titulo: s.plan?.titulo ?? "Viaje", page: tripPage.get(s.plan_id) ?? null, sello: s }));
+  const hitos = vis
+    .filter((s) => s.kind === "hito" && s.hito)
+    .sort(byDateDesc)
+    .map((s) => ({ page: tripPage.get(s.plan_id) ?? null, sello: s }));
+  return { paises, planes, hitos };
+}

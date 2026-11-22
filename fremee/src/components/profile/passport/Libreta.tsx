@@ -55,7 +55,7 @@ export type LibretaIntro = {
   onDone?: () => void;
 };
 
-export default function Libreta({ nombre, sellos, intro }: { nombre: string; sellos: Sello[]; intro?: LibretaIntro }) {
+export default function Libreta({ nombre, sellos, intro, jumpTo }: { nombre: string; sellos: Sello[]; intro?: LibretaIntro; jumpTo?: { page: number; nonce: number } | null }) {
   const trips = useMemo(() => groupTrips(sellos), [sellos]);
   const pages = useMemo(() => buildPages(trips), [trips]);
   const stats = useMemo(() => computeStats(sellos), [sellos]);
@@ -133,8 +133,8 @@ export default function Libreta({ nombre, sellos, intro }: { nombre: string; sel
     });
   }, [intro, measured, wide]);
 
-  // Se abre por la última página sellada: las páginas van por orden de fecha, como en un pasaporte.
-  const [rawIndex, setIndex] = useState(() => pages.length - 1);
+    // En escritorio se abre por la tapa (guarda y página de datos); en móvil, por la última página sellada.
+  const [rawIndex, setIndex] = useState(() => (typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches ? 0 : pages.length - 1));
   // En ancho la página izquierda siempre es par (índice impar); al pasar de móvil a ancho se recoloca.
   const index = wide ? (rawIndex === 0 ? 0 : 2 * Math.ceil(rawIndex / 2) - 1) : rawIndex;
   const [prev, setPrev] = useState<{ index: number; back: boolean; reduced: boolean } | null>(null);
@@ -161,6 +161,14 @@ export default function Libreta({ nombre, sellos, intro }: { nombre: string; sel
     [index, units, wide],
   );
   const goToPage = (i: number) => goToUnit(unit(i));
+  // Saltos pedidos desde el índice (número de página, empezando en 1).
+  const lastJump = useRef<number | null>(null);
+  useEffect(() => {
+    if (!jumpTo || lastJump.current === jumpTo.nonce) return;
+    lastJump.current = jumpTo.nonce;
+    goToUnit(unit(jumpTo.page - 1));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jumpTo]);
 
   const visible = wide ? (index === 0 ? [0] : [index, index + 1]) : [index];
   const visibleKey = visible.join(",");
