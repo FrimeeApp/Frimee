@@ -5,7 +5,7 @@ import { ChevronLeft, List, MoreHorizontal } from "lucide-react";
 import { FOCUS } from "@/components/plans/home/pieces";
 import { isInViewport, playClose, prefersReducedMotion } from "@/lib/passportOpen";
 import { buildPages, groupTrips, type PasaporteAjustes, type Sello } from "@/lib/passport";
-import { ocultarSello } from "@/services/api/endpoints/pasaporte.endpoint";
+import { fetchCiudadBase, ocultarSello } from "@/services/api/endpoints/pasaporte.endpoint";
 import PassportIndex, { type Tab as IndexTab } from "./PassportIndex";
 import PassportPrivacySheet from "./PassportPrivacySheet";
 import StampPopover from "./StampPopover";
@@ -20,6 +20,7 @@ export default function PassportReader({
   sellos: sellosIniciales,
   ajustes: ajustesIniciales = null,
   userId,
+  ciudadDe,
   onAjustesChange,
   readOnly = false,
   title = "Pasaporte",
@@ -35,6 +36,8 @@ export default function PassportReader({
   /** Quién ve tu pasaporte (los lee el perfil junto con los sellos). */
   ajustes?: PasaporteAjustes | null;
   userId?: string;
+  /** De quién es la ciudad base que se enseña en la página de datos (por defecto, la propia). */
+  ciudadDe?: string;
   onAjustesChange?: (a: PasaporteAjustes) => void;
   /** El pasaporte de otra persona: sin ajustes, sin ocultos y sin acciones sobre los sellos. */
   readOnly?: boolean;
@@ -62,6 +65,12 @@ export default function PassportReader({
   // «Ver tu pasaporte como lo ven los demás»: el pasaporte tal como lo ven los demás (sin ocultos y, si lo quitaste, sin sellos de plan).
   const [preview, setPreview] = useState(false);
   const [ajustes, setAjustes] = useState(ajustesIniciales);
+  const [ciudad, setCiudad] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetchCiudadBase(ciudadDe).then((c) => { if (!cancelled) setCiudad(c); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [userId]);
   const [jump, setJump] = useState<{ page: number; nonce: number } | null>(null);
   const pages = useMemo(() => buildPages(groupTrips(sellos)), [sellos]);
   const hasStamps = sellos.some((s) => !s.hidden);
@@ -155,10 +164,10 @@ export default function PassportReader({
                 Salir de la vista previa
               </button>
             </div>
-            <Libreta key="preview" outro={outro} nombre={nombre} sellos={sellos.filter((x) => !x.hidden && ((ajustes?.show_plan_stamps ?? true) || x.kind === "pais"))} />
+            <Libreta key="preview" outro={outro} nombre={nombre} ciudad={ciudad} sellos={sellos.filter((x) => !x.hidden && ((ajustes?.show_plan_stamps ?? true) || x.kind === "pais"))} />
           </>
         ) : (
-          <Libreta outro={outro} nombre={nombre} sellos={sellos} intro={intro} jumpTo={jump} startPage={startPage} onOpenStamp={readOnly ? undefined : (sello, el) => setSheet({ sello, el })} />
+          <Libreta outro={outro} nombre={nombre} ciudad={ciudad} sellos={sellos} intro={intro} jumpTo={jump} startPage={startPage} onOpenStamp={readOnly ? undefined : (sello, el) => setSheet({ sello, el })} />
         )}
         {privacyOpen && (
           <PassportPrivacySheet

@@ -87,3 +87,17 @@ export async function guardarAjustesPasaporte(a: PasaporteAjustes): Promise<void
   });
   if (error) throw error;
 }
+
+/** Ciudad base de una persona (la propia si no se indica), según quien mira; null si no hay o no la puede ver. */
+export async function fetchCiudadBase(userId?: string): Promise<string | null> {
+  const { data, error } = await createBrowserSupabaseClient().rpc("fn_ciudad_base_de", { p_user_id: userId ?? null });
+  if (error) throw error;
+  return (data as string | null) ?? null;
+}
+
+/** Guarda la ciudad base propia; con texto vacío la borra. */
+export async function saveCiudadBase(ciudad: string): Promise<string | null> {
+  const { data, error } = await createBrowserSupabaseClient().rpc("fn_ciudad_base_set", { p_ciudad: ciudad });
+  if (error) throw error;
+  return (data as string | null) ?? null;
+}

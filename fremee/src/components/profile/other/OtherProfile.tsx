@@ -10,6 +10,7 @@ import { FILL_BTN, FOCUS, GHOST_BTN, LABEL, SERIF } from "@/components/plans/hom
 import { computeStats, countryName, dateLabel, latestStamps, planRangeLabel, type Sello } from "@/lib/passport";
 import type { AccesoPasaporte, PerfilAjeno, PlanComun, Relacion } from "@/services/api/endpoints/perfilAjeno.endpoint";
 import { CountryStamp, PlanStamp } from "../passport/stamps";
+import { fetchCiudadBase } from "@/services/api/endpoints/pasaporte.endpoint";
 import { PassportCover } from "../passport/PassportCover";
 import dynamic from "next/dynamic";
 
@@ -208,6 +209,12 @@ function PassportBlock({ data }: { data: OtherProfileData }) {
   // El pasaporte se abre como capa encima del perfil, con su paso en el historial (como en tu perfil).
   const [reader, setReader] = useState<{ from: HTMLElement | null } | null>(null);
   const [closing, setClosing] = useState(false);
+  const [ciudad, setCiudad] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetchCiudadBase(data.id).then((c) => { if (!cancelled) setCiudad(c); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [data.id]);
   useEffect(() => {
     if (!reader) return;
     const onPop = () => setClosing(true);
@@ -269,6 +276,7 @@ function PassportBlock({ data }: { data: OtherProfileData }) {
             ) : (
               <p className={`m-0 text-[28px] leading-[1.1] md:text-[40px] ${SERIF}`}>Aún sin sellos</p>
             )}
+            {ciudad && <p className="m-0 text-[14px] leading-[1.5] text-muted">Vive en {ciudad}</p>}
             {stats.lastStamp && (
               <p className="m-0 text-[14px] leading-[1.5] text-muted">
                 Último sello: {stats.lastStamp.place} · {dateLabel(stats.lastStamp.date)}
@@ -315,6 +323,7 @@ function PassportBlock({ data }: { data: OtherProfileData }) {
             nombre={data.fullName}
             sellos={data.sellos}
             readOnly
+            ciudadDe={data.id}
             title={`Pasaporte de ${data.firstName}`}
             fromCover={reader.from}
             profile={document.querySelector<HTMLElement>("[data-profile-root]")}
