@@ -1,4 +1,4 @@
-import { countryName, hash, planDays, planRangeLabel, stampDateLabel, type HitoKind, type Sello } from "@/lib/passport";
+import { countryName, hash, planRangeLabel, stampDateLabel, type HitoKind, type Sello } from "@/lib/passport";
 
 /** Sellos del pasaporte. Siempre en tinta (--passport-ink); el sello nuevo usa --passport-ink-new. Sin filtros SVG. */
 
@@ -137,7 +137,8 @@ export function PlanStamp({
   const title = plan?.titulo ?? "Viaje";
   const titleSize = title.length > 15 ? 17 : title.length > 11 ? 21 : 27;
   const shown = title.length > 20 ? `${title.slice(0, 19)}…` : title;
-  const days = plan ? planDays(plan) : 0;
+  const place = (plan?.ubicacion_nombre?.split(",")[0]?.trim() ?? "").toUpperCase();
+  const placeShown = place.length > 16 ? `${place.slice(0, 15)}…` : place;
   return (
     <svg width={size} height={Math.round((size * 96) / 140)} viewBox="0 0 140 96" aria-hidden="true" className={className} style={{ transform: `rotate(${tilt}deg)`, flexShrink: 0, ...style }}>
       {border === 2 ? (
@@ -151,9 +152,11 @@ export function PlanStamp({
         <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
         <circle cx="12" cy="10" r="3" />
       </g>
-      <text x="36" y="26" fontFamily={SANS} fontSize="9.5" fontWeight="700" letterSpacing="1.2" fill={c}>
-        {days > 1 ? `${days} DÍAS` : "1 DÍA"}
-      </text>
+      {placeShown && (
+        <text x="36" y="26" fontFamily={SANS} fontSize="9.5" fontWeight="700" letterSpacing="1.2" fill={c}>
+          {placeShown}
+        </text>
+      )}
       <text x="16" y="63" fontFamily={SERIF} fontSize={titleSize} fill={c}>
         {shown}
       </text>
@@ -223,19 +226,19 @@ export function HitoStamp({ hito, id, stampedAt, size = 64, tilt = 0, nuevo = fa
           <path d="M42 48l-8 8 8 8" transform="translate(-4 -8)" />
         </g>
       ) : (
-        <text x="48" y={t.sub ? 59 : 56} textAnchor="middle" fontFamily={SERIF} fontSize={t.sub ? 26 : t.big.length > 1 ? 30 : 34} fill={c}>
+        <text x="48" y={t.sub ? 60 : 58} textAnchor="middle" fontFamily={SERIF} fontSize={t.sub ? 28 : t.big.length > 1 ? 32 : 36} fill={c}>
           {t.big}
         </text>
       )}
-      <text x="48" y={hito === "de_vuelta" ? 74 : t.sub ? 33 : 68} textAnchor="middle" fontFamily={SANS} fontSize="7.5" fontWeight="700" letterSpacing="1.2" fill={c}>
+      <text x="48" y={hito === "de_vuelta" ? 74 : t.sub ? 31 : 70} textAnchor="middle" fontFamily={SANS} fontSize="9" fontWeight="700" letterSpacing="1.2" fill={c}>
         {t.label}
       </text>
       {t.sub && (
-        <text x="48" y="70" textAnchor="middle" fontFamily={SANS} fontSize="7.5" fontWeight="700" letterSpacing="1.2" fill={c}>
+        <text x="48" y="72" textAnchor="middle" fontFamily={SANS} fontSize="9" fontWeight="700" letterSpacing="1.2" fill={c}>
           {t.sub}
         </text>
       )}
-      <text x="48" y="82" textAnchor="middle" fontFamily={SANS} fontSize="6" fontWeight="700" letterSpacing="1" fill={c}>
+      <text x="48" y="84" textAnchor="middle" fontFamily={SANS} fontSize="7" fontWeight="700" letterSpacing="1" fill={c}>
         {stampDateLabel(stampedAt)}
       </text>
     </svg>

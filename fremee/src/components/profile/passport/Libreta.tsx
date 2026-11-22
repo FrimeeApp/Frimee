@@ -18,7 +18,8 @@ import {
   type Sello,
   type Trip,
 } from "@/lib/passport";
-import { CountryStamp, HitoStamp, PlanStamp } from "./stamps";
+import { marcarSellosVistos } from "@/services/api/endpoints/pasaporte.endpoint";
+import { CountryStamp, HITO_NAME, HitoStamp, PlanStamp } from "./stamps";
 
 /** La libreta (tableros «Pasaporte · la libreta»): página de datos + una página por cada 3 viajes de un año. */
 
@@ -64,13 +65,18 @@ export default function Libreta({ nombre, sellos }: { nombre: string; sellos: Se
     };
   }, []);
 
-  // Se abre por la última página sellada: la primera de las páginas de año (los viajes van del más reciente al más antiguo).
-  const [rawIndex, setIndex] = useState(() => (pages.length > 1 ? 1 : 0));
+  // Se abre por la última página sellada: las páginas van por orden de fecha, como en un pasaporte.
+  const [rawIndex, setIndex] = useState(() => pages.length - 1);
   // En ancho la página izquierda siempre es par (índice impar); al pasar de móvil a ancho se recoloca.
   const index = wide ? (rawIndex === 0 ? 0 : 2 * Math.ceil(rawIndex / 2) - 1) : rawIndex;
   const [prev, setPrev] = useState<{ index: number; back: boolean; reduced: boolean } | null>(null);
   const fadeRef = useRef<HTMLDivElement>(null);
   const busy = useRef(false);
+
+  // «Nuevo» solo dura mientras se estampa: al abrir la página se guardan como vistos y vuelven a la tinta normal.
+  const [seen, setSeen] = useState<ReadonlySet<number>>(new Set());
+  const marked = useRef(new Set<number>());
+  const isNew = useCallback((s: Pick<Sello, "id" | "nuevo">) => s.nuevo && !seen.has(s.id), [seen]);
 
   // En ancho se ven dos páginas: la de datos (1) a la derecha de la tapa y luego parejas par | impar.
   const unit = useCallback((i: number) => (wide ? Math.ceil(i / 2) : i), [wide]);
@@ -87,6 +93,22 @@ export default function Libreta({ nombre, sellos }: { nombre: string; sellos: Se
     [index, units, wide],
   );
   const goToPage = (i: number) => goToUnit(unit(i));
+
+  const visible = wide ? (index === 0 ? [0] : [index, index + 1]) : [index];
+  const visibleKey = visible.join(",");
+  useEffect(() => {
+    const ids = visibleKey
+      .split(",")
+      .map((i) => pages[Number(i)])
+      .flatMap((p) => (p?.kind === "year" ? p.trips.flatMap((t) => [t.plan, ...t.paises, ...t.hitos]) : []))
+      .filter((s): s is Sello => Boolean(s?.nuevo) && !marked.current.has(s!.id))
+      .map((s) => s.id);
+    if (ids.length === 0) return;
+    ids.forEach((id) => marked.current.add(id));
+    marcarSellosVistos(ids).catch((err) => console.error("[pasaporte] No se marcaron los sellos como vistos:", (err as { message?: string } | null)?.message ?? err));
+    // Sin limpiar el temporizador: aunque pases de página, esos sellos ya están vistos.
+    setTimeout(() => setSeen((prev) => new Set([...prev, ...ids])), 2400);
+  }, [visibleKey, pages]);
 
   const refs = {
     leftTop: useRef<HTMLDivElement>(null),
@@ -146,7 +168,9 @@ export default function Libreta({ nombre, sellos }: { nombre: string; sellos: Se
   };
 
   const pageAt = (i: number) => pages[i] ?? null;
-  const view = (p: PassportPage | null, cover = false) => <PageView page={p} nombre={nombre} stats={stats} total={pages.length} cover={cover} />;
+  const view = (p: PassportPage | null, cover = false, number = 0) => (
+    <PageView page={p} nombre={nombre} stats={stats} total={pages.length} cover={cover} number={number} isNew={isNew} />
+  );
   const layer = (content: React.ReactNode, z: number, origin: "left" | "right", ref?: React.Ref<HTMLDivElement>) => (
     <div ref={ref} className="absolute top-0" style={{ left: 0, width: W, height: H, transformOrigin: `${origin} center`, zIndex: z }}>
       {content}
@@ -158,7 +182,7 @@ export default function Libreta({ nombre, sellos }: { nombre: string; sellos: Se
     const cur = wide ? (side === "left" ? (index === 0 ? -1 : index) : index === 0 ? 0 : index + 1) : index;
     const before = prev ? (wide ? (side === "left" ? (prev.index === 0 ? -1 : prev.index) : prev.index === 0 ? 0 : prev.index + 1) : prev.index) : null;
     const origin = side === "left" ? "right" : "left";
-    const make = (i: number) => view(i < 0 ? null : pageAt(i), i < 0);
+    const make = (i: number) => view(i < 0 ? null : pageAt(i), i < 0, i + 1);
     if (!prev || before === null || prev.reduced) return layer(make(cur), 1, origin);
     // Hacia delante: la nueva izquierda y la vieja derecha son las que se mueven; hacia atrás, al revés.
     const topIsNew = side === "left" ? !prev.back : prev.back;
@@ -233,7 +257,7 @@ export default function Libreta({ nombre, sellos }: { nombre: string; sellos: Se
           <ChevronLeft className="size-[22px]" aria-hidden />
         </NavButton>
         <span aria-live="polite" className="text-[14px] tabular-nums text-muted">
-          {wide && index > 0 && pages[index + 1] ? `Páginas ${index + 1} y ${index + 2} de ${pages.length}` : `Página ${index + 1} de ${pages.length}`}
+          {wide && index > 0 ? `Páginas ${index + 1}–${index + 2} de ${Math.max(pages.length, index + 2)}` : `Página ${index + 1} de ${pages.length}`}
         </span>
         <NavButton label="Página siguiente" disabled={unit(index) === units - 1} onClick={() => goToUnit(unit(index) + 1)}>
           <ChevronRight className="size-[22px]" aria-hidden />
@@ -319,15 +343,41 @@ function Guilloche({ seed }: { seed: number }) {
   );
 }
 
-function PageView({ page, nombre, stats, total, cover = false }: { page: PassportPage | null; nombre: string; stats: PassportStats; total: number; cover?: boolean }) {
+function PageView({
+  page,
+  nombre,
+  stats,
+  total,
+  cover = false,
+  number,
+  isNew,
+}: {
+  page: PassportPage | null;
+  nombre: string;
+  stats: PassportStats;
+  total: number;
+  cover?: boolean;
+  number: number;
+  isNew: (s: Pick<Sello, "id" | "nuevo">) => boolean;
+}) {
   if (cover) {
     // El interior de la tapa, a la izquierda de la página de datos.
     return <div className="rounded-[8px]" style={{ width: W, height: H, background: "var(--passport-cover)", borderRight: "1px solid var(--passport-spine)" }} />;
   }
   if (!page) {
+    // Página aún sin sellar: dice por qué está vacía y deja dos huecos para el próximo viaje.
     return (
-      <div className="relative overflow-hidden rounded-[8px] border border-app bg-surface" style={{ width: W, height: H }}>
+      <div className="relative overflow-hidden rounded-[8px] border border-app bg-surface text-app" style={{ width: W, height: H }}>
         <Guilloche seed={99} />
+        <div className={`absolute inset-x-4 top-[14px] flex justify-between ${LABEL}`}>
+          <span>VISADOS</span>
+          <span className="tabular-nums">PÁG. {pad2(number)}</span>
+        </div>
+        <span aria-hidden="true" className="absolute rounded-[8px] border-2 border-dashed border-[var(--border-strong)]" style={{ left: 20, top: 84, width: 150, height: 103 }} />
+        <span aria-hidden="true" className="absolute rounded-full border-2 border-dashed border-[var(--border-strong)]" style={{ left: 214, top: 70, width: 104, height: 104 }} />
+        <p className="absolute inset-x-4 m-0 text-center text-[14px] leading-[1.5] text-muted" style={{ top: 236 }}>
+          Aquí irá tu próximo sello
+        </p>
       </div>
     );
   }
@@ -335,10 +385,10 @@ function PageView({ page, nombre, stats, total, cover = false }: { page: Passpor
     <div className="relative overflow-hidden rounded-[8px] border border-app bg-surface text-app" style={{ width: W, height: H }}>
       <Guilloche seed={page.number} />
       <div className={`absolute inset-x-4 top-[14px] flex justify-between ${LABEL}`}>
-        <span>{page.kind === "datos" ? "PÁGINA DE DATOS" : `VISADOS · ${page.year}`}</span>
+        <span>{page.kind === "datos" ? "PÁGINA DE DATOS" : "VISADOS"}</span>
         <span className="tabular-nums">PÁG. {pad2(page.number)}</span>
       </div>
-      {page.kind === "datos" ? <DatosPage nombre={nombre} stats={stats} /> : <YearPage page={page} total={total} />}
+      {page.kind === "datos" ? <DatosPage nombre={nombre} stats={stats} /> : <YearPage page={page} total={total} isNew={isNew} />}
     </div>
   );
 }
@@ -405,32 +455,43 @@ function NuevoPill({ className }: { className?: string }) {
   );
 }
 
-function YearPage({ page, total }: { page: Extract<PassportPage, { kind: "year" }>; total: number }) {
+function YearPage({ page, total, isNew }: { page: Extract<PassportPage, { kind: "year" }>; total: number; isNew: (s: Pick<Sello, "id" | "nuevo">) => boolean }) {
   const starts = page.trips.map((_, i) => page.trips.slice(0, i).reduce((n, t) => n + tripSlots(t), 0));
   return (
     <>
       <h2 className={`absolute left-4 top-[34px] m-0 text-[28px] leading-[1.1] ${SERIF}`}>{page.year}</h2>
       {page.trips.map((t, i) => (
-        <TripView key={t.planId} trip={t} y={SLOT_TOPS[starts[i]]} flip={starts[i] % 2 === 1} />
+        <TripView key={t.planId} trip={t} slot={starts[i]} isNew={isNew} />
       ))}
       {page.continues && page.number < total && <p className="absolute inset-x-4 bottom-3 m-0 text-right text-[12px] leading-[1.4] text-muted">Sigue en la pág. {pad2(page.number + 1)}</p>}
     </>
   );
 }
 
-function TripView({ trip, y, flip }: { trip: Trip; y: number; flip: boolean }) {
+/** Animación al estampar: el de plan primero, el de país 120 ms después, el hito al final. */
+const stampIn = (isNew: boolean, delayMs: number): React.CSSProperties | undefined =>
+  isNew ? { animation: `passport-stamp-in 240ms cubic-bezier(0.2, 0, 0, 1) ${delayMs}ms both` } : undefined;
+
+function TripView({ trip, slot, isNew }: { trip: Trip; slot: number; isNew: (s: Pick<Sello, "id" | "nuevo">) => boolean }) {
+  const y = SLOT_TOPS[slot];
+  const flip = slot % 2 === 1;
   const multi = trip.paises.length >= 2;
   const planX = flip ? 176 : 16;
   const planY = y + 12;
   const label = trip.info?.titulo ?? "Viaje";
-  const nuevoPlan = trip.plan?.nuevo ?? false;
+  const nuevoPlan = trip.plan ? isNew(trip.plan) : false;
   const shown = multi ? trip.paises.slice(0, 3) : trip.paises;
   const extra = multi ? trip.paises.length - shown.length : 0;
   const size = multi ? (shown.length > 2 ? 84 : 88) : 104;
+  const hitoSlot = slot + (multi ? 2 : 1);
+  const hitos = trip.hitos.slice(0, 3);
+  const hitoSize = hitos.length > 2 ? 88 : 92;
+  const hitoGap = 14;
+  const hitoRowW = hitos.length * hitoSize + (hitos.length - 1) * hitoGap;
   return (
     <>
       {trip.plan && (
-        <span role="img" aria-label={`${label}${trip.info ? `, ${dateLabel(trip.date)}` : ""}${nuevoPlan ? ", sello nuevo" : ""}`} className="absolute block leading-[0]" style={{ left: planX, top: planY }}>
+        <span role="img" aria-label={`${label}${trip.info ? `, ${dateLabel(trip.date)}` : ""}${nuevoPlan ? ", sello nuevo" : ""}`} className="absolute block leading-[0]" style={{ left: planX, top: planY, ...stampIn(nuevoPlan, 300) }}>
           <PlanStamp sello={trip.plan} tilt={planTilt(trip.plan.id)} nuevo={nuevoPlan} />
           {nuevoPlan && <NuevoPill className="-right-1.5 -top-2.5" />}
         </span>
@@ -438,10 +499,11 @@ function TripView({ trip, y, flip }: { trip: Trip; y: number; flip: boolean }) {
       {shown.map((p, i) => {
         const x = multi ? (flip ? 28 + (i % 2) * 14 : 232 - (i % 2) * 14) : flip ? 24 : 214;
         const top = multi ? y + i * 108 : y;
+        const nuevo = isNew(p);
         return (
-          <span key={p.id} role="img" aria-label={`${countryName(p.country_code ?? "")}, sello del ${dateLabel(p.stamped_at)}${p.nuevo ? ", nuevo" : ""}`} className="absolute block leading-[0]" style={{ left: Math.min(x, W - size - 8), top }}>
-            <CountryStamp sello={p} size={size} tilt={paisTilt(p.id)} nuevo={p.nuevo} />
-            {p.nuevo && <NuevoPill className="-right-2 -top-2.5" />}
+          <span key={p.id} role="img" aria-label={`${countryName(p.country_code ?? "")}, sello del ${dateLabel(p.stamped_at)}${nuevo ? ", nuevo" : ""}`} className="absolute block leading-[0]" style={{ left: Math.min(x, W - size - 8), top, ...stampIn(nuevo, 420 + i * 60) }}>
+            <CountryStamp sello={p} size={size} tilt={paisTilt(p.id)} nuevo={nuevo} />
+            {nuevo && <NuevoPill className="-right-2 -top-2.5" />}
           </span>
         );
       })}
@@ -450,11 +512,21 @@ function TripView({ trip, y, flip }: { trip: Trip; y: number; flip: boolean }) {
           +{extra}
         </span>
       )}
-      {trip.hitos.slice(0, 3).map((h, i) => (
-        <span key={h.id} role="img" aria-label={`Hito: ${h.hito}`} className="absolute block leading-[0]" style={{ left: planX + 6 + i * 58, top: planY + 108 }}>
-          <HitoStamp hito={h.hito!} id={h.id} stampedAt={h.stamped_at} size={54} tilt={paisTilt(h.id) / 2} nuevo={h.nuevo} />
-        </span>
-      ))}
+      {hitos.map((h, i) => {
+        const nuevo = isNew(h);
+        return (
+          <span
+            key={h.id}
+            role="img"
+            aria-label={`Hito: ${HITO_NAME[h.hito!]}`}
+            className="absolute block leading-[0]"
+            style={{ left: (W - hitoRowW) / 2 + i * (hitoSize + hitoGap), top: SLOT_TOPS[hitoSlot] + 24, ...stampIn(nuevo, 540 + i * 60) }}
+          >
+            <HitoStamp hito={h.hito!} id={h.id} stampedAt={h.stamped_at} size={hitoSize} tilt={paisTilt(h.id) / 2} nuevo={nuevo} />
+            {nuevo && <NuevoPill className="-right-2 -top-2.5" />}
+          </span>
+        );
+      })}
     </>
   );
 }

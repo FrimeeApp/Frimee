@@ -45,9 +45,9 @@ export type PassportPage =
   | { kind: "year"; number: number; year: number; trips: Trip[]; continues: boolean };
 
 export const SLOTS_PER_PAGE = 3;
-/** Un viaje con varios países ocupa dos huecos. */
+/** Un viaje con varios países ocupa dos huecos y los hitos van en su propio hueco. */
 export function tripSlots(t: Trip) {
-  return t.paises.length >= 2 ? 2 : 1;
+  return (t.paises.length >= 2 ? 2 : 1) + (t.hitos.length ? 1 : 0);
 }
 
 const MONTHS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sept", "oct", "nov", "dic"];
@@ -132,13 +132,13 @@ export function groupTrips(sellos: Sello[]): Trip[] {
   }
   const trips = [...byPlan.values()];
   for (const t of trips) t.paises.sort((a, b) => (a.stamped_at < b.stamped_at ? -1 : a.stamped_at > b.stamped_at ? 1 : a.id - b.id));
-  return trips.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.planId - a.planId));
+  return trips.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.planId - b.planId));
 }
 
-/** Página 1 = datos; luego un bloque por año (el más reciente primero) con 3 huecos por página. */
+/** Página 1 = datos; luego un bloque por año y viajes por fecha, de más antiguo a más reciente, con 3 huecos por página. */
 export function buildPages(trips: Trip[]): PassportPage[] {
   const pages: PassportPage[] = [{ kind: "datos", number: 1 }];
-  const years = [...new Set(trips.map((t) => Number(t.date.slice(0, 4))))].sort((a, b) => b - a);
+  const years = [...new Set(trips.map((t) => Number(t.date.slice(0, 4))))].sort((a, b) => a - b);
   for (const year of years) {
     let current: Trip[] = [];
     let used = 0;

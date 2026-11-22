@@ -276,3 +276,15 @@
     --font-h6: 16px;
   }
 }
+
+/* Libreta: el sello cae sobre la página (scale 1,18 → 1, giro y tinta 60 → 100 %). */
+@keyframes passport-stamp-in {
+  from {
+    opacity: 0.6;
+    transform: scale(1.18) rotate(-8deg);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

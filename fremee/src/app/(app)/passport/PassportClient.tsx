@@ -46,7 +46,7 @@ export default function PassportClient() {
             <button type="button" onClick={() => router.back()} aria-label="Volver al perfil" className={`inline-flex size-11 items-center justify-center rounded-[8px] text-app ${FOCUS}`}>
               <ChevronLeft className="size-[22px]" aria-hidden />
             </button>
-            <h1 className="m-0 flex-1 text-[18px] font-[var(--fw-semibold)] leading-[1.3]">Pasaporte</h1>
+            <h1 className="m-0 flex-1 font-sans text-[18px] font-[var(--fw-semibold)] leading-[1.3]">Pasaporte</h1>
           </div>
 
           {failed ? (

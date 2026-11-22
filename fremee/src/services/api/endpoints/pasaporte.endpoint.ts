@@ -45,3 +45,10 @@ export async function leerPasaporte(userId?: string): Promise<PasaporteLeido> {
   if (error) throw error;
   return parsePasaporte(data);
 }
+
+/** Quita la marca «Nuevo» de los sellos que ya has visto (se llama al abrir su página). */
+export async function marcarSellosVistos(ids: number[]): Promise<void> {
+  if (ids.length === 0) return;
+  const { error } = await createBrowserSupabaseClient().rpc("fn_passport_marcar_vistos", { p_stamp_ids: ids });
+  if (error) throw error;
+}
