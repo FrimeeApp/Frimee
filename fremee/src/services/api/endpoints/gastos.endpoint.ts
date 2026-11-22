@@ -33,6 +33,8 @@ export type GastoRow = {
   pagado_por_foto: string | null;
   partes: GastoParte[] | null;
   receipt_url: string | null;
+  created_by_user_id: string | null;
+  created_by_nombre: string | null;
   created_at: string;
 };
 
@@ -47,12 +49,28 @@ export type BalanceRow = {
   importe: number;
 };
 
-export async function pagarLiquidacionEndpoint(liquidacionId: number, comprobanteUrl: string | null): Promise<void> {
+export type MetodoPago = "BIZUM" | "TRANSFERENCIA" | "EFECTIVO" | "OTRO";
+
+/** Marca un pago (total o parcial) de una deuda. Queda en revisión hasta que quien recibe lo confirme. Devuelve el id del pago. */
+export async function pagarLiquidacionEndpoint(
+  liquidacionId: number,
+  opts: { importe?: number; metodo?: MetodoPago | null; comprobanteUrl?: string | null } = {},
+): Promise<number> {
   const supabase = createBrowserSupabaseClient();
-  const { error } = await supabase.rpc("fn_liquidacion_pagar", {
+  const { data, error } = await supabase.rpc("fn_liquidacion_pagar", {
     p_liquidacion_id: liquidacionId,
-    p_comprobante_url: comprobanteUrl,
+    p_importe: opts.importe ?? null,
+    p_metodo: opts.metodo ?? null,
+    p_comprobante_url: opts.comprobanteUrl ?? null,
   });
+  if (error) throw error;
+  return data as number;
+}
+
+/** Deshace un pago marcado que aún no está confirmado. */
+export async function deshacerPagoEndpoint(pagoId: number): Promise<void> {
+  const supabase = createBrowserSupabaseClient();
+  const { error } = await supabase.rpc("fn_liquidacion_deshacer_pago", { p_liquidacion_id: pagoId });
   if (error) throw error;
 }
 
@@ -176,6 +194,14 @@ export async function updateGastoEndpoint(
     p_receipt_url:        input.receipt_url ?? null,
   });
   if (error) throw error;
+}
+
+/** Ítems de un gasto «por ítems», con quién comparte cada uno (para editarlo). */
+export async function fetchGastoItemsEndpoint(gastoId: number): Promise<{ nombre: string; subtotal: number; usuarios: string[] }[]> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_gasto_items", { p_gasto_id: gastoId });
+  if (error) throw error;
+  return (data ?? []) as { nombre: string; subtotal: number; usuarios: string[] }[];
 }
 
 /** Anula un gasto (soft delete) y recalcula liquidaciones */

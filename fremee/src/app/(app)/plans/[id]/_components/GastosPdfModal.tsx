@@ -52,7 +52,7 @@ function PageBlock({ b, m, last }: { b: Block; m: PdfModel; last: boolean }) {
     const cols = "130px 100px 100px 20px 160px 1fr";
     return (
       <div style={{ marginBottom: H.gap }}>
-        {mkH2("Balance por persona", "Pagó − le toca")}
+        {mkH2("Balance por persona", "Pagó menos lo que le toca")}
         <Head cols={cols} labels={["Persona", "Pagó", "Le toca", "", "Saldo", ""]} right={[1, 2]} />
         {b.rows.map((r, i) => (
           <Row key={i} h={H.balRow} cols={cols}>

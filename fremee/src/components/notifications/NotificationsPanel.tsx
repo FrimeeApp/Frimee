@@ -18,6 +18,7 @@ import {
 } from "@/services/api/repositories/notifications.repository";
 import { responderSolicitudEndpoint } from "@/services/api/endpoints/chat.endpoint";
 import { createRealtimeTopic } from "@/lib/realtime";
+import { formatMoney } from "@/lib/formatters";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -96,6 +97,22 @@ function pollDrawMeta(entityId: string | null): { href: string | null; label: st
   } catch {
     return { href: null, label: "lanzó un sorteo." };
   }
+}
+
+/** pago_marcado / pago_confirmado / pago_rechazado: entity_id = {plan_id, plan_titulo, importe, pago_id}. */
+function pagoMeta(tipo: string, entityId: string | null): { href: string; label: string } {
+  let importe = "";
+  let plan = "";
+  try {
+    const meta = JSON.parse(entityId ?? "") as { importe?: number; plan_titulo?: string };
+    if (typeof meta.importe === "number") importe = ` de ${formatMoney(meta.importe)}`;
+    if (meta.plan_titulo) plan = ` en ${meta.plan_titulo}`;
+  } catch {
+    /* sin datos: el texto sale sin importe */
+  }
+  if (tipo === "pago_marcado") return { href: "/mis-gastos", label: `te ha marcado un pago${importe}${plan}.` };
+  if (tipo === "pago_confirmado") return { href: "/mis-gastos", label: `ha confirmado tu pago${importe}${plan}.` };
+  return { href: "/mis-gastos", label: `dice que no ha recibido tu pago${importe}${plan}. La deuda vuelve.` };
 }
 
 function recordatorioLabel(entityId: string | null): string {
@@ -200,7 +217,7 @@ export function NotifItem({
   const isPlanInvite = n.tipo === "plan_invite" && n.entity_id;
   const added = n.tipo === "plan_added" || n.tipo === "plan_join_request" ? planChatMeta(n.tipo, n.entity_id) : null;
   const isJoinRequest = n.tipo === "plan_join_request" && Boolean(added?.planId && added.userId);
-  const pollReopen = n.tipo === "poll_reopen" ? pollReopenMeta(n.entity_id) : n.tipo === "poll_draw" ? pollDrawMeta(n.entity_id) : null;
+  const pollReopen = n.tipo === "poll_reopen" ? pollReopenMeta(n.entity_id) : n.tipo === "poll_draw" ? pollDrawMeta(n.entity_id) : n.tipo.startsWith("pago_") ? pagoMeta(n.tipo, n.entity_id) : null;
   const router = useRouter();
   const [joinError, setJoinError] = useState(false);
   const handleJoinRequest = async (accept: boolean) => {
@@ -305,7 +322,7 @@ export function NotifItem({
               onClick={() => (onNavigate ? onNavigate(pollReopen.href!) : router.push(pollReopen.href!))}
               className="shrink-0 rounded-full bg-[var(--primary)] px-3 py-1 text-[14px] font-[var(--fw-semibold)] text-[var(--contrast)] transition-opacity hover:opacity-80"
             >
-              {n.tipo === "poll_draw" ? "Ver" : "Votar"}
+              {n.tipo === "poll_draw" || n.tipo.startsWith("pago_") ? "Ver" : "Votar"}
             </button>
           )}
           {isJoinRequest && (

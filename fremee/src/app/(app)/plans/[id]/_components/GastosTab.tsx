@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { ArrowDownLeft, ArrowUpRight, ChevronDown, FileText, Pencil, Plus, Search, WalletCards } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { formatMoney } from "@/lib/formatters";
+import { owedToPayer, shareOf, takesPart } from "@/lib/gastos-shares";
 import type { BalanceRow, GastoRow } from "@/services/api/endpoints/gastos.endpoint";
 import type { ExpenseSummary } from "./ExpenseSummaryCard";
 import { normalizeDateKey } from "./plan-utils";
@@ -59,6 +60,8 @@ export function GastosTab({ gastos, balances, userId, summary, planStart, isPast
   const [cat, setCat] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState<Set<string>>(new Set());
+  const [owedOpen, setOwedOpen] = useState(false);
+  const [othersOpen, setOthersOpen] = useState(false);
   const [allCats, setAllCats] = useState(false);
   const [allSubplans, setAllSubplans] = useState(false);
   const currency = summary.currency;
@@ -109,13 +112,13 @@ export function GastosTab({ gastos, balances, userId, summary, planStart, isPast
   /* ── Lista de gastos ── */
   const live = useMemo(() => gastos.filter((g) => g.estado !== "ANULADO"), [gastos]);
   const paidByMeCount = live.filter((g) => g.pagado_por_user_id === userId).length;
-  const affectCount = live.filter((g) => g.partes?.some((p) => p.user_id === userId)).length;
+  const affectCount = live.filter((g) => takesPart(g, userId)).length;
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     return gastos.filter((g) => {
       if (filter === "mios" && g.pagado_por_user_id !== userId) return false;
-      if (filter === "afectan" && !g.partes?.some((p) => p.user_id === userId)) return false;
+      if (filter === "afectan" && !takesPart(g, userId)) return false;
       if (cat && catOf(g) !== cat) return false;
       if (q && !g.titulo.toLowerCase().includes(q)) return false;
       return true;
@@ -175,7 +178,7 @@ export function GastosTab({ gastos, balances, userId, summary, planStart, isPast
           <div>
             {debt > 0 ? (
               <>
-                <p className="inline-flex items-center gap-1 text-[14px] font-[var(--fw-semibold)] text-[var(--warning)]"><ArrowUpRight className="size-4" aria-hidden />Debes</p>
+                <p className="inline-flex items-center gap-1 text-[14px] font-[var(--fw-semibold)] text-app"><ArrowUpRight className="size-4" aria-hidden />Debes</p>
                 <p className="mt-1 flex flex-wrap items-baseline gap-2">
                   <span className="text-[44px] leading-none tabular-nums" style={SERIF}>{money(debt)}</span>
                   <span className="text-[15px] text-muted">a {joinNames(mine.map((b) => firstName(b.to_nombre)))}</span>
@@ -225,16 +228,65 @@ export function GastosTab({ gastos, balances, userId, summary, planStart, isPast
                   <button type="button" onClick={() => onPagar(b)} className="h-10 shrink-0 rounded-lg bg-primary-token px-3.5 text-[14px] font-[var(--fw-semibold)] text-contrast-token">Pagar</button>
                 </div>
               ))}
-              {owedToMe.map((b) => (
-                <div key={b.liquidacion_id} className="flex min-h-16 items-center gap-3 border-b border-app py-2">
-                  <Avatar name={b.from_nombre ?? "Usuario"} src={b.from_profile_image} px={36} topMargin="" />
-                  <div className="min-w-0 flex-1">
-                    <b className="block truncate text-[15px] font-[var(--fw-semibold)] text-app">{firstName(b.from_nombre)} te debe</b>
-                    <span className="block text-[13px] text-muted">Pendiente de cobrar</span>
+              {owedToMe.length === 1 &&
+                owedToMe.map((b) => (
+                  <div key={b.liquidacion_id} className="flex min-h-16 items-center gap-3 border-b border-app py-2">
+                    <Avatar name={b.from_nombre ?? "Usuario"} src={b.from_profile_image} px={36} topMargin="" />
+                    <div className="min-w-0 flex-1">
+                      <b className="block truncate text-[15px] font-[var(--fw-semibold)] text-app">{firstName(b.from_nombre)} te debe</b>
+                      <span className="block text-[13px] text-muted">Pendiente de cobrar</span>
+                    </div>
+                    <b className="text-[15px] font-[var(--fw-semibold)] tabular-nums text-[var(--success)]">{money(b.importe)}</b>
                   </div>
-                  <b className="text-[15px] font-[var(--fw-semibold)] tabular-nums text-[var(--success)]">{money(b.importe)}</b>
+                ))}
+              {owedToMe.length > 1 && (
+                <div>
+                  <button
+                    type="button"
+                    aria-expanded={owedOpen}
+                    onClick={() => setOwedOpen((v) => !v)}
+                    className="flex min-h-16 w-full items-center gap-3 border-b border-app py-2 text-left"
+                  >
+                    <span className="flex shrink-0 items-center">
+                      {owedToMe.slice(0, 3).map((b, i) => (
+                        <Avatar key={b.liquidacion_id} name={b.from_nombre ?? "Usuario"} src={b.from_profile_image} px={36} topMargin="" className={`ring-2 ring-[var(--bg)] ${i > 0 ? "-ml-3" : ""}`} />
+                      ))}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <b className="block truncate text-[15px] font-[var(--fw-semibold)] text-app">{owedToMe.length} personas te deben</b>
+                      <span className="block text-[13px] text-muted">Pendiente de cobrar</span>
+                    </div>
+                    <b className="text-[15px] font-[var(--fw-semibold)] tabular-nums text-[var(--success)]">{money(credit)}</b>
+                    <ChevronDown className={`size-[18px] text-muted transition-transform ${owedOpen ? "rotate-180" : ""}`} aria-hidden />
+                  </button>
+                  {owedOpen && (
+                    <div className="pb-1.5 pl-12">
+                      {owedToMe.map((b) => (
+                        <div key={b.liquidacion_id} className="flex min-h-11 items-center gap-2.5 border-b border-app">
+                          <Avatar name={b.from_nombre ?? "Usuario"} src={b.from_profile_image} px={28} topMargin="" />
+                          <span className="min-w-0 flex-1 truncate text-[14px] font-[var(--fw-semibold)] text-app">{firstName(b.from_nombre)}</span>
+                          <span className="text-[14px] tabular-nums text-[var(--success)]">{money(b.importe)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              ))}
+              )}
+              {others.length > 0 && (
+                <div>
+                  <button
+                    type="button"
+                    aria-expanded={othersOpen}
+                    onClick={() => setOthersOpen((v) => !v)}
+                    className="flex min-h-14 w-full items-center gap-3 border-b border-app py-2 text-left"
+                  >
+                    <span className="min-w-0 flex-1 truncate text-[14px] text-muted">
+                      <b className="font-[var(--fw-semibold)] text-app">{others.length} {others.length === 1 ? "pago" : "pagos"} entre los demás</b> · No te afecta
+                    </span>
+                    <ChevronDown className={`size-[18px] text-muted transition-transform ${othersOpen ? "rotate-180" : ""}`} aria-hidden />
+                  </button>
+                  {othersOpen && (
+                    <>
               {othersByDebtor.map((debts) => {
                 const d = debts[0];
                 const many = debts.length > 1;
@@ -278,6 +330,10 @@ export function GastosTab({ gastos, balances, userId, summary, planStart, isPast
                   </div>
                 );
               })}
+                    </>
+                  )}
+                </div>
+              )}
             </>
           )}
         </section>
@@ -430,9 +486,9 @@ export function GastosTab({ gastos, balances, userId, summary, planStart, isPast
 
 function GastoRowItem({ g, userId, onOpen }: { g: GastoRow; userId: string | undefined; onOpen: () => void }) {
   const paidByMe = g.pagado_por_user_id === userId;
-  const myPart = g.partes?.find((p) => p.user_id === userId)?.importe;
+  const myPart = paidByMe ? undefined : g.partes?.find((p) => p.user_id === userId)?.importe;
   const anulado = g.estado === "ANULADO";
-  const owed = paidByMe ? g.total - (myPart ?? 0) : 0;
+  const owed = paidByMe ? owedToPayer(g) : 0;
   const detail = [paidByMe ? "Pagaste tú" : `Pagó ${firstName(g.pagado_por_nombre)}`, g.categoria_nombre, g.subplan_titulo].filter(Boolean).join(" · ");
 
   let sub: React.ReactNode = null;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowDownLeft, ArrowUpRight, CheckCircle2, Clock3, Share2, XCircle, type LucideIcon } from "lucide-react";
+import { ArrowDownLeft, ArrowRight, ArrowUpRight, Check, CheckCircle2, Clock3, Share2, XCircle } from "lucide-react";
 import { formatMoney, formatLongDateTime } from "@/lib/formatters";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
 import { Avatar } from "@/components/ui/Avatar";
@@ -22,14 +22,20 @@ export type ExpenseItem = {
   counterpartyImage: string | null;
   planName: string;
   planId: number;
+  /** Inicio y fin del plan, para distinguir dos planes con el mismo nombre. */
+  planStart?: string | null;
+  planEnd?: string | null;
   concept: string | null;
   estado: EstadoLiquidacion;
+  /** Cómo se pagó (lo elige quien paga); null si no lo dijo. */
+  metodo?: "BIZUM" | "TRANSFERENCIA" | "EFECTIVO" | "OTRO" | "STRIPE" | null;
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const formatAmount = formatMoney;
 const formatDetailDate = formatLongDateTime;
+const SERIF_STYLE = { fontFamily: "var(--font-display-face), Instrument Serif, Georgia, serif", fontWeight: 400, letterSpacing: "-0.01em", fontVariantNumeric: "tabular-nums" } as const;
 
 export function getExpenseStatusMeta(item: ExpenseItem) {
   if (item.direction === "incoming" && item.estado === "CONFIRMADA") {
@@ -130,15 +136,6 @@ function ConceptRow({ value }: { value: string }) {
   );
 }
 
-function DetailRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="w-full text-left">
-      <p className="text-caption text-muted">{label}</p>
-      <p className="mt-[4px] text-body-sm font-[var(--fw-semibold)] text-app">{value}</p>
-    </div>
-  );
-}
-
 function PlanRow({ value, onClick }: { value: string; onClick: () => void }) {
   return (
     <button
@@ -157,25 +154,6 @@ function PlanRow({ value, onClick }: { value: string; onClick: () => void }) {
   );
 }
 
-function MovementIcon({ Icon, className }: { Icon: LucideIcon; className: string }) {
-  return (
-    <div className={`flex size-12 items-center justify-center rounded-full ${className}`}>
-      <Icon className="size-5" strokeWidth={1.9} aria-hidden />
-    </div>
-  );
-}
-
-function CounterpartyLine({ name, image }: { name: string; image: string | null }) {
-  return (
-    <div className="mt-[var(--space-3)] flex max-w-full items-center justify-center gap-[var(--space-2)]">
-      <Avatar name={name} src={image} px={32} topMargin="" />
-      <p className="min-w-0 truncate text-body-sm font-[var(--fw-semibold)] leading-tight text-app">
-        {name}
-      </p>
-    </div>
-  );
-}
-
 // ── Modal ─────────────────────────────────────────────────────────────────────
 
 type ExpenseDetailModalProps = {
@@ -184,6 +162,7 @@ type ExpenseDetailModalProps = {
   actingId: number | null;
   onClose: () => void;
   onOpenPlan: (planId: number) => void;
+  onPay: (item: ExpenseItem) => void;
   onConfirm: (item: ExpenseItem) => void;
   onReject: (item: ExpenseItem) => void;
 }
@@ -194,6 +173,7 @@ export function ExpenseDetailModal({
   actingId,
   onClose,
   onOpenPlan,
+  onPay,
   onConfirm,
   onReject,
 }: ExpenseDetailModalProps) {
@@ -250,15 +230,35 @@ export function ExpenseDetailModal({
   if (!item) return null;
 
   const incoming = item.direction === "incoming";
-  const otherPartyLabel = item.counterparty || profileName || "Usuario";
+  const other = { name: item.counterparty || "Usuario", image: item.counterpartyImage };
+  const me: { name: string; image: string | null } = { name: profileName || "Tú", image: null };
+  const payer = incoming ? other : me;
+  const payee = incoming ? me : other;
   const statusMeta = getExpenseStatusMeta(item);
-  const StatusIcon = statusMeta.Icon;
   const requiresValidation = incoming && item.estado === "EN_REVISION";
-  const isResolved = item.estado === "CONFIRMADA";
-  const signedAmount = `${incoming ? "+" : "-"}${formatAmount(item.amount)}`;
+  const mustPay = !incoming && item.estado === "PENDIENTE";
+  const resolved = item.estado === "CONFIRMADA";
+  const signedAmount = `${incoming ? "+" : "\u2212"}${formatAmount(item.amount)}`;
   const concept = item.concept?.trim() || item.planName;
-  const pendingMessage = incoming ? "Todavía te deben" : "Todavía debes";
-  const resolvedMessage = incoming ? "Te han pagado" : "Has pagado";
+  const title = incoming
+    ? item.estado === "EN_REVISION"
+      ? <><b>{other.name}</b> te ha pagado</>
+      : resolved
+        ? <><b>{other.name}</b> te pagó</>
+        : <><b>{other.name}</b> te debe</>
+    : resolved || item.estado === "EN_REVISION"
+      ? <>Pagaste a <b>{other.name}</b></>
+      : <>Debes a <b>{other.name}</b></>;
+  const marked = item.estado === "EN_REVISION" || resolved;
+  const steps: { text: string; when?: string; done: boolean }[] = [
+    { text: "Calculado al repartir los gastos", when: formatDetailDate(item.date), done: true },
+  ];
+  if (marked) steps.push({ text: incoming ? `${other.name} lo marcó como pagado` : "Lo marcaste como pagado", done: true });
+  if (item.estado === "EN_REVISION") {
+    steps.push({ text: incoming ? "Falta que lo confirmes" : `Falta que ${other.name} lo confirme`, done: false });
+  } else if (resolved) {
+    steps.push({ text: "Pago confirmado", done: true });
+  }
   const overlayDragProgress = overlayDragState.itemId === item.id ? overlayDragState.progress : 0;
   const overlayDragging = overlayDragState.itemId === item.id ? overlayDragState.dragging : false;
   const overlayOpacity = isClosing
@@ -268,7 +268,7 @@ export function ExpenseDetailModal({
     : Math.max(0.12, 1 - overlayDragProgress * 1.25);
 
   const handleShare = async () => {
-    const text = `${statusMeta.text}: ${signedAmount} con ${otherPartyLabel} · ${concept}`;
+    const text = `${statusMeta.text}: ${signedAmount} con ${other.name} · ${concept}`;
     const appNavigator = typeof window !== "undefined" ? window.navigator : null;
     const clipboard = appNavigator?.clipboard;
 
@@ -322,7 +322,7 @@ export function ExpenseDetailModal({
         onDragProgress={(progress, dragging) => {
           setOverlayDragState({ itemId: item.id, progress, dragging });
         }}
-        className="app-expense-detail-panel app-mobile-sheet-panel relative z-10 flex h-[70dvh] w-full flex-col overflow-hidden rounded-t-[28px] bg-[var(--bg)] shadow-elev-4 md:h-auto md:max-w-[540px] md:rounded-[24px]"
+        className="app-expense-detail-panel app-mobile-sheet-panel relative z-10 flex h-[70dvh] w-full flex-col overflow-hidden rounded-t-[28px] bg-[var(--bg)] shadow-elev-4 md:h-auto md:max-w-[480px] md:rounded-[24px]"
         onPointerDown={(event) => event.stopPropagation()}
         onClick={(event) => event.stopPropagation()}
       >
@@ -332,48 +332,73 @@ export function ExpenseDetailModal({
           </IconButton>
         </div>
 
-        <div className="flex min-h-0 flex-1 flex-col items-center px-[var(--space-6)] pb-[var(--space-4)] pt-[var(--space-8)] text-center">
-          <MovementIcon Icon={StatusIcon} className={statusMeta.iconClass} />
-          <CounterpartyLine name={otherPartyLabel} image={item.counterpartyImage} />
-          <p className="mt-[var(--space-2)] text-caption text-muted">
-            {isResolved ? resolvedMessage : pendingMessage}
-          </p>
-          <p className={`mt-[var(--space-2)] text-[26px] font-[var(--fw-bold)] leading-none text-app ${isResolved ? "" : "opacity-55"}`}>
-            {signedAmount}
-          </p>
-          {isResolved && (
-            <p className="mt-[var(--space-2)] text-caption text-muted">
-              {formatDetailDate(item.date)}
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-[var(--space-6)] pb-[var(--space-4)] pt-[var(--space-8)]">
+          <div className="flex flex-col items-center text-center">
+            <div className="flex items-center gap-2">
+              <Avatar name={payer.name} src={payer.image} px={40} topMargin="" />
+              <ArrowRight className="size-4 text-muted" aria-hidden />
+              <Avatar name={payee.name} src={payee.image} px={40} topMargin="" />
+            </div>
+            <p className="mt-[var(--space-3)] text-body-sm text-app [&_b]:font-[var(--fw-semibold)]">{title}</p>
+            <p className="mt-[var(--space-2)] text-[44px] leading-none text-app" style={SERIF_STYLE}>
+              {signedAmount}
             </p>
-          )}
+          </div>
 
-          <div className="w-full space-y-[var(--space-4)] pt-[var(--space-8)] pb-[calc(var(--space-10)+env(safe-area-inset-bottom))]">
-            <ConceptRow value={concept} />
-            {!isResolved && <DetailRow label="Creado" value={formatDetailDate(item.date)} />}
+          <ol className="mt-[var(--space-8)] space-y-[var(--space-4)]">
+            {steps.map((step) => (
+              <li key={step.text} className="flex items-start gap-3">
+                <span
+                  className={`mt-[2px] flex size-5 shrink-0 items-center justify-center rounded-full ${
+                    step.done ? "bg-[var(--chat-tint)] text-[var(--chat-accent-text)]" : "border border-dashed border-[var(--border-strong)] text-muted"
+                  }`}
+                >
+                  {step.done ? <Check className="size-3" strokeWidth={2.5} aria-hidden /> : <Clock3 className="size-3" aria-hidden />}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className={`text-body-sm ${step.done ? "text-app" : "font-[var(--fw-semibold)] text-app"}`}>{step.text}</p>
+                  {step.when && <p className="text-caption text-muted">{step.when}</p>}
+                </div>
+              </li>
+            ))}
+          </ol>
+
+          <div className="mt-[var(--space-6)] space-y-[var(--space-4)] pb-[calc(var(--space-6)+env(safe-area-inset-bottom))]">
+            {item.concept?.trim() && <ConceptRow value={item.concept.trim()} />}
             <PlanRow value={item.planName} onClick={() => onOpenPlan(item.planId)} />
           </div>
         </div>
 
-        {requiresValidation && (
+        {(requiresValidation || mustPay) && (
           <div className="flex shrink-0 flex-col gap-[var(--space-2)] border-t border-app px-[var(--space-5)] pb-[calc(var(--space-4)+env(safe-area-inset-bottom))] pt-[var(--space-4)] md:pb-[var(--space-4)]">
-            <div className="flex gap-[var(--space-2)]">
+            {requiresValidation ? (
+              <div className="flex gap-[var(--space-2)]">
+                <button
+                  type="button"
+                  disabled={actingId === item.id}
+                  onClick={() => onReject(item)}
+                  className="h-[46px] flex-1 rounded-lg border border-[var(--border-strong)] text-body-sm font-[var(--fw-semibold)] text-app transition-colors hover:bg-surface disabled:opacity-50"
+                >
+                  No recibido
+                </button>
+                <button
+                  type="button"
+                  disabled={actingId === item.id}
+                  onClick={() => onConfirm(item)}
+                  className="h-[46px] flex-1 rounded-lg bg-[var(--success)] text-body-sm font-[var(--fw-semibold)] text-[var(--success-contrast)] transition-opacity hover:opacity-85 disabled:opacity-50"
+                >
+                  {actingId === item.id ? "Confirmando…" : "Confirmar"}
+                </button>
+              </div>
+            ) : (
               <button
                 type="button"
-                disabled={actingId === item.id}
-                onClick={() => onReject(item)}
-                className="flex-1 rounded-[14px] border border-app py-[12px] text-body-sm font-[var(--fw-semibold)] text-app transition-colors hover:bg-surface disabled:opacity-50"
+                onClick={() => onPay(item)}
+                className="h-[46px] w-full rounded-lg bg-[var(--primary)] text-body-sm font-[var(--fw-semibold)] text-[var(--contrast)] transition-opacity hover:opacity-85"
               >
-                No recibido
+                Pagar
               </button>
-              <button
-                type="button"
-                disabled={actingId === item.id}
-                onClick={() => onConfirm(item)}
-                className="flex-1 rounded-[14px] bg-[var(--success)] py-[12px] text-body-sm font-[var(--fw-semibold)] text-white transition-opacity hover:opacity-85 disabled:opacity-50"
-              >
-                {actingId === item.id ? "Confirmando..." : "Confirmar pago"}
-              </button>
-            </div>
+            )}
           </div>
         )}
       </DraggableBottomSheet>
