@@ -269,33 +269,9 @@ Frimee usa **Supabase** como base de datos principal (PostgreSQL) y **Firebase F
 1. Accede a [supabase.com](https://supabase.com/) y crea una cuenta gratuita.
 2. Crea un nuevo proyecto y anota la **URL** y las **claves API** para añadirlas a `.env.local`.
 
-## 4.2 Aplicar el esquema SQL
+## 4.2 Esquema de la base de datos
 
-Desde el **SQL Editor** de Supabase (Dashboard → SQL Editor → New query), ejecuta los archivos en este orden:
-
-```
-supabase/sql/rpc_grupos.sql
-supabase/sql/rls_grupos.sql
-supabase/sql/rls_amistades.sql
-supabase/sql/rls_missing_tables.sql
-supabase/sql/rpc_friendship_actions.sql
-supabase/sql/rpc_chat_extras.sql
-supabase/sql/rpc_chat_leave_update.sql
-supabase/sql/rpc_mensajes_audio.sql
-supabase/sql/rpc_mensajes_document.sql
-supabase/sql/notifications.sql
-supabase/sql/notifications_friendship_triggers.sql
-supabase/sql/notifications_rls_fix.sql
-supabase/sql/route_cache.sql
-supabase/sql/llamadas.sql
-supabase/sql/llamadas_cleanup_stale.sql
-supabase/sql/mensajes_llamadas.sql
-supabase/sql/fix_enum_visibilidad_plan.sql
-supabase/sql/fix_subplan_create_overloads.sql
-supabase/sql/migrate_subplan_tipo_rls.sql
-```
-
-Puedes copiar el contenido de cada archivo en el editor SQL, o usar la [CLI de Supabase](https://supabase.com/docs/guides/cli) si prefieres ejecutarlos desde terminal.
+El esquema (migraciones, funciones y políticas de seguridad) no forma parte de este repositorio público: vive en un repositorio privado. Si quieres montar tu propia instancia, el cliente solo necesita la URL y las claves del proyecto de Supabase que añadiste a `.env.local`.
 
 ## 4.3 Configurar autenticación
 

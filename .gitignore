@@ -55,3 +55,11 @@ fremee/android/app/google-services.json
 
 # Agent context
 .agents/
+
+# Base de datos y despliegue: viven en un repositorio privado (en esta carpeta solo como copia de trabajo)
+/supabase/
+/firebase/
+/VERIFICACION_PUBLICACION.md
+/REVISION_FLUJO.md
+/docs/superpowers/
+/fremee/docs/sql/
