@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import AppSidebar from "@/components/common/AppSidebar";
@@ -40,8 +40,9 @@ export default function PassportClient() {
 
   // La tapa que venía escalándose se funde cuando la libreta ya tiene algo que enseñar (datos o error).
   const ready = Boolean(data) || failed;
-  useEffect(() => {
-    if (ready) closePassportOpening();
+  const bookRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (ready) closePassportOpening(() => bookRef.current?.querySelector<HTMLElement>("[data-passport-book]") ?? null, bookRef.current);
   }, [ready]);
 
   return (
@@ -76,7 +77,9 @@ export default function PassportClient() {
               <div className="skeleton-shimmer aspect-[358/590] w-full rounded-[8px]" />
             </div>
           ) : (
-            <Libreta nombre={data.nombre} sellos={data.pasaporte.sellos} />
+            <div ref={bookRef}>
+              <Libreta nombre={data.nombre} sellos={data.pasaporte.sellos} />
+            </div>
           )}
         </main>
       </div>

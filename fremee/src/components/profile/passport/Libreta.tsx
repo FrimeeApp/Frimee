@@ -222,7 +222,7 @@ export default function Libreta({ nombre, sellos }: { nombre: string; sellos: Se
 
       <div ref={boxRef} className="w-full">
         <div className="relative mx-auto" style={{ width: (wide ? SPREAD_W + TAB_W : W) * scale, height: H * scale }}>
-          <div ref={fadeRef} className="absolute left-0 top-0" style={{ width: wide ? SPREAD_W : W, height: H, transform: `scale(${scale})`, transformOrigin: "top left" }}>
+          <div ref={fadeRef} data-passport-book className="absolute left-0 top-0" style={{ width: wide ? SPREAD_W : W, height: H, transform: `scale(${scale})`, transformOrigin: "top left" }}>
             {wide ? (
               <>
                 <div className="absolute left-0 top-0" style={{ width: W, height: H }}>
