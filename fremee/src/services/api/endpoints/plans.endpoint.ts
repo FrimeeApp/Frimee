@@ -1,4 +1,5 @@
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
+import { saveCountryOfPlan } from "./pasaporte.endpoint";
 
 export type FeedExploreRow = {
   plan_id: number;
@@ -90,6 +91,7 @@ export async function createPlanEndpoint(params: CreatePlanParams): Promise<{ id
     throw new Error("fn_plan_create no devolvio un id de plan.");
   }
 
+  saveCountryOfPlan(Number(row.id), params.ubicacionNombre);
   return { id: Number(row.id) };
 }
 
@@ -205,6 +207,7 @@ export async function updatePlanEndpoint(params: UpdatePlanParams): Promise<void
     p_foto_portada: params.fotoPortada ?? null,
   });
   if (error) throw error;
+  saveCountryOfPlan(params.planId, params.ubicacionNombre);
 }
 
 export async function fetchUserRelatedPlans(params: { userId: string; limit?: number }): Promise<PlanByIdRow[]> {
