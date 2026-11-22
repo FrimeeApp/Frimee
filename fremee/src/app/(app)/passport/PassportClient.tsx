@@ -35,7 +35,7 @@ export default function PassportClient() {
     };
   }, [userId, attempt]);
 
-  if (data) return <PassportReader nombre={data.nombre} sellos={data.pasaporte.sellos} onRequestClose={() => router.back()} />;
+  if (data) return <PassportReader nombre={data.nombre} sellos={data.pasaporte.sellos} ajustes={data.pasaporte.ajustes} userId={userId} onRequestClose={() => router.back()} />;
 
   return (
     <div className="min-h-dvh bg-[var(--passport-table)] px-4 pt-mobile-safe-top text-app">

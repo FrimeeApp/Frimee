@@ -25,10 +25,12 @@ export type Sello = {
   ruta?: { tipo: "flight" | "ferry" | "train"; desde: string; hasta: string } | null;
 };
 
+export type PasaporteAjustes = { passport_visibility: "TODOS" | "AMISTADES" | "SOLO_YO"; show_plan_stamps: boolean; show_companions: boolean };
+
 export type PasaporteLeido = {
   puede_ver: boolean;
   es_mio: boolean;
-  ajustes: { passport_visibility: "TODOS" | "AMISTADES" | "SOLO_YO"; show_plan_stamps: boolean; show_companions: boolean } | null;
+  ajustes: PasaporteAjustes | null;
   sellos: Sello[];
 };
 
