@@ -88,7 +88,7 @@ export function layoutPage(trips: Trip[], dims: Dims): Placed[] {
       x: Math.round(slot.x * sx),
       y: Math.round((y0 + slot.y) * sy),
       // En escritorio los hitos se agrandan un 15 % para que se lean (unos 72 px).
-      size: Math.round(slot.size * ss * (kind === "hito" && ss > 1.02 ? 1.15 : 1)),
+      size: kind === "hito" ? Math.max(60, Math.round(slot.size * ss * (ss > 1.02 ? 1.15 : 1))) : Math.round(slot.size * ss),
       rot: slot.rot + jitter(String(sello.id)),
     });
 

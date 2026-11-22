@@ -119,9 +119,9 @@ export default function PassportReader({
   }, [onRequestClose, indexOpen, sheet, privacyOpen, closing]);
 
   return (
-    <div ref={rootRef} role="dialog" aria-modal="true" aria-label="Pasaporte" className="fixed inset-0 z-[70] overflow-y-auto text-app">
+    <div ref={rootRef} role="dialog" aria-modal="true" aria-label="Pasaporte" className="fixed inset-0 z-[1050] h-dvh overflow-y-auto text-app">
       <div ref={deskRef} aria-hidden="true" className="fixed inset-0 bg-[var(--passport-table)]" />
-      <div className="relative px-safe pb-8 pt-mobile-safe-top md:px-8 md:py-[var(--space-8)]">
+      <div className="relative px-safe pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-mobile-safe-top md:px-8 md:py-[var(--space-8)]">
         <div ref={titleRef} className="mx-auto flex w-full max-w-[460px] items-center gap-1 pb-2 md:max-w-[1080px]">
           <button type="button" onClick={onRequestClose} aria-label="Volver al perfil" className={`inline-flex min-h-11 items-center gap-0.5 rounded-[8px] pl-1 pr-3 text-[16px] font-[var(--fw-semibold)] text-app ${FOCUS}`}>
             <ChevronLeft className="size-[22px]" aria-hidden />

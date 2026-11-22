@@ -148,6 +148,11 @@ export function PlanStamp({
   const title = place ? (plan?.ubicacion_nombre?.split(",")[0]?.trim() ?? "") : (plan?.titulo ?? "Viaje");
   const shown = title.length > 18 ? `${title.slice(0, 17)}…` : title;
   const titleSize = Math.max(15, Math.min(27, Math.floor(108 / (shown.length * 0.52))));
+  // Línea de arriba: la ruta con su icono; sin vuelo, la zona («ITALIA») y, si no hay, el nombre del plan acortado.
+  const nameParts = plan?.ubicacion_nombre?.split(",") ?? [];
+  const zone = nameParts.length > 1 ? nameParts[nameParts.length - 1].trim().toUpperCase() : "";
+  const topText = zone || (place && plan?.titulo ? plan.titulo.toUpperCase() : "");
+  const topShown = topText.length > 13 ? `${topText.slice(0, 12)}…` : topText;
   const route = sello.ruta ? `${routeCode(sello.ruta.desde)} → ${routeCode(sello.ruta.hasta)}` : null;
   return (
     <svg width={size} height={Math.round((size * 96) / 140)} viewBox="0 0 140 96" aria-hidden="true" className={className} style={{ transform: `rotate(${tilt}deg)`, flexShrink: 0, ...style }}>
@@ -165,7 +170,19 @@ export function PlanStamp({
             {route}
           </text>
         </>
-      ) : null}
+      ) : (
+        <>
+          <g transform="translate(15 15) scale(0.62)" fill="none" stroke={c} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
+            <circle cx="12" cy="10" r="3" />
+          </g>
+          {topShown && (
+            <text x="36" y="26" fontFamily={SANS} fontSize="9.5" fontWeight="700" letterSpacing="1.2" fill={c}>
+              {topShown}
+            </text>
+          )}
+        </>
+      )}
       <text x="16" y="63" fontFamily={SERIF} fontSize={titleSize} fill={c} textLength={shown.length * titleSize * 0.52 > 108 ? 108 : undefined} lengthAdjust="spacingAndGlyphs">
         {shown}
       </text>
