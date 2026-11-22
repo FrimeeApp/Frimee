@@ -436,19 +436,25 @@ function RecentStrip({ items, compact = false }: { items: Sello[]; compact?: boo
 
 function Wallet({ tickets, now }: { tickets: PlanTicket[]; now: number }) {
   const router = useRouter();
-  const upcoming = useMemo(() => {
-    return tickets
-      .filter((t) => t.status === "upcoming" && new Date(t.ends_at ?? t.starts_at).getTime() >= now)
-      .sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime())
-      .slice(0, 2);
-  }, [tickets, now]);
+  // Todos los billetes próximos, del más cercano al más lejano; la lista enseña los 2 primeros.
+  const nextAll = useMemo(
+    () =>
+      tickets
+        .filter((t) => t.status === "upcoming" && new Date(t.ends_at ?? t.starts_at).getTime() >= now)
+        .sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime()),
+    [tickets, now],
+  );
+  const upcoming = nextAll.slice(0, 2);
+  // Sin próximos: el último billete (por fecha) lleva a la cartera.
+  const lastTicket = useMemo(() => [...tickets].sort((a, b) => new Date(b.starts_at).getTime() - new Date(a.starts_at).getTime())[0] ?? null, [tickets]);
+  const nextText = nextAll.length === 0 ? "ninguno próximo" : nextAll.length === 1 ? "1 próximo" : `${nextAll.length} próximos`;
 
   return (
     <section aria-label="Cartera" className="flex flex-col gap-2">
       <div className="flex items-baseline gap-2">
         <h2 className="m-0 text-[18px] font-[var(--fw-semibold)] leading-[1.3]">Cartera</h2>
         <span className="text-[14px] tabular-nums text-muted">
-          {tickets.length === 0 ? "vacía" : `${tickets.length} ${tickets.length === 1 ? "billete o documento" : "billetes y documentos"}`}
+          {tickets.length === 0 ? "vacía" : `${tickets.length} ${tickets.length === 1 ? "billete" : "billetes"} · ${nextText}`}
         </span>
         {tickets.length > 0 && (
           <button type="button" onClick={() => router.push("/wallet")} className={`${TEXT_BTN} ml-auto rounded-[4px] ${FOCUS}`}>
@@ -469,8 +475,17 @@ function Wallet({ tickets, now }: { tickets: PlanTicket[]; now: number }) {
             Añadir billete
           </button>
         </div>
-      ) : upcoming.length === 0 ? (
-        <p className="m-0 text-[14px] leading-[1.5] text-muted">No tienes billetes próximos.</p>
+      ) : upcoming.length === 0 && lastTicket ? (
+        <Link href="/wallet" className={`flex min-h-16 items-center gap-3 rounded-[8px] border border-app bg-surface px-3 py-2 text-app no-underline transition-colors hover:bg-surface-2 ${FOCUS}`}>
+          <TicketStub type={lastTicket.type} />
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className="text-[16px] font-[var(--fw-semibold)] leading-[1.35]">Ver la cartera</span>
+            <span className="truncate text-[14px] leading-[1.5] tabular-nums text-muted">
+              Último: {[ticketName(lastTicket), ticketWhen(lastTicket.starts_at)].join(" · ")}
+            </span>
+          </span>
+          <ChevronRight className="size-[18px] shrink-0 text-muted" aria-hidden />
+        </Link>
       ) : (
         <ul className="m-0 list-none overflow-hidden rounded-[8px] border border-app bg-surface p-0 ">
           {upcoming.map((t, i) => (
