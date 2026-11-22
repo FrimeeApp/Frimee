@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import { Check, LogOut, Settings, UserPlus } from "lucide-react";
+import { BookUser, Check, LogOut, Settings, UserPlus } from "lucide-react";
 import { applyThemePreference, cacheThemePreference, type AppThemePreference } from "@/services/theme/preferences";
 import { saveThemePreference } from "@/services/api/repositories/settings.repository";
 
@@ -208,6 +208,10 @@ export default function ProfileMenu(props: Props) {
             </button>
           </div>
           <div role="separator" className="mx-[-6px] my-[6px] h-px bg-[var(--border)]" />
+          <button type="button" role="menuitem" onClick={() => { onClose(false); props.onOpenProfile(); }} className={ROW}>
+            <BookUser className={ICON} aria-hidden />
+            <span className="flex-1">Ver mi pasaporte</span>
+          </button>
           {themeBlock}
         </>
       ) : (
