@@ -28,6 +28,18 @@ import { TimePicker } from "@/components/ui/TimePicker";
 import { PhoneRangeSheet, RangeCalendar, dayLabel, rangeLabel } from "@/components/ui/DateRangePicker";
 import { useIsPhone } from "@/components/chat/bitacora/Sheet";
 import type { PlanWhen } from "@/lib/plan-dates";
+import { parseAmount } from "@/lib/money-input";
+
+const PAGE = 8;
+
+/** «Ver más» al final de una lista larga: enseña otros 8. */
+function MoreButton({ rest, onClick }: { rest: number; onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} className="mt-[4px] flex min-h-[44px] w-full items-center justify-center text-[14px] font-[var(--fw-semibold)] text-[var(--primary)]">
+      Ver {Math.min(PAGE, rest)} más
+    </button>
+  );
+}
 
 /* ─── Contract with the callers (useCreatePlan, PlanPageClient) ─────────────── */
 
@@ -42,6 +54,8 @@ export type CreatePlanPayload = {
   visibility: "PÚBLICO" | "SOLO_GRUPO";
   /** People to invite (the creator is never in it). */
   invited: { id: string; name: string }[];
+  /** Presupuesto del grupo para todo el viaje; null si no se pone. Solo al crear. */
+  budget?: number | null;
 };
 
 export type EditPlanInitialValues = {
@@ -196,6 +210,9 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
   const [when, setWhen] = useState<PlanWhen>(() => defaultWhen(initialDates));
   const [whenError, setWhenError] = useState<string | null>(null);
   const [description, setDescription] = useState("");
+  const [budgetText, setBudgetText] = useState("");
+  /** Cuántos amigos y grupos se enseñan: 8 y «Ver más» suma otros 8. */
+  const [shown, setShown] = useState({ friends: PAGE, groups: PAGE });
   const [visibility, setVisibility] = useState<CreatePlanPayload["visibility"]>("SOLO_GRUPO");
   const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
   const [coverFile, setCoverFile] = useState<File | null>(null);
@@ -218,7 +235,7 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const headingRef = useRef<HTMLHeadingElement | null>(null);
 
-  const snapshot = JSON.stringify({ title, location, when, description, visibility, coverImageUrl, invited: [...invited].sort() });
+  const snapshot = JSON.stringify({ title, location, when, description, visibility, coverImageUrl, invited: [...invited].sort(), budget: budgetText.trim() });
 
   /* Reset every time it opens. */
   const reset = useCallback(() => {
@@ -233,6 +250,8 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
     setWhen(v?.when ?? defaultWhen(initialDates));
     setWhenError(null);
     setDescription(v?.description ?? "");
+    setBudgetText("");
+    setShown({ friends: PAGE, groups: PAGE });
     setVisibility(v?.visibility ?? "SOLO_GRUPO");
     setCoverImageUrl(v?.coverImageUrl ?? null);
     setCoverFile(null);
@@ -246,7 +265,7 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
     setInvited(new Set());
     setInitialSnapshot(JSON.stringify({
       title: v?.title ?? "", location: loc, when: v?.when ?? defaultWhen(initialDates), description: v?.description ?? "",
-      visibility: v?.visibility ?? "SOLO_GRUPO", coverImageUrl: v?.coverImageUrl ?? null, invited: [],
+      visibility: v?.visibility ?? "SOLO_GRUPO", coverImageUrl: v?.coverImageUrl ?? null, invited: [], budget: "",
     }));
   }, [initialValues, initialDates]);
 
@@ -348,6 +367,10 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
   async function submit() {
     if (saving) return;
     if (!checkStep1() || !checkStep2()) return;
+    if (!editing && budgetInvalid) {
+      document.getElementById("np-presupuesto")?.focus();
+      return;
+    }
     setSaving(true);
     setFailed(false);
     try {
@@ -360,6 +383,7 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
         coverFile,
         visibility,
         invited: [...invited].map((id) => ({ id, name: people.get(id)?.name ?? "" })).filter((p) => p.name),
+        budget: editing ? null : parseAmount(budgetText),
       });
       setSaving(false);
       requestClose();
@@ -653,6 +677,7 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
   );
 
   const q = norm(query);
+  const budgetInvalid = budgetText.trim() !== "" && (parseAmount(budgetText) ?? 0) <= 0;
   const friendRows = (friends ?? []).filter((f) => f.id !== currentUserId && (!q || norm(f.nombre).includes(q) || norm(f.username ?? "").includes(q)));
   const groupRows = (groups ?? []).filter((g) => !q || norm(g.nombre ?? "").includes(q));
 
@@ -670,7 +695,7 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
                 type="button"
                 role="tab"
                 aria-selected={tab === v}
-                onClick={() => setTab(v)}
+                onClick={() => { setTab(v); setShown({ friends: PAGE, groups: PAGE }); }}
                 className={`min-h-[44px] border-b-2 text-[14px] font-[var(--fw-semibold)] ${tab === v ? "border-[var(--text-primary)] text-app" : "border-transparent text-muted"}`}
               >
                 {label}
@@ -681,7 +706,7 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
             <Search aria-hidden className="size-[18px] shrink-0 text-muted" />
             <input
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => { setQuery(e.target.value); setShown({ friends: PAGE, groups: PAGE }); }}
               aria-label={tab === "friends" ? "Buscar amigos" : "Buscar grupos"}
               placeholder={tab === "friends" ? "Buscar amigos" : "Buscar grupos"}
               className="h-[42px] min-w-0 flex-1 bg-transparent text-[15px] text-app outline-none placeholder:text-muted"
@@ -708,7 +733,7 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
                   {q ? `Nadie con «${query.trim()}» entre tus amigos.` : "Aún no tienes amigos en Frimee. Podrás invitar con el enlace del plan."}
                 </p>
               ) : (
-                friendRows.map((f) => {
+                friendRows.slice(0, shown.friends).map((f) => {
                   const on = invited.has(f.id);
                   return (
                     <button
@@ -733,7 +758,7 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
             ) : groupRows.length === 0 ? (
               <p className="py-[12px] text-[14px] text-muted">{q ? `Ningún grupo con «${query.trim()}».` : "No estás en ningún grupo."}</p>
             ) : (
-              groupRows.map((g) => {
+              groupRows.slice(0, shown.groups).map((g) => {
                 const ids = g.miembros.map((m) => m.id).filter((id) => id !== currentUserId);
                 const n = ids.filter((id) => invited.has(id)).length;
                 const state = ids.length && n === ids.length ? "on" : n ? "mixed" : "off";
@@ -757,6 +782,12 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
                   </button>
                 );
               })
+            )}
+            {tab === "friends" && friends !== null && friendRows.length > shown.friends && (
+              <MoreButton rest={friendRows.length - shown.friends} onClick={() => setShown((s) => ({ ...s, friends: s.friends + PAGE }))} />
+            )}
+            {tab === "groups" && groups !== null && groupRows.length > shown.groups && (
+              <MoreButton rest={groupRows.length - shown.groups} onClick={() => setShown((s) => ({ ...s, groups: s.groups + PAGE }))} />
             )}
           </div>
           {peopleCount > 0 && (
@@ -831,6 +862,24 @@ export default function CreatePlanModal({ open, onClose, onCreate, currentUserId
           className="block min-h-[76px] w-full resize-none rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface-2)] p-[12px] text-[15px] leading-[1.45] text-app outline-none placeholder:text-muted focus:border-[var(--primary)] focus:shadow-[0_0_0_1px_var(--primary)]"
         />
       </Section>
+
+      {!editing && (
+        <Section title="Presupuesto" extra="opcional" htmlFor="np-presupuesto">
+          <div className={`${FIELD} h-[48px] gap-[8px]`}>
+            <input
+              id="np-presupuesto"
+              inputMode="decimal"
+              value={budgetText}
+              onChange={(e) => setBudgetText(e.target.value)}
+              placeholder="Para todo el viaje"
+              aria-invalid={budgetInvalid}
+              className="h-[46px] min-w-0 flex-1 bg-transparent text-[15px] text-app outline-none placeholder:text-muted"
+            />
+            <span aria-hidden className="text-[15px] text-muted">€</span>
+          </div>
+          {budgetInvalid && <p role="alert" className="mt-[6px] text-[13px] text-[var(--error)]">Escribe un importe válido, por ejemplo 2.000,00.</p>}
+        </Section>
+      )}
     </div>
   );
 
