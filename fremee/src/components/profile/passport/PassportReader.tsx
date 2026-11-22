@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Capacitor } from "@capacitor/core";
 import { ChevronLeft, List, MoreHorizontal } from "lucide-react";
+import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { FOCUS } from "@/components/plans/home/pieces";
 import { isInViewport, playClose, prefersReducedMotion } from "@/lib/passportOpen";
 import { buildPages, groupTrips, type PasaporteAjustes, type Sello } from "@/lib/passport";
@@ -52,6 +55,22 @@ export default function PassportReader({
   onRequestClose: () => void;
   onClosed?: () => void;
 }) {
+  const router = useRouter();
+  const [example, setExample] = useState<{ loading: boolean; error: string | null }>({ loading: false, error: null });
+  const openExample = async () => {
+    setExample({ loading: true, error: null });
+    try {
+      const { data, error } = await createBrowserSupabaseClient().rpc("fn_guest_seed_demo");
+      if (error) throw error;
+      router.push(Capacitor.isNativePlatform() ? `/plans/static?id=${data as number}` : `/plans/${data as number}`);
+    } catch (e) {
+      console.error("[pasaporte] ejemplo:", e instanceof Error ? e.message : e);
+      setExample({ loading: false, error: "No se ha podido abrir el ejemplo. Vuelve a intentarlo." });
+    }
+  };
+  const emptyPage = !readOnly && !sellosIniciales.some((s) => !s.hidden)
+    ? { onCreate: () => router.push("/calendar?create=1"), onExample: () => void openExample(), exampleLoading: example.loading, exampleError: example.error }
+    : null;
   const rootRef = useRef<HTMLDivElement>(null);
   const deskRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLDivElement>(null);
@@ -70,7 +89,7 @@ export default function PassportReader({
     let cancelled = false;
     fetchCiudadBase(ciudadDe).then((c) => { if (!cancelled) setCiudad(c); }).catch(() => {});
     return () => { cancelled = true; };
-  }, [userId]);
+  }, [ciudadDe]);
   const [jump, setJump] = useState<{ page: number; nonce: number } | null>(null);
   const pages = useMemo(() => buildPages(groupTrips(sellos)), [sellos]);
   const hasStamps = sellos.some((s) => !s.hidden);
@@ -167,7 +186,7 @@ export default function PassportReader({
             <Libreta key="preview" outro={outro} nombre={nombre} ciudad={ciudad} sellos={sellos.filter((x) => !x.hidden && ((ajustes?.show_plan_stamps ?? true) || x.kind === "pais"))} />
           </>
         ) : (
-          <Libreta outro={outro} nombre={nombre} ciudad={ciudad} sellos={sellos} intro={intro} jumpTo={jump} startPage={startPage} onOpenStamp={readOnly ? undefined : (sello, el) => setSheet({ sello, el })} />
+          <Libreta outro={outro} nombre={nombre} ciudad={ciudad} emptyPage={emptyPage} sellos={sellos} intro={intro} jumpTo={jump} startPage={startPage} onOpenStamp={readOnly ? undefined : (sello, el) => setSheet({ sello, el })} />
         )}
         {privacyOpen && (
           <PassportPrivacySheet
