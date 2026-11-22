@@ -142,7 +142,7 @@ function Actions({ data, onMessage, onInvite, onAddFriend, onAcceptFriend, onCan
       setBusy(false);
     }
   };
-  const note = "m-0 text-center text-[12px] leading-[1.4] text-muted";
+  const note = "m-0 text-center text-[12px] leading-[1.4] text-muted md:text-right";
   const btn = "w-full md:w-auto";
   let content: React.ReactNode;
   if (data.relationship === "friend") {
@@ -160,7 +160,7 @@ function Actions({ data, onMessage, onInvite, onAddFriend, onAcceptFriend, onCan
     );
   } else if (data.relationship === "request_received") {
     content = (
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1.5 md:items-end">
         <button type="button" disabled={busy} onClick={run(onAcceptFriend)} className={`${FILL_BTN} ${btn}`}>
           <UserCheck className="size-[18px] shrink-0" aria-hidden />
           Aceptar amistad
@@ -170,7 +170,7 @@ function Actions({ data, onMessage, onInvite, onAddFriend, onAcceptFriend, onCan
     );
   } else if (data.relationship === "request_sent") {
     content = (
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1.5 md:items-end">
         <button type="button" disabled={busy} onClick={run(onCancelRequest)} className={`${GHOST_BTN} bg-surface-2 ${btn}`}>
           <Check className="size-[18px] shrink-0" aria-hidden />
           Solicitud enviada
@@ -180,7 +180,7 @@ function Actions({ data, onMessage, onInvite, onAddFriend, onAcceptFriend, onCan
     );
   } else {
     content = (
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1.5 md:items-end">
         <button type="button" disabled={busy} onClick={run(onAddFriend)} className={`${FILL_BTN} ${btn}`}>
           <UserPlus className="size-[18px] shrink-0" aria-hidden />
           Añadir amistad
@@ -190,7 +190,7 @@ function Actions({ data, onMessage, onInvite, onAddFriend, onAcceptFriend, onCan
     );
   }
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-1.5 md:items-end">
       {content}
       {error && (
         <p role="alert" className="m-0 text-center text-[12px] leading-[1.4] text-[var(--error)]">
@@ -228,7 +228,7 @@ function PassportBlock({ data }: { data: OtherProfileData }) {
     return (
       <section aria-label={`Pasaporte de ${data.firstName}`} className="flex items-center gap-4 rounded-[8px] border border-app bg-surface p-4 md:gap-8 md:p-8">
         <div className="relative shrink-0 opacity-55">
-          <PassportCover width={104} />
+          <PassportCover width={104} name={data.fullName} />
           <span className="absolute inset-0 m-auto grid size-11 place-content-center rounded-full border border-[var(--border-strong)] bg-surface text-app">
             <Lock className="size-5" aria-hidden />
           </span>
@@ -384,6 +384,8 @@ function CommonBlock({ data }: { data: OtherProfileData }) {
 export default function OtherProfile(p: Props) {
   const { data } = p;
   const router = useRouter();
+  // Sin nada en común no se pinta la columna: así el pasaporte ocupa todo el ancho.
+  const hasCommon = data.common.paises.length > 0 || data.common.viajes_juntos.length > 0 || data.common.planes_compartidos.length > 0;
   return (
     <div data-profile-root className="mx-auto flex w-full max-w-[1080px] flex-col gap-5 pb-12 md:gap-6">
       <div className="-mx-2 flex h-14 items-center justify-between">
@@ -412,7 +414,7 @@ export default function OtherProfile(p: Props) {
             )}
           </div>
         </div>
-        <div className="md:min-w-[320px] md:justify-end">
+        <div className="md:flex md:justify-end">
           <Actions {...p} />
         </div>
       </div>
@@ -421,9 +423,11 @@ export default function OtherProfile(p: Props) {
         <div className="min-w-0 md:flex-[999_1_560px]">
           <PassportBlock data={data} />
         </div>
-        <div className="min-w-0 md:flex-[1_1_320px]">
-          <CommonBlock data={data} />
-        </div>
+        {hasCommon && (
+          <div className="min-w-0 md:flex-[1_1_320px]">
+            <CommonBlock data={data} />
+          </div>
+        )}
       </div>
     </div>
   );
