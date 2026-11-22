@@ -168,14 +168,36 @@ export default function Libreta({ nombre, sellos }: { nombre: string; sellos: Se
   }, [prev]);
 
   const page = pages[index];
-  const spreadYears = wide ? [pages[index], pages[index + 1]].flatMap((p) => (p?.kind === "year" ? [p.year] : [])) : page.kind === "year" ? [page.year] : [];
+  // Solo cuentan las páginas que se ven: en la primera vista (tapa + datos) no hay ningún año.
+  const spreadYears = visible.flatMap((i) => (pages[i]?.kind === "year" ? [(pages[i] as { year: number }).year] : []));
   const spreadHasDatos = wide ? index === 0 : page.kind === "datos";
   const jumpToYear = (y: number) => goToPage(pages.findIndex((p) => p.kind === "year" && p.year === y));
 
-  const onKey = (e: React.KeyboardEvent) => {
-    if (e.key === "ArrowLeft") goToUnit(unit(index) - 1);
-    else if (e.key === "ArrowRight") goToUnit(unit(index) + 1);
-  };
+  // Flechas del teclado y rueda del ratón pasan página desde cualquier punto de la pantalla.
+  const lastWheel = useRef(0);
+  const current = unit(index);
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+      if (e.key === "ArrowLeft") goToUnit(current - 1);
+      else if (e.key === "ArrowRight") goToUnit(current + 1);
+    };
+    const onWheel = (e: WheelEvent) => {
+      const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+      const now = Date.now();
+      if (Math.abs(d) < 20 || now - lastWheel.current < 450) return;
+      lastWheel.current = now;
+      goToUnit(current + (d > 0 ? 1 : -1));
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("wheel", onWheel, { passive: true });
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("wheel", onWheel);
+    };
+  }, [goToUnit, current]);
 
   const pageAt = (i: number) => pages[i] ?? null;
   const view = (p: PassportPage | null, side: Side, cover = false, number = 0) => (
@@ -218,7 +240,7 @@ export default function Libreta({ nombre, sellos }: { nombre: string; sellos: Se
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-[460px] flex-col md:max-w-[1080px]" onKeyDown={onKey}>
+    <div className="mx-auto flex w-full max-w-[460px] flex-col md:max-w-[1080px]">
       <nav aria-label="Saltar a" className="flex gap-2 overflow-x-auto pb-3 pt-1 md:hidden">
         <Chip active={spreadHasDatos} onClick={() => goToPage(0)}>
           Datos
