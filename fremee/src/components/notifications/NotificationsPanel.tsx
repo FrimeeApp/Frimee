@@ -275,7 +275,7 @@ export function NotifItem({
       }`}
     >
       <div className="relative shrink-0">
-        {n.tipo === "recordatorio_deuda"
+        {n.tipo === "recordatorio_deuda" || n.tipo === "sello_nuevo"
           ? <div className="size-10 rounded-full border border-app bg-[var(--primary)]/15 flex items-center justify-center text-body-sm font-[var(--fw-semibold)] text-[var(--primary)] shrink-0">F</div>
           : <Avatar src={n.actor_foto} name={n.actor_nombre} />
         }
@@ -287,11 +287,11 @@ export function NotifItem({
         <div className="flex min-w-0 items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <p className="text-body-sm leading-snug">
-              {n.tipo === "recordatorio_deuda" ? (
+              {n.tipo === "recordatorio_deuda" || n.tipo === "sello_nuevo" ? (
                 <>
                   <span className="font-[var(--fw-semibold)] text-[var(--primary)]">Frimee</span>
                   {" "}
-                  <span className="text-muted">{recordatorioDeudaLabel(n.entity_id)}</span>
+                  <span className="text-muted">{n.tipo === "sello_nuevo" ? "Tu último viaje ya tiene sello en el pasaporte." : recordatorioDeudaLabel(n.entity_id)}</span>
                 </>
               ) : (
                 <>

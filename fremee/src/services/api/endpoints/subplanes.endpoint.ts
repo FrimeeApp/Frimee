@@ -1,4 +1,5 @@
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
+import { saveCountryOfSubplan } from "./pasaporte.endpoint";
 
 export type TipoSubplan =
   | "VUELO" | "TREN" | "BUS" | "BARCO" | "COCHE"
@@ -89,7 +90,9 @@ export async function createSubplan(params: CreateSubplanParams): Promise<number
     p_parent_subplan_id:        params.parentSubplanId ?? null,
   });
   if (error) throw error;
-  return data as number;
+  const subplanId = data as number;
+  saveCountryOfSubplan(subplanId, { tipo: params.tipo, nombre: params.ubicacionNombre, lat: params.ubicacionLat, lng: params.ubicacionLng });
+  return subplanId;
 }
 
 export type UpdateSubplanParams = {
@@ -130,6 +133,7 @@ export async function updateSubplan(params: UpdateSubplanParams): Promise<void> 
     p_transporte_llegada:   params.transporteLlegada ?? null,
   });
   if (error) { console.error("[updateSubplan] full error:", JSON.stringify(error, null, 2)); throw error; }
+  saveCountryOfSubplan(params.subplanId, { tipo: params.tipo, nombre: params.ubicacionNombre, lat: params.ubicacionLat, lng: params.ubicacionLng });
 }
 
 export async function updateSubplanTransporte(subplanId: number, transporte: string | null): Promise<void> {

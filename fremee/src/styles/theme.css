@@ -34,6 +34,11 @@
 
   --border: #dddde0;
   --border-strong: #cdcdd2;
+
+  /* Pasaporte: la tapa es un objeto, siempre oscura en los dos temas. */
+  --passport-cover: #0e2f2a;
+  --passport-spine: #0a2420;
+  --passport-foil: #3cddc2;
   /* Chat (Bitácora): your messages and the @frimee frame, from the Frimee design system */
   --chat-me: #e7f4f1;
   /* Your message block. Neutral in dark mode (no green), tinted in light mode. */
