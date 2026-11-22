@@ -136,7 +136,9 @@ export default function Libreta({
   const [wide, setWide] = useState(false);
   const [scale, setScale] = useState(1);
   const [measured, setMeasured] = useState(false);
-  const dims = wide ? WIDE : MOBILE;
+  // En móvil el ancho se mantiene y la página se acorta hasta caber entera (sin scroll) entre las marcas y las flechas.
+  const [mobileH, setMobileH] = useState(MOBILE.h);
+  const dims = useMemo<Dims>(() => (wide ? WIDE : { w: MOBILE.w, h: mobileH }), [wide, mobileH]);
   const W = dims.w;
   const H = dims.h;
   const SPREAD_W = W * 2 + SPINE;
@@ -155,7 +157,16 @@ export default function Libreta({
       const pd = isWide ? PAD_WIDE : PAD_SINGLE;
       const byWidth = el.clientWidth / (isWide ? d.w * 2 + SPINE + pd * 2 : d.w + pd * 2);
       const byHeight = isWide ? (window.innerHeight - 290) / (d.h + pd * 2) : Infinity;
-      setScale(Math.min(isWide ? 1 : 1.25, Math.max(0.5, Math.min(byWidth, byHeight))));
+      const sc = Math.min(isWide ? 1 : 1.25, Math.max(0.5, Math.min(byWidth, byHeight)));
+      setScale(sc);
+      if (!isWide) {
+        // Hueco real: desde donde empieza la libreta hasta el final de la pantalla, menos la cinta, las flechas y los márgenes.
+        const wrapper = el.parentElement?.parentElement;
+        const padBottom = wrapper ? parseFloat(getComputedStyle(wrapper).paddingBottom) || 0 : 0;
+        const below = 32 + (controlsRef.current?.offsetHeight ?? 60) + padBottom;
+        const room = window.innerHeight - el.getBoundingClientRect().top - below;
+        setMobileH(Math.max(430, Math.min(MOBILE.h, Math.floor(room / sc) - PAD_SINGLE * 2)));
+      }
       setMeasured(true);
     };
     measure();
@@ -488,7 +499,7 @@ export default function Libreta({
         </div>
       </div>
 
-      <div ref={controlsRef} className="flex items-center justify-between pb-4 pt-3">
+      <div ref={controlsRef} className="flex items-center justify-between pb-2 pt-1 md:pb-4 md:pt-3">
         <NavButton label="Página anterior" disabled={unit(index) === 0} onClick={() => goToUnit(unit(index) - 1)}>
           <ChevronLeft className="size-[22px]" aria-hidden />
         </NavButton>
@@ -687,13 +698,13 @@ function Guarda({ nombre, since, side }: { nombre: string; since: string | null;
   );
 }
 
-function Field({ label, value, big, wrap }: { label: string; value: string; big?: boolean; wrap?: boolean }) {
+function Field({ label, value, big, wrap }: { label: string; value: string; big?: boolean | "sm"; wrap?: boolean }) {
   return (
     <div className="flex min-w-0 flex-col gap-px">
       <span className="text-[11px] font-[var(--fw-semibold)] leading-4 tracking-[0.04em]" style={{ color: BOOK.label }}>
         {label}
       </span>
-      <span className={`${wrap ? "line-clamp-2 break-words" : "truncate"} tabular-nums ${big ? `${SERIF} text-[24px] leading-tight` : "text-[15px] font-[var(--fw-semibold)] tracking-[0.04em]"}`} style={{ color: BOOK.text }} title={value}>
+      <span className={`${wrap ? "line-clamp-2 break-words" : "truncate"} tabular-nums ${big ? `${SERIF} ${big === "sm" ? "text-[20px]" : "text-[24px]"} leading-tight` : "text-[15px] font-[var(--fw-semibold)] tracking-[0.04em]"}`} style={{ color: BOOK.text }} title={value}>
         {value}
       </span>
     </div>
@@ -702,7 +713,9 @@ function Field({ label, value, big, wrap }: { label: string; value: string; big?
 
 /** Página de datos tipo documento: cabecera, foto con firma, campos, sellos por país y línea de máquina. */
 function DatosPage({ nombre, stats }: { nombre: string; stats: PassportStats }) {
-  const { w: W } = useDims();
+  const { w: W, h: H } = useDims();
+  // Por debajo de 560 px de alto (móvil bajo): foto más pequeña, banda más baja, cifras más pequeñas y sin marca de agua.
+  const compact = H < 560;
   const parts = nombre.trim().split(/\s+/);
   const given = parts[0] ?? "";
   // En escritorio caben las etiquetas bilingües; en móvil solo en español.
@@ -719,14 +732,16 @@ function DatosPage({ nombre, stats }: { nombre: string; stats: PassportStats }) 
   const porPais = join(countries.slice(0, nShown)) + (nShown < countries.length ? ` +${countries.length - nShown}` : "");
   const yymm = stats.since ? stats.since.slice(2, 4) + stats.since.slice(5, 7) : "0000";
   const docNumber = `FR-${yymm}-${initials}`;
-  const pw = Math.round(W * 0.27);
+  const pw = Math.round(W * (compact ? 0.22 : 0.27));
   const ph = Math.round(pw * 1.3);
   const mrzSize = Math.min(13, (W - 40) / (m1.length * 0.77));
   return (
     <>
-      <div aria-hidden="true" className="absolute opacity-[.04]" style={{ right: -W * 0.08, bottom: 90 }}>
-        <Emblem size={Math.round(W * 0.55)} color={BOOK.text} />
-      </div>
+      {!compact && (
+        <div aria-hidden="true" className="absolute opacity-[.04]" style={{ right: -W * 0.08, bottom: 90 }}>
+          <Emblem size={Math.round(W * 0.55)} color={BOOK.text} />
+        </div>
+      )}
       <div className="absolute inset-x-5 top-4 whitespace-nowrap text-center text-[11px] font-bold" style={{ letterSpacing: wide ? "0.24em" : "0.1em" }}>
         FRIMEE · PASAPORTE · PASSPORT
       </div>
@@ -747,17 +762,17 @@ function DatosPage({ nombre, stats }: { nombre: string; stats: PassportStats }) 
             {bi("FIRMA", "SIGNATURE")}
           </span>
         </div>
-        <div className="flex min-w-0 flex-1 flex-col gap-2.5">
+        <div className={`flex min-w-0 flex-1 flex-col ${compact ? "gap-1.5" : "gap-2.5"}`}>
           <Field label="TITULAR / HOLDER" value={nombre.trim().toUpperCase()} wrap />
           {stats.since && <Field label={bi("VIAJA DESDE", "SINCE")} value={monthYearLabel(stats.since).toUpperCase()} />}
           {stats.lastStamp && <Field label={bi("ÚLTIMO SELLO", "LAST")} value={`${stats.lastStamp.place} · ${dateLabel(stats.lastStamp.date)}`.toUpperCase()} />}
         </div>
       </div>
-      <div className="absolute inset-x-5 flex flex-col gap-4" style={{ top: 64 + ph + 76 }}>
+      <div className="absolute inset-x-5 flex flex-col gap-4" style={{ top: 64 + ph + (compact ? 70 : 76) }}>
         <div className="grid grid-cols-3 items-end gap-2">
-          <Field label={bi("PAÍSES", "COUNTRIES")} value={String(stats.paises).padStart(2, "0")} big />
-          <Field label={bi("PLANES", "TRIPS")} value={String(stats.planes).padStart(2, "0")} big />
-          <Field label={bi("DÍAS", "DAYS")} value={String(stats.dias).padStart(3, "0")} big />
+          <Field label={bi("PAÍSES", "COUNTRIES")} value={String(stats.paises).padStart(2, "0")} big={compact ? "sm" : true} />
+          <Field label={bi("PLANES", "TRIPS")} value={String(stats.planes).padStart(2, "0")} big={compact ? "sm" : true} />
+          <Field label={bi("DÍAS", "DAYS")} value={String(stats.dias).padStart(3, "0")} big={compact ? "sm" : true} />
         </div>
         {!stats.lastStamp && (
           <p className="m-0 text-[14px] leading-[1.5]" style={{ color: BOOK.label }}>
@@ -768,7 +783,7 @@ function DatosPage({ nombre, stats }: { nombre: string; stats: PassportStats }) 
       </div>
       <div
         aria-hidden="true"
-        className="absolute inset-x-0 bottom-0 box-border h-[78px] overflow-hidden whitespace-nowrap px-5 pt-4 font-mono leading-[1.7] tracking-[0.17em]"
+        className={`absolute inset-x-0 bottom-0 box-border overflow-hidden whitespace-nowrap px-5 font-mono ${compact ? "h-[56px] pt-2" : "h-[78px] pt-4"} leading-[1.7] tracking-[0.17em]`}
         style={{ background: BOOK.paperBand, borderTop: "1px solid #DDE3DA", color: BOOK.text, fontSize: mrzSize }}
       >
         {m1}
