@@ -101,10 +101,3 @@ export async function saveCiudadBase(ciudad: string): Promise<string | null> {
   if (error) throw error;
   return (data as string | null) ?? null;
 }
-
-/** Cuántas fotos y vídeos tiene el álbum de un plan (0 si no hay o no se puede leer). */
-export async function countAlbumItems(planId: number): Promise<number> {
-  const { count, error } = await createBrowserSupabaseClient().from("plan_fotos").select("id", { count: "exact", head: true }).eq("plan_id", planId);
-  if (error) return 0;
-  return count ?? 0;
-}
