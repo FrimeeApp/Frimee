@@ -1,5 +1,6 @@
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { countryOfPlace } from "@/lib/placeCountry";
+import { parsePasaporte, type PasaporteLeido } from "@/lib/passport";
 import type { TipoSubplan } from "./subplanes.endpoint";
 
 /** Los transportes no dan sello de país (son trayectos de paso): no se gasta una geocodificación en ellos. */
@@ -36,4 +37,11 @@ export function saveCountryOfSubplan(
     const { error } = await createBrowserSupabaseClient().rpc("fn_subplan_set_pais", { p_subplan_id: subplanId, p_country: code });
     if (error) logPais("No se guardó el país de la parada", error);
   })();
+}
+
+/** Sellos y ajustes del pasaporte (el tuyo, o el de otra persona si se pasa su id y puede verlo). */
+export async function leerPasaporte(userId?: string): Promise<PasaporteLeido> {
+  const { data, error } = await createBrowserSupabaseClient().rpc("fn_passport_leer", { p_user_id: userId ?? null });
+  if (error) throw error;
+  return parsePasaporte(data);
 }

@@ -190,7 +190,11 @@ function PassportCard({ nombre, plans, now }: { nombre: string; plans: FeedPlanI
 
   if (finished > 0) {
     headline = `${finished} ${finished === 1 ? "plan terminado" : "planes terminados"}`;
-    action = null;
+    action = (
+      <button type="button" onClick={() => router.push("/passport")} className={`${FILL_BTN} w-full md:w-auto md:self-start`}>
+        Abrir pasaporte
+      </button>
+    );
   } else if (next) {
     const stampDay = new Date(planEndsAt(next.endsAt).getTime() + DAY_MS);
     const left = Math.max(1, Math.ceil((stampDay.getTime() - now) / DAY_MS));

@@ -39,6 +39,11 @@
   --passport-cover: #0e2f2a;
   --passport-spine: #0a2420;
   --passport-foil: #3cddc2;
+  /* Libreta: la mesa, el fondo de seguridad y la tinta de los sellos. */
+  --passport-table: #ededef;
+  --passport-line: #e3ebe9;
+  --passport-ink: #2a2a31;
+  --passport-ink-new: #227a6c;
   /* Chat (Bitácora): your messages and the @frimee frame, from the Frimee design system */
   --chat-me: #e7f4f1;
   /* Your message block. Neutral in dark mode (no green), tinted in light mode. */
@@ -195,6 +200,10 @@
 
   --border: #2c2c2e;
   --border-strong: #3a3a3d;
+  --passport-table: #111111;
+  --passport-line: #26262d;
+  --passport-ink: #d9d9de;
+  --passport-ink-new: #3cddc2;
   --chat-me: #15302b;
   --chat-me-block: #15302b;
   --chat-me-border: #245048;
