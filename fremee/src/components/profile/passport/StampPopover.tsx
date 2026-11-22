@@ -6,7 +6,7 @@ import { Capacitor } from "@capacitor/core";
 import { useRouter } from "next/navigation";
 import { EyeOff, Images, MapPin, X } from "lucide-react";
 import { FOCUS, GHOST_BTN } from "@/components/plans/home/pieces";
-import { countryName, countryOrdinal, dateLabel, planRangeLabel, type Sello } from "@/lib/passport";
+import { countryName, countryOrdinal, dateLabel, gentePhrase, planRangeLabel, type Sello } from "@/lib/passport";
 import { marcarNoFui } from "@/services/api/endpoints/pasaporte.endpoint";
 import { HITO_NAME, noFuiQuita } from "./stamps";
 
@@ -252,6 +252,7 @@ export default function StampPopover({
           {title}
         </h2>
         <p className="m-0 text-[14px] leading-[1.5] tabular-nums text-muted">{sub}</p>
+        {sello.kind === "plan" && gentePhrase(sello.gente) && <p className="m-0 text-[14px] leading-[1.5] text-muted">{gentePhrase(sello.gente)}</p>}
       </div>
       {body}
       {error && (
