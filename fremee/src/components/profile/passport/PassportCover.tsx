@@ -1,3 +1,5 @@
+import { coverNameLines } from "@/lib/passport";
+
 /** Tapa del pasaporte (tableros «Pasaporte · la libreta»). Objeto con tapa propia: siempre oscura, también en tema claro. */
 
 const BASE_W = 132;
@@ -51,7 +53,9 @@ export function PassportCover({
       <span className="flex flex-col items-center" style={{ gap: px(6) }}>
         {name ? (
           <span className="text-center font-semibold leading-[1.2]" style={{ fontSize: px(12), letterSpacing: "0.08em" }}>
-            {name.toUpperCase()}
+            {coverNameLines(name).map((l) => (
+              <span key={l} className="block">{l.toUpperCase()}</span>
+            ))}
           </span>
         ) : null}
         <span className="box-border rounded-[3px] border-[1.5px] border-current" style={{ width: px(17), height: px(11) }} />

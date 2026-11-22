@@ -2,24 +2,37 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Capacitor } from "@capacitor/core";
-import { CalendarDays, ChevronRight, MapPin, Settings } from "lucide-react";
+import { CalendarDays, ChevronRight, Lock, MapPin, Settings, Users } from "lucide-react";
 import { listUserRelatedPlans } from "@/services/api/repositories/plans.repository";
 import { listTicketsEndpoint, TICKET_TYPE_LABELS, type PlanTicket } from "@/services/api/endpoints/wallet.endpoint";
 import type { FeedPlanItemDto } from "@/services/api/dtos/plan.dto";
 import { isPlanFinished, planEndsAt } from "@/lib/plan-dates";
 import { TicketTypeIcon } from "@/components/wallet/TicketTypeIcon";
 import { CARD, FILL_BTN, FOCUS, GHOST_BTN, LABEL, SERIF, TEXT_BTN } from "@/components/plans/home/pieces";
+import { leerPasaporte } from "@/services/api/endpoints/pasaporte.endpoint";
+import { computeStats, countryName, dateLabel, type PasaporteLeido, type Sello } from "@/lib/passport";
 import { GhostPlanStamp, PassportCover } from "./PassportCover";
+import PassportReader from "./PassportReader";
+import { CountryStamp, PlanStamp } from "./stamps";
 
 /** Tu perfil (tableros «Perfil»): cabecera, pasaporte y cartera. Nada más: aquí eres viajero, no hay lista de planes. */
 
-type Loaded = { plans: FeedPlanItemDto[]; tickets: PlanTicket[] };
+type Loaded = { plans: FeedPlanItemDto[]; tickets: PlanTicket[]; pasaporte: PasaporteLeido | null };
 
 const DAY_MS = 86_400_000;
 const MONTHS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sept", "oct", "nov", "dic"];
+
+/** El nombre baja por tramos para que la cabecera no crezca: hasta 18 letras, hasta 26 y más. */
+function nameSize(nombre: string) {
+  const n = nombre.trim().length;
+  if (n <= 18) return "text-[32px] md:text-[48px]";
+  if (n <= 26) return "text-[28px] md:text-[40px]";
+  return "text-[24px] md:text-[32px]";
+}
 
 const planPath = (id: number) => (Capacitor.isNativePlatform() ? `/plans/static?id=${id}` : `/plans/${id}`);
 
@@ -74,9 +87,14 @@ export default function MiPerfil({
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([listUserRelatedPlans({ userId, limit: 100 }), listTicketsEndpoint()])
-      .then(([plans, tickets]) => {
-        if (!cancelled) setData({ plans, tickets });
+    // Los sellos no bloquean el perfil: si fallan, la tarjeta cae a la cuenta de planes terminados.
+    const sellos = leerPasaporte().catch((err) => {
+      console.error("[perfil] Error leyendo los sellos:", (err as { message?: string } | null)?.message ?? err);
+      return null;
+    });
+    Promise.all([listUserRelatedPlans({ userId, limit: 100 }), listTicketsEndpoint(), sellos])
+      .then(([plans, tickets, pasaporte]) => {
+        if (!cancelled) setData({ plans, tickets, pasaporte });
       })
       .catch((err) => {
         const { message, code } = (err ?? {}) as { message?: string; code?: string };
@@ -99,7 +117,7 @@ export default function MiPerfil({
   const goSettings = () => router.push("/settings");
 
   return (
-    <div className="mx-auto w-full max-w-[1080px]">
+    <div data-profile-root className="mx-auto w-full max-w-[1080px]">
       {isGuest && (
         <div className="mb-[var(--space-4)] flex min-h-[52px] items-center gap-2.5 rounded-[8px] border border-app bg-surface pl-3 pr-1 md:hidden">
           <span className="flex-1 text-[14px] leading-tight text-app">Estás en modo invitado</span>
@@ -150,7 +168,9 @@ export default function MiPerfil({
           )}
           <span className="flex min-w-0 flex-col items-start gap-0.5">
             <span className={LABEL}>TU PERFIL</span>
-            <span className={`text-[32px] leading-[1.05] md:text-[48px] ${SERIF}`}>{nombre}</span>
+            <span title={nombre} className={`line-clamp-2 break-words ${nameSize(nombre)} leading-[1.05] ${SERIF}`}>
+              {nombre}
+            </span>
           </span>
         </Link>
       </div>
@@ -161,7 +181,7 @@ export default function MiPerfil({
         <ProfileLoading nombre={nombre} />
       ) : (
         <div className="flex flex-col gap-5 md:grid md:grid-cols-[minmax(0,1fr)_minmax(300px,380px)] md:items-start md:gap-6">
-          <PassportCard nombre={nombre} plans={data.plans} now={now} />
+          <PassportCard nombre={nombre} plans={data.plans} pasaporte={data.pasaporte} now={now} />
           <Wallet tickets={data.tickets} now={now} />
         </div>
       )}
@@ -170,7 +190,21 @@ export default function MiPerfil({
   );
 }
 
-function PassportCard({ nombre, plans, now }: { nombre: string; plans: FeedPlanItemDto[]; now: number }) {
+const VISIBILITY_TEXT = {
+  TODOS: { icon: Users, text: "Lo ve todo el mundo" },
+  AMISTADES: { icon: Users, text: "Lo ven tus amistades" },
+  SOLO_YO: { icon: Lock, text: "Solo lo ves tú" },
+} as const;
+
+/** Los 4 sellos más recientes (a igual fecha, el de país antes que el de plan), como en «Últimos sellos». */
+function latestStamps(sellos: Sello[]) {
+  return sellos
+    .filter((s) => !s.hidden && s.kind !== "hito")
+    .sort((a, b) => (a.stamped_at < b.stamped_at ? 1 : a.stamped_at > b.stamped_at ? -1 : a.kind === b.kind ? b.id - a.id : a.kind === "pais" ? -1 : 1))
+    .slice(0, 4);
+}
+
+function PassportCard({ nombre, plans, pasaporte, now }: { nombre: string; plans: FeedPlanItemDto[]; pasaporte: PasaporteLeido | null; now: number }) {
   const router = useRouter();
   const { finished, next } = useMemo(() => {
     const at = new Date(now);
@@ -182,15 +216,71 @@ function PassportCard({ nombre, plans, now }: { nombre: string; plans: FeedPlanI
   }, [plans, now]);
 
   const goCreate = () => router.push("/calendar?create=1");
+  // El pasaporte se abre como capa encima del perfil (para que la tapa pueda volar desde su sitio) y el historial
+  // lleva un paso propio: «atrás» lo cierra.
+  const [reader, setReader] = useState<{ from: HTMLElement | null } | null>(null);
+  const [closing, setClosing] = useState(false);
+  useEffect(() => {
+    if (!reader) return;
+    const onPop = () => setClosing(true);
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [reader]);
+  const closeReader = useCallback(() => {
+    setReader(null);
+    setClosing(false);
+  }, []);
+  const openPassport = () => {
+    if (!pasaporte) {
+      // Sin los sellos leídos, la entrada directa los vuelve a pedir.
+      router.push("/passport");
+      return;
+    }
+    // La tapa que se ve (móvil o escritorio) es la que vuela.
+    const from = ([...document.querySelectorAll<HTMLElement>("[data-passport-cover]")].find((e) => e.getClientRects().length > 0)?.firstElementChild as HTMLElement | null) ?? null;
+    window.history.pushState({ passportReader: true }, "");
+    setClosing(false);
+    setReader({ from });
+  };
 
   let headline: string;
   let body: React.ReactNode = null;
   let chip: React.ReactNode = null;
   let action: React.ReactNode;
 
-  if (finished > 0) {
-    headline = `${finished} ${finished === 1 ? "plan terminado" : "planes terminados"}`;
-    action = null;
+  const sellos = pasaporte?.sellos ?? [];
+  const stats = computeStats(sellos);
+  const recientes = latestStamps(sellos);
+  const nuevo = sellos.find((s) => s.nuevo && !s.hidden && s.kind === "plan") ?? sellos.find((s) => s.nuevo && !s.hidden && s.kind !== "hito");
+  const visibility = VISIBILITY_TEXT[pasaporte?.ajustes?.passport_visibility ?? "AMISTADES"];
+  const VisIcon = visibility.icon;
+  const lastCountry = recientes.find((s) => s.kind === "pais");
+  const lastPlan = recientes.find((s) => s.kind === "plan");
+
+  if (finished > 0 || sellos.length > 0) {
+    headline =
+      stats.paises > 0
+        ? `${stats.paises} ${stats.paises === 1 ? "país" : "países"},\n${stats.planes} ${stats.planes === 1 ? "plan" : "planes"}`
+        : `${finished} ${finished === 1 ? "plan terminado" : "planes terminados"}`;
+    if (nuevo) {
+      const where = nuevo.kind === "pais" && nuevo.country_code ? countryName(nuevo.country_code) : nuevo.plan?.ubicacion_nombre?.split(",")[0]?.trim() || nuevo.plan?.titulo || "";
+      chip = (
+        <span className="inline-flex h-7 items-center gap-1.5 self-start rounded-full border border-[var(--chat-me-border)] bg-[var(--chat-me)] px-2.5 text-[12px] font-[var(--fw-semibold)] text-app">
+          Sello nuevo{where ? ` · ${where}` : ""}
+        </span>
+      );
+    }
+    body = (
+      <span className="inline-flex items-center gap-2 text-[14px] leading-[1.5] text-muted">
+        <VisIcon className="size-4 shrink-0" aria-hidden />
+        {visibility.text}
+      </span>
+    );
+    action = (
+      <button type="button" onClick={openPassport} className={`${FILL_BTN} w-full md:w-auto md:self-start`}>
+        Abrir pasaporte
+      </button>
+    );
   } else if (next) {
     const stampDay = new Date(planEndsAt(next.endsAt).getTime() + DAY_MS);
     const left = Math.max(1, Math.ceil((stampDay.getTime() - now) / DAY_MS));
@@ -235,17 +325,23 @@ function PassportCard({ nombre, plans, now }: { nombre: string; plans: FeedPlanI
               className="absolute left-[72px] top-[63px] -rotate-[7deg] md:left-[122px] md:top-[115px] md:origin-top-left md:scale-[1.45]"
             />
           )}
-          <span className="absolute left-0 top-2.5 md:hidden">
+          {!ghost && lastCountry && (
+            <CountryStamp sello={lastCountry} size={110} tilt={8} className="absolute left-[112px] top-[6px] hidden md:block" />
+          )}
+          {!ghost && lastPlan && (
+            <PlanStamp sello={lastPlan} size={132} tilt={-6} className="absolute left-[150px] top-[132px] hidden md:block" />
+          )}
+          <span data-passport-cover className="absolute left-0 top-2.5 md:hidden">
             <PassportCover name={nombre} width={ghost ? 124 : 132} />
           </span>
-          <span className="absolute left-0 top-4 hidden md:block">
+          <span data-passport-cover className="absolute left-0 top-4 hidden md:block">
             <PassportCover name={nombre} width={196} />
           </span>
         </span>
         <span className="flex min-w-0 flex-col gap-2.5 md:flex-1 md:basis-[240px] md:gap-5">
           <span className="flex flex-col gap-2.5">
             <span className={LABEL}>PASAPORTE</span>
-            <span className={`text-[28px] leading-[1.1] md:text-[40px] ${SERIF}`}>{headline}</span>
+            <span className={`whitespace-pre-line text-[28px] leading-[1.1] md:text-[40px] ${SERIF}`}>{headline}</span>
             {chip}
             {body}
           </span>
@@ -253,6 +349,38 @@ function PassportCard({ nombre, plans, now }: { nombre: string; plans: FeedPlanI
         </span>
       </div>
       <div className="md:hidden">{action}</div>
+      {recientes.length > 0 && (
+        <div className="hidden flex-col gap-3 border-t border-app pt-4 md:flex">
+          <span className={LABEL}>ÚLTIMOS SELLOS</span>
+          <ul className="m-0 grid list-none grid-cols-4 gap-3 p-0">
+            {recientes.map((s) => (
+              <li key={s.id} className="flex flex-col items-center gap-2 text-center">
+                <span className="flex h-[92px] items-center justify-center">
+                  {s.kind === "pais" ? <CountryStamp sello={s} size={84} tilt={-4} nuevo={s.nuevo} /> : <PlanStamp sello={s} size={124} tilt={-3} nuevo={s.nuevo} />}
+                </span>
+                <span className="flex min-w-0 flex-col">
+                  <span className="truncate text-[14px] font-[var(--fw-semibold)] leading-[1.4]">{s.kind === "pais" ? countryName(s.country_code ?? "") : s.plan?.titulo}</span>
+                  <span className="text-[12px] leading-[1.4] tabular-nums text-muted">{dateLabel(s.stamped_at)}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {reader &&
+        pasaporte &&
+        createPortal(
+          <PassportReader
+            nombre={nombre}
+            sellos={pasaporte.sellos}
+            fromCover={reader.from}
+            profile={document.querySelector<HTMLElement>("[data-profile-root]")}
+            closing={closing}
+            onRequestClose={() => window.history.back()}
+            onClosed={closeReader}
+          />,
+          document.body,
+        )}
     </section>
   );
 }

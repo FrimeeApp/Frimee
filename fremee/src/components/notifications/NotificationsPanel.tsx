@@ -217,7 +217,7 @@ export function NotifItem({
   const isPlanInvite = n.tipo === "plan_invite" && n.entity_id;
   const added = n.tipo === "plan_added" || n.tipo === "plan_join_request" ? planChatMeta(n.tipo, n.entity_id) : null;
   const isJoinRequest = n.tipo === "plan_join_request" && Boolean(added?.planId && added.userId);
-  const pollReopen = n.tipo === "poll_reopen" ? pollReopenMeta(n.entity_id) : n.tipo === "poll_draw" ? pollDrawMeta(n.entity_id) : n.tipo.startsWith("pago_") ? pagoMeta(n.tipo, n.entity_id) : null;
+  const pollReopen = n.tipo === "sello_nuevo" ? { href: "/passport", label: "" } : n.tipo === "poll_reopen" ? pollReopenMeta(n.entity_id) : n.tipo === "poll_draw" ? pollDrawMeta(n.entity_id) : n.tipo.startsWith("pago_") ? pagoMeta(n.tipo, n.entity_id) : null;
   const router = useRouter();
   const [joinError, setJoinError] = useState(false);
   const handleJoinRequest = async (accept: boolean) => {
@@ -322,7 +322,7 @@ export function NotifItem({
               onClick={() => (onNavigate ? onNavigate(pollReopen.href!) : router.push(pollReopen.href!))}
               className="shrink-0 rounded-full bg-[var(--primary)] px-3 py-1 text-[14px] font-[var(--fw-semibold)] text-[var(--contrast)] transition-opacity hover:opacity-80"
             >
-              {n.tipo === "poll_draw" || n.tipo.startsWith("pago_") ? "Ver" : "Votar"}
+              {n.tipo === "poll_draw" || n.tipo === "sello_nuevo" || n.tipo.startsWith("pago_") ? "Ver" : "Votar"}
             </button>
           )}
           {isJoinRequest && (

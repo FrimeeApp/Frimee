@@ -41,6 +41,7 @@ import { isoDateOnly, groupByDay, normalizeDateKey, summarizeRecipients, getOccu
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
 import { CloseButton } from "@/components/ui/IconButton";
 import { useToast } from "@/components/ui/Toaster";
+import { estadoNoFui, volverASellar } from "@/services/api/endpoints/pasaporte.endpoint";
 import { shareOf } from "@/lib/gastos-shares";
 import { PayDebtSheet, type PaidResult } from "@/components/plans/modals/PayDebtSheet";
 import { Tabs } from "@/components/ui/Tabs";
@@ -152,6 +153,39 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
   const [activeTab, setActiveTab] = useState<Tab>("itinerario");
   const [plan, setPlan] = useState<PlanByIdRow | null>(initialCache?.plan ?? null);
   const isPast = plan ? isPlanFinished(plan.fin_at) : false;
+
+  // «No fui a este viaje» (pasaporte): si lo marcaste, aquí puedes deshacerlo y volver a recibir los sellos.
+  const [noFui, setNoFui] = useState(false);
+  const [sellando, setSellando] = useState(false);
+  const planIdForPassport = plan?.id;
+  useEffect(() => {
+    if (!planIdForPassport || !isPast) return;
+    let cancelled = false;
+    estadoNoFui(planIdForPassport)
+      .then((v) => {
+        if (!cancelled) setNoFui(v);
+      })
+      .catch(() => {
+        // Sin esto no hay botón; no merece un aviso.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [planIdForPassport, isPast]);
+  const handleVolverASellar = async () => {
+    if (!planIdForPassport || sellando) return;
+    setSellando(true);
+    try {
+      await volverASellar(planIdForPassport);
+      setNoFui(false);
+      toast("Listo. Los sellos de este viaje volverán a tu pasaporte.", "success");
+    } catch (err) {
+      console.error("[pasaporte] No se pudo volver a sellar el viaje:", (err as { message?: string } | null)?.message ?? err);
+      toastError("No se pudo volver a sellar el viaje. Inténtalo de nuevo.");
+    } finally {
+      setSellando(false);
+    }
+  };
   const [isAdmin, setIsAdmin] = useState(initialCache?.isAdmin ?? false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [membershipChecked, setMembershipChecked] = useState(initialCache?.membershipChecked ?? false);
@@ -1106,9 +1140,21 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
               </button>
             )}
             {isPast && (
-              <span className="mobile-safe-action-top absolute right-[var(--page-margin-x)] rounded-full border border-white/30 bg-black/30 px-3 py-[6px] text-[13px] font-[600] text-white/90 backdrop-blur-sm md:top-[var(--space-6)]">
-                Finalizado
-              </span>
+              <div className="mobile-safe-action-top absolute right-[var(--page-margin-x)] flex flex-col items-end gap-2 md:top-[var(--space-6)]">
+                <span className="rounded-full border border-white/30 bg-black/30 px-3 py-[6px] text-[13px] font-[600] text-white/90 backdrop-blur-sm">
+                  Finalizado
+                </span>
+                {noFui && (
+                  <button
+                    type="button"
+                    disabled={sellando}
+                    onClick={() => void handleVolverASellar()}
+                    className="min-h-11 rounded-full border border-white/30 bg-black/40 px-3 py-[6px] text-[13px] font-[600] text-white backdrop-blur-sm transition-colors hover:bg-black/55 disabled:opacity-60"
+                  >
+                    Volver a sellar este viaje
+                  </button>
+                )}
+              </div>
             )}
 
             {/* Title & meta */}
