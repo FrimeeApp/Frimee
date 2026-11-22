@@ -245,10 +245,11 @@ export function BudgetSheet({ planId, initialMode, isAdmin, topes, currency, spe
             Se compara con tu parte: ahora {formatMoney(compared, currency)}{amount ? ` (${pctOf(compared, amount)} %)` : ""}
           </p>
         )}
-        <p className="mt-1.5 text-[13px] text-muted">
-          {locked ? "El del grupo lo pone quien administra el plan." : mode === "grupo" ? "Lo ve todo el grupo. Lo cambia quien administra el plan." : "Solo lo ves tú. Cada uno puede poner el suyo."}
-        </p>
-        <p className="mt-1.5 text-[13px] text-muted">Es una referencia: se puede pasar.</p>
+        {(locked || mode === "grupo") && (
+          <p className="mt-1.5 text-[13px] text-muted">
+            {locked ? "El del grupo lo pone quien administra el plan." : "Lo ve todo el grupo. Lo cambia quien administra el plan."}
+          </p>
+        )}
 
         {error && <p role="alert" className="mt-3 text-[13px] text-[var(--error)]">{error}</p>}
 

@@ -943,14 +943,23 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
         loadBalances();
       }, 400);
     };
+    // Presupuesto del grupo (lo cambia un admin) y tope personal (otro dispositivo tuyo): solo se recargan ellos.
+    let topesTimer: ReturnType<typeof setTimeout> | undefined;
+    const reloadTopesSoon = () => {
+      clearTimeout(topesTimer);
+      topesTimer = setTimeout(loadTopes, 300);
+    };
     const supabase = createBrowserSupabaseClient();
     const channel = supabase
       .channel(createRealtimeTopic("gastos-changes", planId))
       .on("postgres_changes", { event: "*", schema: "public", table: "gastos", filter: `plan_id=eq.${planId}` }, reload)
       .on("postgres_changes", { event: "*", schema: "public", table: "liquidaciones", filter: `plan_id=eq.${planId}` }, reload)
+      .on("postgres_changes", { event: "*", schema: "public", table: "plan_presupuestos", filter: `plan_id=eq.${planId}` }, reloadTopesSoon)
+      .on("postgres_changes", { event: "*", schema: "public", table: "plan_topes", filter: `plan_id=eq.${planId}` }, reloadTopesSoon)
       .subscribe();
     return () => {
       clearTimeout(reloadTimer);
+      clearTimeout(topesTimer);
       void supabase.removeChannel(channel);
     };
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
