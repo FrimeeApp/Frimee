@@ -379,7 +379,7 @@ function ClosedBook({ nombre, width, ghost, big = false }: { nombre: string; wid
   const w = ghost ? Math.round(width * 0.58 + 101 * sc) + 6 : width + 8;
   return (
     <span className="relative block shrink-0 -rotate-3 p-2" style={{ width: w + 16, height: h + 50 }}>
-      <span aria-hidden="true" className="absolute rounded-[8px]" style={{ left: 14, top: 12, width: width, height: h, background: `repeating-linear-gradient(to bottom, ${BOOK.paper} 0 2px, #DCE1D8 2px 3px)`, boxShadow: "0 10px 24px rgba(0,0,0,.4), 0 3px 8px rgba(0,0,0,.3)" }} />
+      <span aria-hidden="true" className="absolute rounded-[8px]" style={{ left: 14, top: 12, width: width, height: h, background: `repeating-linear-gradient(to bottom, ${BOOK.paper} 0 2px, #DCE1D8 2px 3px)`, boxShadow: "var(--book-shadow-small)" }} />
       <span aria-hidden="true" className="absolute" style={{ left: 8 + Math.round(width * 0.62), top: 8 + h - 6, width: 12, height: 34, background: BOOK.ribbon, clipPath: "polygon(0 0,100% 0,100% 100%,50% calc(100% - 9px),0 100%)" }} />
       {ghost && (
         <GhostPlanStamp

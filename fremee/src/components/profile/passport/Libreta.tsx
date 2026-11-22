@@ -464,18 +464,18 @@ export default function Libreta({
               <>
                 <div ref={leftRef} className="absolute left-0 top-0" style={{ width: W, height: H }}>
                   {/* Cada mitad lleva su marco: la tapa que asoma y la sombra. Nunca hay marco sin página encima. */}
-                  <span aria-hidden="true" className="absolute" style={{ left: -PAD, top: -PAD, width: W + PAD + SPINE, height: H + PAD * 2, background: BOOK.cover, borderRadius: "10px 0 0 10px", boxShadow: "0 18px 40px rgba(0,0,0,.45), 0 4px 10px rgba(0,0,0,.3)" }} />
+                  <span aria-hidden="true" className="absolute" style={{ left: -PAD, top: -PAD, width: W + PAD + SPINE, height: H + PAD * 2, background: BOOK.cover, borderRadius: "10px 0 0 10px", boxShadow: "var(--book-shadow)" }} />
                   {half("left")}
                 </div>
                 <div ref={spineRef} aria-hidden="true" className="absolute top-0" style={{ left: W, width: SPINE, height: H, background: "#0a2420" }} />
                 <div ref={rightRef} className="absolute top-0" style={{ left: W + SPINE, width: W, height: H }}>
-                  <span aria-hidden="true" className="absolute" style={{ left: 0, top: -PAD, width: W + PAD, height: H + PAD * 2, background: BOOK.cover, borderRadius: "0 10px 10px 0", boxShadow: "0 18px 40px rgba(0,0,0,.45), 0 4px 10px rgba(0,0,0,.3)" }} />
+                  <span aria-hidden="true" className="absolute" style={{ left: 0, top: -PAD, width: W + PAD, height: H + PAD * 2, background: BOOK.cover, borderRadius: "0 10px 10px 0", boxShadow: "var(--book-shadow)" }} />
                   {half("right")}
                 </div>
               </>
             ) : (
               <div ref={rightRef} className="absolute left-0 top-0" style={{ width: W, height: H }}>
-                <span aria-hidden="true" className="absolute" style={{ left: -PAD, top: -PAD, width: W + PAD * 2, height: H + PAD * 2, background: BOOK.cover, borderRadius: 10, boxShadow: "0 18px 40px rgba(0,0,0,.45), 0 4px 10px rgba(0,0,0,.3)" }} />
+                <span aria-hidden="true" className="absolute" style={{ left: -PAD, top: -PAD, width: W + PAD * 2, height: H + PAD * 2, background: BOOK.cover, borderRadius: 10, boxShadow: "var(--book-shadow)" }} />
                 {half("right")}
               </div>
             )}
@@ -529,7 +529,7 @@ function NavButton({ label, disabled, onClick, children }: { label: string; disa
 }
 
 /** Fondo de seguridad del papel: ondas + roseta + microtexto. Estático, sin filtros. */
-export function PaperGuilloche({ w, h, seed, foil = false, soft = false }: { w: number; h: number; seed: number; foil?: boolean; soft?: boolean }) {
+export function PaperGuilloche({ w, h, seed, foil = false, soft = false, rosetteY = 0.55 }: { w: number; h: number; seed: number; foil?: boolean; soft?: boolean; rosetteY?: number }) {
   const lines = useMemo(() => {
     const out: string[] = [];
     for (let i = 0; i < 22; i++) {
@@ -546,7 +546,7 @@ export function PaperGuilloche({ w, h, seed, foil = false, soft = false }: { w: 
   const c1 = foil ? BOOK.foil : BOOK.guil1;
   const c2 = foil ? BOOK.foil : BOOK.guil2;
   const cx = w / 2;
-  const cy = h * 0.55;
+  const cy = h * rosetteY;
   return (
     <svg aria-hidden="true" width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="pointer-events-none absolute left-0 top-0">
       <g opacity={foil ? 0.13 : 1} fill="none" strokeWidth={0.6}>
@@ -572,11 +572,11 @@ export function PaperGuilloche({ w, h, seed, foil = false, soft = false }: { w: 
 }
 
 /** Papel: fondo de seguridad, grosor de hojas en el canto exterior y sombra del lomo en el interior. */
-function Paper({ side, seed, number, soft = false, children }: { side: Side; seed: number; number?: number; soft?: boolean; children?: React.ReactNode }) {
+function Paper({ side, seed, number, soft = false, rosetteY, children }: { side: Side; seed: number; number?: number; soft?: boolean; rosetteY?: number; children?: React.ReactNode }) {
   const { w: W, h: H } = useDims();
   return (
     <div className={`relative overflow-hidden ${SIDE_RADIUS[side]}`} style={{ ...PAPER_VARS, width: W, height: H, background: BOOK.paper, boxShadow: EDGE[side], color: BOOK.text }}>
-      <PaperGuilloche w={W} h={H} seed={seed} soft={soft} />
+      <PaperGuilloche w={W} h={H} seed={seed} soft={soft} rosetteY={rosetteY} />
       {children}
       {number !== undefined && (
         <span aria-hidden="true" className={`absolute inset-x-0 bottom-[22px] text-center text-[12px] tabular-nums ${SERIF}`} style={{ color: BOOK.label }}>
@@ -629,7 +629,7 @@ function PageView({
     );
   }
   return (
-    <Paper side={side} seed={page.number} number={page.kind === "datos" ? undefined : page.number} soft={page.kind !== "datos"}>
+    <Paper side={side} seed={page.number} number={page.kind === "datos" ? undefined : page.number} soft rosetteY={page.kind === "datos" ? 0.74 : undefined}>
       {page.kind === "datos" ? (
         <DatosPage nombre={nombre} stats={stats} />
       ) : (

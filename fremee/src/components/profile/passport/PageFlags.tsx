@@ -46,7 +46,7 @@ const PageFlags = forwardRef<
             aria-current={on ? "page" : undefined}
             aria-label={f.label === "Datos" ? "Ir a la página de datos" : `Ir a ${f.label}${f.more ? ". Los años anteriores están en el índice" : ""}`}
             className={`absolute bottom-full flex ${overlap ? "justify-start pl-1.5 text-[12px]" : "justify-center text-[13px]"} rounded-t-[5px] border border-b-0 border-[rgba(31,42,40,0.14)] leading-none text-[#1F2A28] transition-transform duration-[160ms] ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:transition-none ${FOCUS} ${
-              on ? "z-10 pt-3 font-bold shadow-[0_-2px_6px_rgba(0,0,0,0.25)]" : "pt-2 font-semibold hover:-translate-y-1"
+              on ? "z-10 pt-3 font-bold" : "pt-2 font-semibold hover:-translate-y-1"
             }`}
             style={{
               left: start + i * step,
@@ -54,6 +54,7 @@ const PageFlags = forwardRef<
               height: 44,
               // Las inactivas se hunden 10 px bajo la libreta (siguen teniendo 44 px de área).
               marginBottom: on ? -6 : -16,
+              boxShadow: on ? "var(--flag-shadow)" : undefined,
               background: TINTS[i % TINTS.length],
             }}
           >
