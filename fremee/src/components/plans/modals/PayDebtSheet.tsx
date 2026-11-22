@@ -6,6 +6,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { CloseButton } from "@/components/ui/IconButton";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
 import { formatMoney } from "@/lib/formatters";
+import { parseAmount, toInputText } from "@/lib/money-input";
 import {
   pagarLiquidacionEndpoint,
   uploadComprobanteEndpoint,
@@ -44,17 +45,6 @@ type Props = {
   onClose: () => void;
   onPaid: (result: PaidResult) => void;
 };
-
-/** «1.234,5» / «12,50» / «12.5» → número, o null si no es un importe. */
-function parseAmount(text: string): number | null {
-  const clean = text.trim().replace(/\s/g, "").replace("€", "");
-  if (!clean) return null;
-  const normalized = clean.includes(",") ? clean.replace(/\./g, "").replace(",", ".") : clean;
-  if (!/^\d+(\.\d{1,2})?$/.test(normalized)) return null;
-  return Math.round(Number(normalized) * 100) / 100;
-}
-
-const toInputText = (value: number) => value.toFixed(2).replace(".", ",");
 
 /** Hoja para pagar una deuda: total o a medias, con método y comprobante opcionales. Sirve desde el plan y desde «Mis gastos». */
 export function PayDebtSheet({ debt, me, onClose, onPaid }: Props) {

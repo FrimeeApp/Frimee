@@ -196,6 +196,33 @@ export async function updateGastoEndpoint(
   if (error) throw error;
 }
 
+export type Tope = { limite: number; moneda: string };
+export type Topes = { grupo: Tope | null; mio: Tope | null };
+
+/** Presupuesto del grupo (lo ve todo el plan) y tope personal (solo lo ve su dueño). */
+export async function fetchTopesEndpoint(planId: number): Promise<Topes> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc("fn_gastos_topes", { p_plan_id: planId });
+  if (error) throw error;
+  const raw = (data ?? {}) as { grupo?: Tope | null; mio?: Tope | null };
+  const clean = (t?: Tope | null): Tope | null => (t && Number(t.limite) > 0 ? { limite: Number(t.limite), moneda: t.moneda } : null);
+  return { grupo: clean(raw.grupo), mio: clean(raw.mio) };
+}
+
+/** Pone, cambia o quita (importe nulo) el presupuesto del grupo. Solo quien administra el plan. */
+export async function setPresupuestoEndpoint(planId: number, limite: number | null, moneda: string): Promise<void> {
+  const supabase = createBrowserSupabaseClient();
+  const { error } = await supabase.rpc("fn_presupuesto_set", { p_plan_id: planId, p_limite: limite, p_moneda: moneda });
+  if (error) throw error;
+}
+
+/** Pone, cambia o quita (importe nulo) tu tope personal. */
+export async function setTopeEndpoint(planId: number, limite: number | null, moneda: string): Promise<void> {
+  const supabase = createBrowserSupabaseClient();
+  const { error } = await supabase.rpc("fn_tope_set", { p_plan_id: planId, p_limite: limite, p_moneda: moneda });
+  if (error) throw error;
+}
+
 /** Ítems de un gasto «por ítems», con quién comparte cada uno (para editarlo). */
 export async function fetchGastoItemsEndpoint(gastoId: number): Promise<{ nombre: string; subtotal: number; usuarios: string[] }[]> {
   const supabase = createBrowserSupabaseClient();
