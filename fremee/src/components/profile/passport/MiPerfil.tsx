@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Capacitor } from "@capacitor/core";
-import { CalendarDays, ChevronRight, Lock, MapPin, Settings, Users } from "lucide-react";
+import { CalendarDays, ChevronRight, Lock, MapPin, Plus, Settings, Users } from "lucide-react";
 import { listUserRelatedPlans } from "@/services/api/repositories/plans.repository";
 import { listTicketsEndpoint, TICKET_TYPE_LABELS, type PlanTicket } from "@/services/api/endpoints/wallet.endpoint";
 import type { FeedPlanItemDto } from "@/services/api/dtos/plan.dto";
@@ -14,11 +14,15 @@ import { isPlanFinished, planEndsAt } from "@/lib/plan-dates";
 import { TicketTypeIcon } from "@/components/wallet/TicketTypeIcon";
 import { CARD, FILL_BTN, FOCUS, GHOST_BTN, LABEL, SERIF, TEXT_BTN } from "@/components/plans/home/pieces";
 import { leerPasaporte } from "@/services/api/endpoints/pasaporte.endpoint";
-import { computeStats, countryName, dateLabel, latestStamps, type PasaporteAjustes, type PasaporteLeido } from "@/lib/passport";
+import { computeStats, countryName, dateLabel, latestStamps, type PasaporteAjustes, type PasaporteLeido, type Sello } from "@/lib/passport";
+import { BOOK, PAPER_VARS, PaperGuilloche } from "./Libreta";
 import { GhostPlanStamp, PassportCover } from "./PassportCover";
 import PassportPrivacySheet from "./PassportPrivacySheet";
-import PassportReader from "./PassportReader";
+import dynamic from "next/dynamic";
 import { CountryStamp, PlanStamp } from "./stamps";
+
+/** El lector es una capa que se abre al pulsar: solo se carga en el cliente (no depende de la hora ni del tamaño de ventana del servidor). */
+const PassportReader = dynamic(() => import("./PassportReader"), { ssr: false });
 
 /** Tu perfil (tableros «Perfil»): cabecera, pasaporte y cartera. Nada más: aquí eres viajero, no hay lista de planes. */
 
@@ -179,7 +183,7 @@ export default function MiPerfil({
       {failed ? (
         <ProfileError onRetry={retry} />
       ) : !data ? (
-        <PassportLoadingCard nombre={nombre} />
+        <PassportLoadingCard nombre={nombre} plain />
       ) : (
         <div className="flex flex-col gap-5 md:grid md:grid-cols-[minmax(0,1fr)_minmax(300px,380px)] md:items-start md:gap-6">
           <PassportCard userId={userId} nombre={nombre} plans={data.plans} pasaporte={data.pasaporte} now={now} />
@@ -250,8 +254,6 @@ function PassportCard({ userId, nombre, plans, pasaporte, now }: { userId: strin
   const ajustes = ajustesLocal ?? pasaporte?.ajustes ?? null;
   const visibility = VISIBILITY_TEXT[ajustes?.passport_visibility ?? "AMISTADES"];
   const VisIcon = visibility.icon;
-  const lastCountry = recientes.find((s) => s.kind === "pais");
-  const lastPlan = recientes.find((s) => s.kind === "plan");
 
   if (finished > 0 || sellos.length > 0) {
     headline =
@@ -317,30 +319,15 @@ function PassportCard({ userId, nombre, plans, pasaporte, now }: { userId: strin
   const ghost = finished === 0 && next ? { place: next.locationName || next.title, dates: dateRangeLabel(next.startsAt, next.endsAt) } : null;
 
   return (
-    <section aria-label="Pasaporte" className={`${CARD} flex flex-col gap-4 px-4 pb-4 pt-5 md:gap-6 md:p-8`}>
-      <div className="flex items-center gap-2 md:flex-wrap md:gap-8">
-        <span className={`relative block shrink-0 ${ghost ? "h-[192px] w-[192px]" : "h-[200px] w-[160px]"} md:h-[302px] md:w-[303px]`}>
-          {ghost && (
-            <GhostPlanStamp
-              place={ghost.place}
-              dates={ghost.dates}
-              className="absolute left-[72px] top-[63px] -rotate-[7deg] md:left-[122px] md:top-[115px] md:origin-top-left md:scale-[1.45]"
-            />
-          )}
-          {!ghost && lastCountry && (
-            <CountryStamp sello={lastCountry} size={110} tilt={8} className="absolute left-[112px] top-[6px] hidden md:block" />
-          )}
-          {!ghost && lastPlan && (
-            <PlanStamp sello={lastPlan} size={132} tilt={-6} className="absolute left-[150px] top-[132px] hidden md:block" />
-          )}
-          <span data-passport-cover className="absolute left-0 top-2.5 md:hidden">
-            <PassportCover name={nombre} width={ghost ? 124 : 132} />
-          </span>
-          <span data-passport-cover className="absolute left-0 top-4 hidden md:block">
-            <PassportCover name={nombre} width={196} />
-          </span>
+    <section aria-label="Pasaporte" className="flex flex-col gap-4 md:gap-8 md:pt-2">
+      <div className="flex items-center gap-4 md:flex-wrap md:gap-10">
+        <span className="md:hidden">
+          <ClosedBook nombre={nombre} width={112} ghost={ghost} />
         </span>
-        <span className="flex min-w-0 flex-col gap-2.5 md:flex-1 md:basis-[240px] md:gap-5">
+        <span className="hidden md:block">
+          <ClosedBook nombre={nombre} width={176} ghost={ghost} big />
+        </span>
+        <span className="flex min-w-0 flex-col gap-2.5 md:flex-1 md:basis-[260px] md:gap-[22px]">
           <span className="flex flex-col gap-2.5">
             <span className={LABEL}>PASAPORTE</span>
             <span className={`whitespace-pre-line text-[28px] leading-[1.1] md:text-[40px] ${SERIF}`}>{headline}</span>
@@ -352,22 +339,14 @@ function PassportCard({ userId, nombre, plans, pasaporte, now }: { userId: strin
       </div>
       <div className="md:hidden">{action}</div>
       {recientes.length > 0 && (
-        <div className="hidden flex-col gap-3 border-t border-app pt-4 md:flex">
-          <span className={LABEL}>ÚLTIMOS SELLOS</span>
-          <ul className="m-0 grid list-none grid-cols-4 gap-3 p-0">
-            {recientes.map((s) => (
-              <li key={s.id} className="flex flex-col items-center gap-2 text-center">
-                <span className="flex h-[92px] items-center justify-center">
-                  {s.kind === "pais" ? <CountryStamp sello={s} size={84} tilt={-4} nuevo={s.nuevo} /> : <PlanStamp sello={s} size={124} tilt={-3} nuevo={s.nuevo} />}
-                </span>
-                <span className="flex min-w-0 flex-col">
-                  <span className="truncate text-[14px] font-[var(--fw-semibold)] leading-[1.4]">{s.kind === "pais" ? countryName(s.country_code ?? "") : s.plan?.titulo}</span>
-                  <span className="text-[12px] leading-[1.4] tabular-nums text-muted">{dateLabel(s.stamped_at)}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
+        <>
+          <div className="md:hidden">
+            <RecentStrip items={recientes.slice(0, 3)} compact />
+          </div>
+          <div className="hidden md:block">
+            <RecentStrip items={recientes} />
+          </div>
+        </>
       )}
       {privacyOpen && (
         <PassportPrivacySheet ajustes={ajustes} shareUrl={`${window.location.origin}/profile/${userId}`} onChange={setAjustesLocal} onClose={() => setPrivacyOpen(false)} />
@@ -393,6 +372,68 @@ function PassportCard({ userId, nombre, plans, pasaporte, now }: { userId: strin
   );
 }
 
+/** Libreta cerrada: hojas asomando por el canto, cinta y tapa, inclinada −3°. Estática. La tapa es la que vuela al abrir (`data-passport-cover`). */
+function ClosedBook({ nombre, width, ghost, big = false }: { nombre: string; width: number; ghost: { place: string; dates: string } | null; big?: boolean }) {
+  const h = Math.round((width * 185) / 132);
+  const sc = big ? 1.3 : 1;
+  const w = ghost ? Math.round(width * 0.58 + 101 * sc) + 6 : width + 8;
+  return (
+    <span className="relative block shrink-0 -rotate-3 p-2" style={{ width: w + 16, height: h + 50 }}>
+      <span aria-hidden="true" className="absolute rounded-[8px]" style={{ left: 14, top: 12, width: width, height: h, background: `repeating-linear-gradient(to bottom, ${BOOK.paper} 0 2px, #DCE1D8 2px 3px)`, boxShadow: "0 10px 24px rgba(0,0,0,.4), 0 3px 8px rgba(0,0,0,.3)" }} />
+      <span aria-hidden="true" className="absolute" style={{ left: 8 + Math.round(width * 0.62), top: 8 + h - 6, width: 12, height: 34, background: BOOK.ribbon, clipPath: "polygon(0 0,100% 0,100% 100%,50% calc(100% - 9px),0 100%)" }} />
+      {ghost && (
+        <GhostPlanStamp
+          place={ghost.place}
+          dates={ghost.dates}
+          className="absolute"
+          style={{ left: 8 + Math.round(width * 0.58), top: 8 + Math.round(width * 0.5), transform: `rotate(-4deg) scale(${sc})`, transformOrigin: "top left" }}
+        />
+      )}
+      <span data-passport-cover className="absolute" style={{ left: 8, top: 8 }}>
+        <PassportCover name={nombre} width={width} tilt={0} />
+      </span>
+    </span>
+  );
+}
+
+/** Tira de papel con los últimos sellos. El papel es claro también en oscuro, como en la libreta. */
+function RecentStrip({ items, compact = false }: { items: Sello[]; compact?: boolean }) {
+  const h = compact ? 178 : 196;
+  const box = compact ? 80 : 96;
+  const rot = [-4, 6, -5, 3];
+  return (
+    <div
+      className="relative w-full max-w-[640px] overflow-hidden rounded-[6px]"
+      style={{ ...PAPER_VARS, height: h, background: BOOK.paper, color: BOOK.text, boxShadow: "0 1px 0 #d6dbd2, 0 2px 0 #e9ece4, 0 3px 0 #d2d7ce" }}
+    >
+      <PaperGuilloche w={640} h={h} seed={2} />
+      <span className="absolute left-4 top-2.5 text-[11px] font-[var(--fw-semibold)] tracking-[0.08em]" style={{ color: BOOK.label }}>
+        ÚLTIMOS SELLOS
+      </span>
+      <ul className="absolute inset-0 m-0 grid list-none p-0" style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}>
+        {items.map((s, i) => (
+          <li key={s.id} className="relative flex flex-col items-center">
+            <span className="flex items-center justify-center" style={{ marginTop: compact ? 26 : 30, height: box }}>
+              <span className="block leading-[0]" style={{ opacity: 0.92 }}>
+                {s.kind === "pais" ? <CountryStamp sello={s} size={compact ? 72 : 84} tilt={rot[i % 4]} nuevo={s.nuevo} /> : <PlanStamp sello={s} size={compact ? 100 : 124} tilt={rot[i % 4]} nuevo={s.nuevo} />}
+              </span>
+            </span>
+            <span className="mb-2.5 mt-auto flex min-w-0 max-w-full flex-col items-center px-1 text-center">
+              <span className="max-w-full truncate text-[14px] font-[var(--fw-semibold)] leading-[1.4]">{s.kind === "pais" ? countryName(s.country_code ?? "") : s.plan?.titulo}</span>
+              <span className="text-[12px] leading-[1.4] tabular-nums" style={{ color: BOOK.label }}>{dateLabel(s.stamped_at)}</span>
+            </span>
+            {s.nuevo && (
+              <span className="absolute h-[22px] rounded-full px-2 text-[12px] font-[var(--fw-semibold)] leading-[22px] text-white" style={{ right: 6, top: compact ? 18 : 22, background: "#227a6c" }}>
+                Nuevo
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function Wallet({ tickets, now }: { tickets: PlanTicket[]; now: number }) {
   const router = useRouter();
   const upcoming = useMemo(() => {
@@ -409,14 +450,25 @@ function Wallet({ tickets, now }: { tickets: PlanTicket[]; now: number }) {
         <span className="text-[14px] tabular-nums text-muted">
           {tickets.length === 0 ? "vacía" : `${tickets.length} ${tickets.length === 1 ? "billete o documento" : "billetes y documentos"}`}
         </span>
-        <button type="button" onClick={() => router.push("/wallet")} className={`${TEXT_BTN} ml-auto rounded-[4px] ${FOCUS}`}>
-          {tickets.length === 0 ? "Añadir" : "Abrir"}
-          {tickets.length > 0 && <ChevronRight className="size-4" aria-hidden />}
-        </button>
+        {tickets.length > 0 && (
+          <button type="button" onClick={() => router.push("/wallet")} className={`${TEXT_BTN} ml-auto rounded-[4px] ${FOCUS}`}>
+            Abrir
+            <ChevronRight className="size-4" aria-hidden />
+          </button>
+        )}
       </div>
 
       {tickets.length === 0 ? (
-        <p className="m-0 text-[14px] leading-[1.5] text-muted">Guarda aquí tus billetes, reservas y entradas para tenerlos a mano en el viaje.</p>
+        <div className="flex flex-col items-start gap-3.5 rounded-[8px] border-[1.5px] border-dashed border-[var(--border-strong)] p-5">
+          <div className="flex items-center gap-3.5">
+            <TicketStub type="other" />
+            <p className="m-0 text-[14px] leading-[1.5] text-muted">Guarda aquí tus billetes, reservas y entradas para tenerlos a mano en el viaje.</p>
+          </div>
+          <button type="button" onClick={() => router.push("/wallet")} className={`${GHOST_BTN} w-full !text-[14px] md:w-auto`}>
+            <Plus className="size-[18px] shrink-0" aria-hidden />
+            Añadir billete
+          </button>
+        </div>
       ) : upcoming.length === 0 ? (
         <p className="m-0 text-[14px] leading-[1.5] text-muted">No tienes billetes próximos.</p>
       ) : (
@@ -465,9 +517,9 @@ function TicketStub({ type }: { type: PlanTicket["type"] }) {
 }
 
 /** Tarjeta del pasaporte cargando: la misma en tu perfil y en el de otra persona. */
-export function PassportLoadingCard({ nombre = "" }: { nombre?: string }) {
+export function PassportLoadingCard({ nombre = "", plain = false }: { nombre?: string; plain?: boolean }) {
   return (
-    <section role="status" aria-label="Cargando tu perfil" className={`${CARD} flex items-center gap-4 px-4 py-5 md:gap-10 md:p-8`}>
+    <section role="status" aria-label="Cargando tu perfil" className={`${plain ? "" : CARD} flex items-center gap-4 ${plain ? "py-2" : "px-4 py-5"} md:gap-10 ${plain ? "" : "md:p-8"}`}>
       <PassportCover name={nombre} loading />
       <span className="flex flex-1 flex-col gap-3">
         <span className="skeleton-shimmer h-3 w-20 rounded-full" />
