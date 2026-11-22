@@ -1393,55 +1393,6 @@ export function ChatConversation({
       }
     }
 
-    if (name === "simplificar") {
-      if (!planId) return "Este comando solo está disponible en el chat de un plan.";
-      try {
-        const balances = await getBalancesForPlanEndpoint(planId);
-        if (balances.length === 0) return "No hay deudas pendientes en este plan.";
-
-        // Calcular balance neto por persona
-        const net = new Map<string, { nombre: string; balance: number }>();
-        for (const b of balances) {
-          if (!net.has(b.from_user_id)) net.set(b.from_user_id, { nombre: b.from_nombre ?? "?", balance: 0 });
-          if (!net.has(b.to_user_id)) net.set(b.to_user_id, { nombre: b.to_nombre ?? "?", balance: 0 });
-          net.get(b.from_user_id)!.balance -= b.importe;
-          net.get(b.to_user_id)!.balance += b.importe;
-        }
-
-        // Separar acreedores y deudores
-        const creditors: { nombre: string; amount: number }[] = [];
-        const debtors: { nombre: string; amount: number }[] = [];
-        for (const [, v] of net) {
-          if (v.balance > 0.01) creditors.push({ nombre: v.nombre, amount: v.balance });
-          else if (v.balance < -0.01) debtors.push({ nombre: v.nombre, amount: -v.balance });
-        }
-        creditors.sort((a, b) => b.amount - a.amount);
-        debtors.sort((a, b) => b.amount - a.amount);
-
-        // Algoritmo greedy: emparejar mayor acreedor con mayor deudor
-        const transfers: string[] = [];
-        while (creditors.length > 0 && debtors.length > 0) {
-          const creditor = creditors[0];
-          const debtor = debtors[0];
-          const amount = Math.min(creditor.amount, debtor.amount);
-          transfers.push(`  ${debtor.nombre} → ${creditor.nombre}: ${formatEuros(amount)}`);
-          creditor.amount -= amount;
-          debtor.amount -= amount;
-          if (creditor.amount < 0.01) creditors.shift();
-          if (debtor.amount < 0.01) debtors.shift();
-        }
-
-        if (transfers.length === 0) return "No hay deudas pendientes en este plan.";
-        const saved = balances.length - transfers.length;
-        const header = saved > 0
-          ? `Deudas simplificadas (${transfers.length} transferencia${transfers.length !== 1 ? "s" : ""} en vez de ${balances.length}):`
-          : `Deudas del plan (${transfers.length} transferencia${transfers.length !== 1 ? "s" : ""}):`;
-        return [header, ...transfers].join("\n");
-      } catch {
-        return "No pude simplificar las deudas, inténtalo de nuevo.";
-      }
-    }
-
     if (name === "gasto") {
       if (!planId) return "Este comando solo está disponible en el chat de un plan.";
 
@@ -1517,7 +1468,6 @@ export function ChatConversation({
           "/hecho [n] · /pendiente [n] · /en_progreso [n] — cambiar estado de tarea",
           "/saldo — tu balance en el plan",
           "/deudas — todas las deudas del plan",
-          "/simplificar — calcular las mínimas transferencias para saldar todo",
           "/votar [pregunta] [op1] [op2]... — crear una votación",
           "/voto [n] — votar en la encuesta activa",
           "/cerrar [n] — cerrar una votación activa",
