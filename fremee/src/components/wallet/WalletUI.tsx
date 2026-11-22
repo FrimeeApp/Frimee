@@ -8,7 +8,7 @@ import { useEffect, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import {
   AlertCircle, BedDouble, Bus, Camera, Check, ChevronLeft, ChevronRight, FileText, MapPin,
-  Plane, Plus, QrCode, RefreshCw, Ship, Ticket as TicketIcon, Train, Trash2, Pencil, X,
+  Plane, Plus, QrCode, RefreshCw, Ship, Ticket as TicketIcon, Train, Trash2, Pencil, Upload, X,
 } from "lucide-react";
 import { BOOK, PaperGuilloche } from "@/components/profile/passport/Libreta";
 
@@ -225,37 +225,59 @@ export function TicketRow({ t, selected, now = new Date(), onSelect }: { t: Tick
 
 /* ---------------- billete abierto ---------------- */
 
-export function TicketDetail({ t, now, isDesktop, sourceUrl, onBack, onOpenPlan, onEdit, onDelete }: {
+export function TicketDetail({ t, now, isDesktop, sourceUrl, onBack, onOpenPlan, onEdit, onDelete, onAddQr }: {
   t: Ticket; now: Date; isDesktop: boolean;
   /** URL firmada de la imagen o PDF original, si existe. */
   sourceUrl?: { url: string; isPdf: boolean } | null;
   onBack?: () => void; onOpenPlan: (planId: string) => void; onEdit?: () => void; onDelete: () => void;
+  /** Abre la subida de PDF o captura para este billete. */
+  onAddQr: () => void;
 }) {
-  const btn = `inline-flex h-[46px] items-center justify-center gap-2 rounded-lg border border-[var(--border-strong)] bg-[var(--surface-2)] px-4 text-sm font-semibold ${FOCUS}`;
-  const ghost = `inline-flex h-11 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold ${FOCUS}`;
-  const body = (
-    <div className="flex flex-col gap-4">
-      <TicketBig t={t} width={isDesktop ? 560 : 358} now={now} />
-      {t.qr ? (
-        <section aria-label="Código QR" className={`flex rounded-[10px] bg-white p-5 ${isDesktop ? "items-center gap-4" : "flex-col items-center gap-3"}`}>
-          <QRCodeSVG value={t.qr} size={isDesktop ? 150 : 196} level="M" title="Código QR del billete" />
-        </section>
-      ) : sourceUrl && !sourceUrl.isPdf ? (
-        <section aria-label="Billete original" className="rounded-[10px] bg-white p-3">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={sourceUrl.url} alt="Billete original con su código" className="mx-auto max-h-[420px] w-full object-contain" />
-        </section>
-      ) : null}
-      <div className={isDesktop ? "flex flex-wrap gap-2" : "grid grid-cols-2 gap-2"}>
-        {t.plan && <button type="button" className={btn} onClick={() => onOpenPlan(t.plan!.id)}><MapPin size={18} aria-hidden />Ver en el plan</button>}
-        {sourceUrl?.isPdf && <a href={sourceUrl.url} target="_blank" rel="noreferrer" className={btn}><FileText size={18} aria-hidden />Abrir el PDF</a>}
+  const width = isDesktop ? 560 : 358;
+  const secondary = `inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-[var(--border-strong)] bg-[var(--surface-2)] px-4 text-sm font-semibold ${FOCUS}`;
+  const iconBtn = `inline-flex h-11 items-center gap-1.5 rounded-lg px-3 text-sm font-semibold hover:bg-[var(--surface-2)] ${FOCUS}`;
+
+  const qrBlock = t.qr ? (
+    <section aria-label="Código QR" className={`flex rounded-[10px] bg-white p-5 ${isDesktop ? "items-center gap-4" : "flex-col items-center gap-3"}`}>
+      <QRCodeSVG value={t.qr} size={isDesktop ? 150 : 196} level="M" title="Código QR del billete" />
+    </section>
+  ) : sourceUrl && !sourceUrl.isPdf ? (
+    <section aria-label="Billete original" className="rounded-[10px] bg-white p-3">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={sourceUrl.url} alt="Billete original con su código" className="mx-auto max-h-[420px] w-full object-contain" />
+    </section>
+  ) : (
+    <section aria-label="Sin código QR"
+      className={`flex rounded-[10px] border-[1.5px] border-dashed border-[var(--border-strong)] p-5 ${isDesktop ? "items-center gap-4" : "flex-col items-start gap-3"}`}>
+      <span aria-hidden className="grid h-12 w-12 shrink-0 place-content-center rounded-lg bg-[var(--surface-2)] text-[var(--text-secondary)]"><QrCode size={24} /></span>
+      <div className="flex flex-1 flex-col gap-0.5">
+        <span className="text-base font-semibold">Este billete no tiene QR</span>
+        <span className={`text-sm ${T2}`}>Sube el PDF o una captura y lo añadimos para enseñarlo en la puerta.</span>
       </div>
-      <div className="flex gap-2">
-        {onEdit && <button type="button" className={`${ghost} text-[var(--text-primary)]`} onClick={onEdit}><Pencil size={18} aria-hidden />Editar</button>}
-        <button type="button" className={`${ghost} text-[var(--error)]`} onClick={onDelete}><Trash2 size={18} aria-hidden />Eliminar</button>
-      </div>
+      <button type="button" onClick={onAddQr} className={`${secondary} ${isDesktop ? "" : "w-full"}`}>
+        <Upload size={18} aria-hidden />Añadir QR o PDF
+      </button>
+    </section>
+  );
+
+  const actions = (
+    <div className={`flex items-center gap-2 ${isDesktop ? "" : "flex-wrap"}`}>
+      {t.plan && <button type="button" className={secondary} onClick={() => onOpenPlan(t.plan!.id)}><MapPin size={18} aria-hidden />Ver en el plan</button>}
+      {sourceUrl?.isPdf && <a href={sourceUrl.url} target="_blank" rel="noreferrer" className={secondary}><FileText size={18} aria-hidden />Abrir el PDF</a>}
+      <span className="flex-1" />
+      {onEdit && <button type="button" className={`${iconBtn} text-[var(--text-primary)]`} onClick={onEdit}><Pencil size={18} aria-hidden />Editar</button>}
+      <button type="button" className={`${iconBtn} text-[var(--error)]`} onClick={onDelete}><Trash2 size={18} aria-hidden />Eliminar</button>
     </div>
   );
+
+  const body = (
+    <div className="flex flex-col gap-3" style={{ width }}>
+      <TicketBig t={t} width={width} now={now} />
+      {actions}
+      {qrBlock}
+    </div>
+  );
+
   if (isDesktop) return <aside aria-label="Billete seleccionado" className="min-w-0 flex-[0_1_560px]">{body}</aside>;
   return (
     <div className="fixed inset-0 z-[60] overflow-y-auto bg-[var(--bg)] pb-[max(16px,env(safe-area-inset-bottom))] text-[var(--text-primary)]">

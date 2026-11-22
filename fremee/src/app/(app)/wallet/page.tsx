@@ -9,9 +9,10 @@ import {
   TicketBig, TicketDetail, TicketRow, WalletError, WalletSkeleton,
   type Ticket, type TicketKind,
 } from "@/components/wallet/WalletUI";
+import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { fetchPlansByIds } from "@/services/api/endpoints/plans.endpoint";
 import {
-  deleteTicketEndpoint, getTicketSourceSignedUrl, listTicketsEndpoint,
+  deleteTicketEndpoint, getTicketSourceSignedUrl, listTicketsEndpoint, updateTicketEndpoint, uploadTicketSourceEndpoint,
   type PlanTicket, type TicketType,
 } from "@/services/api/endpoints/wallet.endpoint";
 
@@ -143,6 +144,27 @@ export default function WalletPage() {
     setSheet(false);
     setModalPlan({ open: true, planId: planId ? Number(planId) : null });
   }
+  /** Añade un PDF o una captura a un billete que ya existe. */
+  function addSource(ticketId: string) {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*,application/pdf";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      try {
+        const { data: { user } } = await createBrowserSupabaseClient().auth.getUser();
+        if (!user) return;
+        const path = await uploadTicketSourceEndpoint(file, user.id);
+        const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+        await updateTicketEndpoint(ticketId, isPdf ? { source_pdf_url: path } : { source_image_url: path });
+        await load();
+      } catch {
+        setState("error");
+      }
+    };
+    input.click();
+  }
   const openPlan = (id: string) => router.push(`/plans/${id}`);
 
   async function confirmDelete() {
@@ -249,7 +271,7 @@ export default function WalletPage() {
                   </div>
 
                   {isDesktop && sel && (
-                    <TicketDetail t={sel} now={now} isDesktop sourceUrl={sourceUrl} onOpenPlan={openPlan} onDelete={() => setDeleting(sel.id)} />
+                    <TicketDetail t={sel} now={now} isDesktop sourceUrl={sourceUrl} onOpenPlan={openPlan} onDelete={() => setDeleting(sel.id)} onAddQr={() => addSource(sel.id)} />
                   )}
                 </div>
               </>
@@ -265,7 +287,7 @@ export default function WalletPage() {
         </button>
       )}
       {!isDesktop && sel && (
-        <TicketDetail t={sel} now={now} isDesktop={false} sourceUrl={sourceUrl} onBack={() => setSelected(null)} onOpenPlan={openPlan} onDelete={() => setDeleting(sel.id)} />
+        <TicketDetail t={sel} now={now} isDesktop={false} sourceUrl={sourceUrl} onBack={() => setSelected(null)} onOpenPlan={openPlan} onDelete={() => setDeleting(sel.id)} onAddQr={() => addSource(sel.id)} />
       )}
       {sheet && <AddTicketSheet plans={plans} defaultPlanId={upcoming[0]?.plan?.id} onPick={openAdd} onClose={() => setSheet(false)} />}
       {modalPlan.open && (
