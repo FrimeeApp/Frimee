@@ -170,9 +170,11 @@ function InlineDayCalendar({
 export default function AddTicketModal({
   onClose,
   onCreated,
+  planId = null,
 }: {
   onClose: () => void;
   onCreated: () => void;
+  planId?: number | null;
 }) {
   const { isClosing, requestClose } = useModalCloseAnimation(onClose);
   const handleNextRef   = useRef<() => void>(() => {});
@@ -317,7 +319,7 @@ export default function AddTicketModal({
       const sourcePdfUrl   = sourcePath && isPdf  ? sourcePath : null;
 
       await createTicketEndpoint({
-        plan_id:          null,
+        plan_id:          planId,
         type,
         title:            title.trim(),
         subtitle:         null,

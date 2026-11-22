@@ -529,7 +529,7 @@ function NavButton({ label, disabled, onClick, children }: { label: string; disa
 }
 
 /** Fondo de seguridad del papel: ondas + roseta + microtexto. Estático, sin filtros. */
-export function PaperGuilloche({ w, h, seed, foil = false, soft = false, rosetteY = 0.55 }: { w: number; h: number; seed: number; foil?: boolean; soft?: boolean; rosetteY?: number }) {
+export function PaperGuilloche({ w, h, seed, foil = false, soft = false, rosetteY = 0.55, variant }: { w: number; h: number; seed: number; foil?: boolean; soft?: boolean; rosetteY?: number; variant?: "ticket" }) {
   const lines = useMemo(() => {
     const out: string[] = [];
     for (let i = 0; i < 22; i++) {
@@ -549,18 +549,18 @@ export function PaperGuilloche({ w, h, seed, foil = false, soft = false, rosette
   const cy = h * rosetteY;
   return (
     <svg aria-hidden="true" width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="pointer-events-none absolute left-0 top-0">
-      <g opacity={foil ? 0.13 : 1} fill="none" strokeWidth={0.6}>
+      <g opacity={foil ? 0.13 : variant === "ticket" ? 0.5 : 1} fill="none" strokeWidth={0.6}>
         {lines.map((d, i) => (
           <path key={i} d={d} stroke={i % 2 ? c1 : c2} />
         ))}
-        <g opacity={soft ? 0.45 : 1}>
+        {variant !== "ticket" && <g opacity={soft ? 0.45 : 1}>
           {Array.from({ length: 18 }, (_, k) => (
             <ellipse key={k} cx={cx} cy={cy} rx={w * 0.34} ry={w * 0.11} stroke={k % 3 === 0 ? c2 : c1} transform={`rotate(${k * 10} ${cx} ${cy})`} />
           ))}
           {Array.from({ length: 6 }, (_, r) => (
             <circle key={r} cx={cx} cy={cy} r={w * 0.06 + r * 5} stroke={c1} strokeWidth={0.5} />
           ))}
-        </g>
+        </g>}
       </g>
       {!foil && (
         <text x={12} y={h - 10} fontSize={5.5} letterSpacing={1} fill={BOOK.micro} fontFamily="Inter, Arial, sans-serif">
