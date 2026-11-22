@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import PassportClient from "./PassportClient";
 
@@ -7,5 +8,9 @@ export const metadata: Metadata = {
 };
 
 export default function PassportPage() {
-  return <PassportClient />;
+  return (
+    <Suspense>
+      <PassportClient />
+    </Suspense>
+  );
 }

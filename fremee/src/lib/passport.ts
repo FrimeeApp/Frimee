@@ -313,3 +313,30 @@ export function latestStamps(sellos: Sello[]) {
     .sort((a, b) => (a.stamped_at < b.stamped_at ? 1 : a.stamped_at > b.stamped_at ? -1 : a.kind === b.kind ? b.id - a.id : a.kind === "pais" ? -1 : 1))
     .slice(0, 4);
 }
+
+/** yyyy-mm-dd de hoy menos `days` días, en hora local. */
+function daysAgo(days: number) {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** Ids de los sellos de un viaje que aún no se han visto. */
+export function unseenIds(t: Trip): number[] {
+  return [t.plan, ...t.paises, ...t.hitos].filter((s): s is Sello => Boolean(s?.nuevo)).map((s) => s.id);
+}
+
+/**
+ * Viajes con sellos sin ver, del más antiguo al más reciente. Con `recentDays` solo los que terminaron hace poco:
+ * los planes antiguos que se sellan de golpe no merecen una celebración (igual que el aviso, que solo sale ≤ 7 días).
+ */
+export function pendingTrips(sellos: Sello[], recentDays?: number): Trip[] {
+  const since = recentDays === undefined ? null : daysAgo(recentDays);
+  return groupTrips(sellos).filter((t) => unseenIds(t).length > 0 && (since === null || t.date >= since));
+}
+
+/** Número de página (empezando en 1) donde está el viaje, o null si no está en el pasaporte. */
+export function tripPageNumber(pages: PassportPage[], planId: number): number | null {
+  for (const p of pages) if (p.kind === "year" && p.trips.some((t) => t.planId === planId)) return p.number;
+  return null;
+}

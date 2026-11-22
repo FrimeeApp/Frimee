@@ -254,3 +254,18 @@ export function HitoStamp({ hito, id, size = 64, tilt = 0, nuevo = false, classN
     </svg>
   );
 }
+
+/** Lo que se quita con «No fui»: «su sello, el de Portugal y el hito «Primer viaje»», para el texto de confirmación. */
+export function noFuiQuita(sellos: Sello[], planId: number): string {
+  const lista = (xs: string[]) => (xs.length > 1 ? `${xs.slice(0, -1).join(", ")} y ${xs[xs.length - 1]}` : xs[0]);
+  const delViaje = sellos.filter((x) => x.plan_id === planId && !x.hidden);
+  const paises = delViaje.filter((x) => x.kind === "pais" && x.country_code).map((x) => countryName(x.country_code!));
+  const hitos = delViaje.filter((x) => x.kind === "hito" && x.hito).map((x) => `«${HITO_NAME[x.hito!]}»`);
+  return [
+    "su sello",
+    paises.length ? (paises.length === 1 ? `el de ${paises[0]}` : `los de ${lista(paises)}`) : null,
+    hitos.length ? (hitos.length === 1 ? `el hito ${hitos[0]}` : `los hitos ${lista(hitos)}`) : null,
+  ]
+    .filter((x): x is string => Boolean(x))
+    .reduce((acc, x, i, all) => (i === 0 ? x : i === all.length - 1 ? `${acc} y ${x}` : `${acc}, ${x}`), "");
+}
