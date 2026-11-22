@@ -1,14 +1,20 @@
+import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { getGoogleMaps, loadGoogleMapsScript } from "@/lib/googleMaps";
 
 /**
- * Código de país (ISO 3166-1 alfa-2, «PT») de un sitio, por sus coordenadas o, si no las hay, por su nombre.
- * Va por geocodificación de Google Maps, que ya se carga en la web. Si no se puede saber devuelve null:
- * el pasaporte lo rellenará más tarde la Edge Function de países.
+ * Código de país (ISO 3166-1 alfa-2, «PT») de un sitio. Con coordenadas se calcula en la base de datos con
+ * fronteras propias (fn_pais_de_punto, sin Google). Solo si eso no da país, o si no hay coordenadas, se usa la
+ * geocodificación de Google Maps con el nombre. Si no se puede saber devuelve null: el pasaporte lo rellenará
+ * más tarde la Edge Function de países.
  */
 export async function countryOfPlace(place: { lat?: number | null; lng?: number | null; text?: string | null }): Promise<string | null> {
   const text = place.text?.trim() ?? "";
   const hasCoords = typeof place.lat === "number" && typeof place.lng === "number";
   if (!hasCoords && !text) return null;
+  if (hasCoords) {
+    const { data, error } = await createBrowserSupabaseClient().rpc("fn_pais_de_punto", { p_lat: place.lat as number, p_lng: place.lng as number });
+    if (!error && typeof data === "string" && /^[A-Z]{2}$/.test(data)) return data;
+  }
   try {
     await loadGoogleMapsScript();
     const geocoder = new (getGoogleMaps().Geocoder)();
