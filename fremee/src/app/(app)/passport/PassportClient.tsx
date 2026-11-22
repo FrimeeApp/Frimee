@@ -10,6 +10,7 @@ import { useAuth } from "@/providers/AuthProvider";
 import { getPublicUserProfile } from "@/services/api/repositories/users.repository";
 import { leerPasaporte } from "@/services/api/endpoints/pasaporte.endpoint";
 import type { PasaporteLeido } from "@/lib/passport";
+import { closePassportOpening } from "@/lib/passportOpen";
 
 /** Tu pasaporte abierto: la libreta con sus páginas. Se llega desde «Abrir pasaporte» en tu perfil. */
 export default function PassportClient() {
@@ -36,6 +37,12 @@ export default function PassportClient() {
       cancelled = true;
     };
   }, [userId, attempt]);
+
+  // La tapa que venía escalándose se funde cuando la libreta ya tiene algo que enseñar (datos o error).
+  const ready = Boolean(data) || failed;
+  useEffect(() => {
+    if (ready) closePassportOpening();
+  }, [ready]);
 
   return (
     <div className="min-h-dvh bg-[var(--passport-table)] text-app">

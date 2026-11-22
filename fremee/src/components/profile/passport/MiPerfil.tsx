@@ -14,6 +14,7 @@ import { TicketTypeIcon } from "@/components/wallet/TicketTypeIcon";
 import { CARD, FILL_BTN, FOCUS, GHOST_BTN, LABEL, SERIF, TEXT_BTN } from "@/components/plans/home/pieces";
 import { leerPasaporte } from "@/services/api/endpoints/pasaporte.endpoint";
 import { computeStats, countryName, dateLabel, type PasaporteLeido, type Sello } from "@/lib/passport";
+import { openPassportFrom } from "@/lib/passportOpen";
 import { GhostPlanStamp, PassportCover } from "./PassportCover";
 import { CountryStamp, PlanStamp } from "./stamps";
 
@@ -204,6 +205,11 @@ function PassportCard({ nombre, plans, pasaporte, now }: { nombre: string; plans
   }, [plans, now]);
 
   const goCreate = () => router.push("/calendar?create=1");
+  // La tapa que se ve (móvil o escritorio) es la que se escala al abrir.
+  const openPassport = () => {
+    const cover = [...document.querySelectorAll<HTMLElement>("[data-passport-cover]")].find((e) => e.getClientRects().length > 0)?.firstElementChild as HTMLElement | null;
+    openPassportFrom(cover ?? null, () => router.push("/passport"));
+  };
 
   let headline: string;
   let body: React.ReactNode = null;
@@ -239,7 +245,7 @@ function PassportCard({ nombre, plans, pasaporte, now }: { nombre: string; plans
       </span>
     );
     action = (
-      <button type="button" onClick={() => router.push("/passport")} className={`${FILL_BTN} w-full md:w-auto md:self-start`}>
+      <button type="button" onClick={openPassport} className={`${FILL_BTN} w-full md:w-auto md:self-start`}>
         Abrir pasaporte
       </button>
     );
@@ -293,10 +299,10 @@ function PassportCard({ nombre, plans, pasaporte, now }: { nombre: string; plans
           {!ghost && lastPlan && (
             <PlanStamp sello={lastPlan} size={132} tilt={-6} className="absolute left-[150px] top-[132px] hidden md:block" />
           )}
-          <span className="absolute left-0 top-2.5 md:hidden">
+          <span data-passport-cover className="absolute left-0 top-2.5 md:hidden">
             <PassportCover name={nombre} width={ghost ? 124 : 132} />
           </span>
-          <span className="absolute left-0 top-4 hidden md:block">
+          <span data-passport-cover className="absolute left-0 top-4 hidden md:block">
             <PassportCover name={nombre} width={196} />
           </span>
         </span>
