@@ -411,7 +411,7 @@ function PageView({
           <span>VISADOS</span>
           <span className="tabular-nums">PÁG. {pad2(number)}</span>
         </div>
-        <FreeSlots trips={[]} />
+        {/* Una hoja en blanco de verdad: fondo de seguridad y cabecera, nada más. */}
       </div>
     );
   }
@@ -435,7 +435,7 @@ function Guarda({ nombre, since, className = "" }: { nombre: string; since: stri
       <svg aria-hidden="true" width={W} height={H} className="absolute inset-0">
         <defs>
           <pattern id="passport-guarda" width="88" height="88" patternUnits="userSpaceOnUse">
-            <g fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" opacity="0.16">
+            <g fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" opacity="0.11">
               <circle cx="22" cy="22" r="12" />
               <ellipse cx="22" cy="22" rx="5.5" ry="12" />
               <path d="M10 22h24" />
@@ -557,15 +557,12 @@ function FreeSlots({ trips }: { trips: Trip[] }) {
   const dims = useDims();
   const free = useMemo(() => freeBands(trips, dims), [trips, dims]);
   if (free.length === 0) return null;
+  // Solo el hueco siguiente: el resto de la hoja se queda en blanco.
   const first = free[0];
   return (
     <>
-      {free.map((f) => (
-        <span key={f.band}>
-          <span aria-hidden="true" className="absolute rounded-[8px] border-2 border-dashed border-[var(--border-strong)]" style={{ left: f.plan.x, top: f.plan.y, width: f.plan.w, height: f.plan.h }} />
-          <span aria-hidden="true" className="absolute rounded-full border-2 border-dashed border-[var(--border-strong)]" style={{ left: f.country.x, top: f.country.y, width: f.country.size, height: f.country.size }} />
-        </span>
-      ))}
+      <span aria-hidden="true" className="absolute rounded-[8px] border-2 border-dashed border-[var(--border-strong)]" style={{ left: first.plan.x, top: first.plan.y, width: first.plan.w, height: first.plan.h }} />
+      <span aria-hidden="true" className="absolute rounded-full border-2 border-dashed border-[var(--border-strong)]" style={{ left: first.country.x, top: first.country.y, width: first.country.size, height: first.country.size }} />
       <p className="absolute inset-x-4 m-0 text-center text-[14px] leading-[1.5] text-muted" style={{ top: first.plan.y + first.plan.h + 20 }}>
         Aquí irá tu próximo sello
       </p>
@@ -606,7 +603,7 @@ function PlacedStamp({ p, isNew }: { p: Placed; isNew: (s: Pick<Sello, "id" | "n
   }
   return (
     <span role="img" aria-label={`Hito: ${HITO_NAME[s.hito!]}`} className={base} style={{ left: p.x, top: p.y, ...stampIn(nuevo, 540) }}>
-      <HitoStamp hito={s.hito!} id={s.id} stampedAt={s.stamped_at} size={p.size} tilt={p.rot} nuevo={nuevo} />
+      <HitoStamp hito={s.hito!} id={s.id} size={p.size} tilt={p.rot} nuevo={nuevo} />
       {nuevo && <NuevoPill className="-right-2 -top-2.5" />}
     </span>
   );

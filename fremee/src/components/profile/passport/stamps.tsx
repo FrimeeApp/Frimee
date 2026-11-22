@@ -1,4 +1,5 @@
-import { countryName, hash, planRangeLabel, stampDateLabel, type HitoKind, type Sello } from "@/lib/passport";
+import { Plane, Ship, TrainFront } from "lucide-react";
+import { countryName, hash, planRangeLabel, routeCode, stampDateLabel, type HitoKind, type Sello } from "@/lib/passport";
 
 /** Sellos del pasaporte. Siempre en tinta (--passport-ink); el sello nuevo usa --passport-ink-new. Sin filtros SVG. */
 
@@ -123,7 +124,7 @@ export function PlanStamp({
   className,
   style,
 }: {
-  sello: Pick<Sello, "id" | "plan">;
+  sello: Pick<Sello, "id" | "plan" | "ruta">;
   size?: number;
   tilt: number;
   nuevo?: boolean;
@@ -138,6 +139,7 @@ export function PlanStamp({
   const titleSize = title.length > 15 ? 17 : title.length > 11 ? 21 : 27;
   const shown = title.length > 20 ? `${title.slice(0, 19)}…` : title;
   const place = (plan?.ubicacion_nombre?.split(",")[0]?.trim() ?? "").toUpperCase();
+  const route = sello.ruta ? `${routeCode(sello.ruta.desde)} → ${routeCode(sello.ruta.hasta)}` : null;
   const placeShown = place.length > 16 ? `${place.slice(0, 15)}…` : place;
   return (
     <svg width={size} height={Math.round((size * 96) / 140)} viewBox="0 0 140 96" aria-hidden="true" className={className} style={{ transform: `rotate(${tilt}deg)`, flexShrink: 0, ...style }}>
@@ -148,14 +150,25 @@ export function PlanStamp({
       )}
       {border === 3 && <rect x="6" y="6" width="128" height="84" rx="4" fill="none" stroke={c} strokeWidth="1" />}
       <rect x={border === 3 ? 10 : 8} y={border === 3 ? 10 : 8} width={border === 3 ? 120 : 124} height={border === 3 ? 76 : 80} rx="3" fill="none" stroke={c} strokeWidth="1" strokeDasharray="3 3" />
-      <g transform="translate(15 15) scale(0.62)" fill="none" stroke={c} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
-        <circle cx="12" cy="10" r="3" />
-      </g>
-      {placeShown && (
-        <text x="36" y="26" fontFamily={SANS} fontSize="9.5" fontWeight="700" letterSpacing="1.2" fill={c}>
-          {placeShown}
-        </text>
+      {route ? (
+        <>
+          {sello.ruta?.tipo === "ferry" ? <Ship x={15} y={15} width={14} height={14} stroke={c} strokeWidth={2.4} /> : sello.ruta?.tipo === "train" ? <TrainFront x={15} y={15} width={14} height={14} stroke={c} strokeWidth={2.4} /> : <Plane x={15} y={15} width={14} height={14} stroke={c} strokeWidth={2.4} />}
+          <text x="36" y="26" fontFamily={SANS} fontSize="9.5" fontWeight="700" letterSpacing="1.2" fill={c}>
+            {route}
+          </text>
+        </>
+      ) : (
+        <>
+          <g transform="translate(15 15) scale(0.62)" fill="none" stroke={c} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
+            <circle cx="12" cy="10" r="3" />
+          </g>
+          {placeShown && (
+            <text x="36" y="26" fontFamily={SANS} fontSize="9.5" fontWeight="700" letterSpacing="1.2" fill={c}>
+              {placeShown}
+            </text>
+          )}
+        </>
       )}
       <text x="16" y="63" fontFamily={SERIF} fontSize={titleSize} fill={c}>
         {shown}
@@ -190,7 +203,7 @@ export const HITO_NAME: Record<HitoKind, string> = {
 };
 
 /** Sellos de hito: formas que no usa ningún otro sello, para reconocerlos sin color. */
-export function HitoStamp({ hito, id, stampedAt, size = 64, tilt = 0, nuevo = false, className, style }: { hito: HitoKind; id: number; stampedAt: string; size?: number; tilt?: number; nuevo?: boolean; className?: string; style?: React.CSSProperties }) {
+export function HitoStamp({ hito, id, size = 64, tilt = 0, nuevo = false, className, style }: { hito: HitoKind; id: number; size?: number; tilt?: number; nuevo?: boolean; className?: string; style?: React.CSSProperties }) {
   const c = ink(nuevo);
   const t = HITO_TEXT[hito];
   const seed = hash(id, 3);
@@ -238,9 +251,6 @@ export function HitoStamp({ hito, id, stampedAt, size = 64, tilt = 0, nuevo = fa
           {t.sub}
         </text>
       )}
-      <text x="48" y="84" textAnchor="middle" fontFamily={SANS} fontSize="7" fontWeight="700" letterSpacing="1" fill={c}>
-        {stampDateLabel(stampedAt)}
-      </text>
     </svg>
   );
 }

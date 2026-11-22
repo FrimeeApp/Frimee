@@ -21,6 +21,8 @@ export type Sello = {
   hidden: boolean;
   nuevo: boolean;
   plan: SelloPlan | null;
+  /** Solo en el sello de plan y solo para su dueño: primer billete de transporte del viaje. */
+  ruta?: { tipo: "flight" | "ferry" | "train"; desde: string; hasta: string } | null;
 };
 
 export type PasaporteLeido = {
@@ -221,4 +223,14 @@ export function parsePasaporte(raw: unknown): PasaporteLeido {
     ajustes: r.ajustes ?? null,
     sellos: Array.isArray(r.sellos) ? r.sellos : [],
   };
+}
+
+/** «Barcelona (BCN)» → «BCN»; un código suelto se queda; si no hay código, las 3 primeras letras de la ciudad. */
+export function routeCode(label: string) {
+  const t = label.trim();
+  const inParens = /\(([A-Za-z]{3})\)/.exec(t);
+  if (inParens) return inParens[1].toUpperCase();
+  if (/^[A-Za-z]{3,4}$/.test(t)) return t.toUpperCase();
+  const word = t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z ]/g, "").trim().split(/\s+/)[0] ?? "";
+  return word.slice(0, 3).toUpperCase();
 }
