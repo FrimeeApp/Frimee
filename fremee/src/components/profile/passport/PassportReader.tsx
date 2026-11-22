@@ -51,6 +51,8 @@ export default function PassportReader({
   const [indexOpen, setIndexOpen] = useState(false);
   const [indexTab, setIndexTab] = useState<IndexTab>("paises");
   const [privacyOpen, setPrivacyOpen] = useState(false);
+  // «Ver como tus amistades»: el pasaporte tal como lo ven los demás (sin ocultos y, si lo quitaste, sin sellos de plan).
+  const [preview, setPreview] = useState(false);
   const [ajustes, setAjustes] = useState(ajustesIniciales);
   const [jump, setJump] = useState<{ page: number; nonce: number } | null>(null);
   const pages = useMemo(() => buildPages(groupTrips(sellos)), [sellos]);
@@ -105,7 +107,19 @@ export default function PassportReader({
             <MoreHorizontal className="size-[22px]" aria-hidden />
           </button>
         </div>
-        <Libreta nombre={nombre} sellos={sellos} intro={intro} jumpTo={jump} onOpenStamp={(sello, el) => setSheet({ sello, el })} />
+        {preview ? (
+          <>
+            <div role="status" className="mx-auto mb-3 flex w-full max-w-[460px] items-center gap-3 rounded-[8px] border border-app bg-surface px-3 py-2 md:max-w-[1080px]">
+              <span className="flex-1 text-[14px] leading-[1.5]">Así lo ven tus amistades.</span>
+              <button type="button" onClick={() => setPreview(false)} className={`min-h-11 px-2 text-[14px] font-[var(--fw-semibold)] text-[var(--primary)] ${FOCUS}`}>
+                Salir de la vista previa
+              </button>
+            </div>
+            <Libreta key="preview" nombre={nombre} sellos={sellos.filter((x) => !x.hidden && ((ajustes?.show_plan_stamps ?? true) || x.kind === "pais"))} />
+          </>
+        ) : (
+          <Libreta nombre={nombre} sellos={sellos} intro={intro} jumpTo={jump} onOpenStamp={(sello, el) => setSheet({ sello, el })} />
+        )}
         {privacyOpen && (
           <PassportPrivacySheet
             ajustes={ajustes}
@@ -119,6 +133,11 @@ export default function PassportReader({
               setPrivacyOpen(false);
               setIndexTab("ocultos");
               setIndexOpen(true);
+            }}
+            onPreview={() => {
+              setPrivacyOpen(false);
+              setSheet(null);
+              setPreview(true);
             }}
             onClose={() => setPrivacyOpen(false)}
           />
