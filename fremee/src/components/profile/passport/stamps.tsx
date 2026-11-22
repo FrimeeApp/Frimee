@@ -1,12 +1,17 @@
 import { Plane, Ship, TrainFront } from "lucide-react";
-import { countryName, hash, planRangeLabel, routeCode, stampDateLabel, type HitoKind, type Sello } from "@/lib/passport";
+import { countryName, countryShortName, hash, planRangeLabel, routeCode, stampDateLabel, type HitoKind, type Sello } from "@/lib/passport";
 
 /** Sellos del pasaporte. Siempre en tinta (--passport-ink); el sello nuevo usa --passport-ink-new. Sin filtros SVG. */
 
 const SANS = "Inter, Arial, sans-serif";
 const SERIF = "var(--font-display-face), Georgia, serif";
 
-const ink = (nuevo?: boolean) => (nuevo ? "var(--passport-ink-new)" : "var(--passport-ink)");
+/** Cada sello con su tinta (por id) cuando está sobre el papel; fuera del papel, o si no hay tinta definida, la del tema. */
+const ink = (nuevo: boolean | undefined, id: number, k: number) => {
+  if (nuevo) return "var(--passport-ink-new)";
+  const i = hash(id, 7 + k) % 5;
+  return i === 0 ? "var(--passport-ink)" : `var(--passport-ink-${i}, var(--passport-ink))`;
+};
 
 /** Cortes irregulares en el trazo («tinta gastada»), fijos por id: cuestan lo mismo que un trazo liso. */
 function worn(seed: number, circumference: number) {
@@ -84,13 +89,16 @@ export function CountryStamp({
   className?: string;
   style?: React.CSSProperties;
 }) {
-  const c = ink(nuevo);
   const seed = hash(sello.id, 1);
+  const c = ink(nuevo, sello.id, 1);
   const border = seed % 4; // liso, dentado, doble, punteado
   const orn = (seed >> 4) % 4; // rayas, estrellas, puntos, arco
   const code = sello.country_code ?? "";
-  const name = countryName(code).toUpperCase();
+  const name = countryShortName(code).toUpperCase();
   const nameSize = name.length > 14 ? 5.6 : name.length > 10 ? 6.4 : 7.5;
+  // A esa altura, el aro punteado deja unos 60 de ancho: los nombres largos («Ciudad del Vaticano») se comprimen para no salirse.
+  const nameWidth = name.length * (nameSize * 0.64 + 1.4);
+  const fitName = nameWidth > 60;
   return (
     <svg width={size} height={size} viewBox="0 0 96 96" aria-hidden="true" className={className} style={{ transform: `rotate(${tilt}deg)`, flexShrink: 0, ...style }}>
       {border === 1 ? (
@@ -102,7 +110,7 @@ export function CountryStamp({
       )}
       {border === 2 && <circle cx="48" cy="48" r="40.5" fill="none" stroke={c} strokeWidth="1" />}
       <circle cx="48" cy="48" r={border === 2 ? 36 : 37.5} fill="none" stroke={c} strokeWidth="1" strokeDasharray="2 3" />
-      <text x="48" y="31" textAnchor="middle" fontFamily={SANS} fontSize={nameSize} fontWeight="700" letterSpacing="1.4" fill={c}>
+      <text x="48" y="31" textAnchor="middle" fontFamily={SANS} fontSize={nameSize} fontWeight="700" letterSpacing={fitName ? 0.6 : 1.4} textLength={fitName ? 60 : undefined} lengthAdjust={fitName ? "spacingAndGlyphs" : undefined} fill={c}>
         {name}
       </text>
       <text x="48" y="59" textAnchor="middle" fontFamily={SERIF} fontSize="32" fill={c}>
@@ -131,16 +139,16 @@ export function PlanStamp({
   className?: string;
   style?: React.CSSProperties;
 }) {
-  const c = ink(nuevo);
   const seed = hash(sello.id, 2);
+  const c = ink(nuevo, sello.id, 2);
   const border = seed % 4; // base, perforado, esquinas, doble
   const plan = sello.plan;
-  const title = plan?.titulo ?? "Viaje";
-  const titleSize = title.length > 15 ? 17 : title.length > 11 ? 21 : 27;
-  const shown = title.length > 20 ? `${title.slice(0, 19)}…` : title;
   const place = (plan?.ubicacion_nombre?.split(",")[0]?.trim() ?? "").toUpperCase();
+  // El destino es el título del sello («Roma»); el nombre del plan, más pequeño arriba. Sin destino, el título es el nombre del plan.
+  const title = place ? (plan?.ubicacion_nombre?.split(",")[0]?.trim() ?? "") : (plan?.titulo ?? "Viaje");
+  const shown = title.length > 18 ? `${title.slice(0, 17)}…` : title;
+  const titleSize = Math.max(15, Math.min(27, Math.floor(108 / (shown.length * 0.52))));
   const route = sello.ruta ? `${routeCode(sello.ruta.desde)} → ${routeCode(sello.ruta.hasta)}` : null;
-  const placeShown = place.length > 16 ? `${place.slice(0, 15)}…` : place;
   return (
     <svg width={size} height={Math.round((size * 96) / 140)} viewBox="0 0 140 96" aria-hidden="true" className={className} style={{ transform: `rotate(${tilt}deg)`, flexShrink: 0, ...style }}>
       {border === 2 ? (
@@ -157,20 +165,8 @@ export function PlanStamp({
             {route}
           </text>
         </>
-      ) : (
-        <>
-          <g transform="translate(15 15) scale(0.62)" fill="none" stroke={c} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
-            <circle cx="12" cy="10" r="3" />
-          </g>
-          {placeShown && (
-            <text x="36" y="26" fontFamily={SANS} fontSize="9.5" fontWeight="700" letterSpacing="1.2" fill={c}>
-              {placeShown}
-            </text>
-          )}
-        </>
-      )}
-      <text x="16" y="63" fontFamily={SERIF} fontSize={titleSize} fill={c}>
+      ) : null}
+      <text x="16" y="63" fontFamily={SERIF} fontSize={titleSize} fill={c} textLength={shown.length * titleSize * 0.52 > 108 ? 108 : undefined} lengthAdjust="spacingAndGlyphs">
         {shown}
       </text>
       <text x="16" y="79" fontFamily={SANS} fontSize="8" fontWeight="700" letterSpacing="1.1" fill={c}>
@@ -204,7 +200,7 @@ export const HITO_NAME: Record<HitoKind, string> = {
 
 /** Sellos de hito: formas que no usa ningún otro sello, para reconocerlos sin color. */
 export function HitoStamp({ hito, id, size = 64, tilt = 0, nuevo = false, className, style }: { hito: HitoKind; id: number; size?: number; tilt?: number; nuevo?: boolean; className?: string; style?: React.CSSProperties }) {
-  const c = ink(nuevo);
+  const c = ink(nuevo, id, 3);
   const t = HITO_TEXT[hito];
   const seed = hash(id, 3);
   let shape: React.ReactNode;

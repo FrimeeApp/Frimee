@@ -5,7 +5,7 @@ import { Capacitor } from "@capacitor/core";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Stamp, X } from "lucide-react";
 import { FILL_BTN, FOCUS, GHOST_BTN, LABEL, SERIF } from "@/components/plans/home/pieces";
-import { Guilloche } from "@/components/profile/passport/Libreta";
+import { BOOK, PAPER_VARS, PaperGuilloche } from "@/components/profile/passport/Libreta";
 import { CountryStamp, HitoStamp, PlanStamp, noFuiQuita } from "@/components/profile/passport/stamps";
 import { useAuth } from "@/providers/AuthProvider";
 import { leerPasaporte, marcarNoFui, marcarSellosVistos } from "@/services/api/endpoints/pasaporte.endpoint";
@@ -297,12 +297,12 @@ function MiniPage({ trip, year, page }: { trip: Trip; year: number; page: number
         <div
           role="img"
           aria-label={`Página del año ${year} con el sello de ${trip.info?.titulo ?? "tu viaje"}`}
-          className="relative overflow-hidden rounded-[8px] border border-app bg-surface"
-          style={{ width: PAGE_W, height: h, transform: `scale(${scale})`, transformOrigin: "top left" }}
+          className="relative overflow-hidden rounded-[8px]"
+          style={{ ...PAPER_VARS, background: BOOK.paper, color: BOOK.text, boxShadow: "2px 0 0 #d6dbd2, 3px 0 0 #e9ece4, 4px 0 0 #d2d7ce", width: PAGE_W, height: h, transform: `scale(${scale})`, transformOrigin: "top left" }}
         >
-          <Guilloche seed={page ?? hash(trip.planId)} size={{ w: PAGE_W, h }} />
+          <PaperGuilloche w={PAGE_W} h={h} seed={page ?? hash(trip.planId)} />
           <div className={`absolute inset-x-4 top-[14px] flex justify-between ${LABEL}`}>
-            <span>VISADOS</span>
+            <span>VISADOS · VISAS</span>
             {page && <span className="tabular-nums">PÁG. {pad2(page)}</span>}
           </div>
           <h2 className={`absolute left-4 top-[34px] m-0 text-[28px] leading-[1.1] ${SERIF}`}>{year}</h2>

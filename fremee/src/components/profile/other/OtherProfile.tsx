@@ -11,7 +11,10 @@ import { computeStats, countryName, dateLabel, latestStamps, planRangeLabel, typ
 import type { AccesoPasaporte, PerfilAjeno, PlanComun, Relacion } from "@/services/api/endpoints/perfilAjeno.endpoint";
 import { CountryStamp, PlanStamp } from "../passport/stamps";
 import { PassportCover } from "../passport/PassportCover";
-import PassportReader from "../passport/PassportReader";
+import dynamic from "next/dynamic";
+
+/** El lector es una capa que se abre al pulsar: solo se carga en el cliente (no depende de la hora ni del tamaño de ventana del servidor). */
+const PassportReader = dynamic(() => import("../passport/PassportReader"), { ssr: false });
 
 /**
  * Perfil de otra persona (tablero «Amistad / Sin amistad»): cabecera, acciones según la relación, su pasaporte

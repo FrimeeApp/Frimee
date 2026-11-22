@@ -49,9 +49,9 @@ export type PassportPage =
   | { kind: "year"; number: number; year: number; trips: Trip[]; continues: boolean };
 
 export const SLOTS_PER_PAGE = 3;
-/** Un viaje ocupa una franja de la página; con 2 o más países, dos. Los hitos van dentro de su franja. */
+/** Un viaje ocupa una franja de la página; con 3 o más países, dos (con 2 caben en una). Los hitos van dentro de su franja. */
 export function tripSlots(t: Trip) {
-  return t.paises.length >= 2 ? 2 : 1;
+  return t.paises.length >= 3 ? 2 : 1;
 }
 
 const MONTHS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sept", "oct", "nov", "dic"];
@@ -101,6 +101,35 @@ export function planDays(p: SelloPlan) {
 }
 
 const regionNames = typeof Intl !== "undefined" && "DisplayNames" in Intl ? new Intl.DisplayNames(["es"], { type: "region" }) : null;
+/** Formas cortas para los sellos de país (el nombre completo sigue en la etiqueta y en la ventanita). */
+const SHORT_NAMES: Record<string, string> = {
+  VA: "Vaticano",
+  CZ: "Rep. Checa",
+  AE: "Emiratos",
+  BA: "Bosnia",
+  DO: "R. Dominicana",
+  US: "EE. UU.",
+  GB: "Reino Unido",
+  NL: "Países Bajos",
+  CD: "R. D. del Congo",
+  CG: "Congo",
+  CF: "R. Centroafricana",
+  MK: "Macedonia N.",
+  SA: "Arabia Saudí",
+  KR: "Corea del Sur",
+  KP: "Corea del Norte",
+  ZA: "Sudáfrica",
+  NZ: "N. Zelanda",
+  PS: "Palestina",
+  FM: "Micronesia",
+  VC: "San Vicente",
+  KN: "San Cristóbal",
+  ST: "Santo Tomé",
+  AG: "Antigua y B.",
+  TT: "Trinidad y T.",
+};
+export const countryShortName = (code: string) => SHORT_NAMES[code] ?? countryName(code);
+
 export function countryName(code: string) {
   try {
     return regionNames?.of(code) ?? code;

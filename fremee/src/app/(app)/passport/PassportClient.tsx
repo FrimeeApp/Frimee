@@ -2,12 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import PassportReader from "@/components/profile/passport/PassportReader";
+import dynamic from "next/dynamic";
 import { GHOST_BTN } from "@/components/plans/home/pieces";
 import { useAuth } from "@/providers/AuthProvider";
 import { getPublicUserProfile } from "@/services/api/repositories/users.repository";
 import { leerPasaporte } from "@/services/api/endpoints/pasaporte.endpoint";
 import { buildPages, groupTrips, tripPageNumber, type PasaporteLeido } from "@/lib/passport";
+
+/** El lector es una capa que se abre al pulsar: solo se carga en el cliente (no depende de la hora ni del tamaño de ventana del servidor). */
+const PassportReader = dynamic(() => import("@/components/profile/passport/PassportReader"), { ssr: false });
 
 /** Entrada directa al pasaporte (enlaces y avisos). Desde el perfil se abre como capa encima de él, sin pasar por aquí. */
 export default function PassportClient() {

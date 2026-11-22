@@ -3,13 +3,13 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, List, MoreHorizontal } from "lucide-react";
 import { FOCUS } from "@/components/plans/home/pieces";
-import { playClose, prefersReducedMotion } from "@/lib/passportOpen";
+import { isInViewport, playClose, prefersReducedMotion } from "@/lib/passportOpen";
 import { buildPages, groupTrips, type PasaporteAjustes, type Sello } from "@/lib/passport";
 import { ocultarSello } from "@/services/api/endpoints/pasaporte.endpoint";
 import PassportIndex, { type Tab as IndexTab } from "./PassportIndex";
 import PassportPrivacySheet from "./PassportPrivacySheet";
 import StampPopover from "./StampPopover";
-import Libreta, { type LibretaIntro } from "./Libreta";
+import Libreta, { type LibretaIntro, type LibretaOutro } from "./Libreta";
 
 /**
  * El pasaporte abierto, como capa a pantalla completa. Desde el perfil se monta encima de él (así la tapa puede volar
@@ -78,14 +78,35 @@ export default function PassportReader({
     rootRef.current?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 160, easing: "linear" });
   }, [flight]);
 
+  // Al volver al perfil (botón o gesto de atrás) con su tapa a la vista, la libreta se cierra y vuela hasta ella;
+  // si no, un fundido corto.
+  const cancelRef = useRef<(() => void) | null>(null);
+  const outro = useMemo<LibretaOutro | null>(
+    () =>
+      closing && !reduced && fromCover && isInViewport(fromCover)
+        ? { fromCover, profile, deskRef, chromeRefs: [titleRef], registerCancel: (c) => { cancelRef.current = c; }, onDone: () => onClosed?.() }
+        : null,
+    [closing, reduced, fromCover, profile, onClosed],
+  );
   useEffect(() => {
-    if (!closing || !rootRef.current) return;
+    if (!closing || !rootRef.current || outro) return;
     void playClose(rootRef.current, profile).then(() => onClosed?.());
-  }, [closing, profile, onClosed]);
+  }, [closing, outro, profile, onClosed]);
+  // Tocar o pulsar una tecla durante el cierre salta al final: nunca hace esperar.
+  useEffect(() => {
+    if (!closing) return;
+    const skip = () => cancelRef.current?.();
+    window.addEventListener("pointerdown", skip);
+    window.addEventListener("keydown", skip);
+    return () => {
+      window.removeEventListener("pointerdown", skip);
+      window.removeEventListener("keydown", skip);
+    };
+  }, [closing]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
+      if (e.key !== "Escape" || closing) return;
       // Esc cierra primero el índice y luego el pasaporte.
       // La hoja de privacidad es un portal propio: su Esc lo gestiona ella.
       if (privacyOpen) setPrivacyOpen(false);
@@ -95,17 +116,19 @@ export default function PassportReader({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onRequestClose, indexOpen, sheet, privacyOpen]);
+  }, [onRequestClose, indexOpen, sheet, privacyOpen, closing]);
 
   return (
     <div ref={rootRef} role="dialog" aria-modal="true" aria-label="Pasaporte" className="fixed inset-0 z-[70] overflow-y-auto text-app">
       <div ref={deskRef} aria-hidden="true" className="fixed inset-0 bg-[var(--passport-table)]" />
       <div className="relative px-safe pb-8 pt-mobile-safe-top md:px-8 md:py-[var(--space-8)]">
         <div ref={titleRef} className="mx-auto flex w-full max-w-[460px] items-center gap-1 pb-2 md:max-w-[1080px]">
-          <button type="button" onClick={onRequestClose} aria-label="Volver al perfil" className={`inline-flex size-11 items-center justify-center rounded-[8px] text-app ${FOCUS}`}>
+          <button type="button" onClick={onRequestClose} aria-label="Volver al perfil" className={`inline-flex min-h-11 items-center gap-0.5 rounded-[8px] pl-1 pr-3 text-[16px] font-[var(--fw-semibold)] text-app ${FOCUS}`}>
             <ChevronLeft className="size-[22px]" aria-hidden />
+            Perfil
           </button>
-          <h1 className="m-0 flex-1 font-sans text-[18px] font-[var(--fw-semibold)] leading-[1.3]">{title}</h1>
+          <h1 className="sr-only">{title}</h1>
+          <div className="flex-1" />
           {hasStamps && (
             <button type="button" onClick={() => { setIndexTab("paises"); setIndexOpen(true); }} aria-label="Índice del pasaporte" className={`inline-flex size-11 items-center justify-center rounded-[8px] text-app ${FOCUS}`}>
               <List className="size-[22px]" aria-hidden />
@@ -132,10 +155,10 @@ export default function PassportReader({
                 Salir de la vista previa
               </button>
             </div>
-            <Libreta key="preview" nombre={nombre} sellos={sellos.filter((x) => !x.hidden && ((ajustes?.show_plan_stamps ?? true) || x.kind === "pais"))} />
+            <Libreta key="preview" outro={outro} nombre={nombre} sellos={sellos.filter((x) => !x.hidden && ((ajustes?.show_plan_stamps ?? true) || x.kind === "pais"))} />
           </>
         ) : (
-          <Libreta nombre={nombre} sellos={sellos} intro={intro} jumpTo={jump} startPage={startPage} onOpenStamp={readOnly ? undefined : (sello, el) => setSheet({ sello, el })} />
+          <Libreta outro={outro} nombre={nombre} sellos={sellos} intro={intro} jumpTo={jump} startPage={startPage} onOpenStamp={readOnly ? undefined : (sello, el) => setSheet({ sello, el })} />
         )}
         {privacyOpen && (
           <PassportPrivacySheet

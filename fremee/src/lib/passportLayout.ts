@@ -2,7 +2,7 @@
  * Colocación de los sellos en una página (referencia del tablero de diseño).
  *
  * Las medidas están en px sobre una página de referencia de 358 × 590 (móvil). La página se divide en una
- * cabecera de 64 px y 3 franjas de 166 px; cada viaje ocupa una franja y uno con 2 o más países ocupa dos.
+ * cabecera de 64 px y 3 franjas de 166 px; cada viaje ocupa una franja y uno con 3 o más países ocupa dos (con 2 caben en una).
  * Dentro de la franja los huecos alternan de lado para que la página no parezca una tabla.
  *
  * En escritorio la página mide 452 × 620: las posiciones se escalan por eje (x por ancho, y por alto) para llenar
@@ -24,7 +24,7 @@ const BANDS: BandSlots[] = [
   { plan: { x: 18, y: 8, rot: 3, size: 150 }, country: { x: 210, y: 0, rot: -5, size: 100 }, hito: { x: 234, y: 104, rot: -4, size: 60 } },
 ];
 
-/** Viaje con 2 o más países: ocupa dos franjas seguidas. */
+/** Viaje con 3 o más países: ocupa dos franjas seguidas. */
 const MULTI = {
   plan: { x: 12, y: 2, rot: -4, size: 150 },
   countries: [
@@ -40,6 +40,16 @@ const MULTI = {
   ] as Slot[],
 };
 
+/** Viaje con 2 países: caben en una franja. En la franja 1 el plan va a la derecha, así que los países van a la izquierda. */
+const TWO: Slot[] = [
+  { x: 178, y: -6, rot: 8, size: 86 },
+  { x: 266, y: 14, rot: -6, size: 84 },
+];
+const TWO_MIRROR: Slot[] = [
+  { x: 14, y: -6, rot: -7, size: 86 },
+  { x: 100, y: 14, rot: 6, size: 84 },
+];
+
 /** Desplazamiento pequeño y estable (−2…+2°) para que dos sellos con el mismo hueco no sean idénticos. */
 function jitter(id: string, range = 2): number {
   let h = 0;
@@ -54,7 +64,7 @@ export type Placed =
 export type FreeBand = { band: number; plan: { x: number; y: number; w: number; h: number }; country: { x: number; y: number; size: number } };
 
 /** Cuántas franjas ocupa un viaje. */
-export const bandsFor = (t: Trip) => (t.paises.length > 1 ? 2 : 1);
+export const bandsFor = (t: Trip) => (t.paises.length > 2 ? 2 : 1);
 
 type Dims = { w: number; h: number };
 
@@ -77,13 +87,14 @@ export function layoutPage(trips: Trip[], dims: Dims): Placed[] {
       sello,
       x: Math.round(slot.x * sx),
       y: Math.round((y0 + slot.y) * sy),
-      size: Math.round(slot.size * ss),
+      // En escritorio los hitos se agrandan un 15 % para que se lean (unos 72 px).
+      size: Math.round(slot.size * ss * (kind === "hito" && ss > 1.02 ? 1.15 : 1)),
       rot: slot.rot + jitter(String(sello.id)),
     });
 
   for (const t of trips) {
     const y0 = PAGE.headerH + band * PAGE.bandH;
-    if (t.paises.length > 1) {
+    if (t.paises.length > 2) {
       if (t.plan) put("plan", t.plan, MULTI.plan, y0);
       t.paises.slice(0, 3).forEach((c, i) => put("country", c, MULTI.countries[i], y0));
       if (t.paises.length > 3) {
@@ -103,7 +114,10 @@ export function layoutPage(trips: Trip[], dims: Dims): Placed[] {
       const b = BANDS[band];
       if (!b) break;
       if (t.plan) put("plan", t.plan, b.plan, y0);
-      if (t.paises[0]) put("country", t.paises[0], b.country, y0);
+      if (t.paises.length === 2) {
+        const two = band === 1 ? TWO_MIRROR : TWO;
+        t.paises.forEach((c, i) => put("country", c, two[i], y0));
+      } else if (t.paises[0]) put("country", t.paises[0], b.country, y0);
       if (t.hitos[0]) put("hito", t.hitos[0], b.hito, y0);
       band += 1;
     }

@@ -186,6 +186,19 @@ export default function ProfileMenu(props: Props) {
     >
       {isGuest ? (
         <>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => { onClose(false); props.onOpenProfile(); }}
+            className="flex w-full items-center gap-[12px] rounded-[6px] px-[10px] py-[10px] text-left transition-colors hover:bg-[var(--surface-2)] focus-visible:bg-[var(--surface-2)] focus-visible:outline-none"
+          >
+            <span className="flex size-[40px] shrink-0 items-center justify-center rounded-full border border-strong bg-surface-inset text-body font-[var(--fw-semibold)] text-app">?</span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[15px] font-[var(--fw-semibold)] text-app">Invitado</span>
+              <span className="block truncate text-[13px] text-muted">Ver perfil</span>
+            </span>
+          </button>
+          <div role="separator" className="mx-[-6px] my-[6px] h-px bg-[var(--border)]" />
           <div className="px-[10px] pb-[10px] pt-[8px]">
             <p className="text-[15px] font-[var(--fw-semibold)] text-app">Estás en modo invitado</p>
             <p className="mt-[2px] text-[13px] text-muted">Cuenta de ejemplo con tres planes</p>
