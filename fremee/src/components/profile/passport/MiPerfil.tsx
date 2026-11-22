@@ -179,7 +179,7 @@ export default function MiPerfil({
       {failed ? (
         <ProfileError onRetry={retry} />
       ) : !data ? (
-        <ProfileLoading nombre={nombre} />
+        <PassportLoadingCard nombre={nombre} />
       ) : (
         <div className="flex flex-col gap-5 md:grid md:grid-cols-[minmax(0,1fr)_minmax(300px,380px)] md:items-start md:gap-6">
           <PassportCard userId={userId} nombre={nombre} plans={data.plans} pasaporte={data.pasaporte} now={now} />
@@ -464,7 +464,8 @@ function TicketStub({ type }: { type: PlanTicket["type"] }) {
   );
 }
 
-function ProfileLoading({ nombre }: { nombre: string }) {
+/** Tarjeta del pasaporte cargando: la misma en tu perfil y en el de otra persona. */
+export function PassportLoadingCard({ nombre = "" }: { nombre?: string }) {
   return (
     <section role="status" aria-label="Cargando tu perfil" className={`${CARD} flex items-center gap-4 px-4 py-5 md:gap-10 md:p-8`}>
       <PassportCover name={nombre} loading />

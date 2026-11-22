@@ -61,7 +61,7 @@ export default function PassportPrivacySheet({
     const frames: Keyframe[] = reduced
       ? [{ opacity: 0 }, { opacity: 1 }]
       : isDesktop
-        ? [{ opacity: 0, transform: "translate(-50%, -50%) scale(0.96)" }, { opacity: 1, transform: "translate(-50%, -50%)" }]
+        ? [{ opacity: 0, transform: "scale(0.96)" }, { opacity: 1, transform: "none" }] // el centrado va en `translate` (clase), no se pisa con transform
         : [{ transform: "translateY(100%)" }, { transform: "none" }];
     el.animate(frames, { duration: reduced || isDesktop ? 160 : 240, easing: reduced ? "linear" : "cubic-bezier(0.2, 0, 0, 1)" });
   }, [isDesktop, reduced]);

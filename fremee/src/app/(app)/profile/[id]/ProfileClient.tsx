@@ -14,7 +14,7 @@ import type { Sello } from "@/lib/passport";
 import { useBloqueos } from "@/hooks/useBloqueos";
 import { BlockConfirm } from "@/components/chat/info/BlockConfirm";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
-import MiPerfil from "@/components/profile/passport/MiPerfil";
+import MiPerfil, { PassportLoadingCard } from "@/components/profile/passport/MiPerfil";
 import OtherProfile from "@/components/profile/other/OtherProfile";
 import InviteToPlanSheet from "@/components/profile/other/InviteToPlanSheet";
 import { useToast } from "@/components/ui/Toaster";
@@ -242,17 +242,18 @@ export default function ProfilePage() {
   );
 }
 
+/** Cabecera y tarjeta del pasaporte cargando: misma forma que tu perfil, para que no cambie al llegar los datos. */
 function ProfileSkeleton() {
   return (
     <div aria-label="Cargando perfil" role="status" className="mx-auto flex w-full max-w-[1080px] flex-col gap-5 md:gap-6">
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 md:gap-6">
         <div className="skeleton-shimmer size-[72px] shrink-0 rounded-full md:size-[104px]" />
         <div className="flex flex-col gap-2">
           <div className="skeleton-shimmer h-3 w-20 rounded-full" />
-          <div className="skeleton-shimmer h-8 w-48 rounded-full" />
+          <div className="skeleton-shimmer h-8 w-48 rounded-full md:h-12 md:w-72" />
         </div>
       </div>
-      <div className="skeleton-shimmer h-[200px] w-full rounded-[8px] md:h-[300px]" />
+      <PassportLoadingCard />
     </div>
   );
 }
