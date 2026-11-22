@@ -4,8 +4,9 @@ import { useMemo, useState } from "react";
 import { ArrowDownLeft, ArrowUpRight, ChevronDown, FileText, Pencil, Plus, Search, WalletCards } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { formatMoney } from "@/lib/formatters";
-import { owedToPayer, shareOf, takesPart } from "@/lib/gastos-shares";
-import type { BalanceRow, GastoRow } from "@/services/api/endpoints/gastos.endpoint";
+import { owedToPayer, takesPart } from "@/lib/gastos-shares";
+import type { BalanceRow, GastoRow, Topes } from "@/services/api/endpoints/gastos.endpoint";
+import { AddBudgetButton, GroupBudget, MyTope } from "./BudgetBits";
 import type { ExpenseSummary } from "./ExpenseSummaryCard";
 import { normalizeDateKey } from "./plan-utils";
 
@@ -32,6 +33,11 @@ type Props = {
   onPagar: (balance: BalanceRow) => void;
   onAdd: () => void;
   onPdf: () => void;
+  /** Presupuesto del grupo y tope personal; null en cada uno si no hay. */
+  topes: Topes;
+  isAdmin: boolean;
+  /** Abre la hoja de presupuesto en «Del grupo» o «Solo mío». */
+  onEditTope: (mode: "grupo" | "mio") => void;
 };
 
 const firstName = (name: string | null | undefined) => (name ?? "Usuario").trim().split(" ")[0] || "Usuario";
@@ -55,7 +61,7 @@ function dayTitle(key: string, planStart: string | null) {
   return diff >= 0 ? `${label} · Día ${diff + 1}` : label;
 }
 
-export function GastosTab({ gastos, balances, userId, summary, planStart, isPast, canAdd, onOpenGasto, onPagar, onAdd, onPdf }: Props) {
+export function GastosTab({ gastos, balances, userId, summary, planStart, isPast, canAdd, onOpenGasto, onPagar, onAdd, onPdf, topes, isAdmin, onEditTope }: Props) {
   const [filter, setFilter] = useState<Filter>("todos");
   const [cat, setCat] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -164,6 +170,25 @@ export function GastosTab({ gastos, balances, userId, summary, planStart, isPast
   const money = (n: number, c = currency) => formatMoney(n, c);
   const hasPdf = gastos.length > 0;
 
+  /* Presupuesto del grupo (en «Entre los N») y tope personal (en «Tu cuenta»). Con el plan terminado no se editan. */
+  const groupBudget = topes.grupo ? (
+    <GroupBudget
+      spent={summary.total}
+      limit={topes.grupo.limite}
+      currency={currency}
+      people={summary.participantCount}
+      segments={categories}
+      onEdit={isPast ? undefined : () => onEditTope("grupo")}
+    />
+  ) : isAdmin && !isPast ? (
+    <AddBudgetButton label="Poner un presupuesto" onClick={() => onEditTope("grupo")} />
+  ) : null;
+  const myTope = topes.mio ? (
+    <MyTope share={summary.yourShare} limit={topes.mio.limite} currency={currency} onEdit={isPast ? undefined : () => onEditTope("mio")} />
+  ) : !isPast ? (
+    <AddBudgetButton label="Ponerte un tope" hint="solo lo ves tú" onClick={() => onEditTope("mio")} />
+  ) : null;
+
   return (
     <div className="mx-auto max-w-[1100px] md:grid md:grid-cols-[minmax(0,1fr)_340px] md:items-start md:gap-14">
       <div className="min-w-0 md:max-w-[720px]">
@@ -174,7 +199,8 @@ export function GastosTab({ gastos, balances, userId, summary, planStart, isPast
         )}
 
         {/* Tu cuenta */}
-        <section aria-label="Tu cuenta" className="rounded-lg border border-app bg-surface p-4 md:flex md:items-end md:justify-between md:gap-8 md:px-6 md:py-5">
+        <section aria-label="Tu cuenta" className="rounded-lg border border-app bg-surface p-4 md:px-6 md:py-5">
+          <div className="md:flex md:items-end md:justify-between md:gap-8">
           <div>
             {debt > 0 ? (
               <>
@@ -203,6 +229,8 @@ export function GastosTab({ gastos, balances, userId, summary, planStart, isPast
             <div><p className="text-[12px] text-muted">Pagaste</p><p className="mt-0.5 text-[16px] font-[var(--fw-semibold)] tabular-nums text-app">{money(summary.paidByYou)}</p></div>
             <div><p className="text-[12px] text-muted">Tu parte</p><p className="mt-0.5 text-[16px] font-[var(--fw-semibold)] tabular-nums text-app">{money(summary.yourShare)}</p></div>
           </div>
+          </div>
+          {myTope}
         </section>
 
         {/* Quién debe a quién */}
@@ -355,11 +383,14 @@ export function GastosTab({ gastos, balances, userId, summary, planStart, isPast
               </button>
             )}
           </div>
+          {groupBudget}
           {showCategories && (
             <>
-              <div className="mt-3 flex h-2 gap-0.5 overflow-hidden rounded" role="img" aria-label={categories.map((c) => `${c.label} ${c.pct} %`).join(", ")}>
-                {categories.map((c) => <i key={c.label} style={{ width: `${c.pct}%`, background: "var(--text-primary)", opacity: c.shade }} />)}
-              </div>
+              {!topes.grupo && (
+                <div className="mt-3 flex h-2 gap-0.5 overflow-hidden rounded" role="img" aria-label={categories.map((c) => `${c.label} ${c.pct} %`).join(", ")}>
+                  {categories.map((c) => <i key={c.label} style={{ width: `${c.pct}%`, background: "var(--text-primary)", opacity: c.shade }} />)}
+                </div>
+              )}
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {shownCats.map((c) => (
                   <button key={c.label} type="button" aria-pressed={cat === c.label} onClick={() => pickCat(c)} className={`${chip(cat === c.label)} !h-8 !px-2.5 !text-[12px]`}>
@@ -438,6 +469,7 @@ export function GastosTab({ gastos, balances, userId, summary, planStart, isPast
             {summary.count} {summary.count === 1 ? "gasto" : "gastos"}
             {summary.participantCount > 0 && ` · ${money(summary.total / summary.participantCount)} por persona`}
           </p>
+          {groupBudget}
           {showCategories && (
             <>
               <p className="mb-1 mt-5 text-[12px] font-[var(--fw-semibold)] tracking-[0.02em] text-muted">En qué se ha ido</p>

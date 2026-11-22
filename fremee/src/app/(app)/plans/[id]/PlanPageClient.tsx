@@ -13,7 +13,7 @@ import { fetchPlansByIds, fetchPlanUserRol, updatePlanEndpoint, type PlanByIdRow
 import CreatePlanModal, { type EditPlanInitialValues } from "@/components/plans/modals/CreatePlanModal";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { fetchSubplanes, updateSubplanTransporte, updateSubplanViaje, type SubplanRow, type TipoSubplan, TIPOS_TRANSPORTE, isTipoSubplan } from "@/services/api/endpoints/subplanes.endpoint";
-import { getBalancesForPlanEndpoint, deshacerPagoEndpoint, listGastosForPlanEndpoint, type BalanceRow, type GastoRow } from "@/services/api/endpoints/gastos.endpoint";
+import { getBalancesForPlanEndpoint, deshacerPagoEndpoint, fetchTopesEndpoint, listGastosForPlanEndpoint, type BalanceRow, type GastoRow, type Topes } from "@/services/api/endpoints/gastos.endpoint";
 import DayRouteMap from "@/components/plans/DayRouteMap";
 import { findMissingLegs, useComputeMissingLegs } from "@/hooks/useComputeMissingLegs";
 import AddGastoSheet from "@/components/plans/modals/AddGastoSheet";
@@ -33,6 +33,7 @@ import { FEED_ENABLED } from "@/config/app";
 import { PlanDetailSkeleton } from "./_components/PlanDetailSkeleton";
 import { ExpenseSummaryCard } from "./_components/ExpenseSummaryCard";
 import { GastosTab } from "./_components/GastosTab";
+import { BudgetSheet } from "./_components/BudgetBits";
 import { GastosPdfModal } from "./_components/GastosPdfModal";
 import type { PdfInput } from "@/lib/gastos-pdf";
 import { AddSubplanSheet, TRANSPORT_MAP, type AddSheetProps } from "./_components/AddSubplanSheet";
@@ -196,6 +197,8 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
   const [selectedGastoId, setSelectedGastoId] = useState<number | null>(null);
   const [balances, setBalances] = useState<BalanceRow[]>(initialCache?.balances ?? []);
   const [pagarDeuda, setPagarDeuda] = useState<BalanceRow | null>(null);
+  const [topes, setTopes] = useState<Topes>({ grupo: null, mio: null });
+  const [budgetSheet, setBudgetSheet] = useState<"grupo" | "mio" | null>(null);
   const [editingTransporteId, setEditingTransporteId] = useState<number | null>(null);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const { isClosing: invoiceClosing, requestClose: closeInvoiceModal } = useModalCloseAnimation(() => setShowInvoiceModal(false), showInvoiceModal);
@@ -907,6 +910,13 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
     }).catch(console.error);
   };
 
+  // Presupuesto del grupo y tope personal. Solo se cargan para la pestaña Gastos y se ven al recargar.
+  const loadTopes = () => {
+    const planId = Number(id);
+    if (!planId) return;
+    fetchTopesEndpoint(planId).then(setTopes).catch(console.error);
+  };
+
   const handlePaid = (result: PaidResult) => {
     loadBalances();
     toast(`Pago a ${result.toName} marcado`, "success", {
@@ -933,19 +943,28 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
         loadBalances();
       }, 400);
     };
+    // Presupuesto del grupo (lo cambia un admin) y tope personal (otro dispositivo tuyo): solo se recargan ellos.
+    let topesTimer: ReturnType<typeof setTimeout> | undefined;
+    const reloadTopesSoon = () => {
+      clearTimeout(topesTimer);
+      topesTimer = setTimeout(loadTopes, 300);
+    };
     const supabase = createBrowserSupabaseClient();
     const channel = supabase
       .channel(createRealtimeTopic("gastos-changes", planId))
       .on("postgres_changes", { event: "*", schema: "public", table: "gastos", filter: `plan_id=eq.${planId}` }, reload)
       .on("postgres_changes", { event: "*", schema: "public", table: "liquidaciones", filter: `plan_id=eq.${planId}` }, reload)
+      .on("postgres_changes", { event: "*", schema: "public", table: "plan_presupuestos", filter: `plan_id=eq.${planId}` }, reloadTopesSoon)
+      .on("postgres_changes", { event: "*", schema: "public", table: "plan_topes", filter: `plan_id=eq.${planId}` }, reloadTopesSoon)
       .subscribe();
     return () => {
       clearTimeout(reloadTimer);
+      clearTimeout(topesTimer);
       void supabase.removeChannel(channel);
     };
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { loadBalances(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { loadBalances(); loadTopes(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const handleGastoCreated = (event: Event) => {
       const detail = (event as CustomEvent<{ planId?: number }>).detail;
@@ -1425,6 +1444,9 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
                 onPagar={setPagarDeuda}
                 onAdd={() => setShowAddGastoSheet(true)}
                 onPdf={() => setShowInvoiceModal(true)}
+                topes={topes}
+                isAdmin={isAdmin}
+                onEditTope={setBudgetSheet}
               />
             )}
 
@@ -1632,6 +1654,21 @@ export default function PlanDetailPage({ presentation = "page" }: { presentation
             loadGastos();
             loadBalances();
           }}
+        />
+      )}
+
+      {budgetSheet && plan && user && (
+        <BudgetSheet
+          planId={plan.id}
+          initialMode={budgetSheet}
+          isAdmin={isAdmin}
+          topes={topes}
+          currency={expenseSummary.currency}
+          spent={expenseSummary.total}
+          yourShare={expenseSummary.yourShare}
+          people={expenseSummary.participantCount}
+          onClose={() => setBudgetSheet(null)}
+          onSaved={loadTopes}
         />
       )}
 

@@ -75,7 +75,8 @@ import { CameraModal } from "@/components/chat/CameraModal";
 import { PollCreatorModal } from "@/components/chat/PollCreatorModal";
 import { PLAN_WRITE_COMMANDS, VALID_TASK_CATEGORIES } from "@/components/chat/chat.constants";
 import { crearTareaEndpoint, misTareasEndpoint, todasTareasEndpoint, updateEstadoTareaEndpoint, recordarEndpoint, type TareaRow } from "@/services/api/endpoints/tareas.endpoint";
-import { getBalancesForPlanEndpoint } from "@/services/api/endpoints/gastos.endpoint";
+import { fetchTopesEndpoint, getBalancesForPlanEndpoint, listGastosForPlanEndpoint, setPresupuestoEndpoint } from "@/services/api/endpoints/gastos.endpoint";
+import { parseAmount } from "@/lib/money-input";
 import { promoteToAdminEndpoint, demoteAdminEndpoint, expulsarPlanEndpoint, salirPlanEndpoint } from "@/services/api/endpoints/plans.endpoint";
 import { callFrimeeAssistant, type FrimeeHistoryEntry } from "@/services/api/endpoints/frimee.endpoint";
 import { useModalCloseAnimation } from "@/hooks/useModalCloseAnimation";
@@ -1378,6 +1379,36 @@ export function ChatConversation({
         return lines.join("\n");
       } catch {
         return "No pude obtener tu saldo, inténtalo de nuevo.";
+      }
+    }
+
+    if (name === "presupuesto") {
+      if (!planId) return "Este comando solo está disponible en el chat de un plan.";
+      try {
+        const { grupo } = await fetchTopesEndpoint(planId);
+        const arg = parts.slice(1).join(" ").trim();
+
+        // «/presupuesto»: cómo va el presupuesto del grupo.
+        if (!arg) {
+          if (!grupo) return "Este plan aún no tiene presupuesto. Quien administra el plan lo pone con /presupuesto 2000.";
+          const gastos = await listGastosForPlanEndpoint(planId);
+          const spent = gastos.filter((g) => g.estado === "CONFIRMADO").reduce((sum, g) => sum + Number(g.total), 0);
+          const pct = Math.round((spent / grupo.limite) * 100);
+          return spent > grupo.limite
+            ? `Presupuesto del grupo: ${formatEuros(grupo.limite)}. Lleváis ${formatEuros(spent)} (${pct} %): os habéis pasado ${formatEuros(spent - grupo.limite)}.`
+            : `Presupuesto del grupo: ${formatEuros(grupo.limite)}. Lleváis ${formatEuros(spent)} (${pct} %): quedan ${formatEuros(grupo.limite - spent)}.`;
+        }
+
+        // «/presupuesto 2000» o «/presupuesto quitar»: solo quien administra el plan.
+        const quitar = /^(quitar|borrar|ninguno)$/i.test(arg);
+        const amount = quitar ? null : parseAmount(arg);
+        if (!quitar && (amount === null || amount <= 0)) return "Indica un importe válido. Ej: /presupuesto 2000";
+        await setPresupuestoEndpoint(planId, amount, grupo?.moneda ?? "EUR");
+        return amount === null ? "Presupuesto quitado." : `Presupuesto del grupo: ${formatEuros(amount)}.`;
+      } catch (e) {
+        const msg = (e as { message?: string })?.message ?? "";
+        if (msg.includes("administra el plan")) return "El presupuesto del grupo lo pone quien administra el plan.";
+        return "No pude con el presupuesto, inténtalo de nuevo.";
       }
     }
 

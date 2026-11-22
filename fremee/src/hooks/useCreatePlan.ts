@@ -9,6 +9,7 @@ import { useToast } from "@/components/ui/Toaster";
 import type { CreatePlanPayload } from "@/components/plans/modals/CreatePlanModal";
 import { createPlan, listPlansByIdsInOrder } from "@/services/api/repositories/plans.repository";
 import { invitePeople } from "@/services/api/repositories/invitations.repository";
+import { setPresupuestoEndpoint } from "@/services/api/endpoints/gastos.endpoint";
 import { syncGoogleCalendarBidirectional } from "@/services/api/repositories/events.repository";
 import { resolveGoogleProviderToken } from "@/services/auth/googleProviderToken";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
@@ -76,6 +77,17 @@ export function useCreatePlan() {
         }
       }
 
+      // El presupuesto es opcional: si falla, el plan ya está creado y se avisa para ponerlo desde Gastos.
+      let budgetFailed = false;
+      if (payload.budget && payload.budget > 0) {
+        try {
+          await setPresupuestoEndpoint(created.id, payload.budget, "EUR");
+        } catch (error) {
+          console.warn("[nuevo-plan] budget failed:", error);
+          budgetFailed = true;
+        }
+      }
+
       if (settings?.google_sync_enabled && settings.google_sync_export_plans) {
         try {
           const token = await resolveGoogleProviderToken({ supabase, session, userId: user.id, cachedToken: googleProviderToken });
@@ -101,8 +113,10 @@ export function useCreatePlan() {
       toast(
         inviteFailed
           ? "Plan creado, pero no se pudieron enviar las invitaciones. Invita desde el plan."
-          : invited.length ? `Plan creado. Hemos invitado a ${namesSentence(invited.map((p) => p.name))}.` : "Plan creado.",
-        inviteFailed ? "error" : "success",
+          : budgetFailed
+            ? "Plan creado, pero no se pudo guardar el presupuesto. Ponlo desde la pestaña Gastos."
+            : invited.length ? `Plan creado. Hemos invitado a ${namesSentence(invited.map((p) => p.name))}.` : "Plan creado.",
+        inviteFailed || budgetFailed ? "error" : "success",
       );
       router.push(Capacitor.isNativePlatform() ? `/plans/static?id=${created.id}` : `/plans/${created.id}`);
       return created;
