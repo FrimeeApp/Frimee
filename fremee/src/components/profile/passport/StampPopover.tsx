@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { EyeOff, Images, MapPin, X } from "lucide-react";
 import { FOCUS, GHOST_BTN } from "@/components/plans/home/pieces";
 import { countryName, countryOrdinal, dateLabel, gentePhrase, planRangeLabel, type Sello } from "@/lib/passport";
-import { marcarNoFui } from "@/services/api/endpoints/pasaporte.endpoint";
+import { countAlbumItems, marcarNoFui } from "@/services/api/endpoints/pasaporte.endpoint";
 import { HITO_NAME, noFuiQuita } from "./stamps";
 
 /**
@@ -79,6 +79,14 @@ export default function StampPopover({
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // «Ver el álbum» solo sale si el plan tiene fotos o vídeos; mientras se comprueba, no sale.
+  const [albumItems, setAlbumItems] = useState(0);
+  useEffect(() => {
+    if (sello.kind !== "plan") return;
+    let cancelled = false;
+    countAlbumItems(sello.plan_id).then((n) => { if (!cancelled) setAlbumItems(n); });
+    return () => { cancelled = true; };
+  }, [sello.kind, sello.plan_id]);
 
   // Colocar (solo escritorio) antes de pintar, para que no salte.
   useLayoutEffect(() => {
@@ -187,13 +195,15 @@ export default function StampPopover({
       </div>
     ) : (
       <>
-        <div className="grid grid-cols-2 gap-2">
+        <div className={`grid gap-2 ${albumItems > 0 ? "grid-cols-2" : ""}`}>
           <button type="button" className={btn} onClick={() => router.push(planPath(sello.plan_id))}>
             <MapPin className="size-[18px] shrink-0" strokeWidth={2} aria-hidden /> Ver el plan
           </button>
-          <button type="button" className={btn} onClick={() => router.push(albumPath(sello.plan_id))}>
-            <Images className="size-[18px] shrink-0" strokeWidth={2} aria-hidden /> Ver el álbum
-          </button>
+          {albumItems > 0 && (
+            <button type="button" className={btn} onClick={() => router.push(albumPath(sello.plan_id))}>
+              <Images className="size-[18px] shrink-0" strokeWidth={2} aria-hidden /> Ver el álbum
+            </button>
+          )}
         </div>
         {/* «Ocultar» (reversible) a la izquierda; «No fui» (quita sellos) a la derecha y en rojo. */}
         <div className="flex items-center justify-between">
