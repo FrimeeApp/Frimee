@@ -8,7 +8,7 @@ import { CountryStamp, HITO_NAME, HitoStamp, PlanStamp } from "./stamps";
 
 /** Índice del pasaporte (tablero «Índice»): países, planes e hitos en texto, cada uno con su página. Pulsar uno salta a ella. */
 
-type Tab = "paises" | "planes" | "hitos" | "ocultos";
+export type Tab = "paises" | "planes" | "hitos" | "ocultos";
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
 export default function PassportIndex({
@@ -17,6 +17,7 @@ export default function PassportIndex({
   onPick,
   onClose,
   onRestore,
+  initialTab = "paises",
 }: {
   sellos: Sello[];
   pages: PassportPage[];
@@ -24,9 +25,10 @@ export default function PassportIndex({
   onClose: () => void;
   /** Vuelve a mostrar un sello oculto (solo en tu pasaporte). */
   onRestore?: (s: Sello) => Promise<void>;
+  initialTab?: Tab;
 }) {
   const data = useMemo(() => buildIndex(sellos, pages), [sellos, pages]);
-  const [tab, setTab] = useState<Tab>("paises");
+  const [tab, setTab] = useState<Tab>(initialTab);
   const panelRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 

@@ -14,8 +14,9 @@ import { isPlanFinished, planEndsAt } from "@/lib/plan-dates";
 import { TicketTypeIcon } from "@/components/wallet/TicketTypeIcon";
 import { CARD, FILL_BTN, FOCUS, GHOST_BTN, LABEL, SERIF, TEXT_BTN } from "@/components/plans/home/pieces";
 import { leerPasaporte } from "@/services/api/endpoints/pasaporte.endpoint";
-import { computeStats, countryName, dateLabel, type PasaporteLeido, type Sello } from "@/lib/passport";
+import { computeStats, countryName, dateLabel, latestStamps, type PasaporteAjustes, type PasaporteLeido } from "@/lib/passport";
 import { GhostPlanStamp, PassportCover } from "./PassportCover";
+import PassportPrivacySheet from "./PassportPrivacySheet";
 import PassportReader from "./PassportReader";
 import { CountryStamp, PlanStamp } from "./stamps";
 
@@ -178,10 +179,10 @@ export default function MiPerfil({
       {failed ? (
         <ProfileError onRetry={retry} />
       ) : !data ? (
-        <ProfileLoading nombre={nombre} />
+        <PassportLoadingCard nombre={nombre} />
       ) : (
         <div className="flex flex-col gap-5 md:grid md:grid-cols-[minmax(0,1fr)_minmax(300px,380px)] md:items-start md:gap-6">
-          <PassportCard nombre={nombre} plans={data.plans} pasaporte={data.pasaporte} now={now} />
+          <PassportCard userId={userId} nombre={nombre} plans={data.plans} pasaporte={data.pasaporte} now={now} />
           <Wallet tickets={data.tickets} now={now} />
         </div>
       )}
@@ -196,15 +197,7 @@ const VISIBILITY_TEXT = {
   SOLO_YO: { icon: Lock, text: "Solo lo ves tú" },
 } as const;
 
-/** Los 4 sellos más recientes (a igual fecha, el de país antes que el de plan), como en «Últimos sellos». */
-function latestStamps(sellos: Sello[]) {
-  return sellos
-    .filter((s) => !s.hidden && s.kind !== "hito")
-    .sort((a, b) => (a.stamped_at < b.stamped_at ? 1 : a.stamped_at > b.stamped_at ? -1 : a.kind === b.kind ? b.id - a.id : a.kind === "pais" ? -1 : 1))
-    .slice(0, 4);
-}
-
-function PassportCard({ nombre, plans, pasaporte, now }: { nombre: string; plans: FeedPlanItemDto[]; pasaporte: PasaporteLeido | null; now: number }) {
+function PassportCard({ userId, nombre, plans, pasaporte, now }: { userId: string; nombre: string; plans: FeedPlanItemDto[]; pasaporte: PasaporteLeido | null; now: number }) {
   const router = useRouter();
   const { finished, next } = useMemo(() => {
     const at = new Date(now);
@@ -252,7 +245,10 @@ function PassportCard({ nombre, plans, pasaporte, now }: { nombre: string; plans
   const stats = computeStats(sellos);
   const recientes = latestStamps(sellos);
   const nuevo = sellos.find((s) => s.nuevo && !s.hidden && s.kind === "plan") ?? sellos.find((s) => s.nuevo && !s.hidden && s.kind !== "hito");
-  const visibility = VISIBILITY_TEXT[pasaporte?.ajustes?.passport_visibility ?? "AMISTADES"];
+  const [ajustesLocal, setAjustesLocal] = useState<PasaporteAjustes | null>(null);
+  const [privacyOpen, setPrivacyOpen] = useState(false);
+  const ajustes = ajustesLocal ?? pasaporte?.ajustes ?? null;
+  const visibility = VISIBILITY_TEXT[ajustes?.passport_visibility ?? "AMISTADES"];
   const VisIcon = visibility.icon;
   const lastCountry = recientes.find((s) => s.kind === "pais");
   const lastPlan = recientes.find((s) => s.kind === "plan");
@@ -277,9 +273,15 @@ function PassportCard({ nombre, plans, pasaporte, now }: { nombre: string; plans
       </span>
     );
     action = (
-      <button type="button" onClick={openPassport} className={`${FILL_BTN} w-full md:w-auto md:self-start`}>
-        Abrir pasaporte
-      </button>
+      <span className="flex flex-col gap-2 md:flex-row md:self-start">
+        <button type="button" onClick={openPassport} className={`${FILL_BTN} w-full md:w-auto`}>
+          Abrir pasaporte
+        </button>
+        <button type="button" onClick={() => setPrivacyOpen(true)} className={`${GHOST_BTN} w-full !text-[14px] md:w-auto`}>
+          <Users className="size-[18px] shrink-0" strokeWidth={2} aria-hidden />
+          Quién lo ve
+        </button>
+      </span>
     );
   } else if (next) {
     const stampDay = new Date(planEndsAt(next.endsAt).getTime() + DAY_MS);
@@ -367,12 +369,18 @@ function PassportCard({ nombre, plans, pasaporte, now }: { nombre: string; plans
           </ul>
         </div>
       )}
+      {privacyOpen && (
+        <PassportPrivacySheet ajustes={ajustes} shareUrl={`${window.location.origin}/profile/${userId}`} onChange={setAjustesLocal} onClose={() => setPrivacyOpen(false)} />
+      )}
       {reader &&
         pasaporte &&
         createPortal(
           <PassportReader
             nombre={nombre}
             sellos={pasaporte.sellos}
+            ajustes={ajustes}
+            userId={userId}
+            onAjustesChange={setAjustesLocal}
             fromCover={reader.from}
             profile={document.querySelector<HTMLElement>("[data-profile-root]")}
             closing={closing}
@@ -456,7 +464,8 @@ function TicketStub({ type }: { type: PlanTicket["type"] }) {
   );
 }
 
-function ProfileLoading({ nombre }: { nombre: string }) {
+/** Tarjeta del pasaporte cargando: la misma en tu perfil y en el de otra persona. */
+export function PassportLoadingCard({ nombre = "" }: { nombre?: string }) {
   return (
     <section role="status" aria-label="Cargando tu perfil" className={`${CARD} flex items-center gap-4 px-4 py-5 md:gap-10 md:p-8`}>
       <PassportCover name={nombre} loading />

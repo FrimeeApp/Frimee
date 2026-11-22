@@ -25,10 +25,12 @@ export type Sello = {
   ruta?: { tipo: "flight" | "ferry" | "train"; desde: string; hasta: string } | null;
 };
 
+export type PasaporteAjustes = { passport_visibility: "TODOS" | "AMISTADES" | "SOLO_YO"; show_plan_stamps: boolean; show_companions: boolean };
+
 export type PasaporteLeido = {
   puede_ver: boolean;
   es_mio: boolean;
-  ajustes: { passport_visibility: "TODOS" | "AMISTADES" | "SOLO_YO"; show_plan_stamps: boolean; show_companions: boolean } | null;
+  ajustes: PasaporteAjustes | null;
   sellos: Sello[];
 };
 
@@ -302,4 +304,12 @@ export function countryOrdinal(sellos: Sello[], code: string, stampId: number): 
     .filter((s) => !s.hidden && s.kind === "pais" && s.country_code === code)
     .sort((a, b) => (a.stamped_at < b.stamped_at ? -1 : a.stamped_at > b.stamped_at ? 1 : a.id - b.id));
   return all.findIndex((s) => s.id === stampId) + 1;
+}
+
+/** Los 4 sellos más recientes (a igual fecha, el de país antes que el de plan), como en «Últimos sellos». */
+export function latestStamps(sellos: Sello[]) {
+  return sellos
+    .filter((s) => !s.hidden && s.kind !== "hito")
+    .sort((a, b) => (a.stamped_at < b.stamped_at ? 1 : a.stamped_at > b.stamped_at ? -1 : a.kind === b.kind ? b.id - a.id : a.kind === "pais" ? -1 : 1))
+    .slice(0, 4);
 }

@@ -1,6 +1,6 @@
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { countryOfPlace } from "@/lib/placeCountry";
-import { parsePasaporte, type PasaporteLeido } from "@/lib/passport";
+import { parsePasaporte, type PasaporteAjustes, type PasaporteLeido } from "@/lib/passport";
 import type { TipoSubplan } from "./subplanes.endpoint";
 
 /** Los transportes no dan sello de país (son trayectos de paso): no se gasta una geocodificación en ellos. */
@@ -75,5 +75,15 @@ export async function estadoNoFui(planId: number): Promise<boolean> {
 /** Deshace «No fui»: vuelves a recibir los sellos del viaje. */
 export async function volverASellar(planId: number): Promise<void> {
   const { error } = await createBrowserSupabaseClient().rpc("fn_passport_si_fui", { p_plan_id: planId });
+  if (error) throw error;
+}
+
+/** «Quién ve tu pasaporte»: visibilidad y qué se enseña. */
+export async function guardarAjustesPasaporte(a: PasaporteAjustes): Promise<void> {
+  const { error } = await createBrowserSupabaseClient().rpc("fn_passport_ajustes", {
+    p_visibility: a.passport_visibility,
+    p_show_plan_stamps: a.show_plan_stamps,
+    p_show_companions: a.show_companions,
+  });
   if (error) throw error;
 }
