@@ -305,3 +305,11 @@ export function countryOrdinal(sellos: Sello[], code: string, stampId: number): 
     .sort((a, b) => (a.stamped_at < b.stamped_at ? -1 : a.stamped_at > b.stamped_at ? 1 : a.id - b.id));
   return all.findIndex((s) => s.id === stampId) + 1;
 }
+
+/** Los 4 sellos más recientes (a igual fecha, el de país antes que el de plan), como en «Últimos sellos». */
+export function latestStamps(sellos: Sello[]) {
+  return sellos
+    .filter((s) => !s.hidden && s.kind !== "hito")
+    .sort((a, b) => (a.stamped_at < b.stamped_at ? 1 : a.stamped_at > b.stamped_at ? -1 : a.kind === b.kind ? b.id - a.id : a.kind === "pais" ? -1 : 1))
+    .slice(0, 4);
+}

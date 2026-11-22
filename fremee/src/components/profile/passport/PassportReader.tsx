@@ -21,6 +21,8 @@ export default function PassportReader({
   ajustes: ajustesIniciales = null,
   userId,
   onAjustesChange,
+  readOnly = false,
+  title = "Pasaporte",
   fromCover = null,
   profile = null,
   closing = false,
@@ -33,6 +35,9 @@ export default function PassportReader({
   ajustes?: PasaporteAjustes | null;
   userId?: string;
   onAjustesChange?: (a: PasaporteAjustes) => void;
+  /** El pasaporte de otra persona: sin ajustes, sin ocultos y sin acciones sobre los sellos. */
+  readOnly?: boolean;
+  title?: string;
   /** La tapa pequeña del perfil desde la que se abre; sin ella no hay vuelo. */
   fromCover?: HTMLElement | null;
   /** Capa del perfil que se funde al abrir y vuelve al cerrar. */
@@ -97,15 +102,17 @@ export default function PassportReader({
           <button type="button" onClick={onRequestClose} aria-label="Volver al perfil" className={`inline-flex size-11 items-center justify-center rounded-[8px] text-app ${FOCUS}`}>
             <ChevronLeft className="size-[22px]" aria-hidden />
           </button>
-          <h1 className="m-0 flex-1 font-sans text-[18px] font-[var(--fw-semibold)] leading-[1.3]">Pasaporte</h1>
+          <h1 className="m-0 flex-1 font-sans text-[18px] font-[var(--fw-semibold)] leading-[1.3]">{title}</h1>
           {hasStamps && (
             <button type="button" onClick={() => { setIndexTab("paises"); setIndexOpen(true); }} aria-label="Índice del pasaporte" className={`inline-flex size-11 items-center justify-center rounded-[8px] text-app ${FOCUS}`}>
               <List className="size-[22px]" aria-hidden />
             </button>
           )}
+          {!readOnly && (
           <button type="button" onClick={() => setPrivacyOpen(true)} aria-label="Más opciones" className={`inline-flex size-11 items-center justify-center rounded-[8px] text-app ${FOCUS}`}>
             <MoreHorizontal className="size-[22px]" aria-hidden />
           </button>
+          )}
         </div>
         {preview ? (
           <>
@@ -118,7 +125,7 @@ export default function PassportReader({
             <Libreta key="preview" nombre={nombre} sellos={sellos.filter((x) => !x.hidden && ((ajustes?.show_plan_stamps ?? true) || x.kind === "pais"))} />
           </>
         ) : (
-          <Libreta nombre={nombre} sellos={sellos} intro={intro} jumpTo={jump} onOpenStamp={(sello, el) => setSheet({ sello, el })} />
+          <Libreta nombre={nombre} sellos={sellos} intro={intro} jumpTo={jump} onOpenStamp={readOnly ? undefined : (sello, el) => setSheet({ sello, el })} />
         )}
         {privacyOpen && (
           <PassportPrivacySheet
@@ -148,7 +155,7 @@ export default function PassportReader({
             sellos={sellos}
             pages={pages}
             onClose={() => setIndexOpen(false)}
-            onRestore={async (s) => {
+            onRestore={readOnly ? undefined : async (s) => {
               await Promise.all(sellos.filter((x) => x.plan_id === s.plan_id && x.hidden).map((x) => ocultarSello(x.id, false)));
               setSellos((all) => all.map((x) => (x.plan_id === s.plan_id ? { ...x, hidden: false } : x)));
             }}

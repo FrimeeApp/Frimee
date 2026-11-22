@@ -14,7 +14,7 @@ import { isPlanFinished, planEndsAt } from "@/lib/plan-dates";
 import { TicketTypeIcon } from "@/components/wallet/TicketTypeIcon";
 import { CARD, FILL_BTN, FOCUS, GHOST_BTN, LABEL, SERIF, TEXT_BTN } from "@/components/plans/home/pieces";
 import { leerPasaporte } from "@/services/api/endpoints/pasaporte.endpoint";
-import { computeStats, countryName, dateLabel, type PasaporteAjustes, type PasaporteLeido, type Sello } from "@/lib/passport";
+import { computeStats, countryName, dateLabel, latestStamps, type PasaporteAjustes, type PasaporteLeido } from "@/lib/passport";
 import { GhostPlanStamp, PassportCover } from "./PassportCover";
 import PassportPrivacySheet from "./PassportPrivacySheet";
 import PassportReader from "./PassportReader";
@@ -196,14 +196,6 @@ const VISIBILITY_TEXT = {
   AMISTADES: { icon: Users, text: "Lo ven tus amistades" },
   SOLO_YO: { icon: Lock, text: "Solo lo ves tú" },
 } as const;
-
-/** Los 4 sellos más recientes (a igual fecha, el de país antes que el de plan), como en «Últimos sellos». */
-function latestStamps(sellos: Sello[]) {
-  return sellos
-    .filter((s) => !s.hidden && s.kind !== "hito")
-    .sort((a, b) => (a.stamped_at < b.stamped_at ? 1 : a.stamped_at > b.stamped_at ? -1 : a.kind === b.kind ? b.id - a.id : a.kind === "pais" ? -1 : 1))
-    .slice(0, 4);
-}
 
 function PassportCard({ userId, nombre, plans, pasaporte, now }: { userId: string; nombre: string; plans: FeedPlanItemDto[]; pasaporte: PasaporteLeido | null; now: number }) {
   const router = useRouter();
