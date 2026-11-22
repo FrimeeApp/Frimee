@@ -261,7 +261,7 @@ export type IndexData = {
   paises: { code: string; name: string; count: number; last: string; page: number | null; sello: Sello }[];
   planes: { titulo: string; page: number | null; sello: Sello }[];
   hitos: { page: number | null; sello: Sello }[];
-  /** Sellos ocultos (solo los ve su dueño), del más reciente al más antiguo. */
+  /** Viajes ocultos (su sello de plan; solo los ve su dueño), del más reciente al más antiguo. */
   ocultos: Sello[];
 };
 
@@ -292,7 +292,7 @@ export function buildIndex(sellos: Sello[], pages: PassportPage[]): IndexData {
     .filter((s) => s.kind === "hito" && s.hito)
     .sort(byDateDesc)
     .map((s) => ({ page: tripPage.get(s.plan_id) ?? null, sello: s }));
-  const ocultos = sellos.filter((s) => s.hidden).sort(byDateDesc);
+  const ocultos = sellos.filter((s) => s.hidden && s.kind === "plan").sort(byDateDesc);
   return { paises, planes, hitos, ocultos };
 }
 

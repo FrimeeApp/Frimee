@@ -7,7 +7,7 @@ import { playClose, prefersReducedMotion } from "@/lib/passportOpen";
 import { buildPages, groupTrips, type Sello } from "@/lib/passport";
 import { ocultarSello } from "@/services/api/endpoints/pasaporte.endpoint";
 import PassportIndex from "./PassportIndex";
-import StampSheet from "./StampSheet";
+import StampPopover from "./StampPopover";
 import Libreta, { type LibretaIntro } from "./Libreta";
 
 /**
@@ -39,7 +39,7 @@ export default function PassportReader({
   const [reduced] = useState(prefersReducedMotion);
   // Ocultar un sello o decir «no fui» cambia el pasaporte al momento, sin volver a leerlo.
   const [sellos, setSellos] = useState(sellosIniciales);
-  const [sheet, setSheet] = useState<Sello | null>(null);
+  const [sheet, setSheet] = useState<{ sello: Sello; el: HTMLElement } | null>(null);
   const [indexOpen, setIndexOpen] = useState(false);
   const [jump, setJump] = useState<{ page: number; nonce: number } | null>(null);
   const pages = useMemo(() => buildPages(groupTrips(sellos)), [sellos]);
@@ -89,15 +89,15 @@ export default function PassportReader({
             </button>
           )}
         </div>
-        <Libreta nombre={nombre} sellos={sellos} intro={intro} jumpTo={jump} onOpenStamp={setSheet} />
+        <Libreta nombre={nombre} sellos={sellos} intro={intro} jumpTo={jump} onOpenStamp={(sello, el) => setSheet({ sello, el })} />
         {indexOpen && (
           <PassportIndex
             sellos={sellos}
             pages={pages}
             onClose={() => setIndexOpen(false)}
             onRestore={async (s) => {
-              await ocultarSello(s.id, false);
-              setSellos((all) => all.map((x) => (x.id === s.id ? { ...x, hidden: false } : x)));
+              await Promise.all(sellos.filter((x) => x.plan_id === s.plan_id && x.hidden).map((x) => ocultarSello(x.id, false)));
+              setSellos((all) => all.map((x) => (x.plan_id === s.plan_id ? { ...x, hidden: false } : x)));
             }}
             onPick={(page) => {
               setIndexOpen(false);
@@ -106,12 +106,17 @@ export default function PassportReader({
           />
         )}
         {sheet && (
-          <StampSheet
-            sello={sheet}
+          <StampPopover
+            sello={sheet.sello}
+            anchor={sheet.el}
             sellos={sellos}
             onClose={() => setSheet(null)}
-            onHidden={(s) => {
-              setSellos((all) => all.map((x) => (x.id === s.id ? { ...x, hidden: true } : x)));
+            // Ocultar un sello oculta su viaje entero: plan, países y hitos.
+            onHide={async (planId) => {
+              await Promise.all(sellos.filter((x) => x.plan_id === planId && !x.hidden).map((x) => ocultarSello(x.id, true)));
+            }}
+            onHidden={(planId) => {
+              setSellos((all) => all.map((x) => (x.plan_id === planId ? { ...x, hidden: true } : x)));
               setSheet(null);
             }}
             onNoFui={(planId) => {

@@ -32,7 +32,7 @@ const MOBILE: Dims = { w: 358, h: 590 };
 const WIDE: Dims = { w: 452, h: 620 };
 const DimsContext = createContext<Dims>(MOBILE);
 /** Pulsar un sello abre su hoja (solo en tu propio pasaporte). */
-const StampOpenContext = createContext<((s: Sello) => void) | null>(null);
+const StampOpenContext = createContext<((s: Sello, el: HTMLElement) => void) | null>(null);
 const useDims = () => useContext(DimsContext);
 const SPINE = 6;
 const TAB_W = 52;
@@ -68,7 +68,7 @@ export default function Libreta({
   sellos: Sello[];
   intro?: LibretaIntro;
   jumpTo?: { page: number; nonce: number } | null;
-  onOpenStamp?: (s: Sello) => void;
+  onOpenStamp?: (s: Sello, el: HTMLElement) => void;
 }) {
   const trips = useMemo(() => groupTrips(sellos), [sellos]);
   const pages = useMemo(() => buildPages(trips), [trips]);
@@ -701,7 +701,7 @@ function PlacedStamp({ p, isNew }: { p: Placed; isNew: (s: Pick<Sello, "id" | "n
   const base = "absolute block rounded-[8px] leading-[0]";
   // Con hoja (tu pasaporte) cada sello es un botón; sin ella, solo una imagen con su descripción.
   return open ? (
-    <button type="button" onClick={() => open(s)} aria-label={label} className={`${base} ${FOCUS}`} style={style}>
+    <button type="button" onClick={(e) => open(s, e.currentTarget)} aria-label={label} className={`${base} ${FOCUS}`} style={style}>
       {content}
       {pill}
     </button>

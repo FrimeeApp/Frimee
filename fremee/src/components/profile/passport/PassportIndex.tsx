@@ -96,7 +96,7 @@ export default function PassportIndex({
             ))}
           {tab === "ocultos" && (
             <>
-              <li className="py-3 text-[14px] leading-[1.5] text-muted">Solo los ves tú. No salen en las páginas ni los ve nadie más.</li>
+              <li className="py-3 text-[14px] leading-[1.5] text-muted">Viajes ocultos: solo los ves tú. No salen en las páginas ni los ve nadie más.</li>
               {data.ocultos.map((o, i) => (
                 <HiddenRow key={o.id} first={i === 0} sello={o} onRestore={onRestore} />
               ))}
