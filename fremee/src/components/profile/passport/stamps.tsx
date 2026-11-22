@@ -91,6 +91,9 @@ export function CountryStamp({
   const code = sello.country_code ?? "";
   const name = countryName(code).toUpperCase();
   const nameSize = name.length > 14 ? 5.6 : name.length > 10 ? 6.4 : 7.5;
+  // A esa altura, el aro punteado deja unos 60 de ancho: los nombres largos («Ciudad del Vaticano») se comprimen para no salirse.
+  const nameWidth = name.length * (nameSize * 0.64 + 1.4);
+  const fitName = nameWidth > 60;
   return (
     <svg width={size} height={size} viewBox="0 0 96 96" aria-hidden="true" className={className} style={{ transform: `rotate(${tilt}deg)`, flexShrink: 0, ...style }}>
       {border === 1 ? (
@@ -102,7 +105,7 @@ export function CountryStamp({
       )}
       {border === 2 && <circle cx="48" cy="48" r="40.5" fill="none" stroke={c} strokeWidth="1" />}
       <circle cx="48" cy="48" r={border === 2 ? 36 : 37.5} fill="none" stroke={c} strokeWidth="1" strokeDasharray="2 3" />
-      <text x="48" y="31" textAnchor="middle" fontFamily={SANS} fontSize={nameSize} fontWeight="700" letterSpacing="1.4" fill={c}>
+      <text x="48" y="31" textAnchor="middle" fontFamily={SANS} fontSize={nameSize} fontWeight="700" letterSpacing={fitName ? 0.6 : 1.4} textLength={fitName ? 60 : undefined} lengthAdjust={fitName ? "spacingAndGlyphs" : undefined} fill={c}>
         {name}
       </text>
       <text x="48" y="59" textAnchor="middle" fontFamily={SERIF} fontSize="32" fill={c}>
