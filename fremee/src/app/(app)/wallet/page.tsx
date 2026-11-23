@@ -13,9 +13,10 @@ import {
   type Ticket, type TicketKind,
 } from "@/components/wallet/WalletUI";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
+import { readTicketBarcode, type TicketCode } from "@/lib/ticket-barcode";
 import { fetchPlansByIds, fetchUserRelatedPlans } from "@/services/api/endpoints/plans.endpoint";
 import {
-  createTicketEndpoint, deleteTicketEndpoint, deleteTicketSourceFiles, getTicketSourceSignedUrl, listTicketsEndpoint, updateTicketEndpoint, uploadTicketSourceEndpoint,
+  createTicketEndpoint, deleteTicketEndpoint, deleteTicketSourceFiles, getTicketCodeEndpoint, getTicketSourceSignedUrl, listTicketsEndpoint, setTicketCodeEndpoint, updateTicketEndpoint, uploadTicketSourceEndpoint,
   type PlanTicket, type TicketType,
 } from "@/services/api/endpoints/wallet.endpoint";
 
@@ -23,9 +24,8 @@ const KIND_OF: Record<TicketType, TicketKind> = {
   flight: "vuelo", train: "tren", ferry: "barco", concert: "entrada", match: "entrada", hotel: "reserva", other: "otro",
 };
 
-function toTicket(p: PlanTicket, dates: Map<string, string>): Ticket {
+function toTicket(p: PlanTicket, dates: Map<string, string>, code?: TicketCode | null): Ticket {
   const kind = KIND_OF[p.type];
-  const realQr = p.barcode_value && p.barcode_value !== "detected" ? p.barcode_value : undefined;
   return {
     id: p.id,
     kind,
@@ -33,8 +33,9 @@ function toTicket(p: PlanTicket, dates: Map<string, string>): Ticket {
     status: p.status === "upcoming" ? "listo" : "usado",
     plan: p.plan_id != null && p.plan_titulo ? { id: String(p.plan_id), title: p.plan_titulo, dates: dates.get(String(p.plan_id)) } : undefined,
     code: p.booking_code ?? undefined,
-    qr: realQr,
-    hasSourceCode: !realQr && !!(p.qr_image_url || p.barcode_value),
+    qr: code?.contenido,
+    qrFormat: code?.formato,
+    hasSourceCode: !code && !!(p.qr_image_url || p.barcode_value),
     hasSource: !!(p.source_image_url || p.source_pdf_url),
     from: p.from_label ?? undefined,
     to: p.to_label ?? undefined,
@@ -80,6 +81,9 @@ export default function WalletPage() {
   const [formPlans, setFormPlans] = useState<PlanOption[]>([]);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [source, setSource] = useState<{ id: string; url: string; isPdf: boolean } | null>(null);
+  /** Contenido descifrado del código de cada billete abierto; null = no tiene o no se pudo leer. */
+  const [codes, setCodes] = useState<Record<string, TicketCode | null>>({});
+  const dropCode = (id: string) => setCodes((c) => { const n = { ...c }; delete n[id]; return n; });
 
   const [dates, setDates] = useState<Map<string, string>>(new Map());
   const [reload, setReload] = useState(0);
@@ -99,7 +103,7 @@ export default function WalletPage() {
     return () => { cancelled = true; };
   }, [reload]);
 
-  const tickets = useMemo(() => raw.map((p) => toTicket(p, dates)), [raw, dates]);
+  const tickets = useMemo(() => raw.map((p) => toTicket(p, dates, codes[p.id])), [raw, dates, codes]);
   const upcoming = useMemo(() => tickets.filter((t) => t.status === "listo").sort((a, b) => a.startsAt.localeCompare(b.startsAt)), [tickets]);
   const used = useMemo(() => tickets.filter((t) => t.status === "usado").sort((a, b) => b.startsAt.localeCompare(a.startsAt)), [tickets]);
   const list = tab === "proximos" ? upcoming : used;
@@ -135,6 +139,20 @@ export default function WalletPage() {
     return () => { cancelled = true; clearInterval(refresh); };
   }, [selected, sourcePath, sourceIsPdf]);
   const sourceUrl = source && source.id === selected ? source : null;
+
+  // El código se pide descifrado solo cuando se abre el billete.
+  const selHasCode = !!selRaw?.barcode_value;
+  useEffect(() => {
+    if (!selected || !selHasCode || codes[selected] !== undefined) return;
+    let cancelled = false;
+    getTicketCodeEndpoint(selected)
+      .then((c) => { if (!cancelled) setCodes((m) => ({ ...m, [selected]: c })); })
+      .catch((err) => {
+        console.error("[billetes] No se pudo leer el código del billete:", (err as { message?: string } | null)?.message ?? err);
+        if (!cancelled) setCodes((m) => ({ ...m, [selected]: null }));
+      });
+    return () => { cancelled = true; };
+  }, [selected, selHasCode, codes]);
 
   const next = tab === "proximos" ? upcoming[0] : undefined;
   const meta = tickets.length === 0 ? "vacía"
@@ -174,11 +192,24 @@ export default function WalletPage() {
     setForm({ mode: "edit", id, initial: draftFromTicket(t, url) });
     void loadFormPlans();
   }
+  /** El billete ya está guardado: si el código no se puede guardar, se sigue enseñando la imagen original. */
+  async function saveCode(ticketId: string, code: TicketCode | null) {
+    try { await setTicketCodeEndpoint(ticketId, code); }
+    catch (err) { console.error("[billetes] No se pudo guardar el código del billete:", (err as { message?: string } | null)?.message ?? err); }
+  }
   async function saveForm(d: TicketDraft) {
     if (!form) return;
     const input = inputFromDraft(d);
-    if (form.mode === "add") await createTicketEndpoint({ ...input, status: "upcoming" });
-    else await updateTicketEndpoint(form.id, input); // updateTicketEndpoint no toca barcode_value
+    if (form.mode === "add") {
+      const id = await createTicketEndpoint({ ...input, status: "upcoming" });
+      if (d.file?.fresh && d.file.code) await saveCode(id, d.file.code);
+    } else {
+      await updateTicketEndpoint(form.id, input); // updateTicketEndpoint no toca barcode_value
+      // un archivo nuevo trae su código (o ninguno) y sustituye al anterior; sin archivo, el código ya no tiene origen
+      if (d.file?.fresh) await saveCode(form.id, d.file.code ?? null);
+      else if (!d.file && form.initial.file) await saveCode(form.id, null);
+      dropCode(form.id);
+    }
     setForm(null);
     await load();
   }
@@ -203,6 +234,9 @@ export default function WalletPage() {
         const path = await uploadTicketSourceEndpoint(file, user.id);
         const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
         await updateTicketEndpoint(ticketId, isPdf ? { source_pdf_url: path } : { source_image_url: path });
+        // una captura con código lo sustituye; un PDF, o una captura sin código legible, deja el que había
+        const code = isPdf ? null : await readTicketBarcode(file);
+        if (code) { await saveCode(ticketId, code); dropCode(ticketId); }
         await load();
       } catch {
         setState("error");

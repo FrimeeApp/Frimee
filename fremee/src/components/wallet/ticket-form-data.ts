@@ -6,6 +6,7 @@ import { createBrowserSupabaseClient } from "@/services/supabase/client";
 import { buildInternalApiUrl } from "@/config/external";
 import { airportTz } from "@/lib/airports";
 import type { TicketOcrResult } from "@/app/api/tickets/ocr/route";
+import { readTicketBarcode, type TicketCode } from "@/lib/ticket-barcode";
 import type { CreateTicketInput, PlanTicket, TicketType } from "@/services/api/endpoints/wallet.endpoint";
 
 export type TicketFile = {
@@ -19,6 +20,10 @@ export type TicketFile = {
   /** Hay QR o código de barras en el archivo. */
   qr: boolean;
   isPdf: boolean;
+  /** Archivo subido en esta sesión (no el que ya estaba guardado): su código, o su falta, sustituye al anterior. */
+  fresh?: boolean;
+  /** Contenido del código leído de la imagen en el dispositivo. Solo en los archivos recién subidos. */
+  code?: TicketCode;
 };
 
 export type TicketDraft = {
@@ -196,6 +201,9 @@ export async function uploadTicketFile(file: File, onProgress: (pct: number) => 
   body.append("file", isPdf ? file : await toJpeg(file), isPdf ? file.name : "ticket.jpg");
   body.append("user_id", user.id);
 
+  // El código se lee en el dispositivo, a la vez que el servidor lee el resto de datos; los PDF no se leen.
+  const codePromise: Promise<TicketCode | null> = isPdf ? Promise.resolve(null) : readTicketBarcode(file);
+
   let pct = 0;
   const timer = setInterval(() => { pct += (90 - pct) * 0.12; onProgress(pct); }, 250);
   try {
@@ -229,8 +237,9 @@ export async function uploadTicketFile(file: File, onProgress: (pct: number) => 
       terminal: data.terminal_label ?? undefined,
       holder: data.passenger_name ?? undefined,
     };
+    const code = await codePromise;
     return {
-      file: { path: data.source_path, url: isPdf ? "" : URL.createObjectURL(file), name: file.name, size: file.size, qr: data.has_qr, isPdf },
+      file: { path: data.source_path, url: isPdf ? "" : URL.createObjectURL(file), name: file.name, size: file.size, qr: data.has_qr || !!code, isPdf, fresh: true, code: code ?? undefined },
       extracted,
     };
   } finally {
