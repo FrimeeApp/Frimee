@@ -7,6 +7,7 @@
 import { useEffect } from "react";
 import { TicketCodeView } from "./TicketCodeView";
 import { raiseScreenBrightness } from "@/lib/screen-brightness";
+import { protectScreen } from "@/lib/screen-privacy";
 import type { TicketCodeFormat } from "@/lib/ticket-barcode";
 import {
   AlertCircle, BedDouble, Bus, ChevronLeft, ChevronRight, FileText, MapPin,
@@ -240,14 +241,17 @@ export function TicketDetail({ t, now, isDesktop, sourceUrl, onBack, onOpenPlan,
   const secondary = `inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-[var(--border-strong)] bg-[var(--surface-2)] px-4 text-sm font-semibold ${FOCUS}`;
   const iconBtn = `inline-flex h-11 items-center gap-1.5 rounded-lg px-3 text-sm font-semibold hover:bg-[var(--surface-2)] ${FOCUS}`;
 
-  // Con el código a la vista (billete próximo), la pantalla sube al máximo en la app nativa y vuelve a como estaba al cerrar.
-  const showingCode = !!t.qr && t.status === "listo";
+  // Con el código a la vista (billete próximo), en la app nativa el brillo sube al máximo y la pantalla no se puede
+  // capturar ni grabar; todo vuelve a como estaba al cerrar el billete.
+  const showingCode = t.status === "listo" && (!!t.qr || (!!sourceUrl && !sourceUrl.isPdf));
   useEffect(() => {
     if (!showingCode) return;
-    let restore: (() => void) | null = null;
+    const restores: (() => void)[] = [];
     let cancelled = false;
-    void raiseScreenBrightness().then((r) => { if (cancelled) r(); else restore = r; });
-    return () => { cancelled = true; restore?.(); };
+    for (const start of [raiseScreenBrightness, protectScreen]) {
+      void start().then((r) => { if (cancelled) r(); else restores.push(r); });
+    }
+    return () => { cancelled = true; restores.forEach((r) => r()); };
   }, [showingCode, t.id]);
 
   const qrBlock = t.qr ? (
