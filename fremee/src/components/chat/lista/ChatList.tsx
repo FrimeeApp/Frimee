@@ -7,6 +7,8 @@ import { formatChatTime, resolveChatAvatar, resolveChatName, type ChatListItem }
 import { GroupIcon } from "@/components/chat/ChatConversation";
 import { momentPreview, parseMoment } from "@/components/chat/bitacora/moments";
 import { tripStatus } from "@/components/chat/bitacora/timeline";
+import { FlightBadge } from "@/components/flights/FlightLine";
+import { flightA11y, flightPreview, flightStateAt, useFriendFlight } from "@/components/flights/flight-data";
 
 export type ChatFilter = "todos" | "viajes" | "personas" | "noleidos";
 
@@ -185,11 +187,16 @@ function ChatRow({
   const planMade = chat.tipo === "GRUPO"
     && (parseMoment(chat.last_message ?? "")?.type === "plan_creado" || (chat.last_message ?? "").startsWith("Plan creado · "));
   const preview = describeLastMessage(chat.last_message);
+  // Vuelo de la otra persona: insignia en el avatar y, sin mensajes sin leer, el estado en la vista previa.
+  const flight = useFriendFlight(chat.tipo === "DIRECTO" ? chat.miembros.find((m) => m.id !== userId)?.id : null);
+  const flightState = flight ? flightStateAt(flight, now.getTime()) : null;
+  const showFlight = !!flight && flightState !== "landed";
   return (
     <button
       type="button"
       onClick={() => onOpen(chat.chat_id)}
       aria-current={selected ? "true" : undefined}
+      aria-label={showFlight && flight ? flightA11y(flight, now.getTime()) : undefined}
       // The open chat (board d-*): --chat-surface, since --surface is white like the page in light mode.
       className={`flex min-h-[68px] w-full items-center gap-3 px-[var(--space-4)] py-[10px] text-left transition-colors focus:outline-none focus-visible:bg-[var(--chat-surface)] ${selected ? "bg-[var(--chat-surface)]" : "hover:bg-[var(--chat-surface)]"}`}
     >
@@ -199,7 +206,7 @@ function ChatRow({
           <span className="mt-[3px] text-[10px] font-[var(--fw-semibold)] uppercase tracking-[0.04em] text-muted">{trip.start.toLocaleDateString("es-ES", { month: "short" }).replace(".", "")}</span>
         </span>
       ) : (
-        <span className="shrink-0"><ChatPreviewAvatar name={name} image={avatar} isGroup={chat.tipo !== "DIRECTO"} /></span>
+        <span className="relative shrink-0"><ChatPreviewAvatar name={name} image={avatar} isGroup={chat.tipo !== "DIRECTO"} />{showFlight && flightState && <FlightBadge state={flightState} />}</span>
       )}
       <span className="min-w-0 flex-1">
         <span className="flex items-baseline gap-2">
@@ -222,7 +229,7 @@ function ChatRow({
           ) : (
             <span className={`flex min-w-0 flex-1 items-center gap-[6px] text-[14px] leading-[1.4] ${preview.missed ? "text-[var(--error)]" : hasUnread ? "text-app" : "text-muted"}`}>
               {preview.icon}
-              <span className="truncate">{preview.text}</span>
+              <span className="truncate">{showFlight && !hasUnread && flight ? flightPreview(flight, now.getTime()) : preview.text}</span>
             </span>
           )}
           {hasUnread && (

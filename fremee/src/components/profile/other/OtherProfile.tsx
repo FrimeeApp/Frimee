@@ -13,6 +13,8 @@ import { CountryStamp, PlanStamp } from "../passport/stamps";
 import { fetchCiudadBase } from "@/services/api/endpoints/pasaporte.endpoint";
 import { PassportCover } from "../passport/PassportCover";
 import dynamic from "next/dynamic";
+import { FlightCard } from "@/components/flights/FlightLine";
+import { useFriendFlight } from "@/components/flights/flight-data";
 
 /** El lector es una capa que se abre al pulsar: solo se carga en el cliente (no depende de la hora ni del tamaño de ventana del servidor). */
 const PassportReader = dynamic(() => import("../passport/PassportReader"), { ssr: false });
@@ -396,6 +398,8 @@ function CommonBlock({ data }: { data: OtherProfileData }) {
 export default function OtherProfile(p: Props) {
   const { data } = p;
   const router = useRouter();
+  // Si es tu amistad y está volando ahora, su vuelo va encima del pasaporte.
+  const flight = useFriendFlight(data.relationship === "friend" ? data.id : null);
   // Sin nada en común no se pinta la columna: así el pasaporte ocupa todo el ancho.
   const hasCommon = data.common.paises.length > 0 || data.common.viajes_juntos.length > 0 || data.common.planes_compartidos.length > 0;
   return (
@@ -430,6 +434,8 @@ export default function OtherProfile(p: Props) {
           <Actions {...p} />
         </div>
       </div>
+
+      {flight && <FlightCard flight={flight} />}
 
       <div className="flex flex-col gap-5 md:flex-row md:flex-wrap md:items-start md:gap-6">
         <div className="min-w-0 md:flex-[999_1_560px]">

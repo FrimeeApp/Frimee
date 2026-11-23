@@ -1,0 +1,22 @@
+/* Vuelos de amistades (línea del chat, tarjeta del perfil, insignia de la lista). Tokens del tablero «Vuelos». */
+:root {
+  --fl-bg: var(--bg);
+  --fl-sf2: var(--surface-2);
+  --fl-bd: var(--border);
+  --fl-bd-strong: var(--border-strong);
+  --fl-tx: var(--text-primary);
+  --fl-tx2: var(--text-secondary);
+  --fl-pr: var(--primary);
+  --fl-prtx: var(--primary-hover);
+  --fl-fill: var(--primary-hover);
+  --fl-onfill: var(--contrast);
+  --fl-tint: color-mix(in srgb, var(--primary) 14%, transparent);
+  --fl-meb: var(--chat-me-border);
+}
+.dark {
+  --fl-prtx: var(--primary);
+  --fl-fill: var(--primary);
+}
+.fl-live { animation: fl-live 2000ms ease-in-out infinite; }
+@keyframes fl-live { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+@media (prefers-reduced-motion: reduce) { .fl-live { animation: none; } }
