@@ -253,14 +253,24 @@ function PlanList({ plans, value, onChange, name }: { plans: PlanOption[]; value
     );
   };
   const up = plans.filter((p) => p.upcoming);
-  const past = plans.filter((p) => !p.upcoming);
+  const past = plans.filter((p) => !p.upcoming); // ya vienen del más reciente al más antiguo
+  // Los pasados van plegados: se ven de 5 en 5 al pedirlos, y el plan elegido sale siempre (al editar un billete de un plan acabado).
+  const [showPast, setShowPast] = useState(false);
+  const [pastCount, setPastCount] = useState(5);
+  const shownPast = past.filter((p, i) => (showPast && i < pastCount) || p.id === value);
   const head = (t: string) => <span className="pb-0.5 pt-2.5 text-[11px] font-semibold tracking-[0.06em]" style={{ color: BOOK.label }}>{t}</span>;
+  const linkBtn = (label: string, onClick: () => void) => (
+    <button type="button" onClick={onClick} className={`min-h-11 self-start rounded text-left text-[14px] font-semibold ${FOCUS}`} style={{ color: BOOK.ribbon }}>{label}</button>
+  );
   return (
     <div role="radiogroup" aria-label="Plan" className="flex flex-col">
       {up.length > 0 && head("PRÓXIMOS")}
       {up.map((p, i) => row(p.id, p.title, p.dates, i === 0))}
-      {past.length > 0 && head("PASADOS")}
-      {past.map((p, i) => row(p.id, p.title, p.dates, i === 0))}
+      {shownPast.length > 0 && head("PASADOS")}
+      {shownPast.map((p, i) => row(p.id, p.title, p.dates, i === 0))}
+      {past.length > 0 && !showPast && linkBtn(`Ver planes pasados (${past.length})`, () => setShowPast(true))}
+      {showPast && pastCount < past.length && linkBtn("Ver más", () => setPastCount((n) => n + 5))}
+      {showPast && linkBtn("Ocultar planes pasados", () => { setShowPast(false); setPastCount(5); })}
       <div className={plans.length ? "mt-0.5 border-t" : ""} style={{ borderColor: "#DCE3DE" }}>{row(null, "Sin plan", "", true)}</div>
     </div>
   );
