@@ -509,9 +509,22 @@ export default function Libreta({
         <NavButton label="Página anterior" disabled={unit(index) === 0} onClick={() => goToUnit(unit(index) - 1)}>
           <ChevronLeft className="size-[22px]" aria-hidden />
         </NavButton>
-        <span aria-live="polite" className="text-[14px] tabular-nums text-muted">
-          {wide && index > 0 ? `Páginas ${index + 1}–${index + 2} de ${Math.max(pages.length, index + 2)}` : `Página ${index + 1} de ${pages.length}`}
-        </span>
+        <div className="flex flex-col items-center gap-2">
+          <p aria-live="polite" className="m-0 flex items-baseline gap-1.5 whitespace-nowrap tabular-nums">
+            <span className={`text-[22px] leading-none text-app ${SERIF}`}>{wide && index > 0 ? `Págs. ${index + 1}–${index + 2}` : `Pág. ${index + 1}`}</span>
+            <span className="text-[14px] leading-none text-muted">de {wide && index > 0 ? Math.max(pages.length, index + 2) : pages.length}</span>
+          </p>
+          {/* Un trazo por pliego: el actual, largo y relleno. */}
+          <span aria-hidden="true" className="flex items-center gap-1.5">
+            {Array.from({ length: units }, (_, i) =>
+              i === unit(index) ? (
+                <span key={i} className="h-1.5 w-7 rounded-sm bg-[var(--text-primary)] transition-[width] duration-150 motion-reduce:transition-none" />
+              ) : (
+                <span key={i} className="box-border h-1.5 w-2.5 rounded-sm border border-[var(--text-secondary)] transition-[width] duration-150 motion-reduce:transition-none" />
+              ),
+            )}
+          </span>
+        </div>
         <NavButton label="Página siguiente" disabled={unit(index) === units - 1} onClick={() => goToUnit(unit(index) + 1)}>
           <ChevronRight className="size-[22px]" aria-hidden />
         </NavButton>
@@ -522,13 +535,19 @@ export default function Libreta({
 
 function NavButton({ label, disabled, onClick, children }: { label: string; disabled: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
+    // Sin `disabled`: sigue siendo enfocable para que el lector de pantalla la anuncie como desactivada.
     <button
       type="button"
       aria-label={label}
-      disabled={disabled}
-      onClick={onClick}
-      className={`inline-flex size-11 items-center justify-center rounded-[8px] border border-[var(--border-strong)] bg-surface-2 text-app disabled:opacity-[var(--disabled-opacity)] md:size-[52px] ${FOCUS}`}
+      aria-disabled={disabled || undefined}
+      onClick={() => !disabled && onClick()}
+      className={`relative inline-flex size-[52px] shrink-0 items-center justify-center rounded-lg bg-[#0e2f2a] p-0 text-[#F1F3EC] transition-[background-color,transform] duration-[120ms] motion-reduce:transition-none ${
+        disabled ? "cursor-not-allowed opacity-40" : "cursor-pointer hover:bg-[#13403a] active:translate-y-px active:bg-[#0a2420] motion-reduce:active:translate-y-0"
+      } focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1c6a5d]`}
+      style={{ border: "1px solid var(--passport-arrow-border)", boxShadow: "var(--passport-arrow-shadow)" }}
     >
+      {/* pespunte */}
+      <span aria-hidden="true" className="pointer-events-none absolute inset-1 rounded-[5px] border border-dashed border-[rgba(241,243,236,0.38)]" />
       {children}
     </button>
   );
