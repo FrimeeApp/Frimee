@@ -134,7 +134,7 @@ export default function PassportPrivacySheet({
   return createPortal(
     <>
       {/* Velo sólido, sin desenfoque. */}
-      <div aria-hidden="true" className="fixed inset-0 z-[89] bg-black/60" onClick={onClose} />
+      <div aria-hidden="true" className="fixed inset-0 z-[1059] bg-black/60" onClick={onClose} />
       <div
         ref={ref}
         role="dialog"
@@ -142,8 +142,8 @@ export default function PassportPrivacySheet({
         aria-labelledby={titleId}
         className={
           isDesktop
-            ? "fixed left-1/2 top-1/2 z-[90] flex max-h-[calc(100dvh-48px)] w-[480px] -translate-x-1/2 -translate-y-1/2 flex-col rounded-[8px] border border-app bg-surface text-app shadow-[0_12px_24px_rgba(0,0,0,0.3),0_4px_8px_rgba(0,0,0,0.2)]"
-            : "fixed inset-x-0 bottom-0 z-[90] mx-auto flex max-h-[90dvh] w-full max-w-[460px] flex-col rounded-t-[8px] border-t border-app bg-surface text-app shadow-[0_12px_24px_rgba(0,0,0,0.3),0_4px_8px_rgba(0,0,0,0.2)]"
+            ? "fixed left-1/2 top-1/2 z-[1060] flex max-h-[calc(100dvh-48px)] w-[480px] -translate-x-1/2 -translate-y-1/2 flex-col rounded-[8px] border border-app bg-surface text-app shadow-[0_12px_24px_rgba(0,0,0,0.3),0_4px_8px_rgba(0,0,0,0.2)]"
+            : "fixed inset-x-0 bottom-0 z-[1060] mx-auto flex max-h-[90dvh] w-full max-w-[460px] flex-col rounded-t-[8px] border-t border-app bg-surface text-app shadow-[0_12px_24px_rgba(0,0,0,0.3),0_4px_8px_rgba(0,0,0,0.2)]"
         }
       >
         <header className="flex items-center gap-2 pb-1 pl-6 pr-2 pt-3">
