@@ -45,6 +45,15 @@ export default function PoliticaDePrivacidadPage() {
           </p>
           <p>Contenido introducido por el usuario dentro de la aplicación.</p>
           <p>
+            Billetes y entradas que el usuario guarda en su Cartera, con su archivo (imagen o PDF) y los datos que
+            figuran en él, como el localizador, el asiento, el titular o el código QR. Los archivos se guardan en un
+            espacio privado al que solo puede acceder su propietario.
+          </p>
+          <p>
+            Si el usuario lo permite, sus amistades pueden ver la ruta y las horas de un vuelo suyo en curso, pero nunca
+            el localizador, el asiento ni el titular. Esta opción se cambia en Ajustes, en «Quién ve tus vuelos».
+          </p>
+          <p>
             Datos técnicos y de uso necesarios para el funcionamiento, seguridad y mejora de la plataforma, como
             información del dispositivo, navegador, registros de acceso o uso de la aplicación.
           </p>
@@ -141,6 +150,10 @@ export default function PoliticaDePrivacidadPage() {
             Frimee podrá compartir datos personales con proveedores necesarios para prestar el servicio, como servicios
             de alojamiento web, bases de datos, autenticación, correo electrónico, analítica, soporte técnico o
             proveedores de inteligencia artificial.
+          </p>
+          <p>
+            Para leer automáticamente un billete que el usuario sube, Frimee envía el archivo, o el texto que contiene,
+            a un proveedor de inteligencia artificial, con ese único fin.
           </p>
           <p>
             Estos proveedores actuarán como encargados del tratamiento y tratarán los datos únicamente siguiendo
