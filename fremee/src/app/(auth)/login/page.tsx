@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import LegalNotice from "@/components/auth/LegalNotice";
 import GoogleAuthButton from "@/components/auth/GoogleAuthButton";
@@ -41,7 +41,10 @@ function LoginPageInner() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   // Full-screen loader: only while checking an existing session or entering as a guest.
-  const [loading, setLoading] = useState(() => hasCachedSession());
+  // En el servidor no hay localStorage: se lee con useSyncExternalStore para no romper la hidratación.
+  const cachedSession = useSyncExternalStore(() => () => {}, hasCachedSession, () => false);
+  const [loadingOverride, setLoading] = useState<boolean | null>(null);
+  const loading = loadingOverride ?? cachedSession;
   // Email sign-in keeps the form on screen (button shows "Entrando...") until the
   // credentials are checked, so a wrong password does not flash the splash screen.
   const [submitting, setSubmitting] = useState(false);
