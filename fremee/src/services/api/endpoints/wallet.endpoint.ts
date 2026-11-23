@@ -1,4 +1,5 @@
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
+import type { TicketCode } from "@/lib/ticket-barcode";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -243,6 +244,24 @@ export async function shareTicketEndpoint(ticketId: string, userIds: string[]): 
   if (error) throw error;
 }
 
+
+/** Guarda (cifrado), cambia o quita (null) el contenido del código del billete. Solo su dueño. */
+export async function setTicketCodeEndpoint(ticketId: string, code: TicketCode | null): Promise<void> {
+  const { error } = await createBrowserSupabaseClient().rpc("fn_ticket_codigo_set", {
+    p_ticket: ticketId,
+    p_formato: code?.formato ?? null,
+    p_contenido: code?.contenido ?? null,
+  });
+  if (error) throw error;
+}
+
+/** Contenido descifrado del código: lo ve su dueño y quien tiene el billete compartido. */
+export async function getTicketCodeEndpoint(ticketId: string): Promise<TicketCode | null> {
+  const { data, error } = await createBrowserSupabaseClient().rpc("fn_ticket_codigo_get", { p_ticket: ticketId });
+  if (error) throw error;
+  const row = (data as { formato: TicketCode["formato"]; contenido: string }[] | null)?.[0];
+  return row ? { formato: row.formato, contenido: row.contenido } : null;
+}
 
 const TICKET_BUCKET = "plan-tickets";
 

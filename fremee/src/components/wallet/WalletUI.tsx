@@ -5,7 +5,9 @@
  * El papel y las tintas son los del pasaporte (iguales en los dos temas).
  */
 import { useEffect } from "react";
-import { QRCodeSVG } from "qrcode.react";
+import { TicketCodeView } from "./TicketCodeView";
+import { raiseScreenBrightness } from "@/lib/screen-brightness";
+import type { TicketCodeFormat } from "@/lib/ticket-barcode";
 import {
   AlertCircle, BedDouble, Bus, ChevronLeft, ChevronRight, FileText, MapPin,
   Plane, Plus, QrCode, RefreshCw, Ship, Ticket as TicketIcon, Train, Trash2, Pencil, Upload,
@@ -30,8 +32,9 @@ export type Ticket = {
   status: "listo" | "usado";
   plan?: { id: string; title: string; dates?: string };
   code?: string;
-  /** Contenido real del QR, si lo tenemos. */
+  /** Contenido real del código (QR, Aztec o PDF417), si lo tenemos. */
   qr?: string;
+  qrFormat?: TicketCodeFormat;
   /** Hay un código guardado pero solo como imagen del billete original. */
   hasSourceCode?: boolean;
   hasSource?: boolean;
@@ -237,9 +240,19 @@ export function TicketDetail({ t, now, isDesktop, sourceUrl, onBack, onOpenPlan,
   const secondary = `inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-[var(--border-strong)] bg-[var(--surface-2)] px-4 text-sm font-semibold ${FOCUS}`;
   const iconBtn = `inline-flex h-11 items-center gap-1.5 rounded-lg px-3 text-sm font-semibold hover:bg-[var(--surface-2)] ${FOCUS}`;
 
+  // Con el código a la vista (billete próximo), la pantalla sube al máximo en la app nativa y vuelve a como estaba al cerrar.
+  const showingCode = !!t.qr && t.status === "listo";
+  useEffect(() => {
+    if (!showingCode) return;
+    let restore: (() => void) | null = null;
+    let cancelled = false;
+    void raiseScreenBrightness().then((r) => { if (cancelled) r(); else restore = r; });
+    return () => { cancelled = true; restore?.(); };
+  }, [showingCode, t.id]);
+
   const qrBlock = t.qr ? (
-    <section aria-label="Código QR" className={`flex rounded-[10px] bg-white p-5 ${isDesktop ? "items-center gap-4" : "flex-col items-center gap-3"}`}>
-      <QRCodeSVG value={t.qr} size={isDesktop ? 150 : 196} level="M" title="Código QR del billete" />
+    <section aria-label="Código del billete" className={`flex rounded-[10px] bg-white p-5 ${isDesktop ? "items-center gap-4" : "flex-col items-center gap-3"}`}>
+      <TicketCodeView formato={t.qrFormat ?? "qr"} contenido={t.qr} size={isDesktop ? 150 : 196} />
     </section>
   ) : sourceUrl && !sourceUrl.isPdf ? (
     <section aria-label="Billete original" className="rounded-[10px] bg-white p-3">
