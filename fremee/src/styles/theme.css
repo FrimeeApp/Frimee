@@ -43,6 +43,8 @@
   --passport-table: #ededef;
   --passport-ink: #2a2a31;
   --passport-ink-new: #227a6c;
+  --passport-arrow-border: #0e2f2a;
+  --passport-arrow-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 1px 2px rgba(28, 28, 34, 0.1), 0 2px 6px rgba(28, 28, 34, 0.1);
   /* Sombras de la libreta: suaves sobre la mesa clara, más profundas sobre la oscura. */
   --book-shadow: 0 14px 30px rgba(28, 28, 34, 0.18), 0 3px 8px rgba(28, 28, 34, 0.12);
   --book-shadow-small: 0 8px 20px rgba(28, 28, 34, 0.18), 0 2px 6px rgba(28, 28, 34, 0.12);
@@ -206,6 +208,8 @@
   --passport-table: #111111;
   --passport-ink: #d9d9de;
   --passport-ink-new: #3cddc2;
+  --passport-arrow-border: #3c7a6e;
+  --passport-arrow-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 2px 6px rgba(0, 0, 0, 0.35);
   --book-shadow: 0 18px 40px rgba(0, 0, 0, 0.45), 0 4px 10px rgba(0, 0, 0, 0.3);
   --book-shadow-small: 0 10px 24px rgba(0, 0, 0, 0.4), 0 3px 8px rgba(0, 0, 0, 0.3);
   --flag-shadow: 0 -2px 6px rgba(0, 0, 0, 0.25);
