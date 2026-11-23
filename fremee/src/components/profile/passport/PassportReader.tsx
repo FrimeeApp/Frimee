@@ -81,8 +81,6 @@ export default function PassportReader({
   const [indexOpen, setIndexOpen] = useState(false);
   const [indexTab, setIndexTab] = useState<IndexTab>("paises");
   const [privacyOpen, setPrivacyOpen] = useState(false);
-  // «Ver tu pasaporte como lo ven los demás»: el pasaporte tal como lo ven los demás (sin ocultos y, si lo quitaste, sin sellos de plan).
-  const [preview, setPreview] = useState(false);
   const [ajustes, setAjustes] = useState(ajustesIniciales);
   const [ciudad, setCiudad] = useState<string | null>(null);
   useEffect(() => {
@@ -168,26 +166,7 @@ export default function PassportReader({
           </button>
           )}
         </div>
-        {preview ? (
-          <>
-            <div role="status" className="mx-auto mb-3 flex w-full max-w-[460px] items-center gap-3 rounded-[8px] border border-app bg-surface px-3 py-2 md:max-w-[1080px]">
-              <span className="flex-1 text-[14px] leading-[1.5]">{ajustes?.passport_visibility === "TODOS" ? "Así ve tu pasaporte cualquiera en Frimee." : "Así ven tu pasaporte tus amistades."}</span>
-              <button
-                type="button"
-                onClick={() => {
-                  // Mirar, cambiar algo y volver a mirar: se vuelve al diálogo de privacidad, no al lector.
-                  setPreview(false);
-                  setPrivacyOpen(true);
-                }}
-                className={`min-h-11 px-2 text-[14px] font-[var(--fw-semibold)] text-[var(--primary)] ${FOCUS}`}>
-                Salir de la vista previa
-              </button>
-            </div>
-            <Libreta key="preview" outro={outro} nombre={nombre} ciudad={ciudad} sellos={sellos.filter((x) => !x.hidden && ((ajustes?.show_plan_stamps ?? true) || x.kind === "pais"))} />
-          </>
-        ) : (
           <Libreta outro={outro} nombre={nombre} ciudad={ciudad} emptyPage={emptyPage} sellos={sellos} intro={intro} jumpTo={jump} startPage={startPage} onOpenStamp={readOnly ? undefined : (sello, el) => setSheet({ sello, el })} />
-        )}
         {privacyOpen && (
           <PassportPrivacySheet
             ajustes={ajustes}
@@ -201,11 +180,6 @@ export default function PassportReader({
               setPrivacyOpen(false);
               setIndexTab("ocultos");
               setIndexOpen(true);
-            }}
-            onPreview={() => {
-              setPrivacyOpen(false);
-              setSheet(null);
-              setPreview(true);
             }}
             onClose={() => setPrivacyOpen(false)}
           />

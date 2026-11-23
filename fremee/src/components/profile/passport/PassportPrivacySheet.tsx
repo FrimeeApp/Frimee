@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { AlertCircle, Check, ChevronRight, Eye, EyeOff, Lock, Share2, X } from "lucide-react";
+import { AlertCircle, Check, ChevronRight, EyeOff, Lock, Share2, X } from "lucide-react";
 import { FOCUS } from "@/components/plans/home/pieces";
 import type { PasaporteAjustes } from "@/lib/passport";
 import { guardarAjustesPasaporte } from "@/services/api/endpoints/pasaporte.endpoint";
@@ -33,7 +33,6 @@ export default function PassportPrivacySheet({
   shareUrl,
   onChange,
   onOpenHidden,
-  onPreview,
   onClose,
 }: {
   ajustes: PasaporteAjustes | null;
@@ -42,8 +41,6 @@ export default function PassportPrivacySheet({
   onChange: (a: PasaporteAjustes) => void;
   /** Sin él, la fila «Sellos ocultos» no sale (solo existe dentro del lector). */
   onOpenHidden?: () => void;
-  /** Sin él, no sale «Ver tu pasaporte como lo ven los demás». */
-  onPreview?: () => void;
   onClose: () => void;
 }) {
   const [v, setV] = useState<PasaporteAjustes>(ajustes ?? DEFAULTS);
@@ -221,17 +218,8 @@ export default function PassportPrivacySheet({
               "Guardando…"
             ) : status === "copied" ? (
               "Enlace copiado."
-            ) : (
-              <>
-                <Check className="size-4 shrink-0" aria-hidden /> Se guarda solo
-              </>
-            )}
+            ) : null}
           </span>
-          {onPreview && (
-            <button type="button" className={btn2} onClick={onPreview} disabled={onlyMe}>
-              <Eye className="size-[18px] shrink-0" strokeWidth={2} aria-hidden /> Ver tu pasaporte como lo ven los demás
-            </button>
-          )}
           {shareUrl && (
             <button type="button" className={btn2} onClick={() => void share()}>
               <Share2 className="size-[18px] shrink-0" strokeWidth={2} aria-hidden /> Compartir
