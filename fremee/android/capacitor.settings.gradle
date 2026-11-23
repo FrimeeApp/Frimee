@@ -23,6 +23,9 @@ project(':capacitor-keyboard').projectDir = new File('../node_modules/@capacitor
 include ':capacitor-preferences'
 project(':capacitor-preferences').projectDir = new File('../node_modules/@capacitor/preferences/android')
 
+include ':capacitor-privacy-screen'
+project(':capacitor-privacy-screen').projectDir = new File('../node_modules/@capacitor/privacy-screen/android')
+
 include ':capacitor-push-notifications'
 project(':capacitor-push-notifications').projectDir = new File('../node_modules/@capacitor/push-notifications/android')
 
