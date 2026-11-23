@@ -357,6 +357,8 @@ export function TicketForm(p: Props) {
   const dRef = useRef(d);
   useEffect(() => { dRef.current = d; }, [d]);
   const [fromFile, setFromFile] = useState<Set<DraftKey>>(new Set());
+  const fromFileRef = useRef(fromFile);
+  useEffect(() => { fromFileRef.current = fromFile; }, [fromFile]);
   const [fileSt, setFileSt] = useState<FileState>(start.file ? { s: "done", file: start.file } : { s: "empty" });
   const [tried, setTried] = useState(false);
   const [moreOpen, setMoreOpen] = useState(() => p.mode === "edit" && DETAIL_KEYS.some(([k]) => !!start[k]));
@@ -395,12 +397,18 @@ export function TicketForm(p: Props) {
     setFileSt({ s: "uploading", name: f.name, pct: 0 });
     try {
       const res = await uploadFile(f, (pct) => setFileSt((st) => (st.s === "uploading" ? { ...st, pct: Math.round(pct) } : st)), ac.signal);
-      // solo rellena lo que está vacío: nunca pisa lo que ya escribiste
+      // Rellena lo que está vacío y lo que venía del archivo anterior («Del archivo»), pero nunca pisa lo que escribiste tú.
+      // Lo del archivo anterior que el nuevo no trae se vacía, para que no queden datos de otro billete.
       const cur = dRef.current;
+      const before = fromFileRef.current;
       const next: TicketDraft = { ...cur, file: res.file };
       const filled = new Set<DraftKey>();
-      for (const [k, v] of Object.entries(res.extracted ?? {}) as [DraftKey, string][]) {
-        if (v && !cur[k]) { (next as Record<string, unknown>)[k] = v; filled.add(k); }
+      const incoming = Object.entries(res.extracted ?? {}) as [DraftKey, string][];
+      for (const k of before) {
+        if (!incoming.some(([key, v]) => key === k && v)) (next as Record<string, unknown>)[k] = k === "title" || k === "date" || k === "time" ? "" : undefined;
+      }
+      for (const [k, v] of incoming) {
+        if (v && (!cur[k] || before.has(k))) { (next as Record<string, unknown>)[k] = v; filled.add(k); }
       }
       const prevPath = cur.file?.path;
       if (prevPath && prevPath !== res.file.path && sessionPaths.current.delete(prevPath)) p.releaseFiles([prevPath]);
