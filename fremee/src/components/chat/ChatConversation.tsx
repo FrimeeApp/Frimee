@@ -2953,7 +2953,7 @@ export function ChatConversation({
         </div>
       )}
 
-      {otherFlight && <FlightLine flight={otherFlight} chatId={chat.chat_id} maxWidth={640} column={780} />}
+      {otherFlight && <FlightLine flight={otherFlight} chatId={chat.chat_id} />}
       {embedded && onStartCall && (
         <div className="flex items-center justify-end gap-1 px-[var(--space-3)] pt-2 md:hidden">
           <ChatIconButton label="Iniciar llamada de voz" size="sm" onClick={() => onStartCall("audio")}>
