@@ -250,12 +250,16 @@ const TICKET_BUCKET = "plan-tickets";
 export async function deleteTicketSourceFiles(paths: (string | null | undefined)[]): Promise<void> {
   const list = [...new Set(paths.filter((p): p is string => !!p))];
   if (!list.length) return;
-  await createBrowserSupabaseClient().storage.from(TICKET_BUCKET).remove(list).catch(() => undefined);
+  // Storage no lanza: devuelve un error, o una lista con menos archivos de los pedidos si una política los deniega.
+  const { data, error } = await createBrowserSupabaseClient().storage.from(TICKET_BUCKET).remove(list);
+  if (error) console.error("[billetes] No se pudo borrar el archivo:", error.message, list);
+  else if ((data?.length ?? 0) < list.length) console.error("[billetes] Storage no borró todos los archivos:", { pedidos: list, borrados: data?.map((o) => o.name) });
 }
 
 async function ticketSourcePaths(ticketId: string): Promise<string[]> {
-  const { data } = await createBrowserSupabaseClient()
+  const { data, error } = await createBrowserSupabaseClient()
     .from("plan_tickets").select("source_image_url, source_pdf_url").eq("id", ticketId).maybeSingle();
+  if (error) console.error("[billetes] No se pudieron leer los archivos del billete:", error.message);
   return [data?.source_image_url, data?.source_pdf_url].filter((p): p is string => !!p);
 }
 
