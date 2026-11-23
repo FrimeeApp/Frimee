@@ -166,12 +166,14 @@ function ago(iso: string, now: number) {
 
 /* ---------------- cuerpo desplegado ---------------- */
 
-function FlightBody({ flight: f, p, live, now, active = true }: {
+function FlightBody({ flight: f, p, live, now, active = true, aligned = false }: {
   flight: FriendFlight; p: number; live: boolean; now: number; active?: boolean;
+  /** En el chat: el contenido empieza donde empiezan los mensajes (56 px) y acaba donde acaban las burbujas. */
+  aligned?: boolean;
 }) {
   const diff = f.to.tz !== f.from.tz ? tzDiffLabel(f.to.tz, now) : null;
   return (
-    <div className="px-4 pb-3 pt-1">
+    <div className={`${aligned ? "pl-[56px] pr-4" : "px-4"} pb-4 pt-1`}>
       <div className="flex items-end justify-between gap-2">
         <div>
           <div className={`${SERIF} text-[28px] leading-[30px] tabular-nums text-[var(--fl-tx)]`}>{f.from.iata}</div>
@@ -230,15 +232,7 @@ function IconBubble({ Icon, mute }: { Icon: typeof Plane; mute?: boolean }) {
 
 const FOCUS_RING = "outline-none focus-visible:ring-2 focus-visible:ring-[var(--fl-pr)] focus-visible:ring-inset";
 
-export function FlightLine({ flight, chatId, maxWidth, column }: {
-  flight: FriendFlight;
-  /** Para recordar si estaba desplegada en este chat hasta que aterrice. */
-  chatId: string;
-  /** Escritorio: ancho del contenido de la línea (640 en el diseño). */
-  maxWidth?: number;
-  /** Escritorio: ancho de la columna de mensajes; la línea empieza donde empiezan los mensajes. */
-  column?: number;
-}) {
+export function FlightLine({ flight, chatId }: {  flight: FriendFlight;  /** Para recordar si estaba desplegada en este chat hasta que aterrice. */  chatId: string;}) {
   const now = useNow();
   const reduced = useReducedMotion();
   const bodyId = useId();
@@ -262,7 +256,7 @@ export function FlightLine({ flight, chatId, maxWidth, column }: {
   const canExpand = state === "airborne";
 
   const head = (
-    <div className="flex min-h-14 items-center gap-3 pl-4 pr-1">
+    <div className="flex min-h-14 items-center gap-[13px] pl-[11px] pr-1">
       <IconBubble Icon={c.Icon} mute={c.mute} />
       <span className="min-w-0 flex-1 text-left">
         <span className="block truncate text-[14px] font-semibold text-[var(--fl-tx)]">{c.title}</span>
@@ -284,8 +278,8 @@ export function FlightLine({ flight, chatId, maxWidth, column }: {
 
   return (
     <section aria-label={`Vuelo de ${flight.friendName}`} className="flex-none border-b border-[var(--fl-bd)] bg-[var(--fl-bg)]">
-      <div className="mx-auto w-full" style={column ? { maxWidth: column } : undefined}>
-       <div style={maxWidth ? { maxWidth } : undefined}>
+      {/* Misma columna que los mensajes de la Bitácora: el icono cae sobre su línea vertical (27 px) y el texto empieza en 56 px. */}
+      <div className="mx-auto w-full max-w-[780px]">
         {canExpand ? (
           <button type="button" onClick={toggle} aria-expanded={open} aria-controls={bodyId} className={`relative block w-full ${FOCUS_RING}`}>
             <span className="sr-only">{open ? "Ocultar el vuelo" : "Ver el vuelo"}</span>
@@ -300,11 +294,10 @@ export function FlightLine({ flight, chatId, maxWidth, column }: {
         {canExpand && (
           <div id={bodyId} className="grid" style={{ gridTemplateRows: open ? "1fr" : "0fr", transition: reduced ? undefined : `grid-template-rows 240ms ${EASE}` }}>
             <div className="min-h-0 overflow-hidden" aria-hidden={!open} inert={!open}>
-              <FlightBody flight={flight} p={p} live={live} now={now} active={open} />
+              <FlightBody flight={flight} p={p} live={live} now={now} active={open} aligned />
             </div>
           </div>
         )}
-       </div>
       </div>
     </section>
   );
