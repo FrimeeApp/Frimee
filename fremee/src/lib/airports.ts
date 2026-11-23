@@ -174,3 +174,41 @@ export function flightProgressFromTime(
   const end   = new Date(endsAt).getTime();
   return Math.min(1, Math.max(0, (now - start) / (end - start)));
 }
+
+/** Zona horaria de cada aeropuerto, para enseñar horas locales («llega a las 11:40 hora local»). */
+const TZ_MADRID = "Europe/Madrid";
+const AIRPORT_TZ: Record<string, string> = {
+  // España y Portugal
+  MAD: TZ_MADRID, BCN: TZ_MADRID, AGP: TZ_MADRID, PMI: TZ_MADRID, ALC: TZ_MADRID, VLC: TZ_MADRID, SVQ: TZ_MADRID,
+  BIO: TZ_MADRID, SDR: TZ_MADRID, SCQ: TZ_MADRID, IBZ: TZ_MADRID, GRX: TZ_MADRID,
+  LPA: "Atlantic/Canary", TFN: "Atlantic/Canary", TFS: "Atlantic/Canary",
+  LIS: "Europe/Lisbon", OPO: "Europe/Lisbon",
+  // Europa
+  LHR: "Europe/London", LGW: "Europe/London", STN: "Europe/London", DUB: "Europe/Dublin",
+  CDG: "Europe/Paris", ORY: "Europe/Paris", MRS: "Europe/Paris", NCE: "Europe/Paris", LYS: "Europe/Paris", NTE: "Europe/Paris", TLS: "Europe/Paris",
+  AMS: "Europe/Amsterdam", BRU: "Europe/Brussels", FRA: "Europe/Berlin", MUC: "Europe/Berlin", BER: "Europe/Berlin", TXL: "Europe/Berlin", HAM: "Europe/Berlin",
+  VIE: "Europe/Vienna", ZRH: "Europe/Zurich", GVA: "Europe/Zurich",
+  FCO: "Europe/Rome", MXP: "Europe/Rome", LIN: "Europe/Rome", NAP: "Europe/Rome", FLR: "Europe/Rome", PSA: "Europe/Rome", VCE: "Europe/Rome", BLQ: "Europe/Rome", TRN: "Europe/Rome", GEN: "Europe/Rome",
+  CPH: "Europe/Copenhagen", OSL: "Europe/Oslo", ARN: "Europe/Stockholm", HEL: "Europe/Helsinki",
+  ATH: "Europe/Athens", IST: "Europe/Istanbul", SAW: "Europe/Istanbul", PRG: "Europe/Prague", WAW: "Europe/Warsaw", BUD: "Europe/Budapest",
+  OTP: "Europe/Bucharest", SVO: "Europe/Moscow", DME: "Europe/Moscow",
+  // América del Norte
+  JFK: "America/New_York", LGA: "America/New_York", EWR: "America/New_York", ATL: "America/New_York", MIA: "America/New_York", BOS: "America/New_York", MCO: "America/New_York",
+  YYZ: "America/Toronto", YUL: "America/Toronto",
+  ORD: "America/Chicago", DFW: "America/Chicago", DEN: "America/Denver",
+  LAX: "America/Los_Angeles", SFO: "America/Los_Angeles", SEA: "America/Los_Angeles", LAS: "America/Los_Angeles", YVR: "America/Vancouver",
+  MEX: "America/Mexico_City", CUN: "America/Cancun",
+  // América del Sur
+  GRU: "America/Sao_Paulo", GIG: "America/Sao_Paulo", EZE: "America/Argentina/Buenos_Aires", SCL: "America/Santiago", BOG: "America/Bogota", LIM: "America/Lima",
+  // Asia
+  DXB: "Asia/Dubai", AUH: "Asia/Dubai", DOH: "Asia/Qatar", SIN: "Asia/Singapore", HKG: "Asia/Hong_Kong", PEK: "Asia/Shanghai", PVG: "Asia/Shanghai",
+  NRT: "Asia/Tokyo", HND: "Asia/Tokyo", ICN: "Asia/Seoul", BKK: "Asia/Bangkok", KUL: "Asia/Kuala_Lumpur", DEL: "Asia/Kolkata", BOM: "Asia/Kolkata", TLV: "Asia/Jerusalem",
+  // África y Oceanía
+  CAI: "Africa/Cairo", JNB: "Africa/Johannesburg", CMN: "Africa/Casablanca", NBO: "Africa/Nairobi",
+  SYD: "Australia/Sydney", MEL: "Australia/Melbourne", AKL: "Pacific/Auckland",
+};
+
+/** Zona horaria del aeropuerto; Madrid si no la conocemos. */
+export function airportTz(iata: string): string {
+  return AIRPORT_TZ[iata.toUpperCase()] ?? TZ_MADRID;
+}

@@ -86,6 +86,8 @@ import { LinkifiedText } from "@/components/chat/bitacora/LinkifiedText";
 import dynamic from "next/dynamic";
 
 import { isPlanFinished as planFinished } from "@/lib/plan-dates";
+import { FlightLine } from "@/components/flights/FlightLine";
+import { useFriendFlight } from "@/components/flights/flight-data";
 const EmojiMartPicker = dynamic(() => import("@emoji-mart/react"), { ssr: false });
 
 // Shown over the input in plan chats so people find out about the @frimee assistant.
@@ -2547,6 +2549,9 @@ export function ChatConversation({
     />
   );
 
+  // Vuelo de la otra persona (solo en chats 1 a 1): línea fija arriba, plegada o desplegada.
+  const otherFlight = useFriendFlight(chat.tipo === "DIRECTO" ? chat.miembros.find((m) => m.id !== currentUserId)?.id : null);
+
   if (showInfo && isPhone) {
     return <div className={containerClassName ?? "flex h-[calc(100dvh-var(--space-20)-env(safe-area-inset-bottom))] flex-col md:h-[calc(100dvh-var(--space-16))]"}>{infoPanel("screen")}</div>;
   }
@@ -2948,6 +2953,7 @@ export function ChatConversation({
         </div>
       )}
 
+      {otherFlight && <FlightLine flight={otherFlight} chatId={chat.chat_id} maxWidth={640} column={780} />}
       {embedded && onStartCall && (
         <div className="flex items-center justify-end gap-1 px-[var(--space-3)] pt-2 md:hidden">
           <ChatIconButton label="Iniciar llamada de voz" size="sm" onClick={() => onStartCall("audio")}>

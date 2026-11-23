@@ -95,14 +95,3 @@ export function buildOpenSkyStatesUrl(callsign: string) {
   const search = new URLSearchParams({ callsign: padded });
   return `https://opensky-network.org/api/states/all?${search.toString()}`;
 }
-
-export function buildAishubVesselUrl(username: string, mmsi: string) {
-  const search = new URLSearchParams({
-    username,
-    format: "1",
-    output: "json",
-    compress: "0",
-    mmsi,
-  });
-  return `https://data.aishub.net/ws.php?${search.toString()}`;
-}

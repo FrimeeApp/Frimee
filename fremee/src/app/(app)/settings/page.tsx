@@ -7,9 +7,10 @@ import { Capacitor } from "@capacitor/core";
 import { ArrowLeftIcon, ChevronRightIcon } from "@/components/icons";
 import {
   Pencil, User, Shield, Calendar, Bell, Moon, Sun, Globe, Clock,
-  Mail, MessageSquare, LogOut, Trash2, KeyRound, Eye, EyeOff, ChevronLeft, MapPin,
+  Mail, MessageSquare, LogOut, Trash2, KeyRound, Eye, EyeOff, ChevronLeft, MapPin, Plane,
 } from "lucide-react";
 import { NotificationSettingsSection } from "@/components/notifications/NotificationSettingsSection";
+import { fetchFlightVisibility, saveFlightVisibility, type FlightVisibility } from "@/services/api/endpoints/vuelos.endpoint";
 import { BirthDatePicker } from "@/components/ui/BirthDatePicker";
 import CiudadBaseField from "@/components/profile/passport/CiudadBaseField";
 import { App } from "@capacitor/app";
@@ -559,6 +560,18 @@ export default function SettingsPage() {
     }
   };
 
+  // «Quién ve tus vuelos»: se guarda al elegir, sin esperar al botón de guardar del resto.
+  const [flightVis, setFlightVis] = useState<FlightVisibility>("AMISTADES");
+  useEffect(() => {
+    let cancelled = false;
+    fetchFlightVisibility().then((v) => { if (!cancelled) setFlightVis(v); }).catch(() => { /* se queda el valor por defecto */ });
+    return () => { cancelled = true; };
+  }, []);
+  function changeFlightVis(next: FlightVisibility) {
+    const prev = flightVis;
+    setFlightVis(next);
+    saveFlightVisibility(next).catch(() => setFlightVis(prev));
+  }
   const disableEditing = settingsLoading || busyAction === "save" || busyAction === "upload-image";
 
   if (settingsLoading) return <SettingsPageSkeleton />;
@@ -696,6 +709,19 @@ export default function SettingsPage() {
                     checked={form.allowFriendRequests}
                     disabled={disableEditing}
                     onChange={(next) => setForm((prev) => ({ ...prev, allowFriendRequests: next }))}
+                  />
+                }
+              />
+              <SettingsRow
+                icon={<Plane className="size-[18px]" aria-hidden />}
+                label="Quién ve tus vuelos"
+                description="Tus amistades ven en vuestro chat que estás volando, la ruta y la hora de llegada. Nunca tu asiento, tu localizador ni el billete."
+                right={
+                  <FieldSelect
+                    value={flightVis}
+                    disabled={disableEditing}
+                    onChange={(value) => changeFlightVis(value as FlightVisibility)}
+                    options={[{ value: "AMISTADES", label: "Tus amistades" }, { value: "NADIE", label: "Nadie" }]}
                   />
                 }
               />
