@@ -854,7 +854,6 @@ function YearPage({ page, total, isNew }: { page: Extract<PassportPage, { kind: 
       ))}
       {/* La última página, si le quedan franjas, enseña dónde irá lo siguiente. */}
       {page.number === total && <FreeSlots trips={page.trips} />}
-      {page.continues && page.number < total && <p className="absolute inset-x-5 bottom-11 m-0 text-right text-[12px] leading-[1.4] text-muted">Sigue en la pág. {pad2(page.number + 1)}</p>}
     </>
   );
 }

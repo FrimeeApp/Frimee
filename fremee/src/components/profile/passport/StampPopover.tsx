@@ -284,7 +284,7 @@ export default function StampPopover({
         aria-modal="false"
         aria-labelledby={titleId}
         style={{ position: "fixed", left: pos?.left ?? -9999, top: pos?.top ?? -9999 }}
-        className="relative z-[80] flex w-[320px] flex-col gap-3 rounded-[8px] border border-app bg-surface p-4 text-app shadow-[0_4px_12px_rgba(0,0,0,0.3),0_2px_4px_rgba(0,0,0,0.2)]"
+        className="relative z-[1060] flex w-[320px] flex-col gap-3 rounded-[8px] border border-app bg-surface p-4 text-app shadow-[0_4px_12px_rgba(0,0,0,0.3),0_2px_4px_rgba(0,0,0,0.2)]"
       >
         {closeBtn}
         {content}
@@ -292,13 +292,13 @@ export default function StampPopover({
     ) : (
       <>
         {/* Velo: color sólido, sin desenfoque. */}
-        <div aria-hidden="true" className="fixed inset-0 z-[79] bg-black/60" onClick={onClose} />
+        <div aria-hidden="true" className="fixed inset-0 z-[1059] bg-black/60" onClick={onClose} />
         <div
           ref={ref}
           role="dialog"
           aria-modal="true"
           aria-labelledby={titleId}
-          className="fixed inset-x-0 bottom-0 z-[80] mx-auto flex max-h-dvh w-full max-w-[460px] flex-col gap-4 overflow-y-auto rounded-t-[8px] border-t border-app bg-surface px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-2 text-app shadow-[0_12px_24px_rgba(0,0,0,0.3),0_4px_8px_rgba(0,0,0,0.2)]"
+          className="fixed inset-x-0 bottom-0 z-[1060] mx-auto flex max-h-dvh w-full max-w-[460px] flex-col gap-4 overflow-y-auto rounded-t-[8px] border-t border-app bg-surface px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-2 text-app shadow-[0_12px_24px_rgba(0,0,0,0.3),0_4px_8px_rgba(0,0,0,0.2)]"
         >
           <div className="relative flex h-7 shrink-0 justify-center">
             <span aria-hidden="true" className="mt-1 h-1 w-9 rounded-full bg-[var(--border-strong)]" />
