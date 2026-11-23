@@ -3,16 +3,19 @@
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import AppSidebar from "@/components/common/AppSidebar";
-import AddTicketModal from "@/components/wallet/AddTicketModal";
+import { TicketForm } from "@/components/wallet/TicketForm";
 import {
-  AddTicketSheet, ConfirmDelete, FOCUS, ON_PRIMARY, Plus, SERIF, T2, ChevronLeft, ChevronRight,
+  draftFromTicket, inputFromDraft, uploadTicketFile, type PlanOption, type TicketDraft,
+} from "@/components/wallet/ticket-form-data";
+import {
+  ConfirmDelete, FOCUS, ON_PRIMARY, Plus, SERIF, T2, ChevronLeft, ChevronRight,
   TicketBig, TicketDetail, TicketRow, WalletError, WalletSkeleton,
   type Ticket, type TicketKind,
 } from "@/components/wallet/WalletUI";
 import { createBrowserSupabaseClient } from "@/services/supabase/client";
-import { fetchPlansByIds } from "@/services/api/endpoints/plans.endpoint";
+import { fetchPlansByIds, fetchUserRelatedPlans } from "@/services/api/endpoints/plans.endpoint";
 import {
-  deleteTicketEndpoint, getTicketSourceSignedUrl, listTicketsEndpoint, updateTicketEndpoint, uploadTicketSourceEndpoint,
+  createTicketEndpoint, deleteTicketEndpoint, deleteTicketSourceFiles, getTicketSourceSignedUrl, listTicketsEndpoint, updateTicketEndpoint, uploadTicketSourceEndpoint,
   type PlanTicket, type TicketType,
 } from "@/services/api/endpoints/wallet.endpoint";
 
@@ -73,8 +76,8 @@ export default function WalletPage() {
   const [state, setState] = useState<"loading" | "error" | "ok">("loading");
   const [tab, setTab] = useState<"proximos" | "usados">("proximos");
   const [picked, setSelected] = useState<string | null>(null);
-  const [sheet, setSheet] = useState(false);
-  const [modalPlan, setModalPlan] = useState<{ open: boolean; planId: number | null }>({ open: false, planId: null });
+  const [form, setForm] = useState<{ mode: "add"; defaultPlanId: number | null } | { mode: "edit"; id: string; initial: TicketDraft } | null>(null);
+  const [formPlans, setFormPlans] = useState<PlanOption[]>([]);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [source, setSource] = useState<{ id: string; url: string; isPdf: boolean } | null>(null);
 
@@ -111,11 +114,6 @@ export default function WalletPage() {
     return [...m.values()];
   }, [list]);
 
-  const plans = useMemo(() => {
-    const m = new Map<string, { id: string; title: string }>();
-    for (const t of tickets) if (t.plan) m.set(t.plan.id, t.plan);
-    return [...m.values()];
-  }, [tickets]);
 
   // escritorio: el primero seleccionado por defecto
   const selected = isDesktop && !list.some((t) => t.id === picked) ? (list[0]?.id ?? null) : picked;
@@ -129,10 +127,12 @@ export default function WalletPage() {
   useEffect(() => {
     if (!selected || !sourcePath) return;
     let cancelled = false;
-    getTicketSourceSignedUrl(sourcePath)
+    const sign = () => getTicketSourceSignedUrl(sourcePath)
       .then((url) => { if (!cancelled) setSource({ id: selected, url, isPdf: sourceIsPdf }); })
       .catch(() => { /* sin original: no pasa nada */ });
-    return () => { cancelled = true; };
+    void sign();
+    const refresh = setInterval(sign, 4 * 60_000); // la URL dura 5 minutos: se renueva mientras el billete está abierto
+    return () => { cancelled = true; clearInterval(refresh); };
   }, [selected, sourcePath, sourceIsPdf]);
   const sourceUrl = source && source.id === selected ? source : null;
 
@@ -140,9 +140,54 @@ export default function WalletPage() {
   const meta = tickets.length === 0 ? "vacía"
     : `${tickets.length} ${tickets.length === 1 ? "billete" : "billetes"} · ${upcoming.length ? `${upcoming.length} ${upcoming.length === 1 ? "próximo" : "próximos"}` : "ninguno próximo"}`;
 
-  function openAdd(_how: "upload" | "photo" | "manual", planId?: string) {
-    setSheet(false);
-    setModalPlan({ open: true, planId: planId ? Number(planId) : null });
+  /**
+   * Todos los planes del usuario, para elegir a cuál pertenece el billete.
+   * Devuelve el plan por defecto: el que está en curso, si no el próximo más cercano, si no ninguno.
+   */
+  async function loadFormPlans(): Promise<number | null> {
+    try {
+      const { data: { user } } = await createBrowserSupabaseClient().auth.getUser();
+      if (!user) return null;
+      const rows = await fetchUserRelatedPlans({ userId: user.id });
+      const nowMs = Date.now();
+      const opts = rows.map((p) => ({
+        id: p.id, title: p.titulo, dates: planDates(p.inicio_at, p.fin_at),
+        upcoming: new Date(p.fin_at).getTime() >= nowMs, start: p.inicio_at, startMs: new Date(p.inicio_at).getTime(),
+      }));
+      opts.sort((a, b) => (a.upcoming === b.upcoming ? (a.upcoming ? a.start.localeCompare(b.start) : b.start.localeCompare(a.start)) : a.upcoming ? -1 : 1));
+      setFormPlans(opts.map(({ id, title, dates, upcoming }) => ({ id, title, dates, upcoming })));
+      const current = opts.find((o) => o.upcoming && o.startMs <= nowMs);
+      return (current ?? opts.find((o) => o.upcoming))?.id ?? null;
+    } catch {
+      return null; /* sin lista de planes: solo sale «Sin plan» */
+    }
+  }
+  async function openAdd() {
+    const defaultPlanId = await loadFormPlans();
+    setForm({ mode: "add", defaultPlanId });
+  }
+  async function openEdit(id: string) {
+    const t = raw.find((x) => x.id === id);
+    if (!t) return;
+    const path = t.source_image_url ?? t.source_pdf_url;
+    const url = t.source_image_url && path ? await getTicketSourceSignedUrl(path).catch(() => undefined) : undefined;
+    setForm({ mode: "edit", id, initial: draftFromTicket(t, url) });
+    void loadFormPlans();
+  }
+  async function saveForm(d: TicketDraft) {
+    if (!form) return;
+    const input = inputFromDraft(d);
+    if (form.mode === "add") await createTicketEndpoint({ ...input, status: "upcoming" });
+    else await updateTicketEndpoint(form.id, input); // updateTicketEndpoint no toca barcode_value
+    setForm(null);
+    await load();
+  }
+  async function deleteFromForm() {
+    if (form?.mode !== "edit") return;
+    await deleteTicketEndpoint(form.id);
+    setForm(null);
+    setSelected(null);
+    await load();
   }
   /** Añade un PDF o una captura a un billete que ya existe. */
   function addSource(ticketId: string) {
@@ -205,7 +250,7 @@ export default function WalletPage() {
                 {state === "ok" && <p className={`text-sm tabular-nums ${T2}`}>{meta}</p>}
               </div>
               {state === "ok" && !empty && (
-                <button type="button" onClick={() => setSheet(true)}
+                <button type="button" onClick={() => void openAdd()}
                   className={`hidden h-[46px] items-center gap-2 rounded-lg bg-[var(--primary)] px-5 font-semibold hover:bg-[var(--primary-hover)] md:inline-flex ${ON_PRIMARY} ${FOCUS}`}>
                   <Plus size={18} aria-hidden />Añadir billete
                 </button>
@@ -223,7 +268,7 @@ export default function WalletPage() {
                 </svg>
                 <h2 className={`${SERIF} mt-2 text-[28px] leading-[1.15]`}>Tu cartera está vacía</h2>
                 <p className={`text-base ${T2}`}>Sube el PDF de un billete o una captura y lo rellenamos por ti. Aquí lo tendrás a mano en la puerta.</p>
-                <button type="button" onClick={() => setSheet(true)} className={`mt-3 inline-flex h-[46px] w-full items-center justify-center gap-2 rounded-lg bg-[var(--primary)] px-5 font-semibold md:w-auto ${ON_PRIMARY} ${FOCUS}`}>
+                <button type="button" onClick={() => void openAdd()} className={`mt-3 inline-flex h-[46px] w-full items-center justify-center gap-2 rounded-lg bg-[var(--primary)] px-5 font-semibold md:w-auto ${ON_PRIMARY} ${FOCUS}`}>
                   <Plus size={18} aria-hidden />Añadir billete
                 </button>
               </div>
@@ -271,7 +316,7 @@ export default function WalletPage() {
                   </div>
 
                   {isDesktop && sel && (
-                    <TicketDetail t={sel} now={now} isDesktop sourceUrl={sourceUrl} onOpenPlan={openPlan} onDelete={() => setDeleting(sel.id)} onAddQr={() => addSource(sel.id)} />
+                    <TicketDetail t={sel} now={now} isDesktop sourceUrl={sourceUrl} onOpenPlan={openPlan} onEdit={() => void openEdit(sel.id)} onDelete={() => setDeleting(sel.id)} onAddQr={() => addSource(sel.id)} />
                   )}
                 </div>
               </>
@@ -281,20 +326,25 @@ export default function WalletPage() {
       </div>
 
       {!isDesktop && state === "ok" && !empty && (
-        <button type="button" aria-label="Añadir billete" onClick={() => setSheet(true)}
+        <button type="button" aria-label="Añadir billete" onClick={() => void openAdd()}
           className={`fixed bottom-[max(24px,env(safe-area-inset-bottom))] right-4 z-40 grid h-14 w-14 place-content-center rounded-full bg-[var(--primary)] shadow-[0_4px_12px_rgba(0,0,0,0.3),0_2px_4px_rgba(0,0,0,0.2)] ${ON_PRIMARY} ${FOCUS}`}>
           <Plus size={26} aria-hidden />
         </button>
       )}
       {!isDesktop && sel && (
-        <TicketDetail t={sel} now={now} isDesktop={false} sourceUrl={sourceUrl} onBack={() => setSelected(null)} onOpenPlan={openPlan} onDelete={() => setDeleting(sel.id)} onAddQr={() => addSource(sel.id)} />
+        <TicketDetail t={sel} now={now} isDesktop={false} sourceUrl={sourceUrl} onBack={() => setSelected(null)} onOpenPlan={openPlan} onEdit={() => void openEdit(sel.id)} onDelete={() => setDeleting(sel.id)} onAddQr={() => addSource(sel.id)} />
       )}
-      {sheet && <AddTicketSheet plans={plans} defaultPlanId={upcoming[0]?.plan?.id} onPick={openAdd} onClose={() => setSheet(false)} />}
-      {modalPlan.open && (
-        <AddTicketModal
-          planId={modalPlan.planId}
-          onClose={() => setModalPlan({ open: false, planId: null })}
-          onCreated={() => { setModalPlan({ open: false, planId: null }); void load(); }}
+      {form && (
+        <TicketForm
+          mode={form.mode}
+          initial={form.mode === "edit" ? form.initial : undefined}
+          plans={formPlans}
+          defaultPlanId={form.mode === "add" ? form.defaultPlanId : null}
+          uploadFile={uploadTicketFile}
+          releaseFiles={(paths) => void deleteTicketSourceFiles(paths)}
+          onSubmit={saveForm}
+          onDelete={form.mode === "edit" ? deleteFromForm : undefined}
+          onClose={() => setForm(null)}
         />
       )}
       {deleting && <ConfirmDelete onConfirm={confirmDelete} onCancel={() => setDeleting(null)} />}

@@ -4,7 +4,7 @@ import { randomUUID } from "crypto";
 import { publicEnv, getSupabaseServiceRoleKey } from "@/config/env";
 import { OPENAI_API_BASE_URL } from "@/config/external";
 import { createSupabaseServerClient, createSupabaseServiceClient } from "@/services/supabase/server";
-import { validateUploadFile } from "@/lib/sanitize";
+import { sniffUploadType, validateUploadFile } from "@/lib/sanitize";
 import { checkDailyLimit, checkRateLimit, dailyLimitedResponse, rateLimitedResponse } from "@/lib/rate-limit";
 
 export type TicketOcrResult = {
@@ -77,14 +77,16 @@ export async function POST(req: NextRequest) {
       getSupabaseServiceRoleKey()
     );
 
-    const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
-    const filename = `${randomUUID()}.${ext}`;
-    const storagePath = `tickets/${userId}/${filename}`;
     const fileBuffer = Buffer.from(await file.arrayBuffer());
+    const real = sniffUploadType(fileBuffer);
+    if (!real) {
+      return NextResponse.json({ error: "El archivo no es una imagen o PDF válido. Usa JPG, PNG, WebP o PDF." }, { status: 400 });
+    }
+    const storagePath = `tickets/${userId}/${randomUUID()}.${real.ext}`;
 
     const { error: uploadError } = await supabase.storage
       .from("plan-tickets")
-      .upload(storagePath, fileBuffer, { contentType: file.type, upsert: false });
+      .upload(storagePath, fileBuffer, { contentType: real.mime, upsert: false });
 
     if (uploadError) {
       return NextResponse.json({ error: "Error subiendo archivo: " + uploadError.message }, { status: 500 });
@@ -111,7 +113,7 @@ Devuelve ÚNICAMENTE el JSON, sin texto adicional ni markdown, con esta estructu
 Para vuelos: from_label y to_label deben ser los códigos IATA de 3 letras (MAD, JFK…) si aparecen, o el nombre de la ciudad.
 Si no puedes extraer algún campo con certeza, pon null. No inventes datos.`;
 
-    const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+    const isPdf = real.mime === "application/pdf";
 
     let messageContent: unknown[];
     if (isPdf) {
@@ -121,7 +123,7 @@ Si no puedes extraer algún campo con certeza, pon null. No inventes datos.`;
       messageContent = [{ type: "text", text: `${prompt}\n\nTexto del documento:\n${pdfText}` }];
     } else {
       const base64   = fileBuffer.toString("base64");
-      const mimeType = file.type || "image/jpeg";
+      const mimeType = real.mime;
       messageContent = [
         { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64}`, detail: "high" } },
         { type: "text", text: prompt },
@@ -131,7 +133,7 @@ Si no puedes extraer algún campo con certeza, pon null. No inventes datos.`;
     const openaiRes = await fetch(`${OPENAI_API_BASE_URL}/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: "gpt-4o", max_tokens: 800, messages: [{ role: "user", content: messageContent }] }),
+      body: JSON.stringify({ model: "gpt-4o", max_tokens: 800, store: false, messages: [{ role: "user", content: messageContent }] }),
     });
 
     if (!openaiRes.ok) {

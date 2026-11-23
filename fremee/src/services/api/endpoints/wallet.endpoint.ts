@@ -149,35 +149,6 @@ export async function listTicketsEndpoint(): Promise<PlanTicket[]> {
   return (data ?? []) as PlanTicket[];
 }
 
-export async function listActiveFriendFlightsEndpoint(): Promise<PlanTicket[]> {
-  const supabase = createBrowserSupabaseClient();
-  const { data, error } = await supabase.rpc("fn_active_friend_flights");
-  if (error) throw error;
-  return (data ?? []) as PlanTicket[];
-}
-
-export async function listActiveFriendFerriesEndpoint(): Promise<PlanTicket[]> {
-  const supabase = createBrowserSupabaseClient();
-  const { data, error } = await supabase.rpc("fn_active_friend_ferries");
-  if (error) throw error;
-  if (!data?.length) return [];
-
-  const userIds = [...new Set((data as PlanTicket[]).map(r => r.user_id))];
-  const { data: profiles } = await supabase
-    .from("usuarios_public")
-    .select("id, nombre")
-    .in("id", userIds);
-
-  const nameMap: Record<string, string> = {};
-  for (const p of profiles ?? []) nameMap[p.id] = p.nombre ?? "";
-
-  return (data as PlanTicket[]).map(r => ({
-    ...r,
-    shared_by_user_id: r.user_id,
-    shared_by_nombre: nameMap[r.user_id] ?? null,
-  }));
-}
-
 export async function listTicketsForPlanEndpoint(planId: number): Promise<PlanTicket[]> {
   const supabase = createBrowserSupabaseClient();
   const { data, error } = await supabase.rpc("fn_tickets_list_for_plan", { p_plan_id: planId });
@@ -216,6 +187,9 @@ export async function createTicketEndpoint(input: CreateTicketInput): Promise<st
 
 export async function updateTicketEndpoint(ticketId: string, input: UpdateTicketInput): Promise<void> {
   const supabase = createBrowserSupabaseClient();
+  const before = input.source_image_url !== undefined || input.source_pdf_url !== undefined
+    ? await supabase.from("plan_tickets").select("source_image_url, source_pdf_url").eq("id", ticketId).maybeSingle()
+    : null;
   const { error } = await supabase
     .from("plan_tickets")
     .update({
@@ -242,6 +216,14 @@ export async function updateTicketEndpoint(ticketId: string, input: UpdateTicket
     })
     .eq("id", ticketId);
   if (error) throw error;
+  // el archivo anterior que se ha cambiado o quitado ya no hace falta
+  if (before?.data) {
+    const gone = [
+      input.source_image_url !== undefined && input.source_image_url !== before.data.source_image_url ? before.data.source_image_url : null,
+      input.source_pdf_url !== undefined && input.source_pdf_url !== before.data.source_pdf_url ? before.data.source_pdf_url : null,
+    ];
+    await deleteTicketSourceFiles(gone);
+  }
 }
 
 export async function markTicketUsedEndpoint(ticketId: string): Promise<void> {
@@ -253,11 +235,6 @@ export async function markTicketUsedEndpoint(ticketId: string): Promise<void> {
   if (error) throw error;
 }
 
-export async function deleteTicketEndpoint(ticketId: string): Promise<void> {
-  const supabase = createBrowserSupabaseClient();
-  const { error } = await supabase.from("plan_tickets").delete().eq("id", ticketId);
-  if (error) throw error;
-}
 
 export async function shareTicketEndpoint(ticketId: string, userIds: string[]): Promise<void> {
   const supabase = createBrowserSupabaseClient();
@@ -266,18 +243,46 @@ export async function shareTicketEndpoint(ticketId: string, userIds: string[]): 
   if (error) throw error;
 }
 
-export async function uploadTicketSourceEndpoint(file: File, userId: string): Promise<string> {
+
+const TICKET_BUCKET = "plan-tickets";
+
+/** Borra archivos de billete de Storage. Solo puede borrar los del propio usuario; si falla, no rompe nada. */
+export async function deleteTicketSourceFiles(paths: (string | null | undefined)[]): Promise<void> {
+  const list = [...new Set(paths.filter((p): p is string => !!p))];
+  if (!list.length) return;
+  await createBrowserSupabaseClient().storage.from(TICKET_BUCKET).remove(list).catch(() => undefined);
+}
+
+async function ticketSourcePaths(ticketId: string): Promise<string[]> {
+  const { data } = await createBrowserSupabaseClient()
+    .from("plan_tickets").select("source_image_url, source_pdf_url").eq("id", ticketId).maybeSingle();
+  return [data?.source_image_url, data?.source_pdf_url].filter((p): p is string => !!p);
+}
+
+export async function deleteTicketEndpoint(ticketId: string): Promise<void> {
   const supabase = createBrowserSupabaseClient();
-  const ext = file.name.split(".").pop() ?? "jpg";
-  const path = `tickets/${userId}/${Date.now()}.${ext}`;
-  const { error } = await supabase.storage.from("plan-tickets").upload(path, file, { upsert: true });
+  const paths = await ticketSourcePaths(ticketId);
+  const { error } = await supabase.from("plan_tickets").delete().eq("id", ticketId);
+  if (error) throw error;
+  await deleteTicketSourceFiles(paths);
+}
+
+const SOURCE_EXT: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "application/pdf": "pdf" };
+
+export async function uploadTicketSourceEndpoint(file: File, userId: string): Promise<string> {
+  const ext = SOURCE_EXT[file.type];
+  if (!ext) throw new Error("Tipo de archivo no permitido");
+  const supabase = createBrowserSupabaseClient();
+  const path = `tickets/${userId}/${crypto.randomUUID()}.${ext}`;
+  const { error } = await supabase.storage.from(TICKET_BUCKET).upload(path, file, { upsert: false, contentType: file.type });
   if (error) throw error;
   return path;
 }
 
+/** URL temporal para ver el archivo original: 5 minutos. */
 export async function getTicketSourceSignedUrl(path: string): Promise<string> {
   const supabase = createBrowserSupabaseClient();
-  const { data, error } = await supabase.storage.from("plan-tickets").createSignedUrl(path, 60 * 60);
+  const { data, error } = await supabase.storage.from(TICKET_BUCKET).createSignedUrl(path, 5 * 60);
   if (error) throw error;
   return data.signedUrl;
 }

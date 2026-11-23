@@ -4,16 +4,16 @@
  * billete abierto con QR, hoja «Añadir» y estados de carga/error.
  * El papel y las tintas son los del pasaporte (iguales en los dos temas).
  */
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import {
-  AlertCircle, BedDouble, Bus, Camera, Check, ChevronLeft, ChevronRight, FileText, MapPin,
-  Plane, Plus, QrCode, RefreshCw, Ship, Ticket as TicketIcon, Train, Trash2, Pencil, Upload, X,
+  AlertCircle, BedDouble, Bus, ChevronLeft, ChevronRight, FileText, MapPin,
+  Plane, Plus, QrCode, RefreshCw, Ship, Ticket as TicketIcon, Train, Trash2, Pencil, Upload,
 } from "lucide-react";
 import { BOOK, PaperGuilloche } from "@/components/profile/passport/Libreta";
 
-const FOCUS = "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]";
-const SERIF = "[font-family:var(--font-display-face)] font-normal";
+export const FOCUS = "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]";
+export const SERIF = "[font-family:var(--font-display-face)] font-normal";
 const T2 = "text-[var(--text-secondary)]";
 const ON_PRIMARY = "text-[var(--contrast)]";
 
@@ -291,68 +291,6 @@ export function TicketDetail({ t, now, isDesktop, sourceUrl, onBack, onOpenPlan,
   );
 }
 
-/* ---------------- añadir ---------------- */
-
-export function AddTicketSheet({ plans, defaultPlanId, onPick, onClose }: {
-  plans: { id: string; title: string }[]; defaultPlanId?: string;
-  onPick: (how: "upload" | "photo" | "manual", planId?: string) => void; onClose: () => void;
-}) {
-  const [plan, setPlan] = useState<string | undefined>(defaultPlanId);
-  useEffect(() => {
-    const k = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    document.addEventListener("keydown", k);
-    return () => document.removeEventListener("keydown", k);
-  }, [onClose]);
-  const opt = (Icon: typeof Plane, a: string, b: string, how: "upload" | "photo" | "manual", tag?: string) => (
-    <button type="button" onClick={() => onPick(how, plan)} className={`flex min-h-[68px] w-full items-center gap-3.5 border-t border-[var(--border)] py-2 text-left ${FOCUS}`}>
-      <span className="grid h-11 w-11 shrink-0 place-content-center rounded-full bg-[var(--surface-2)]"><Icon size={20} aria-hidden /></span>
-      <span className="flex flex-1 flex-col">
-        <span className="flex items-center gap-2 text-base font-semibold">{a}
-          {tag && <span className="h-[22px] rounded-full border border-dashed border-[var(--chat-me-border)] bg-[var(--chat-me)] px-2 text-xs font-semibold leading-5">{tag}</span>}
-        </span>
-        <span className={`text-sm ${T2}`}>{b}</span>
-      </span>
-      <ChevronRight size={18} aria-hidden className={T2} />
-    </button>
-  );
-  const chip = (id: string | undefined, label: string) => {
-    const on = plan === id;
-    return (
-      <button key={label} type="button" aria-pressed={on} onClick={() => setPlan(id)}
-        className={`inline-flex h-9 items-center gap-1.5 rounded-full border px-3.5 text-sm font-semibold ${FOCUS} ${
-          on ? `border-[var(--primary)] bg-[var(--primary)] ${ON_PRIMARY}` : "border-[var(--border-strong)] bg-[var(--surface-2)]"}`}>
-        {on && <Check size={14} aria-hidden />}{label}
-      </button>
-    );
-  };
-  return (
-    <>
-      <div aria-hidden className="fixed inset-0 z-[70] bg-black/60" onClick={onClose} />
-      <section role="dialog" aria-modal="true" aria-labelledby="add-h"
-        className="fixed inset-x-0 bottom-0 z-[71] flex flex-col gap-3 rounded-t-lg border-t border-[var(--border)] bg-[var(--surface)] px-4 pb-5 pt-2 text-[var(--text-primary)] shadow-[0_12px_24px_rgba(0,0,0,0.3),0_4px_8px_rgba(0,0,0,0.2)] md:inset-x-auto md:bottom-auto md:left-1/2 md:top-1/2 md:w-[480px] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-lg md:border md:px-6">
-        <div className="flex h-11 items-center justify-between">
-          <h2 id="add-h" className="text-lg font-semibold">Añadir a la cartera</h2>
-          <button type="button" aria-label="Cerrar" onClick={onClose} className={`grid h-11 w-11 place-content-center rounded-lg ${FOCUS}`}><X size={22} aria-hidden /></button>
-        </div>
-        <div className="flex flex-col">
-          {opt(FileText, "Subir PDF o captura", "El billete del correo o una captura de la app.", "upload", "Lo rellenamos por ti")}
-          {opt(Camera, "Hacer una foto", "De una entrada en papel o una tarjeta de embarque.", "photo")}
-          {opt(Pencil, "Rellenar a mano", "Tipo, fecha, localizador y lo que quieras guardar.", "manual")}
-        </div>
-        {plans.length > 0 && (
-          <div className="flex flex-col gap-2">
-            <span className={`text-xs font-semibold tracking-[0.02em] ${T2}`}>¿DE QUÉ PLAN ES?</span>
-            <div className="flex flex-wrap gap-2">
-              {plans.map((p) => chip(p.id, p.title))}
-              {chip(undefined, "Sin plan")}
-            </div>
-          </div>
-        )}
-      </section>
-    </>
-  );
-}
-
 /* ---------------- confirmar borrado ---------------- */
 
 export function ConfirmDelete({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
@@ -405,4 +343,4 @@ export function WalletError({ onRetry }: { onRetry: () => void }) {
   );
 }
 
-export { Plus, SERIF, T2, FOCUS, ON_PRIMARY, ChevronLeft, ChevronRight, fmtDay };
+export { Plus, T2, ON_PRIMARY, ChevronLeft, ChevronRight, fmtDay };
