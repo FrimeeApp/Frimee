@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import AppSidebar from "@/components/common/AppSidebar";
 import { useAuth } from "@/providers/AuthProvider";
 import { getPublicUserProfile } from "@/services/api/repositories/users.repository";
@@ -32,7 +32,12 @@ export default function ProfilePage() {
   const { id: routeId } = useParams<{ id: string }>();
   const searchParams = useSearchParams();
   const router = useRouter();
-  const id = routeId === "static" ? searchParams.get("id") ?? "" : routeId;
+  const pathname = usePathname();
+  const routeProfileId = routeId === "static" ? searchParams.get("id") ?? "" : routeId;
+  // Si encima se abre otra ruta (p. ej. «Ver el plan» como ventana), esta pantalla sigue montada y useParams
+  // pasa a devolver el id de la otra ruta: solo se actualiza el id mientras la ruta sea de perfil.
+  const [id, setId] = useState(routeProfileId);
+  if (pathname.startsWith("/profile") && routeProfileId !== id) setId(routeProfileId);
   const { user, profile: myProfile, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const isGuest = Boolean(user?.is_anonymous);
